@@ -1,0 +1,536 @@
+// =========================================================
+// LF_PowerGrid - Splitter device (v0.7.11)
+//
+// LF_Splitter_Kit:  Holdable item (wooden crate model).
+//                   Player places it via hologram -> spawns LF_Splitter.
+//
+// LF_Splitter:      1 input  (input_1)
+//                   3 outputs (output_1, output_2, output_3)
+//                   Each output delivers 1/3 of the incoming power.
+//                   Owns wires on its output side (same pattern as Generator).
+//
+// Memory points (LOD Memory):
+//   port_input_1   - where the upstream cable connects
+//   port_output_1  - downstream cable 1
+//   port_output_2  - downstream cable 2
+//   port_output_3  - downstream cable 3
+//
+// Wire manipulation delegated to LFPG_WireHelper (3_Game).
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT: deployable item that spawns the actual Splitter
+// Uses the splitter model directly — hologram matches final
+// result, no cargo, no orientation mismatch.
+// ---------------------------------------------------------
+class LF_Splitter_Kit : Inventory_Base
+{
+    override bool IsDeployable()
+    {
+        return true;
+    }
+
+    // Prevent any cargo display inherited from model proxies
+    override bool CanDisplayCargo()
+    {
+        return false;
+    }
+
+    // Allow placement near walls and on surfaces
+    override bool CanBePlaced(Man player, vector position)
+    {
+        return true;
+    }
+
+    // Disable height restriction so it can go on tables/shelves
+    override bool DoPlacingHeightCheck()
+    {
+        return false;
+    }
+
+    override string GetDeploySoundset()
+    {
+        return "placeBarbedWire_SoundSet";
+    }
+
+    override string GetLoopDeploySoundset()
+    {
+        return "barbedwire_deploy_SoundSet";
+    }
+
+    override void SetActions()
+    {
+        super.SetActions();
+        AddAction(ActionTogglePlaceObject);
+        AddAction(ActionDeployObject);
+    }
+
+    // Engine moves the kit to hologram position before calling this.
+    // Since kit and splitter share the same model, position matches exactly.
+    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
+    {
+        super.OnPlacementComplete(player, position, orientation);
+
+        #ifdef SERVER
+        vector finalPos = GetPosition();
+        vector finalOri = GetOrientation();
+
+        // Only keep yaw (horizontal rotation). Zero pitch/roll so splitter sits upright.
+        // DayZ orientation vector: [0]=yaw  [1]=pitch  [2]=roll
+        finalOri[1] = 0;
+        finalOri[2] = 0;
+
+        EntityAI splitter = GetGame().CreateObjectEx("LF_Splitter", finalPos, ECE_CREATEPHYSICS);
+        if (splitter)
+        {
+            splitter.SetPosition(finalPos);
+            splitter.SetOrientation(finalOri);
+            splitter.Update();
+            LFPG_Util.Info("[Splitter_Kit] Deployed LF_Splitter at " + finalPos.ToString() + " yaw=" + finalOri[0].ToString());
+        }
+        else
+        {
+            LFPG_Util.Error("[Splitter_Kit] Failed to create LF_Splitter!");
+        }
+
+        GetGame().ObjectDelete(this);
+        #endif
+    }
+};
+
+// ---------------------------------------------------------
+// SPLITTER: pass-through device (consumer + source)
+// ---------------------------------------------------------
+class LF_Splitter : Inventory_Base
+{
+    // ---- Device identity ----
+    protected int m_DeviceIdLow = 0;
+    protected int m_DeviceIdHigh = 0;
+    protected string m_DeviceId;
+
+    // ---- Wires owned (output side, same as Generator) ----
+    protected ref array<ref LFPG_WireData> m_Wires;
+
+    // ---- Power state ----
+    // True when upstream source is providing power via input port
+    protected bool m_PoweredNet = false;
+
+    // v0.7.8: Bitmask of overloaded output wires.
+    protected int m_OverloadMask = 0;
+
+    void LF_Splitter()
+    {
+        m_Wires = new array<ref LFPG_WireData>;
+        RegisterNetSyncVariableInt("m_DeviceIdLow");
+        RegisterNetSyncVariableInt("m_DeviceIdHigh");
+        RegisterNetSyncVariableBool("m_PoweredNet");
+        RegisterNetSyncVariableInt("m_OverloadMask");
+    }
+
+    // Passthrough device: no manual toggle or custom actions.
+    // Port actions (wire/cut) are on LF_CableReel and Pliers.
+    override void SetActions()
+    {
+        super.SetActions();
+    }
+
+    // Prevent players from picking up a placed splitter.
+    // Moving it would break all wire connections and cause orphaned wires.
+    override bool CanPutInCargo(EntityAI parent)
+    {
+        return false;
+    }
+
+    override bool CanPutIntoHands(EntityAI parent)
+    {
+        return false;
+    }
+
+    override bool CanBePlaced(Man player, vector position)
+    {
+        return false;
+    }
+
+    override void EEInit()
+    {
+        super.EEInit();
+
+        #ifdef SERVER
+        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
+        {
+            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
+            SetSynchDirty();
+        }
+        #endif
+
+        LFPG_UpdateDeviceIdString();
+        LFPG_TryRegister();
+
+        #ifdef SERVER
+        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
+
+        // FIX: if Splitter was saved as powered (e.g. server restart),
+        // propagate immediately so downstream consumers receive power
+        // without waiting for the 5s ValidateAllWiresAndPropagate timer.
+        if (m_PoweredNet && m_DeviceId != "")
+        {
+            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        }
+        #endif
+    }
+
+    override void EEDelete(EntityAI parent)
+    {
+        // Sprint 4.1: notify graph before unregistering
+        LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(m_DeviceId);
+        LFPG_DeviceRegistry.Get().Unregister(m_DeviceId, this);
+        LFPG_NetworkManager.Get().RequestGlobalSelfHeal();
+        super.EEDelete(parent);
+    }
+
+    override void OnVariablesSynchronized()
+    {
+        super.OnVariablesSynchronized();
+        LFPG_TryRegister();
+    }
+
+    protected void LFPG_UpdateDeviceIdString()
+    {
+        m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
+    }
+
+    protected void LFPG_TryRegister()
+    {
+        LFPG_UpdateDeviceIdString();
+        if (m_DeviceId != "")
+        {
+            LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
+        }
+    }
+
+    // ============================================
+    // LFPG_IDevice interface
+    // ============================================
+    string LFPG_GetDeviceId()
+    {
+        return m_DeviceId;
+    }
+
+    // 4 ports: 1 input + 3 outputs
+    int LFPG_GetPortCount()
+    {
+        return 4;
+    }
+
+    string LFPG_GetPortName(int idx)
+    {
+        if (idx == 0) return "input_1";
+        if (idx == 1) return "output_1";
+        if (idx == 2) return "output_2";
+        if (idx == 3) return "output_3";
+        return "";
+    }
+
+    int LFPG_GetPortDir(int idx)
+    {
+        if (idx == 0) return LFPG_PortDir.IN;
+        if (idx >= 1 && idx <= 3) return LFPG_PortDir.OUT;
+        return -1;
+    }
+
+    string LFPG_GetPortLabel(int idx)
+    {
+        if (idx == 0) return "Input 1";
+        if (idx == 1) return "Output 1";
+        if (idx == 2) return "Output 2";
+        if (idx == 3) return "Output 3";
+        return "";
+    }
+
+    bool LFPG_HasPort(string portName, int dir)
+    {
+        if (dir == LFPG_PortDir.IN && portName == "input_1") return true;
+        if (dir == LFPG_PortDir.OUT)
+        {
+            if (portName == "output_1") return true;
+            if (portName == "output_2") return true;
+            if (portName == "output_3") return true;
+        }
+        return false;
+    }
+
+    vector LFPG_GetPortWorldPos(string portName)
+    {
+        // Primary: memory point with "port_" prefix convention
+        // e.g. portName "input_1" -> memory point "port_input_1"
+        string memPoint = "port_" + portName;
+        if (MemoryPointExists(memPoint))
+        {
+            return ModelToWorld(GetMemoryPointPos(memPoint));
+        }
+
+        // Secondary: try without underscore before number.
+        // Handles inconsistent p3d naming (e.g. "port_output1" vs "port_output_1").
+        // Strip last underscore+digit and rejoin without underscore:
+        // "output_1" -> try "port_output1"
+        int len = portName.Length();
+        if (len >= 3)
+        {
+            string lastChar = portName.Substring(len - 1, 1);
+            string beforeLast = portName.Substring(len - 2, 1);
+            if (beforeLast == "_")
+            {
+                // e.g. "output_1" -> "output" + "1" -> "port_output1"
+                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
+                if (MemoryPointExists(compact))
+                {
+                    return ModelToWorld(GetMemoryPointPos(compact));
+                }
+            }
+        }
+
+        // Tertiary: exact portName as memory point
+        if (MemoryPointExists(portName))
+        {
+            return ModelToWorld(GetMemoryPointPos(portName));
+        }
+
+        // Fallback: device center + vertical offset
+        // Only reached if p3d lacks the expected memory points
+        LFPG_Util.Warn("[LF_Splitter] Missing memory point for port: " + portName);
+        vector p = GetPosition();
+        p[1] = p[1] + 0.5;
+        return p;
+    }
+
+    // ---- Source behavior ----
+    // The splitter IS a source for downstream devices.
+    bool LFPG_IsSource()
+    {
+        return true;
+    }
+
+    // Sprint 4.1: Electrical graph node type.
+    // Splitter has both IN and OUT ports → PASSTHROUGH.
+    int LFPG_GetDeviceType()
+    {
+        return LFPG_DeviceType.PASSTHROUGH;
+    }
+
+    // Source is "on" when receiving power from upstream.
+    bool LFPG_GetSourceOn()
+    {
+        return m_PoweredNet;
+    }
+
+    // ---- Consumer behavior ----
+    // Called by graph propagation when upstream power state changes.
+    // NOTE: No RequestPropagate here. The graph handles propagation
+    // automatically: when upstream changes, this PASSTHROUGH node is
+    // marked dirty via DIRTY_INPUT and re-evaluated by ProcessDirtyQueue,
+    // which then marks downstream nodes dirty in turn.
+    // ValidateAllWiresAndPropagate (self-heal) handles edge cases.
+    void LFPG_SetPowered(bool powered)
+    {
+        #ifdef SERVER
+        if (m_PoweredNet == powered)
+        {
+            LFPG_Util.Debug("[LF_Splitter] SetPowered(" + powered.ToString() + ") SKIP (no change) id=" + m_DeviceId);
+            return;
+        }
+
+        m_PoweredNet = powered;
+        SetSynchDirty();
+
+        LFPG_Util.Debug("[LF_Splitter] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId + " wires=" + m_Wires.Count().ToString());
+        #endif
+    }
+
+    // v0.7.8: Overload bitmask (which output wires exceed capacity)
+    int LFPG_GetOverloadMask()
+    {
+        return m_OverloadMask;
+    }
+
+    void LFPG_SetOverloadMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_OverloadMask != mask)
+        {
+            m_OverloadMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ---- Connection validation ----
+    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
+    {
+        if (!other) return false;
+
+        // Only output ports can initiate connections
+        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT)) return false;
+
+        EntityAI otherEntity = EntityAI.Cast(other);
+        if (!otherEntity) return false;
+
+        // Check if other device has the specified input port
+        string otherId = LFPG_DeviceAPI.GetDeviceId(otherEntity);
+        if (otherId != "")
+        {
+            return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN);
+        }
+
+        // Vanilla device: accept if it's a consumer
+        return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
+    }
+
+    // ============================================
+    // Wire ownership API (delegates to WireHelper)
+    // ============================================
+    bool LFPG_HasWireStore()
+    {
+        return true;
+    }
+
+    array<ref LFPG_WireData> LFPG_GetWires()
+    {
+        return m_Wires;
+    }
+
+    string LFPG_GetWiresJSON()
+    {
+        return LFPG_WireHelper.GetJSON(m_Wires);
+    }
+
+    bool LFPG_AddWire(LFPG_WireData wd)
+    {
+        if (!wd) return false;
+
+        // Only allow wires from output ports
+        if (wd.m_SourcePort == "")
+            wd.m_SourcePort = "output_1";
+
+        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
+        {
+            LFPG_Util.Warn("[LF_Splitter] AddWire rejected: not an output port: " + wd.m_SourcePort);
+            return false;
+        }
+
+        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_ClearWires()
+    {
+        bool result = LFPG_WireHelper.ClearAll(m_Wires);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_ClearWiresForCreator(string creatorId)
+    {
+        bool result = LFPG_WireHelper.ClearForCreator(m_Wires, creatorId);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_PruneMissingTargets()
+    {
+        // Use cached map from NetworkManager if available (during self-heal),
+        // otherwise build our own (standalone calls like wire creation).
+        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
+        if (!validIds)
+        {
+            validIds = new map<string, bool>;
+            array<EntityAI> all = new array<EntityAI>;
+            LFPG_DeviceRegistry.Get().GetAll(all);
+            int vi;
+            for (vi = 0; vi < all.Count(); vi = vi + 1)
+            {
+                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
+                if (did != "")
+                {
+                    validIds[did] = true;
+                }
+            }
+        }
+
+        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    // ============================================
+    // Persistence
+    // ============================================
+    override void OnStoreSave(ParamsWriteContext ctx)
+    {
+        super.OnStoreSave(ctx);
+
+        ctx.Write(m_DeviceIdLow);
+        ctx.Write(m_DeviceIdHigh);
+        ctx.Write(m_PoweredNet);
+
+        string json;
+        LFPG_WireHelper.SerializeJSON(m_Wires, json);
+        ctx.Write(json);
+    }
+
+    override bool OnStoreLoad(ParamsReadContext ctx, int version)
+    {
+        if (!super.OnStoreLoad(ctx, version))
+            return false;
+
+        if (!ctx.Read(m_DeviceIdLow))
+        {
+            LFPG_Util.Error("[LF_Splitter] OnStoreLoad: failed to read m_DeviceIdLow");
+            return false;
+        }
+
+        if (!ctx.Read(m_DeviceIdHigh))
+        {
+            LFPG_Util.Error("[LF_Splitter] OnStoreLoad: failed to read m_DeviceIdHigh");
+            return false;
+        }
+
+        LFPG_UpdateDeviceIdString();
+
+        if (!ctx.Read(m_PoweredNet))
+        {
+            LFPG_Util.Error("[LF_Splitter] OnStoreLoad: failed to read m_PoweredNet for " + m_DeviceId);
+            return false;
+        }
+
+        string json;
+        if (!ctx.Read(json))
+        {
+            LFPG_Util.Error("[LF_Splitter] OnStoreLoad: failed to read wires json for " + m_DeviceId);
+            return false;
+        }
+        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_Splitter");
+
+        return true;
+    }
+};
