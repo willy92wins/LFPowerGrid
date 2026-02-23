@@ -303,7 +303,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.28";
+static const string LFPG_VERSION_STR = "0.7.30";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -360,3 +360,13 @@ static const float LFPG_JOINT_SIZE_MAX       = 6.0;    // max joint size up clos
 // ---- Retry system ----
 static const int   LFPG_RETRY_MAX            = 5;      // max retry attempts for deferred wires
 static const float LFPG_RETRY_TICK_S         = 2.0;    // seconds between retry ticks
+
+// ---- Centralized position polling (v0.7.30, Audit 1+2 closure) ----
+// Single global timer in NetworkManager replaces N per-device timers.
+// Round-robin batching: processes BATCH_SIZE devices per tick.
+// Full cycle latency: (tracked_devices / BATCH_SIZE) * TICK_MS.
+// Example: 200 wired devices, batch 32, tick 500ms → 3.1s max latency.
+static const int   LFPG_MOVE_DETECT_TICK_MS      = 500;    // tick frequency (ms)
+static const int   LFPG_MOVE_DETECT_BATCH_SIZE   = 32;     // devices per tick
+static const float LFPG_MOVE_DETECT_THRESHOLD_M  = 0.3;    // drift threshold (meters)
+static const float LFPG_MOVE_DETECT_THRESHOLD_SQ = 0.09;   // 0.3² pre-computed (avoids sqrt)

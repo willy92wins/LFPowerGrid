@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - NetworkManager (v0.7.26, Sprint 4.3+audit4)
+// LF_PowerGrid - NetworkManager (v0.7.30, Sprint 4.3+audit closure)
 //
 // Server singleton: validation, wire storage, propagation.
 //
@@ -21,6 +21,11 @@
 //
 // Sprint 4.3: Load telemetry accumulators in TickPropagation.
 //   Periodic dump of propagation latency + load metrics.
+//
+// v0.7.30 (Audit 1+2): Centralized position polling with round-robin
+//   batching. Replaces per-device timers + full-scan approach.
+//   m_TrackedDeviceIds auto-registers on wire add, unregisters on cut.
+//   CheckDeviceMovement processes BATCH_SIZE devices per 500ms tick.
 //
 // Vanilla wire persistence: saved/loaded via profile JSON.
 //   Position-based IDs survive server restarts.
@@ -93,16 +98,16 @@ class LFPG_NetworkManager
     protected int m_TelemTotalEdgesVisited;
     protected float m_TelemLastDumpMs;
 
-    // v0.7.23 (Bug 5): Movement detection for wired devices.
-    // Tracks last known positions to detect devices that moved.
-    // When a device moves > threshold, its wires are disconnected.
+    // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
+    // Replaces N per-device timers (v0.7.29) with a single global timer.
+    // m_TrackedDeviceIds: only devices with active wires (auto-register/unregister).
+    // m_TrackedDeviceIndex: ID → array index for O(1) swap-and-pop removal.
+    // m_TrackCursor: round-robin cursor for batched processing.
+    // m_LastKnownPos: reused from v0.7.23, position snapshot per tracked device.
     protected ref map<string, vector> m_LastKnownPos;
-    // v0.7.26 (Audit 4): Lowered from 0.5m to 0.3m. The 0.5m threshold
-    // was too lenient — physics jitter rarely exceeds 0.1m, and 0.3m catches
-    // admin tool moves and building mod placements more reliably.
-    // EEItemLocationChanged on LFPG devices uses 0.1m for instant detection.
-    protected static const float MOVE_DETECT_THRESHOLD_M = 0.3;  // 30cm
-    protected static const int   MOVE_DETECT_INTERVAL_MS = 3000; // 3 seconds (v0.7.28: reduced from 10s)
+    protected ref array<string>       m_TrackedDeviceIds;
+    protected ref map<string, int>    m_TrackedDeviceIndex;
+    protected int                     m_TrackCursor;
 
     void LFPG_NetworkManager()
     {
@@ -114,6 +119,13 @@ class LFPG_NetworkManager
         m_PendingBroadcastLFPG = new map<string, EntityAI>;
         m_PendingBroadcastVanilla = new map<string, EntityAI>;
         m_LastKnownPos = new map<string, vector>;
+        // v0.7.30: Tracked device set for centralized polling (server-only)
+        if (GetGame().IsServer())
+        {
+            m_TrackedDeviceIds = new array<string>;
+            m_TrackedDeviceIndex = new map<string, int>;
+            m_TrackCursor = 0;
+        }
 
         #ifdef SERVER
         m_Graph = new LFPG_ElecGraph();
@@ -135,8 +147,14 @@ class LFPG_NetworkManager
         // Sprint 4.2: periodic propagation tick (event-driven via graph dirty queue)
         int propTickMs = (int)LFPG_PROPAGATE_TICK_MS;
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(TickPropagation, propTickMs, true);
-        // v0.7.23 (Bug 5): periodic device movement detection
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, MOVE_DETECT_INTERVAL_MS, true);
+        // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
+        // Replaces per-device timers. Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
+        // Runtime guard: prevents timer registration in SP/local-host hybrid contexts
+        // where #ifdef SERVER is active but the instance isn't a true dedicated server.
+        if (GetGame().IsServer())
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, true);
+        }
         #endif
     }
 
@@ -320,7 +338,14 @@ class LFPG_NetworkManager
         #ifdef SERVER
         if (!m_Graph)
             return false;
-        return m_Graph.OnWireAdded(sourceId, targetId, sourcePort, targetPort, wireRef);
+        bool inserted = m_Graph.OnWireAdded(sourceId, targetId, sourcePort, targetPort, wireRef);
+        if (inserted)
+        {
+            // v0.7.30: Auto-track both endpoints for centralized position polling
+            TrackDeviceForPolling(sourceId);
+            TrackDeviceForPolling(targetId);
+        }
+        return inserted;
         #else
         return false;
         #endif
@@ -353,6 +378,8 @@ class LFPG_NetworkManager
         m_Graph.OnDeviceRemoved(deviceId);
         // v0.7.26 (Audit 4): Clean up position tracking for removed device
         m_LastKnownPos.Remove(deviceId);
+        // v0.7.30: Untrack from centralized polling (EEDelete path)
+        UntrackDeviceFromPolling(deviceId);
         #endif
     }
 
@@ -1196,26 +1223,146 @@ class LFPG_NetworkManager
 
 
     // ===========================
-    // v0.7.23 (Bug 5): Device movement detection
+    // v0.7.30 (Audit 1+2): Centralized position polling
     // ===========================
-    // Periodic check (every 10s) for wired devices that have moved.
-    // If a device with wires moves more than MOVE_DETECT_THRESHOLD_M,
-    // all its wires are disconnected and cables cleaned up.
-    // This catches movement via admin tools, physics, building mods, etc.
-    protected void CheckDeviceMovement()
+    // Round-robin batched: processes LFPG_MOVE_DETECT_BATCH_SIZE devices per
+    // tick from m_TrackedDeviceIds. Only devices with active wires are tracked.
+    // Replaces: (a) full-scan CheckDeviceMovement every 3s (v0.7.23-0.7.29)
+    //           (b) N per-device timers in generator/lamp (v0.7.29)
+    // Uses DistSq to avoid sqrt per check.
+
+    // ---- Track / Untrack ----
+    // Called when wires are added or removed. Maintains the set of devices
+    // that need position monitoring. O(1) insert, O(1) swap-and-pop removal.
+
+    void TrackDeviceForPolling(string deviceId)
     {
         #ifdef SERVER
-        ref array<EntityAI> allDevices = new array<EntityAI>;
-        LFPG_DeviceRegistry.Get().GetAll(allDevices);
+        if (!GetGame().IsServer())
+            return;
 
-        // Collect device IDs that moved (can't modify maps during iteration)
-        ref array<string> movedIds = new array<string>;
-        ref array<EntityAI> movedObjs = new array<EntityAI>;
+        if (deviceId == "")
+            return;
+
+        int existingIdx;
+        if (m_TrackedDeviceIndex.Find(deviceId, existingIdx))
+            return;  // already tracked
+
+        int idx = m_TrackedDeviceIds.Count();
+        m_TrackedDeviceIds.Insert(deviceId);
+        m_TrackedDeviceIndex.Set(deviceId, idx);
+
+        // Initialize position snapshot
+        EntityAI dev = LFPG_DeviceRegistry.Get().FindById(deviceId);
+        if (dev)
+        {
+            m_LastKnownPos.Set(deviceId, dev.GetPosition());
+        }
+        #endif
+    }
+
+    void UntrackDeviceFromPolling(string deviceId)
+    {
+        #ifdef SERVER
+        if (!GetGame().IsServer())
+            return;
+
+        if (deviceId == "")
+            return;
+
+        int idx;
+        if (!m_TrackedDeviceIndex.Find(deviceId, idx))
+            return;  // not tracked
+
+        int lastIdx = m_TrackedDeviceIds.Count() - 1;
+
+        if (idx < lastIdx)
+        {
+            // Swap with last element to keep array compact
+            string lastId = m_TrackedDeviceIds[lastIdx];
+            m_TrackedDeviceIds[idx] = lastId;
+            m_TrackedDeviceIndex.Set(lastId, idx);
+        }
+
+        // Pop last
+        m_TrackedDeviceIds.Remove(lastIdx);
+        m_TrackedDeviceIndex.Remove(deviceId);
+
+        // Clean up position tracking
+        m_LastKnownPos.Remove(deviceId);
+
+        // Clamp cursor to valid range
+        if (m_TrackCursor >= m_TrackedDeviceIds.Count())
+        {
+            m_TrackCursor = 0;
+        }
+        #endif
+    }
+
+    // ---- DeviceHasAnyWires ----
+    // Returns true if the device has any owned wires (output side) or
+    // any incoming wires (input side via reverse index).
+    // Used by CutAllWiresFromDevice to decide whether to untrack.
+    protected bool DeviceHasAnyWires(EntityAI device, string deviceId)
+    {
+        #ifdef SERVER
+        if (!GetGame().IsServer())
+            return false;
+
+        if (!device || deviceId == "")
+            return false;
+
+        // Check owned wires (sources, splitters)
+        if (LFPG_DeviceAPI.HasWireStore(device))
+        {
+            ref array<ref LFPG_WireData> ownedWires = LFPG_DeviceAPI.GetDeviceWires(device);
+            if (ownedWires && ownedWires.Count() > 0)
+            {
+                return true;
+            }
+        }
+
+        // Check incoming wires via reverse index (consumers, passthroughs)
+        int portCount = LFPG_DeviceAPI.GetPortCount(device);
+        int pci;
+        for (pci = 0; pci < portCount; pci = pci + 1)
+        {
+            int pdChk = LFPG_DeviceAPI.GetPortDir(device, pci);
+            if (pdChk == LFPG_PortDir.IN)
+            {
+                string pnChk = LFPG_DeviceAPI.GetPortName(device, pci);
+                if (CountWiresTargeting(deviceId, pnChk) > 0)
+                {
+                    return true;
+                }
+            }
+        }
+        #endif
+
+        return false;
+    }
+
+    // ---- RebuildTrackedDevices ----
+    // Rebuilds the tracked set from current wire state. Called after
+    // ValidateAllWiresAndPropagate (startup, self-heal) to ensure
+    // the tracked set matches the validated wire topology.
+    protected void RebuildTrackedDevices()
+    {
+        #ifdef SERVER
+        if (!GetGame().IsServer())
+            return;
+
+        m_TrackedDeviceIds.Clear();
+        m_TrackedDeviceIndex.Clear();
+        m_TrackCursor = 0;
+
+        ref array<EntityAI> allDevs = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDevs);
 
         int i;
-        for (i = 0; i < allDevices.Count(); i = i + 1)
+        for (i = 0; i < allDevs.Count(); i = i + 1)
         {
-            EntityAI dev = allDevices[i];
+            EntityAI dev = allDevs[i];
             if (!dev)
                 continue;
 
@@ -1223,41 +1370,65 @@ class LFPG_NetworkManager
             if (devId == "")
                 continue;
 
-            // Only check devices that own wires (sources/splitters)
-            bool hasWires = false;
-            if (LFPG_DeviceAPI.HasWireStore(dev))
+            if (DeviceHasAnyWires(dev, devId))
             {
-                ref array<ref LFPG_WireData> wires = LFPG_DeviceAPI.GetDeviceWires(dev);
-                if (wires && wires.Count() > 0)
-                {
-                    hasWires = true;
-                }
+                int insertIdx = m_TrackedDeviceIds.Count();
+                m_TrackedDeviceIds.Insert(devId);
+                m_TrackedDeviceIndex.Set(devId, insertIdx);
+                m_LastKnownPos.Set(devId, dev.GetPosition());
             }
+        }
 
-            // Also check devices that are targets (consumers)
-            // Use reverse index: any wires targeting this device?
-            if (!hasWires)
-            {
-                int portCount = LFPG_DeviceAPI.GetPortCount(dev);
-                int pi;
-                for (pi = 0; pi < portCount; pi = pi + 1)
-                {
-                    int portDir = LFPG_DeviceAPI.GetPortDir(dev, pi);
-                    if (portDir == LFPG_PortDir.IN)
-                    {
-                        string portName = LFPG_DeviceAPI.GetPortName(dev, pi);
-                        int wCount = CountWiresTargeting(devId, portName);
-                        if (wCount > 0)
-                        {
-                            hasWires = true;
-                            break;
-                        }
-                    }
-                }
-            }
+        LFPG_Util.Info("[Movement] RebuildTrackedDevices: tracking " + m_TrackedDeviceIds.Count().ToString() + " wired devices");
+        #endif
+    }
 
-            if (!hasWires)
+    // ---- CheckDeviceMovement (round-robin batched) ----
+    // Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
+    // Uses LFPG_WorldUtil.DistSq to avoid sqrt per check.
+    // Devices that moved have all wires cut and are untracked.
+    // Disappeared devices (null in registry) are silently untracked.
+    protected void CheckDeviceMovement()
+    {
+        #ifdef SERVER
+        if (!GetGame().IsServer())
+            return;
+
+        int totalTracked = m_TrackedDeviceIds.Count();
+        if (totalTracked == 0)
+            return;
+
+        // Clamp cursor
+        if (m_TrackCursor >= totalTracked)
+        {
+            m_TrackCursor = 0;
+        }
+
+        int batchEnd = m_TrackCursor + LFPG_MOVE_DETECT_BATCH_SIZE;
+        if (batchEnd > totalTracked)
+        {
+            batchEnd = totalTracked;
+        }
+
+        // Collect moved/disappeared devices (can't modify tracked array during iteration)
+        ref array<string> movedIds = new array<string>;
+        ref array<EntityAI> movedDevs = new array<EntityAI>;
+        ref array<string> disappearedIds = new array<string>;
+
+        int i;
+        for (i = m_TrackCursor; i < batchEnd; i = i + 1)
+        {
+            string devId = m_TrackedDeviceIds[i];
+            if (devId == "")
                 continue;
+
+            EntityAI dev = LFPG_DeviceRegistry.Get().FindById(devId);
+            if (!dev)
+            {
+                // Device disappeared from registry — mark for untrack
+                disappearedIds.Insert(devId);
+                continue;
+            }
 
             vector currentPos = dev.GetPosition();
             vector lastPos;
@@ -1265,38 +1436,45 @@ class LFPG_NetworkManager
 
             if (hadPos)
             {
-                float moveDist = vector.Distance(currentPos, lastPos);
-                if (moveDist > MOVE_DETECT_THRESHOLD_M)
+                float distSq = LFPG_WorldUtil.DistSq(currentPos, lastPos);
+                if (distSq > LFPG_MOVE_DETECT_THRESHOLD_SQ)
                 {
                     movedIds.Insert(devId);
-                    movedObjs.Insert(dev);
+                    movedDevs.Insert(dev);
                 }
             }
 
-            m_LastKnownPos[devId] = currentPos;
+            // Always update position snapshot
+            m_LastKnownPos.Set(devId, currentPos);
         }
 
-        // Process moved devices outside the iteration loop
-        // v0.7.28 (Bug 2+3): Use centralized CutAllWiresFromDevice instead of
-        // ad-hoc logic. CutAllWiresFromDevice now forces SetPowered(false) on
-        // all neighbors before removing the graph node, preventing orphaned
-        // consumers from keeping stale powered state.
+        // Advance cursor (wraps naturally on next tick)
+        m_TrackCursor = batchEnd;
+
+        // Process disappeared devices (just untrack, no wire cut needed)
+        int di;
+        for (di = 0; di < disappearedIds.Count(); di = di + 1)
+        {
+            UntrackDeviceFromPolling(disappearedIds[di]);
+        }
+
+        // Process moved devices
         int mi;
         for (mi = 0; mi < movedIds.Count(); mi = mi + 1)
         {
+            EntityAI movedDev = movedDevs[mi];
             string movedId = movedIds[mi];
-            EntityAI movedDev = movedObjs[mi];
 
             LFPG_Util.Warn("[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires");
 
-            // Centralized wire cut: handles owned wires, vanilla wires,
-            // incoming wires, graph cleanup, and SetPowered(false) on neighbors.
+            // CutAllWiresFromDevice handles: owned wires, vanilla wires,
+            // incoming wires, graph cleanup, SetPowered(false) on neighbors,
+            // and auto-untrack via the hook at the end of CutAllWiresFromDevice.
             CutAllWiresFromDevice(movedDev);
 
             // Generator-specific: force source off when physically moved.
             // CutAllWiresFromDevice handles consumers/passthroughs via
-            // SetPowered(false), but generators ignore SetPowered (they
-            // produce, not consume). Must force m_SourceOn off explicitly.
+            // SetPowered(false), but generators produce (not consume).
             LF_TestGenerator gen = LF_TestGenerator.Cast(movedDev);
             if (gen && gen.LFPG_GetSwitchState())
             {
@@ -1304,7 +1482,7 @@ class LFPG_NetworkManager
             }
         }
 
-        // Trigger full self-heal if any devices moved (safety net)
+        // Trigger self-heal if any devices moved
         if (movedIds.Count() > 0)
         {
             LFPG_Util.Info("[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal");
@@ -1485,6 +1663,11 @@ class LFPG_NetworkManager
         // Devices that were deleted/destroyed leave orphan entries.
         // Without cleanup, this map grows unboundedly on long-running servers.
         PruneStaleLastKnownPositions();
+
+        // v0.7.30: Rebuild tracked device set from validated wire state.
+        // Must happen after graph rebuild + prune so the tracked set matches
+        // the authoritative wire topology.
+        RebuildTrackedDevices();
         #endif
     }
 
@@ -2073,6 +2256,33 @@ class LFPG_NetworkManager
             // RemoveWiresTargeting (which flushes internally), but this
             // covers any edge case where a broadcast was queued but not sent.
             FlushBroadcasts();
+        }
+
+        // --- 7. Untrack from centralized polling (v0.7.30) ---
+        // CutAll removes all owned + incoming wires, so device no longer
+        // needs position monitoring. UntrackDeviceFromPolling is a no-op
+        // if the device wasn't tracked.
+        // Also untrack neighbors that may have lost all their wires
+        // as a result of this cut (e.g. consumer whose only source was cut).
+        UntrackDeviceFromPolling(deviceId);
+
+        int nui;
+        for (nui = 0; nui < neighborIds.Count(); nui = nui + 1)
+        {
+            string neighborId = neighborIds[nui];
+            EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborId);
+            if (neighborDev)
+            {
+                if (!DeviceHasAnyWires(neighborDev, neighborId))
+                {
+                    UntrackDeviceFromPolling(neighborId);
+                }
+            }
+            else
+            {
+                // Neighbor disappeared — clean up
+                UntrackDeviceFromPolling(neighborId);
+            }
         }
         #endif
     }

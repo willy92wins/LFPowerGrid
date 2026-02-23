@@ -16,6 +16,9 @@
 //          - CompEM SwitchOff on both client+server (visual effects fix)
 //          - CanBePickedUp/IsHeavyBehaviour overrides for lamp
 //          - Position polling timer for heavy carry bypass detection
+// v0.7.30: Removed per-device position polling timers (Audit 1+2 closure).
+//          Movement detection is now centralized in NetworkManager with
+//          round-robin batching. See LFPG_MOVE_DETECT_* constants.
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -43,10 +46,9 @@ class LF_TestGenerator : PowerGenerator
     // Synced to clients for per-wire CRITICAL_LOAD cable state.
     protected int m_OverloadMask = 0;
 
-    // v0.7.29 (Audit fix): Position polling for movement bypass detection.
-    protected vector m_LFPG_LastKnownPos;
-    static const float LFPG_POS_POLL_INTERVAL_S = 2.0;
-    static const float LFPG_POS_DRIFT_THRESHOLD_M = 0.5;
+    // v0.7.30: Per-device position polling removed.
+    // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
+    // with round-robin batching (Audit 1+2 closure).
 
     void LF_TestGenerator()
     {
@@ -152,59 +154,12 @@ class LF_TestGenerator : PowerGenerator
         if (m_SourceOn)
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
-        // v0.7.29 (Audit fix): Start position polling (safety net)
-        m_LFPG_LastKnownPos = GetPosition();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PositionPollTick, LFPG_POS_POLL_INTERVAL_S * 1000.0, true);
-        #endif
-    }
-
-    // v0.7.29 (Audit fix): Periodic position drift check.
-    // Catches admin teleport, physics push, or any mechanism that
-    // moves the generator without firing EEItemLocationChanged.
-    protected void LFPG_PositionPollTick()
-    {
-        #ifdef SERVER
-        if (m_DeviceId == "")
-            return;
-
-        vector currentPos = GetPosition();
-
-        if (m_LFPG_LastKnownPos == vector.Zero)
-        {
-            m_LFPG_LastKnownPos = currentPos;
-            return;
-        }
-
-        float dist = vector.Distance(m_LFPG_LastKnownPos, currentPos);
-        if (dist > LFPG_POS_DRIFT_THRESHOLD_M)
-        {
-            LFPG_Util.Warn("[LF_TestGenerator] Position drift detected: " + dist.ToString() + "m, cutting wires id=" + m_DeviceId);
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-
-            if (m_SourceOn)
-            {
-                m_SourceOn = false;
-                SetSynchDirty();
-                ComponentEnergyManager emDrift = GetCompEM();
-                if (emDrift)
-                {
-                    emDrift.SwitchOff();
-                }
-            }
-
-            m_LFPG_LastKnownPos = currentPos;
-        }
         #endif
     }
 
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
-        // v0.7.29: Stop position polling timer
-        #ifdef SERVER
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PositionPollTick);
-        #endif
-
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
@@ -823,13 +778,9 @@ class LF_TestLamp : Spotlight
     // ScriptedLightBase is an engine object (not Managed). Do NOT store as `ref`.
     protected ScriptedLightBase m_LFPG_Light;
 
-    // v0.7.29 (Audit fix): Position polling for heavy carry detection.
-    // DayZ heavy carry can move entities GROUND→GROUND incrementally
-    // (each frame < 0.1m), bypassing EEItemLocationChanged's threshold.
-    // This timer checks total drift from the original wired position.
-    protected vector m_LFPG_LastKnownPos;
-    static const float LFPG_POS_POLL_INTERVAL_S = 2.0;
-    static const float LFPG_POS_DRIFT_THRESHOLD_M = 0.5;
+    // v0.7.30: Per-device position polling removed.
+    // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
+    // with round-robin batching (Audit 1+2 closure).
 
     void LF_TestLamp()
     {
@@ -900,62 +851,11 @@ class LF_TestLamp : Spotlight
 
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
-
-        // v0.7.29 (Audit fix): Start position polling timer (server-only).
-        // Safety net for heavy carry and other movement bypasses.
-        #ifdef SERVER
-        m_LFPG_LastKnownPos = GetPosition();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PositionPollTick, LFPG_POS_POLL_INTERVAL_S * 1000.0, true);
-        #endif
-    }
-
-    // v0.7.29 (Audit fix): Periodic position drift check.
-    // Compares current position against last known position.
-    // If drift exceeds threshold, cuts all wires. This catches:
-    //   - Heavy carry system (GROUND→GROUND, incremental, < 0.1m/frame)
-    //   - Admin teleport without EEItemLocationChanged
-    //   - Physics push from vehicles or explosions
-    protected void LFPG_PositionPollTick()
-    {
-        #ifdef SERVER
-        if (m_DeviceId == "")
-            return;
-
-        vector currentPos = GetPosition();
-
-        // Skip if device hasn't been placed yet (zero position)
-        if (m_LFPG_LastKnownPos == vector.Zero)
-        {
-            m_LFPG_LastKnownPos = currentPos;
-            return;
-        }
-
-        float dist = vector.Distance(m_LFPG_LastKnownPos, currentPos);
-        if (dist > LFPG_POS_DRIFT_THRESHOLD_M)
-        {
-            LFPG_Util.Warn("[LF_TestLamp] Position drift detected: " + dist.ToString() + "m, cutting wires id=" + m_DeviceId);
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-
-            if (m_PoweredNet)
-            {
-                m_PoweredNet = false;
-                SetSynchDirty();
-            }
-
-            // Update known position to prevent repeated cutting
-            m_LFPG_LastKnownPos = currentPos;
-        }
-        #endif
     }
 
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
-        // v0.7.29: Stop position polling timer
-        #ifdef SERVER
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PositionPollTick);
-        #endif
-
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
