@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Splitter device (v0.7.11)
+// LF_PowerGrid - Splitter device (v0.7.26)
 //
 // LF_Splitter_Kit:  Holdable item (wooden crate model).
 //                   Player places it via hologram -> spawns LF_Splitter.
@@ -61,12 +61,18 @@ class LF_Splitter_Kit : Inventory_Base
     override void SetActions()
     {
         super.SetActions();
+        // v0.7.26: ActionTogglePlaceObject enters hologram mode.
+        // LFPG_ActionPlaceSplitter confirms placement (extends ActionPlaceObject).
+        // This combo is proven to move the kit to hologram position BEFORE
+        // OnPlacementComplete fires, unlike ActionDeployObject which doesn't.
         AddAction(ActionTogglePlaceObject);
-        AddAction(ActionDeployObject);
+        AddAction(LFPG_ActionPlaceSplitter);
     }
 
-    // Engine moves the kit to hologram position before calling this.
-    // Since kit and splitter share the same model, position matches exactly.
+    // v0.7.26: With ActionPlaceObject (not ActionDeployObject), the engine
+    // moves the kit to the hologram position BEFORE this callback fires.
+    // GetPosition()/GetOrientation() now return the hologram transform directly.
+    // No DeferredDeploy hack needed.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
@@ -75,18 +81,17 @@ class LF_Splitter_Kit : Inventory_Base
         vector finalPos = GetPosition();
         vector finalOri = GetOrientation();
 
-        // Only keep yaw (horizontal rotation). Zero pitch/roll so splitter sits upright.
-        // DayZ orientation vector: [0]=yaw  [1]=pitch  [2]=roll
-        finalOri[1] = 0;
-        finalOri[2] = 0;
+        LFPG_Util.Info("[Splitter_Kit] OnPlacementComplete: pos=" + finalPos.ToString() + " ori=" + finalOri.ToString());
 
+        // Do NOT use ECE_PLACE_ON_SURFACE — it forces ground snap, killing wall placement.
+        // Do NOT zero pitch/roll — the hologram orientation already includes wall alignment.
         EntityAI splitter = GetGame().CreateObjectEx("LF_Splitter", finalPos, ECE_CREATEPHYSICS);
         if (splitter)
         {
             splitter.SetPosition(finalPos);
             splitter.SetOrientation(finalOri);
             splitter.Update();
-            LFPG_Util.Info("[Splitter_Kit] Deployed LF_Splitter at " + finalPos.ToString() + " yaw=" + finalOri[0].ToString());
+            LFPG_Util.Info("[Splitter_Kit] Deployed LF_Splitter at " + finalPos.ToString() + " ori=" + finalOri.ToString());
         }
         else
         {
@@ -151,6 +156,59 @@ class LF_Splitter : Inventory_Base
         return false;
     }
 
+    // v0.7.26 (Bug 2): Immediate movement detection.
+    // Two-layer detection: inventory type transition (primary) + distance (secondary).
+    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
+    {
+        super.EEItemLocationChanged(oldLoc, newLoc);
+
+        #ifdef SERVER
+        if (m_DeviceId == "")
+            return;
+
+        // Primary: inventory location type transition.
+        // GROUND→anything else = picked up (admin tools, physics, scripts).
+        // CanPutInCargo/CanPutIntoHands block normal pickup, but not all paths.
+        bool wasGround = (oldLoc.GetType() == InventoryLocationType.GROUND);
+        bool nowGround = (newLoc.GetType() == InventoryLocationType.GROUND);
+
+        if (wasGround && !nowGround)
+        {
+            LFPG_Util.Warn("[LF_Splitter] Picked up (GROUND->" + newLoc.GetType().ToString() + ") id=" + m_DeviceId);
+            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+
+            if (m_PoweredNet)
+            {
+                m_PoweredNet = false;
+                SetSynchDirty();
+            }
+            return;
+        }
+
+        // Secondary: distance-based for GROUND→GROUND moves.
+        // Catches admin teleport, physics push, building destruction.
+        vector oldPos = oldLoc.GetPos();
+        vector newPos = newLoc.GetPos();
+
+        if (oldPos == vector.Zero)
+            return;
+
+        float dist = vector.Distance(oldPos, newPos);
+        // v0.7.25: Threshold 0.1m (physics bumps can be 0.2-0.4m).
+        if (dist < 0.1)
+            return;
+
+        LFPG_Util.Warn("[LF_Splitter] EEItemLocationChanged: moved " + dist.ToString() + "m id=" + m_DeviceId);
+        LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
     override void EEInit()
     {
         super.EEInit();
@@ -179,12 +237,43 @@ class LF_Splitter : Inventory_Base
         #endif
     }
 
+    // v0.7.26 (Bug 2): Cut all wires when splitter is destroyed.
+    // EEKilled fires when entity reaches RUINED state but before deletion.
+    // Without this, a destroyed splitter keeps ghost wires in the graph
+    // for as long as the ruined object persists in the world.
+    override void EEKilled(Object killer)
+    {
+        #ifdef SERVER
+        if (m_DeviceId != "")
+        {
+            LFPG_Util.Warn("[LF_Splitter] EEKilled: cutting all wires id=" + m_DeviceId);
+            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+        }
+
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+
+        super.EEKilled(killer);
+    }
+
     override void EEDelete(EntityAI parent)
     {
-        // Sprint 4.1: notify graph before unregistering
+        // v0.7.26: Centralized cleanup ensures all wires, graph edges,
+        // reverse index, and player counts are cleaned atomically.
+        #ifdef SERVER
+        if (m_DeviceId != "")
+        {
+            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+        }
+        #endif
+
+        // Notify graph and unregister device identity
         LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(m_DeviceId);
         LFPG_DeviceRegistry.Get().Unregister(m_DeviceId, this);
-        LFPG_NetworkManager.Get().RequestGlobalSelfHeal();
         super.EEDelete(parent);
     }
 

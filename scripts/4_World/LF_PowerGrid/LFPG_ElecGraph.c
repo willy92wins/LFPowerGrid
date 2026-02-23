@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Electrical Graph (Sprint 4.2 S3, v0.7.21)
+// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.7.26)
 //
 // In-memory directed graph of the electrical network.
 // Nodes = devices, edges = wires. Rebuilt from wire data at
@@ -17,10 +17,23 @@
 //   H2: Dirty mask differentiation (INTERNAL/TOPOLOGY/INPUT)
 //   H6: Consumer respects m_Consumption (not just epsilon)
 //
-// Sprint 4.2 S3: Dead code removal (legacy BFS propagation removed
-//   from NetworkManager; this graph is now the sole propagation path).
+// Sprint 4.2 S3: Dead code removal — graph is sole propagation path.
+//
+// Sprint 4.3: Load modeling
+//   - Priority-based power allocation on outgoing edges
+//   - Overload detection: demand > capacity → brownout policy
+//   - Edge budget active (limits edges visited per tick)
+//   - Budget dedup fix (processed++ after epoch check)
+//   - Targeted ResetRequeueCounts (O(dirty) not O(N_total))
+//   - SyncNodeToEntity syncs LoadRatio + OverloadMask for sources
+//   - Per-component load telemetry
 //
 // Server-only: all public methods are guarded by #ifdef SERVER.
+//
+// v0.7.26 (Audit 4):
+//   - DFS depth limit in DetectCycleIfAdded (LFPG_DFS_MAX_VISITED)
+//   - NaN/infinity guards on loadRatio + inputSum calculations
+//   - Improved overload reporting when MaxOutput is zero
 // =========================================================
 
 class LFPG_ElecGraph
@@ -48,6 +61,15 @@ class LFPG_ElecGraph
     protected int m_LastRebuildMs;
     protected int m_LastProcessMs;        // Sprint 4.2 S2: time spent in ProcessDirtyQueue
 
+    // --- Sprint 4.3: Targeted requeue tracking ---
+    protected ref array<string> m_EnqueuedThisEpoch;
+
+    // --- Sprint 4.3: Edge budget tracking ---
+    protected int m_EdgesVisitedThisEpoch;
+
+    // --- Sprint 4.3: Load telemetry ---
+    protected int m_LastOverloadCount;
+
     void LFPG_ElecGraph()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -63,6 +85,9 @@ class LFPG_ElecGraph
         m_EdgeCount = 0;
         m_LastRebuildMs = 0;
         m_LastProcessMs = 0;
+        m_EnqueuedThisEpoch = new array<string>;
+        m_EdgesVisitedThisEpoch = 0;
+        m_LastOverloadCount = 0;
     }
 
     // ===========================
@@ -90,8 +115,6 @@ class LFPG_ElecGraph
         m_EdgeCount = 0;
 
         // Step 1: Iterate all registered devices to create nodes
-        // (only those that have wires will persist — lazy pruning later)
-        // We still create them here to resolve types correctly.
         ref array<EntityAI> allDevices = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevices);
 
@@ -106,7 +129,6 @@ class LFPG_ElecGraph
             if (devId == "")
                 continue;
 
-            // Pre-create node (may be pruned if no edges after wire pass)
             EnsureNode(devId, devObj);
         }
 
@@ -164,7 +186,7 @@ class LFPG_ElecGraph
             }
         }
 
-        // Step 4: Prune nodes with no edges (lazy: keep only connected nodes)
+        // Step 4: Prune nodes with no edges
         ref array<string> emptyNodes = new array<string>;
         int ni;
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
@@ -212,16 +234,12 @@ class LFPG_ElecGraph
     // Incremental operations
     // ===========================
 
-    // Called after a wire is successfully added.
-    // Sprint 4.2 S2 (H1): returns true only if edge was actually inserted.
-    // Only marks endpoints dirty when insertion succeeds.
     bool OnWireAdded(string sourceId, string targetId, string sourcePort, string targetPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
         if (sourceId == "" || targetId == "")
             return false;
 
-        // Resolve entities for type detection
         EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
         EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
 
@@ -237,7 +255,6 @@ class LFPG_ElecGraph
 
         m_ComponentsDirty = true;
 
-        // Sprint 4.2: Mark both endpoints dirty for propagation
         MarkNodeDirty(sourceId, LFPG_DIRTY_TOPOLOGY);
         MarkNodeDirty(targetId, LFPG_DIRTY_TOPOLOGY);
 
@@ -247,8 +264,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Called after a wire is removed.
-    // Sprint 4.2: marks both endpoints dirty for propagation.
     void OnWireRemoved(string sourceId, string targetId, string sourcePort, string targetPort)
     {
         #ifdef SERVER
@@ -257,24 +272,19 @@ class LFPG_ElecGraph
         CleanupOrphanNode(targetId);
         m_ComponentsDirty = true;
 
-        // Sprint 4.2: Mark both endpoints dirty
         MarkNodeDirty(sourceId, LFPG_DIRTY_TOPOLOGY);
         MarkNodeDirty(targetId, LFPG_DIRTY_TOPOLOGY);
         #endif
     }
 
-    // Called when a device is destroyed.
-    // Removes the node and all its edges from the graph.
     void OnDeviceRemoved(string deviceId)
     {
         #ifdef SERVER
         if (deviceId == "")
             return;
 
-        // Collect neighbors that will be affected
         ref array<string> affectedNeighbors = new array<string>;
 
-        // Remove outgoing edges
         ref array<ref LFPG_ElecEdge> outEdges;
         if (m_Outgoing.Find(deviceId, outEdges) && outEdges)
         {
@@ -284,7 +294,6 @@ class LFPG_ElecGraph
                 ref LFPG_ElecEdge oEdge = outEdges[oi];
                 if (oEdge)
                 {
-                    // Remove from target's incoming
                     RemoveFromIncoming(oEdge.m_TargetNodeId, deviceId, oEdge.m_SourcePort, oEdge.m_TargetPort);
                     affectedNeighbors.Insert(oEdge.m_TargetNodeId);
                     m_EdgeCount = m_EdgeCount - 1;
@@ -293,7 +302,6 @@ class LFPG_ElecGraph
             }
         }
 
-        // Remove incoming edges
         ref array<ref LFPG_ElecEdge> inEdges;
         if (m_Incoming.Find(deviceId, inEdges) && inEdges)
         {
@@ -303,7 +311,6 @@ class LFPG_ElecGraph
                 ref LFPG_ElecEdge iEdge = inEdges[ii];
                 if (iEdge)
                 {
-                    // Remove from source's outgoing
                     RemoveFromOutgoing(iEdge.m_SourceNodeId, deviceId, iEdge.m_SourcePort, iEdge.m_TargetPort);
                     affectedNeighbors.Insert(iEdge.m_SourceNodeId);
                     m_EdgeCount = m_EdgeCount - 1;
@@ -312,18 +319,15 @@ class LFPG_ElecGraph
             }
         }
 
-        // Remove the node itself
         m_Nodes.Remove(deviceId);
         m_Outgoing.Remove(deviceId);
         m_Incoming.Remove(deviceId);
         m_NodeCount = m_Nodes.Count();
 
-        // Cleanup any neighbors that became orphans
         int ai;
         for (ai = 0; ai < affectedNeighbors.Count(); ai = ai + 1)
         {
             CleanupOrphanNode(affectedNeighbors[ai]);
-            // Sprint 4.2: Mark surviving neighbors dirty
             MarkNodeDirty(affectedNeighbors[ai], LFPG_DIRTY_TOPOLOGY);
         }
 
@@ -335,24 +339,28 @@ class LFPG_ElecGraph
     // Cycle detection
     // ===========================
 
-    // Returns true if adding an edge sourceId→targetId would create
-    // a directed cycle. Uses iterative DFS from targetId following
-    // outgoing edges — if it reaches sourceId, a cycle exists.
     bool DetectCycleIfAdded(string sourceId, string targetId)
     {
         #ifdef SERVER
-        // Self-loop
         if (sourceId == targetId)
             return true;
 
-        // DFS from targetId following outgoing edges
         ref array<string> stack = new array<string>;
         ref map<string, bool> visited = new map<string, bool>;
 
         stack.Insert(targetId);
+        int visitedCount = 0;
 
         while (stack.Count() > 0)
         {
+            // v0.7.26 (Audit 4): Depth limit guard for very dense graphs.
+            // Conservatively assumes cycle if limit reached (safe: rejects wire).
+            if (visitedCount >= LFPG_DFS_MAX_VISITED)
+            {
+                LFPG_Util.Warn("[ElecGraph] DetectCycle: visited limit reached (" + visitedCount.ToString() + "), assuming cycle");
+                return true;
+            }
+
             int topIdx = stack.Count() - 1;
             string current = stack[topIdx];
             stack.Remove(topIdx);
@@ -366,14 +374,15 @@ class LFPG_ElecGraph
                 continue;
 
             visited.Set(current, true);
+            visitedCount = visitedCount + 1;
 
             ref array<ref LFPG_ElecEdge> edges;
             if (m_Outgoing.Find(current, edges) && edges)
             {
-                int ei;
-                for (ei = 0; ei < edges.Count(); ei = ei + 1)
+                int edgeI;
+                for (edgeI = 0; edgeI < edges.Count(); edgeI = edgeI + 1)
                 {
-                    ref LFPG_ElecEdge edge = edges[ei];
+                    ref LFPG_ElecEdge edge = edges[edgeI];
                     if (edge && edge.m_TargetNodeId != "")
                     {
                         bool tgtVisited = false;
@@ -397,15 +406,12 @@ class LFPG_ElecGraph
     // Connected components
     // ===========================
 
-    // Assigns component IDs to all nodes via undirected BFS.
-    // Only runs when m_ComponentsDirty is set.
     void RebuildComponents()
     {
         #ifdef SERVER
         if (!m_ComponentsDirty)
             return;
 
-        // Reset all component IDs
         int ri;
         for (ri = 0; ri < m_Nodes.Count(); ri = ri + 1)
         {
@@ -416,7 +422,6 @@ class LFPG_ElecGraph
 
         int nextId = 0;
 
-        // BFS from each unvisited node
         int ni;
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
@@ -426,7 +431,6 @@ class LFPG_ElecGraph
             if (startNode.m_ComponentId != -1)
                 continue;
 
-            // BFS queue
             ref array<string> queue = new array<string>;
             queue.Insert(m_Nodes.GetKey(ni));
             int head = 0;
@@ -444,7 +448,6 @@ class LFPG_ElecGraph
 
                 curNode.m_ComponentId = nextId;
 
-                // Follow outgoing (undirected: treat as neighbors)
                 ref array<ref LFPG_ElecEdge> outE;
                 if (m_Outgoing.Find(curId, outE) && outE)
                 {
@@ -464,7 +467,6 @@ class LFPG_ElecGraph
                     }
                 }
 
-                // Follow incoming (undirected: treat as neighbors)
                 ref array<ref LFPG_ElecEdge> inE;
                 if (m_Incoming.Find(curId, inE) && inE)
                 {
@@ -497,7 +499,6 @@ class LFPG_ElecGraph
     // Internal helpers
     // ===========================
 
-    // Creates a node if it doesn't exist.
     protected void EnsureNode(string deviceId, EntityAI obj)
     {
         #ifdef SERVER
@@ -521,21 +522,15 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Adds an edge to the graph (no cycle check — internal use).
-    // Validates that source and target nodes exist or can be created.
-    // Sprint 4.2 S2 (H1): returns bool — true if edge was actually inserted.
-    // Returns false on: empty IDs, missing nodes, edge limits exceeded.
     protected bool AddEdgeInternal(string sourceId, string targetId, string srcPort, string tgtPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
         if (sourceId == "" || targetId == "")
             return false;
 
-        // Validate nodes exist — create if needed during rebuild
         ref LFPG_ElecNode srcNode;
         if (!m_Nodes.Find(sourceId, srcNode))
         {
-            // Node not registered — try to resolve from DeviceRegistry
             EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
             if (!srcObj)
             {
@@ -557,7 +552,6 @@ class LFPG_ElecGraph
             EnsureNode(targetId, tgtObj);
         }
 
-        // Sprint 4.2 (Audit #1): Check edge limits on source outgoing
         ref array<ref LFPG_ElecEdge> existOut;
         if (m_Outgoing.Find(sourceId, existOut) && existOut)
         {
@@ -568,7 +562,6 @@ class LFPG_ElecGraph
             }
         }
 
-        // Sprint 4.2 (Audit #1): Check edge limits on target incoming
         ref array<ref LFPG_ElecEdge> existIn;
         if (m_Incoming.Find(targetId, existIn) && existIn)
         {
@@ -596,6 +589,9 @@ class LFPG_ElecGraph
         }
         outArr.Insert(edge);
 
+        // Sprint 4.3: Assign edge index within source's outgoing array
+        edge.m_EdgeIndex = outArr.Count() - 1;
+
         // Insert into incoming
         ref array<ref LFPG_ElecEdge> inArr;
         if (!m_Incoming.Find(targetId, inArr) || !inArr)
@@ -612,18 +608,12 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Removes a specific edge matching all four identifiers.
-    // Sprint 4.2 (Audit #2): Only decrements m_EdgeCount if both
-    // Remove operations confirmed the edge existed.
     protected void RemoveEdgeInternal(string sourceId, string targetId, string srcPort, string tgtPort)
     {
         #ifdef SERVER
-        // Remove from outgoing[sourceId]
         bool removedOut = RemoveFromOutgoing(sourceId, targetId, srcPort, tgtPort);
-        // Remove from incoming[targetId]
         bool removedIn = RemoveFromIncoming(targetId, sourceId, srcPort, tgtPort);
 
-        // Only decrement if at least one side confirmed removal
         if (removedOut || removedIn)
         {
             m_EdgeCount = m_EdgeCount - 1;
@@ -633,8 +623,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Remove matching edge from m_Outgoing[ownerId].
-    // Returns true if an edge was actually removed.
     protected bool RemoveFromOutgoing(string ownerId, string targetId, string srcPort, string tgtPort)
     {
         #ifdef SERVER
@@ -649,6 +637,16 @@ class LFPG_ElecGraph
             if (e && e.m_TargetNodeId == targetId && e.m_SourcePort == srcPort && e.m_TargetPort == tgtPort)
             {
                 arr.Remove(i);
+                // Sprint 4.3 fix: reindex m_EdgeIndex on remaining edges after removal
+                int ri;
+                for (ri = i; ri < arr.Count(); ri = ri + 1)
+                {
+                    ref LFPG_ElecEdge re = arr[ri];
+                    if (re)
+                    {
+                        re.m_EdgeIndex = ri;
+                    }
+                }
                 return true;
             }
             i = i - 1;
@@ -659,8 +657,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Remove matching edge from m_Incoming[targetId] where source == sourceId.
-    // Returns true if an edge was actually removed.
     protected bool RemoveFromIncoming(string targetId, string sourceId, string srcPort, string tgtPort)
     {
         #ifdef SERVER
@@ -685,7 +681,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Remove a node if it has no edges remaining.
     protected void CleanupOrphanNode(string deviceId)
     {
         #ifdef SERVER
@@ -781,10 +776,39 @@ class LFPG_ElecGraph
         return m_DirtyQueue.Count() - m_DirtyQueueHead;
     }
 
-    // Sprint 4.2 S2 (H2): Correct order for bulk mutations.
-    // After any bulk wire removal (CutWires, CutPort), callers must
-    // rebuild the graph FIRST, then populate states, then mark dirty.
-    // This method encapsulates the correct sequence.
+    // Sprint 4.3: Get count of sources currently in overload state.
+    int GetOverloadedSourceCount()
+    {
+        #ifdef SERVER
+        int count = 0;
+        int ni;
+        for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
+        {
+            ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
+            if (node && node.m_DeviceType == LFPG_DeviceType.SOURCE)
+            {
+                if (node.m_LoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
+                {
+                    count = count + 1;
+                }
+            }
+        }
+        return count;
+        #else
+        return 0;
+        #endif
+    }
+
+    // Sprint 4.3: Get edges visited in last ProcessDirtyQueue call.
+    int GetLastEdgesVisited()
+    {
+        return m_EdgesVisitedThisEpoch;
+    }
+
+    // ===========================
+    // Bulk rebuild helpers
+    // ===========================
+
     void PostBulkRebuild(LFPG_NetworkManager mgr)
     {
         #ifdef SERVER
@@ -800,12 +824,10 @@ class LFPG_ElecGraph
     }
 
     // ===========================
-    // Sprint 4.2: Dirty marking
+    // Sprint 4.2+4.3: Dirty marking
     // ===========================
 
-    // Mark a node as needing re-evaluation during the next propagation tick.
-    // mask: combination of LFPG_DIRTY_TOPOLOGY, LFPG_DIRTY_INPUT, LFPG_DIRTY_INTERNAL.
-    // If the node is already in the queue, the mask is OR'd with the existing mask.
+    // Sprint 4.3: Now tracks enqueued nodes for targeted requeue reset.
     void MarkNodeDirty(string nodeId, int mask)
     {
         #ifdef SERVER
@@ -823,11 +845,11 @@ class LFPG_ElecGraph
         {
             node.m_InQueue = true;
             m_DirtyQueue.Insert(nodeId);
+            m_EnqueuedThisEpoch.Insert(nodeId);
         }
         #endif
     }
 
-    // Mark all nodes in a connected component as dirty.
     void MarkComponentDirty(int componentId, int mask)
     {
         #ifdef SERVER
@@ -849,8 +871,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Mark all SOURCE nodes as dirty (used at server warmup).
-    // This triggers a full propagation cascade through the entire network.
     void MarkSourcesDirty()
     {
         #ifdef SERVER
@@ -869,38 +889,15 @@ class LFPG_ElecGraph
     }
 
     // ===========================
-    // Sprint 4.2: Budgeted propagation
+    // Sprint 4.3: Budgeted propagation with load allocation
     // ===========================
 
-    // Process up to 'budget' dirty nodes per call.
-    // Returns the number of dirty nodes remaining in the queue.
-    // Called periodically by NetworkManager.TickPropagation().
-    //
-    // Sprint 4.2 S2 fixes:
-    //   H3-prev: Requeue counts reset per-epoch (not only on empty queue)
-    //   H4-prev: Head-index dequeue avoids array copy churn
-    //
-    // Sprint 4.2 S2b fixes (audit #2):
-    //   H2: Dirty mask differentiation:
-    //       DIRTY_INTERNAL on SOURCE → skip input eval, just recalc output from state
-    //       DIRTY_TOPOLOGY → full re-evaluation (shares may have changed)
-    //       DIRTY_INPUT → normal input re-evaluation
-    //   H6: Consumer respects m_Consumption threshold (not just epsilon)
-    //   H7: epoch = tick-batch (one ProcessDirtyQueue call), NOT global wave
-    //
-    // Algorithm:
-    //   For each dirty node (up to budget):
-    //     1. Evaluate inputs based on dirty mask
-    //     2. Compute this node's output based on device type
-    //     3. If output changed beyond epsilon: mark downstream dirty
-    //     4. Sync state to game entity
-    int ProcessDirtyQueue(int budget)
+    int ProcessDirtyQueue(int nodeBudget, int edgeBudget)
     {
         #ifdef SERVER
         int queueLen = m_DirtyQueue.Count() - m_DirtyQueueHead;
         if (queueLen <= 0)
         {
-            // Queue is logically empty — compact if needed
             if (m_DirtyQueue.Count() > 0)
             {
                 m_DirtyQueue.Clear();
@@ -911,15 +908,11 @@ class LFPG_ElecGraph
 
         int startMs = GetGame().GetTickCount();
 
-        // Ensure components are current (needed for warmup)
         if (m_ComponentsDirty)
             RebuildComponents();
 
-        // H7: m_CurrentEpoch increments per ProcessDirtyQueue call (= per tick-batch).
-        // It does NOT represent a full propagation wave (which may span multiple ticks).
         m_CurrentEpoch = m_CurrentEpoch + 1;
 
-        // H3-prev: Reset requeue counts at start of each new epoch
         if (m_LastRequeueResetEpoch != m_CurrentEpoch)
         {
             ResetRequeueCounts();
@@ -927,12 +920,17 @@ class LFPG_ElecGraph
         }
 
         int processed = 0;
+        m_EdgesVisitedThisEpoch = 0;
 
-        while (m_DirtyQueueHead < m_DirtyQueue.Count() && processed < budget)
+        while (m_DirtyQueueHead < m_DirtyQueue.Count())
         {
+            if (processed >= nodeBudget)
+                break;
+            if (m_EdgesVisitedThisEpoch >= edgeBudget)
+                break;
+
             string nodeId = m_DirtyQueue[m_DirtyQueueHead];
             m_DirtyQueueHead = m_DirtyQueueHead + 1;
-            processed = processed + 1;
 
             ref LFPG_ElecNode node;
             if (!m_Nodes.Find(nodeId, node) || !node)
@@ -940,9 +938,11 @@ class LFPG_ElecGraph
 
             // Skip if already processed this epoch (dedup)
             if (node.m_LastEpoch == m_CurrentEpoch)
-                continue;
+                continue;  // Sprint 4.3 fix: processed NOT incremented here
 
-            // Cycle protection: limit re-enqueues per epoch
+            // NOW increment processed (after dedup check)
+            processed = processed + 1;
+
             if (node.m_RequeueCount > LFPG_MAX_REQUEUE_PER_EPOCH)
             {
                 LFPG_Util.Warn("[ElecGraph] Requeue limit reached for " + nodeId + " epoch=" + m_CurrentEpoch.ToString());
@@ -952,13 +952,9 @@ class LFPG_ElecGraph
                 continue;
             }
 
-            // Capture dirty mask before clearing
             int dirtyMask = node.m_DirtyMask;
 
             // --- Step 1: Evaluate inputs ---
-            // H2: Sources with ONLY DIRTY_INTERNAL skip input evaluation.
-            // Their state was already refreshed by RefreshSourceState().
-            // For all other cases: re-evaluate inputs from incoming edges.
             bool skipInputEval = false;
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE && dirtyMask == LFPG_DIRTY_INTERNAL)
             {
@@ -978,32 +974,25 @@ class LFPG_ElecGraph
                         if (!inEdge)
                             continue;
 
-                        // Skip disabled edges
                         if ((inEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
                             continue;
 
-                        ref LFPG_ElecNode srcNode;
-                        if (m_Nodes.Find(inEdge.m_SourceNodeId, srcNode) && srcNode)
+                        m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+
+                        // Sprint 4.3: Use priority-aware allocated power
+                        float edgePower = GetEdgeAllocatedPower(inEdge);
+                        // v0.7.26 (Audit 4): Guard against NaN/negative from floating point corruption
+                        if (edgePower < 0.0)
                         {
-                            // Each outgoing edge from source delivers a share of output.
-                            // Simple: split evenly across all enabled outgoing edges.
-                            float srcOutput = srcNode.m_OutputPower;
-                            if (srcOutput > 0.0)
-                            {
-                                int enabledOutCount = CountEnabledOutgoing(inEdge.m_SourceNodeId);
-                                if (enabledOutCount > 0)
-                                {
-                                    inputSum = inputSum + (srcOutput / enabledOutCount);
-                                }
-                            }
+                            edgePower = 0.0;
                         }
+                        inputSum = inputSum + edgePower;
                     }
                 }
                 node.m_InputPower = inputSum;
             }
             else
             {
-                // Source with DIRTY_INTERNAL: keep existing m_InputPower (irrelevant for sources)
                 inputSum = node.m_InputPower;
             }
 
@@ -1013,17 +1002,14 @@ class LFPG_ElecGraph
 
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
-                // Source: output = capacity if turned on, 0 if off.
-                // Source state was refreshed by RefreshSourceState or warmup.
                 if (node.m_Powered)
                 {
                     newOutput = node.m_MaxOutput;
                 }
-                newPowered = node.m_Powered;  // Source powered state is external
+                newPowered = node.m_Powered;
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                // Passthrough (splitter): powered if has any input, passes it through
                 if (inputSum > LFPG_PROPAGATION_EPSILON)
                 {
                     newPowered = true;
@@ -1032,13 +1018,8 @@ class LFPG_ElecGraph
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
             {
-                // H6: Consumer powered check uses m_Consumption when declared.
-                // If m_Consumption > 0: powered only if input meets demand.
-                // If m_Consumption == 0 (undeclared): powered if any input above epsilon.
-                // This enables Sprint 4.3 load modeling while staying backward-compatible.
                 if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                 {
-                    // Real consumption check: input must meet or exceed demand
                     if (inputSum + LFPG_PROPAGATION_EPSILON >= node.m_Consumption)
                     {
                         newPowered = true;
@@ -1046,22 +1027,59 @@ class LFPG_ElecGraph
                 }
                 else
                 {
-                    // Fallback: any input above epsilon powers the consumer
                     if (inputSum > LFPG_PROPAGATION_EPSILON)
                     {
                         newPowered = true;
                     }
                 }
-                newOutput = 0.0;  // Consumers don't output
+                newOutput = 0.0;
             }
             else
             {
-                // UNKNOWN: treat as consumer with no declared consumption
                 if (inputSum > LFPG_PROPAGATION_EPSILON)
                     newPowered = true;
             }
 
             node.m_Powered = newPowered;
+
+            // --- Step 2b (Sprint 4.3): Priority-based output allocation ---
+            if (newOutput > LFPG_PROPAGATION_EPSILON)
+            {
+                if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                {
+                    int edgeBudgetLeft = edgeBudget - m_EdgesVisitedThisEpoch;
+                    if (edgeBudgetLeft < 0)
+                    {
+                        edgeBudgetLeft = 0;
+                    }
+                    AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
+                }
+            }
+            else
+            {
+                // Clear allocations on all outgoing edges
+                ref array<ref LFPG_ElecEdge> clearEdges;
+                if (m_Outgoing.Find(nodeId, clearEdges) && clearEdges)
+                {
+                    int cli;
+                    for (cli = 0; cli < clearEdges.Count(); cli = cli + 1)
+                    {
+                        ref LFPG_ElecEdge clEdge = clearEdges[cli];
+                        if (clEdge)
+                        {
+                            clEdge.m_AllocatedPower = 0.0;
+                            clEdge.m_Demand = 0.0;
+                            clEdge.m_Flags = clEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
+                            clEdge.m_Flags = clEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
+                        }
+                    }
+                }
+                if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+                {
+                    node.m_LoadRatio = 0.0;
+                    node.m_OverloadMask = 0;
+                }
+            }
 
             // --- Step 3: If output changed, mark downstream dirty ---
             float outputDelta = newOutput - node.m_LastStableOutput;
@@ -1073,7 +1091,6 @@ class LFPG_ElecGraph
                 node.m_OutputPower = newOutput;
                 node.m_LastStableOutput = newOutput;
 
-                // Mark all downstream nodes dirty
                 ref array<ref LFPG_ElecEdge> outEdges;
                 if (m_Outgoing.Find(nodeId, outEdges) && outEdges)
                 {
@@ -1083,7 +1100,8 @@ class LFPG_ElecGraph
                         ref LFPG_ElecEdge outEdge = outEdges[oi];
                         if (outEdge && outEdge.m_TargetNodeId != "")
                         {
-                            // Increment target requeue count for cycle protection
+                            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+
                             ref LFPG_ElecNode tgtNode;
                             if (m_Nodes.Find(outEdge.m_TargetNodeId, tgtNode) && tgtNode)
                             {
@@ -1110,17 +1128,14 @@ class LFPG_ElecGraph
         }
 
         // H4: Compact the queue only when head passes threshold
-        // This avoids per-tick array copies while preventing unbounded growth.
         int remaining = m_DirtyQueue.Count() - m_DirtyQueueHead;
         if (remaining <= 0)
         {
-            // Queue fully drained
             m_DirtyQueue.Clear();
             m_DirtyQueueHead = 0;
         }
         else if (m_DirtyQueueHead >= LFPG_DIRTY_QUEUE_COMPACT_THRESHOLD)
         {
-            // Compact: shift remaining entries to front
             ref array<string> compacted = new array<string>;
             int ci;
             for (ci = m_DirtyQueueHead; ci < m_DirtyQueue.Count(); ci = ci + 1)
@@ -1143,6 +1158,7 @@ class LFPG_ElecGraph
         if (processed > 0)
         {
             LFPG_Util.Debug("[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString()
+                + " edges=" + m_EdgesVisitedThisEpoch.ToString()
                 + " remaining=" + remaining.ToString()
                 + " epoch=" + m_CurrentEpoch.ToString()
                 + " ms=" + elapsed.ToString());
@@ -1155,19 +1171,13 @@ class LFPG_ElecGraph
     }
 
     // ===========================
-    // Sprint 4.2: Entity sync
+    // Sprint 4.3: Entity sync
     // ===========================
 
-    // Apply the graph node's electrical state to its game entity.
-    // Only meaningful on server. Calls LFPG_DeviceAPI.SetPowered().
     protected void SyncNodeToEntity(string nodeId, LFPG_ElecNode node)
     {
         #ifdef SERVER
         if (!node)
-            return;
-
-        // Sources manage their own powered state externally — skip sync
-        if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             return;
 
         EntityAI entObj = LFPG_DeviceRegistry.Get().FindById(nodeId);
@@ -1178,17 +1188,51 @@ class LFPG_ElecGraph
         if (!entObj)
             return;
 
+        if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+        {
+            // Sprint 4.3: Sync load ratio and overload mask to source entity
+            float loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
+            if (loadDelta < 0.0)
+            {
+                loadDelta = -loadDelta;
+            }
+            if (loadDelta > 0.01)
+            {
+                LFPG_DeviceAPI.SetLoadRatio(entObj, node.m_LoadRatio);
+
+                // Sprint 4.3: Per-source load telemetry — log when delta exceeds threshold
+                if (loadDelta > LFPG_LOAD_TELEM_DELTA)
+                {
+                    string loadState = "NORMAL";
+                    if (node.m_LoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
+                    {
+                        loadState = "CRITICAL";
+                    }
+                    else if (node.m_LoadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
+                    {
+                        loadState = "WARNING";
+                    }
+                    LFPG_Util.Info("[LoadTelem] " + nodeId
+                        + " load=" + node.m_LoadRatio.ToString()
+                        + " prev=" + node.m_LastSyncedLoadRatio.ToString()
+                        + " cap=" + node.m_MaxOutput.ToString()
+                        + " state=" + loadState);
+                }
+
+                node.m_LastSyncedLoadRatio = node.m_LoadRatio;
+            }
+            LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
+            return;
+        }
+
         LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
         #endif
     }
 
     // ===========================
-    // Sprint 4.2: Warmup helpers
+    // Sprint 4.2+4.3: Warmup helpers
     // ===========================
 
-    // Populate electrical properties for ALL nodes from their entities.
-    // Called once at server startup after graph rebuild.
-    // Reads MaxOutput and Consumption from entities via DeviceAPI.
     void PopulateAllNodeElecStates()
     {
         #ifdef SERVER
@@ -1208,11 +1252,9 @@ class LFPG_ElecGraph
             if (!obj)
                 continue;
 
-            // Populate capacity (sources and passthroughs)
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
                 node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
-                // Read current on/off state from entity
                 bool sourceOn = false;
                 if (LFPG_DeviceAPI.IsSource(obj))
                 {
@@ -1228,11 +1270,9 @@ class LFPG_ElecGraph
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                // Passthroughs don't have their own capacity limit (yet)
                 node.m_MaxOutput = 0.0;
             }
 
-            // Populate consumption (consumers)
             if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
             {
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
@@ -1243,8 +1283,6 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Refresh a single source node's on/off state from its entity.
-    // Called when a source is toggled (OnWorkStart/OnWorkStop).
     void RefreshSourceState(string nodeId)
     {
         #ifdef SERVER
@@ -1278,17 +1316,14 @@ class LFPG_ElecGraph
         node.m_Powered = sourceOn;
         node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
 
-        // Mark dirty so propagation picks up the state change
         MarkNodeDirty(nodeId, LFPG_DIRTY_INTERNAL);
         #endif
     }
 
     // ===========================
-    // Sprint 4.2: Internal helpers
+    // Sprint 4.2+4.3: Internal helpers
     // ===========================
 
-    // Count enabled outgoing edges for a node.
-    // Used to calculate per-edge power share.
     protected int CountEnabledOutgoing(string nodeId)
     {
         ref array<ref LFPG_ElecEdge> outEdges;
@@ -1308,17 +1343,264 @@ class LFPG_ElecGraph
         return count;
     }
 
-    // Reset requeue counts on all nodes (called at end of full queue drain).
+    // Sprint 4.3: Priority-based power allocation across outgoing edges.
+    protected float AllocateOutputByPriority(string nodeId, float availableOutput, int edgeBudgetRemaining)
+    {
+        #ifdef SERVER
+        ref array<ref LFPG_ElecEdge> outEdges;
+        if (!m_Outgoing.Find(nodeId, outEdges) || !outEdges)
+            return 0.0;
+
+        int edgeCount = outEdges.Count();
+        if (edgeCount <= 0)
+            return 0.0;
+
+        // Phase 1: Collect enabled edges and their demands
+        ref array<int> idxArr = new array<int>;
+        ref array<float> demandArr = new array<float>;
+        ref array<int> prioArr = new array<int>;
+
+        float totalDemand = 0.0;
+        int ei;
+        for (ei = 0; ei < edgeCount; ei = ei + 1)
+        {
+            ref LFPG_ElecEdge edge = outEdges[ei];
+            if (!edge)
+                continue;
+            if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+
+            float edgeDemand = 0.0;
+            ref LFPG_ElecNode targetNode;
+            if (m_Nodes.Find(edge.m_TargetNodeId, targetNode) && targetNode)
+            {
+                if (targetNode.m_DeviceType == LFPG_DeviceType.CONSUMER)
+                {
+                    edgeDemand = targetNode.m_Consumption;
+                }
+                else if (targetNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                {
+                    edgeDemand = targetNode.m_LastStableOutput;
+                    if (edgeDemand < LFPG_PROPAGATION_EPSILON)
+                    {
+                        edgeDemand = 0.0;
+                    }
+                }
+            }
+
+            idxArr.Insert(ei);
+            demandArr.Insert(edgeDemand);
+            prioArr.Insert(edge.m_Priority);
+            totalDemand = totalDemand + edgeDemand;
+        }
+
+        int enabledCount = idxArr.Count();
+        if (enabledCount <= 0)
+            return 0.0;
+
+        // Phase 2: Sort by priority (descending) — insertion sort
+        int si;
+        int sj;
+        for (si = 1; si < enabledCount; si = si + 1)
+        {
+            int keyIdx = idxArr[si];
+            float keyDem = demandArr[si];
+            int keyPrio = prioArr[si];
+
+            sj = si - 1;
+            while (sj >= 0 && prioArr[sj] < keyPrio)
+            {
+                idxArr[sj + 1] = idxArr[sj];
+                demandArr[sj + 1] = demandArr[sj];
+                prioArr[sj + 1] = prioArr[sj];
+                sj = sj - 1;
+            }
+            idxArr[sj + 1] = keyIdx;
+            demandArr[sj + 1] = keyDem;
+            prioArr[sj + 1] = keyPrio;
+        }
+
+        // Phase 2b: Assign demands for zero-demand edges
+        int zeroDemandCount = 0;
+        float declaredDemand = 0.0;
+        int zi;
+        for (zi = 0; zi < enabledCount; zi = zi + 1)
+        {
+            if (demandArr[zi] < LFPG_PROPAGATION_EPSILON)
+            {
+                zeroDemandCount = zeroDemandCount + 1;
+            }
+            else
+            {
+                declaredDemand = declaredDemand + demandArr[zi];
+            }
+        }
+
+        if (zeroDemandCount > 0)
+        {
+            float shareForZero = 0.0;
+            float afterDeclared = availableOutput - declaredDemand;
+            if (afterDeclared > LFPG_PROPAGATION_EPSILON)
+            {
+                shareForZero = afterDeclared / zeroDemandCount;
+            }
+            int zj;
+            for (zj = 0; zj < enabledCount; zj = zj + 1)
+            {
+                if (demandArr[zj] < LFPG_PROPAGATION_EPSILON)
+                {
+                    demandArr[zj] = shareForZero;
+                    totalDemand = totalDemand + shareForZero;
+                }
+            }
+        }
+
+        // Phase 3: Allocate power in priority order
+        float remaining = availableOutput;
+        int overloadMask = 0;
+        bool isOverloaded = false;
+        if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
+        {
+            isOverloaded = true;
+        }
+
+        int ai;
+        for (ai = 0; ai < enabledCount; ai = ai + 1)
+        {
+            int origIdx = idxArr[ai];
+            ref LFPG_ElecEdge allocEdge = outEdges[origIdx];
+            if (!allocEdge)
+                continue;
+
+            float edgeDemand = demandArr[ai];
+            float allocated = 0.0;
+
+            if (remaining > LFPG_PROPAGATION_EPSILON)
+            {
+                if (edgeDemand <= remaining + LFPG_PROPAGATION_EPSILON)
+                {
+                    allocated = edgeDemand;
+                }
+                else
+                {
+                    allocated = remaining;
+                }
+                remaining = remaining - allocated;
+                if (remaining < 0.0)
+                {
+                    remaining = 0.0;
+                }
+            }
+
+            allocEdge.m_AllocatedPower = allocated;
+            allocEdge.m_Demand = edgeDemand;
+
+            // Mark brownout
+            if (allocated < LFPG_PROPAGATION_EPSILON && edgeDemand > LFPG_PROPAGATION_EPSILON)
+            {
+                allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_BROWNOUT;
+                allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_OVERLOADED;
+                // Sprint 4.3 fix: use origIdx (actual array position) for overload mask bit,
+                // not m_EdgeIndex which can be stale after edge removal.
+                if (origIdx >= 0 && origIdx < 31)
+                {
+                    overloadMask = overloadMask | (1 << origIdx);
+                }
+            }
+            else
+            {
+                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
+                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
+            }
+        }
+
+        // Phase 4: Update source node load metrics
+        ref LFPG_ElecNode srcNode;
+        if (m_Nodes.Find(nodeId, srcNode) && srcNode)
+        {
+            if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE)
+            {
+                if (srcNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                {
+                    float rawRatio = totalDemand / srcNode.m_MaxOutput;
+                    // v0.7.26 (Audit 4): NaN/infinity guard — clamp to sane range.
+                    // Prevents floating point corruption from propagating to UI/telemetry.
+                    if (rawRatio < 0.0)
+                    {
+                        rawRatio = 0.0;
+                    }
+                    if (rawRatio > 100.0)
+                    {
+                        rawRatio = 100.0;
+                    }
+                    srcNode.m_LoadRatio = rawRatio;
+                }
+                else
+                {
+                    // v0.7.26: If MaxOutput is 0 but there IS demand, report overload
+                    if (totalDemand > LFPG_PROPAGATION_EPSILON)
+                    {
+                        srcNode.m_LoadRatio = 100.0;
+                    }
+                    else
+                    {
+                        srcNode.m_LoadRatio = 0.0;
+                    }
+                }
+                srcNode.m_OverloadMask = overloadMask;
+            }
+        }
+
+        return totalDemand;
+        #else
+        return 0.0;
+        #endif
+    }
+
+    // Sprint 4.3: Get allocated power for a specific incoming edge.
+    protected float GetEdgeAllocatedPower(LFPG_ElecEdge inEdge)
+    {
+        #ifdef SERVER
+        if (!inEdge)
+            return 0.0;
+
+        if (inEdge.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
+            return inEdge.m_AllocatedPower;
+
+        // Fallback: equal split (backward compat for first pass / warmup)
+        ref LFPG_ElecNode srcNode;
+        if (!m_Nodes.Find(inEdge.m_SourceNodeId, srcNode) || !srcNode)
+            return 0.0;
+
+        float srcOutput = srcNode.m_OutputPower;
+        if (srcOutput < LFPG_PROPAGATION_EPSILON)
+            return 0.0;
+
+        int enabledOutCount = CountEnabledOutgoing(inEdge.m_SourceNodeId);
+        if (enabledOutCount <= 0)
+            return 0.0;
+
+        return srcOutput / enabledOutCount;
+        #else
+        return 0.0;
+        #endif
+    }
+
+    // Sprint 4.3: Targeted reset — only resets nodes that were actually enqueued.
     protected void ResetRequeueCounts()
     {
         #ifdef SERVER
-        int ni;
-        for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
+        int ri;
+        for (ri = 0; ri < m_EnqueuedThisEpoch.Count(); ri = ri + 1)
         {
-            ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
-            if (node)
-                node.m_RequeueCount = 0;
+            string rNodeId = m_EnqueuedThisEpoch[ri];
+            ref LFPG_ElecNode rNode;
+            if (m_Nodes.Find(rNodeId, rNode) && rNode)
+            {
+                rNode.m_RequeueCount = 0;
+            }
         }
+        m_EnqueuedThisEpoch.Clear();
         #endif
     }
 };

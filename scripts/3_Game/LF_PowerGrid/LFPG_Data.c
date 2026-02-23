@@ -1,85 +1,14 @@
 // =========================================================
-// LF_PowerGrid - serializable data
-// =========================================================
-
-class LFPG_WireData
-{
-    // Versioned fields (Phase 1)
-    string m_TargetDeviceId;
-    string m_TargetPort;
-
-    // Optional/forward-compatible fields
-    // Source OUT port on the owner (Phase1 default is "output_1").
-    // If empty on old saves, treat as "output_1".
-    // Note: uses literal here (not LFPG_PORT_OUTPUT_1) to avoid
-    // initialization order dependency between Data and Defines.
-    string m_SourcePort = "output_1";
-
-    // Creator PlayerIdentity plainId (for quotas/permissions). May be empty on old saves.
-    string m_CreatorId;
-
-    ref array<vector> m_Waypoints;
-
-    void LFPG_WireData()
-    {
-        m_Waypoints = new array<vector>;
-    }
-};
-
-// Per-device wire persistence blob (serialized to JSON string in OnStoreSave).
-// Schema version history:
-//   v1 (original): ver, wires[]
-//   v2 (Sprint 3): no field changes, establishes migration chain + sanitization
-//   v3 (Sprint 4, planned): may add m_Priority, m_Flags per wire
-class LFPG_PersistBlob
-{
-    int ver = LFPG_PERSIST_VER;
-    ref array<ref LFPG_WireData> wires;
-
-    void LFPG_PersistBlob()
-    {
-        wires = new array<ref LFPG_WireData>;
-    }
-};
-
-// Vanilla wire persistence (central store, saved to profile JSON)
-class LFPG_VanillaWireEntry
-{
-    string ownerDeviceId;
-    string targetDeviceId;
-    string targetPort;
-    string sourcePort;
-    string creatorId;
-    ref array<vector> waypoints;
-
-    void LFPG_VanillaWireEntry()
-    {
-        waypoints = new array<vector>;
-    }
-};
-
-// Schema version history:
-//   v1 (original): ver, entries[]
-//   v2 (Sprint 3): no field changes, establishes migration chain + sanitization
-class LFPG_VanillaWireStore
-{
-    int ver = LFPG_VANILLA_PERSIST_VER;
-    ref array<ref LFPG_VanillaWireEntry> entries;
-
-    void LFPG_VanillaWireStore()
-    {
-        entries = new array<ref LFPG_VanillaWireEntry>;
-    }
-};
-
-// =========================================================
-// Electrical graph data structures (Sprint 4.1)
+// LF_PowerGrid - data structures (v0.7.22, Sprint 4.3)
 //
-// Pure data classes — no behavior, no side effects.
+// Pure data classes. No logic. No entity references.
+// Instantiated by LFPG_ElecGraph (4_World) or persistence (3_Game).
+//
 // The LFPG_ElecGraph class (4_World) owns and manipulates these.
 //
-// Fields marked "Sprint 4.2/4.3 reserved" are declared now for
-// documentation but not initialized or used until their sprint.
+// Sprint 4.3 additions:
+//   - m_LoadRatio, m_OverloadMask on ElecNode (source telemetry)
+//   - m_Demand on ElecEdge (downstream demand for priority allocation)
 // =========================================================
 
 class LFPG_ElecNode
@@ -102,9 +31,14 @@ class LFPG_ElecNode
     int    m_RequeueCount;     // Times re-enqueued this epoch (cycle protection)
     int    m_LastEpoch;        // Last epoch this node was processed
 
-    // --- Sprint 4.3 reserved: capacity ---
+    // --- Sprint 4.2+4.3: capacity ---
     float  m_MaxOutput;        // Source capacity or passthrough limit
     float  m_Consumption;      // Consumer demand (populated at warmup)
+
+    // --- Sprint 4.3: load telemetry (source nodes only) ---
+    float  m_LoadRatio;        // totalDemand / m_MaxOutput (0.0 = idle, >1.0 = overloaded)
+    int    m_OverloadMask;     // Bitmask: bit N = 1 means outgoing edge N is overloaded/brownout
+    float  m_LastSyncedLoadRatio;  // Last load ratio synced to entity (avoids redundant syncs)
 
     void LFPG_ElecNode()
     {
@@ -122,6 +56,9 @@ class LFPG_ElecNode
         m_LastEpoch = 0;
         m_MaxOutput = 0.0;
         m_Consumption = 0.0;
+        m_LoadRatio = 0.0;
+        m_OverloadMask = 0;
+        m_LastSyncedLoadRatio = -1.0;
     }
 };
 
@@ -134,9 +71,14 @@ class LFPG_ElecEdge
     string          m_TargetPort;     // Input port on target
     ref LFPG_WireData m_WireRef;     // Reference to original WireData (not a copy)
 
-    // --- Sprint 4.2: active (used in propagation) ---
-    int             m_Priority;
-    int             m_Flags;         // LFPG_EDGE_ENABLED | LFPG_EDGE_OVERLOADED
+    // --- Sprint 4.2+4.3: active (used in propagation + load allocation) ---
+    int             m_Priority;       // Higher = served first during overload
+    int             m_Flags;          // LFPG_EDGE_ENABLED | LFPG_EDGE_OVERLOADED | LFPG_EDGE_BROWNOUT
+
+    // --- Sprint 4.3: load allocation ---
+    float           m_Demand;         // Downstream demand seen through this edge
+    float           m_AllocatedPower; // Power actually allocated to this edge this epoch
+    int             m_EdgeIndex;      // Index within source's outgoing array (for overload mask bit)
 
     void LFPG_ElecEdge()
     {
@@ -147,5 +89,8 @@ class LFPG_ElecEdge
         m_WireRef = null;
         m_Priority = 0;
         m_Flags = LFPG_EDGE_ENABLED;
+        m_Demand = 0.0;
+        m_AllocatedPower = 0.0;
+        m_EdgeIndex = 0;
     }
 };

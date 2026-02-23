@@ -23,7 +23,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.7.17";
+        version = "0.7.27";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
@@ -98,8 +98,15 @@ class CfgVehicles
         weight = 3000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
-        itemBehaviour = 0;
         isDeployable = 1;
+		carveNavmesh    = 1;
+		physLayer       = "item_large";
+		// slopeTolerance = min dot(surfaceNormal, up). 1.0=flat only, 0.0=any surface.
+		// 0.0 allows walls/ceilings. For walls only (no ceiling): ~0.05
+		slopeTolerance  = 0.0;
+		yawPitchRollLimit[] = {90, 90, 90};
+		// placementOffset removed: causes oscillation loop with vanilla hologram.
+		// Wall offset handled by custom hologram (LFPG_SplitterHologram).
     };
 
     // ---- Splitter (placed device) ----
@@ -115,5 +122,8 @@ class CfgVehicles
         weight = 5000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
+		carveNavmesh    = 1;
+		physLayer       = "item_large";
+		isDeployable    = 0;
     };
 };

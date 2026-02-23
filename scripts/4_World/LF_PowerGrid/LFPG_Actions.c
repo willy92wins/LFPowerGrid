@@ -514,8 +514,10 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         if (!LFPG_WiringClient.Get().IsActive())
             return false;
 
-        if (LFPG_ActionRaycast.IsCursorOnDevice(player))
-            return false;
+        // v0.7.23 (Bug 7): Removed IsCursorOnDevice check.
+        // Cancel must be available even when looking at a device,
+        // so the player doesn't have to look at the floor to cancel.
+        // Port actions and Cancel coexist in the scroll menu.
 
         return true;
     }
@@ -858,19 +860,29 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (!gen)
             return;
 
+        // v0.7.23b: Simple toggle — always succeeds.
         gen.LFPG_ToggleSource();
 
-        // Feedback to player
+        // Feedback: show switch state + whether actually producing power
         PlayerBase execPlayer = PlayerBase.Cast(action_data.m_Player);
         if (execPlayer)
         {
-            bool nowOn = gen.LFPG_GetSourceOn();
-            string stateStr = "OFF";
-            if (nowOn)
+            bool switchOn = gen.LFPG_GetSwitchState();
+            bool producing = gen.LFPG_GetSourceOn();
+
+            if (!switchOn)
             {
-                stateStr = "ON";
+                execPlayer.MessageStatus("[LFPG] Generator OFF");
             }
-            execPlayer.MessageStatus("[LFPG] Generator " + stateStr);
+            else if (!producing)
+            {
+                // ON but not producing — missing spark plug
+                execPlayer.MessageStatus("[LFPG] Generator ON (not producing - needs Spark Plug)");
+            }
+            else
+            {
+                execPlayer.MessageStatus("[LFPG] Generator ON - producing power");
+            }
         }
     }
 };

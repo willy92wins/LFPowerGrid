@@ -1,11 +1,17 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.14)
+// LF_PowerGrid - Example devices (v0.7.27)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
+// - LF_TestLampHeavy: high-consumption consumer for load testing
 //
-// v0.7.14: Generator LFPG_GetSourceOn uses m_SourceOn only (no em.IsWorking fallback).
-//          Generator EEInit syncs CompEM with m_SourceOn.
-//          Lamp EEInit forces CompEM off (LFPG manages via m_PoweredNet).
+// v0.7.14: Generator LFPG_GetSourceOn uses m_SourceOn only.
+// v0.7.23: SparkPlug validation on toggle, EEInit sync.
+// v0.7.25: Remove vanilla actions, lower movement threshold.
+// v0.7.26: Centralized CutAllWiresFromDevice, IsSparkPlugValid,
+//          EEKilled, dual-layer EEItemLocationChanged, block
+//          vanilla plug/unplug on lamps.
+// v0.7.27: Refactored to LFPG_DeviceLifecycle static helpers.
+//          Zero duplicated lifecycle code across device classes.
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -46,6 +52,15 @@ class LF_TestGenerator : PowerGenerator
     override void SetActions()
     {
         super.SetActions();
+
+        // v0.7.25 (Bug 1): Remove vanilla turn on/off actions.
+        // These bypass LFPG_ToggleSource's sparkplug validation and
+        // can trigger CompEM via paths that CanTurnOn() might not catch
+        // on all vanilla DayZ versions. Only LFPG_ToggleSource should
+        // control this generator.
+        RemoveAction(ActionTurnOnPowerGenerator);
+        RemoveAction(ActionTurnOffPowerGenerator);
+
         AddAction(ActionLFPG_ToggleSource);
     }
 
@@ -64,20 +79,25 @@ class LF_TestGenerator : PowerGenerator
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
 
-        // v0.7.14: Force CompEM to match m_SourceOn after init/load.
-        // Prevents vanilla CompEM auto-starting when generator has fuel,
-        // which caused LFPG_GetSourceOn desync before the fallback was removed.
+        // v0.7.27: Uses centralized sparkplug validation (includes health check)
         #ifdef SERVER
         ComponentEnergyManager emInit = GetCompEM();
         if (emInit)
         {
-            if (m_SourceOn)
+            if (m_SourceOn && LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
                 emInit.SwitchOn();
             }
             else
             {
                 emInit.SwitchOff();
+                if (m_SourceOn && !LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+                {
+                    // Persisted ON but sparkplug invalid: clear m_SourceOn
+                    m_SourceOn = false;
+                    SetSynchDirty();
+                    LFPG_Util.Info("[LF_TestGenerator] EEInit: cleared m_SourceOn (invalid SparkPlug) id=" + m_DeviceId);
+                }
             }
         }
         #endif
@@ -90,18 +110,54 @@ class LF_TestGenerator : PowerGenerator
         #endif
     }
 
+    // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
-        // Sprint 4.1: notify graph before unregistering
-        LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(m_DeviceId);
-        LFPG_DeviceRegistry.Get().Unregister(m_DeviceId, this);
-        LFPG_NetworkManager.Get().RequestGlobalSelfHeal();
+        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
 
-    // Vanilla CompEM hooks: detect when user toggles via vanilla action
+    // v0.7.26 (Bug 1+2): Cut all wires when generator is destroyed.
+    // v0.7.27: Delegates to DeviceLifecycle, then handles generator-specific state.
+    override void EEKilled(Object killer)
+    {
+        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
+
+        #ifdef SERVER
+        // Generator-specific: force off
+        if (m_SourceOn)
+        {
+            m_SourceOn = false;
+            SetSynchDirty();
+        }
+
+        ComponentEnergyManager emKill = GetCompEM();
+        if (emKill)
+        {
+            emKill.SwitchOff();
+        }
+        #endif
+
+        super.EEKilled(killer);
+    }
+
+    // Vanilla CompEM hooks: sync m_SourceOn with vanilla state.
+    // v0.7.27: Uses LFPG_DeviceLifecycle.IsSparkPlugValid (includes health check)
     override void OnWorkStart()
     {
+        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+        {
+            LFPG_Util.Info("[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId);
+            #ifdef SERVER
+            ComponentEnergyManager emForce = GetCompEM();
+            if (emForce)
+            {
+                emForce.SwitchOff();
+            }
+            #endif
+            return;
+        }
+
         super.OnWorkStart();
 
         #ifdef SERVER
@@ -128,6 +184,127 @@ class LF_TestGenerator : PowerGenerator
         if (m_DeviceId != "")
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        }
+        #endif
+    }
+
+    // v0.7.23 (Bug 2): SparkPlug attach/detach controls both propagation
+    // AND vanilla CompEM (animations/sound).
+    override void EEItemAttached(EntityAI item, string slot_name)
+    {
+        super.EEItemAttached(item, slot_name);
+
+        #ifdef SERVER
+        if (slot_name == "SparkPlug" && m_SourceOn && m_DeviceId != "")
+        {
+            // v0.7.27: Re-validate after attachment (checks health too)
+            if (LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+            {
+                LFPG_Util.Info("[LF_TestGenerator] SparkPlug attached while ON, starting CompEM + propagating");
+                ComponentEnergyManager emAttach = GetCompEM();
+                if (emAttach)
+                {
+                    emAttach.SwitchOn();
+                }
+                LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+            }
+        }
+        #endif
+    }
+
+    override void EEItemDetached(EntityAI item, string slot_name)
+    {
+        super.EEItemDetached(item, slot_name);
+
+        #ifdef SERVER
+        if (slot_name == "SparkPlug" && m_SourceOn && m_DeviceId != "")
+        {
+            LFPG_Util.Info("[LF_TestGenerator] SparkPlug detached while ON, stopping CompEM + propagating");
+
+            // v0.7.25 (Bug 1): Clear m_SourceOn FIRST — the generator cannot
+            // run without sparkplug, period.
+            m_SourceOn = false;
+            SetSynchDirty();
+
+            ComponentEnergyManager emDetach = GetCompEM();
+            if (emDetach)
+            {
+                emDetach.SwitchOff();
+            }
+            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        }
+        #endif
+    }
+
+    // v0.7.27: Centralized sparkplug validation (includes ruined health)
+    override bool CanTurnOn()
+    {
+        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+        {
+            return false;
+        }
+        return super.CanTurnOn();
+    }
+
+    // v0.7.27: Block vanilla periodic work tick without valid sparkplug.
+    override void OnWork(float consumed_energy)
+    {
+        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+        {
+            LFPG_Util.Info("[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId);
+            #ifdef SERVER
+            ComponentEnergyManager emKill = GetCompEM();
+            if (emKill)
+            {
+                emKill.SwitchOff();
+            }
+            if (m_SourceOn)
+            {
+                m_SourceOn = false;
+                SetSynchDirty();
+                if (m_DeviceId != "")
+                {
+                    LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                }
+            }
+            #endif
+            return;
+        }
+        super.OnWork(consumed_energy);
+    }
+
+    // v0.7.27: Block vanilla SwitchOn without valid sparkplug.
+    override void OnSwitchOn()
+    {
+        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+        {
+            LFPG_Util.Info("[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId);
+            #ifdef SERVER
+            ComponentEnergyManager emBlock = GetCompEM();
+            if (emBlock)
+            {
+                emBlock.SwitchOff();
+            }
+            #endif
+            return;
+        }
+        super.OnSwitchOn();
+    }
+
+    override void OnSwitchOff()
+    {
+        super.OnSwitchOff();
+
+        #ifdef SERVER
+        if (m_SourceOn)
+        {
+            m_SourceOn = false;
+            SetSynchDirty();
+            LFPG_Util.Info("[LF_TestGenerator] OnSwitchOff: cleared m_SourceOn id=" + m_DeviceId);
+            if (m_DeviceId != "")
+            {
+                LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+            }
         }
         #endif
     }
@@ -217,11 +394,25 @@ class LF_TestGenerator : PowerGenerator
         return LFPG_DeviceType.SOURCE;
     }
 
-    // v0.7.14: m_SourceOn is the sole authority.
-    // OnWorkStart/OnWorkStop already sync it with CompEM state.
-    // The old em.IsWorking() fallback caused false positives when
-    // vanilla CompEM auto-started a generator with fuel on spawn.
+    // v0.7.27: Uses centralized sparkplug validation
     bool LFPG_GetSourceOn()
+    {
+        if (!m_SourceOn)
+        {
+            return false;
+        }
+
+        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    // v0.7.23b: Raw switch state (true = player turned it on).
+    // Used for UI feedback to distinguish "OFF" vs "ON but not producing".
+    bool LFPG_GetSwitchState()
     {
         return m_SourceOn;
     }
@@ -357,8 +548,6 @@ class LF_TestGenerator : PowerGenerator
 
     bool LFPG_PruneMissingTargets()
     {
-        // Use cached map from NetworkManager if available (during self-heal),
-        // otherwise build our own (standalone calls like wire creation).
         ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
         if (!validIds)
         {
@@ -441,27 +630,76 @@ class LF_TestGenerator : PowerGenerator
     // ============================================
     // Source toggle
     // ============================================
+    // v0.7.27: Uses centralized sparkplug validation
     void LFPG_ToggleSource()
     {
         #ifdef SERVER
-        m_SourceOn = !m_SourceOn;
-        SetSynchDirty();
-
-        ComponentEnergyManager em = GetCompEM();
-        if (em)
+        if (m_SourceOn)
         {
-            if (m_SourceOn)
+            m_SourceOn = false;
+            SetSynchDirty();
+
+            ComponentEnergyManager emOff = GetCompEM();
+            if (emOff)
             {
-                em.SwitchOn();
+                emOff.SwitchOff();
             }
-            else
+        }
+        else
+        {
+            if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
-                em.SwitchOff();
+                LFPG_Util.Info("[LF_TestGenerator] Toggle ON blocked: invalid SparkPlug id=" + m_DeviceId);
+                return;
+            }
+
+            m_SourceOn = true;
+            SetSynchDirty();
+
+            ComponentEnergyManager emOn = GetCompEM();
+            if (emOn)
+            {
+                emOn.SwitchOn();
             }
         }
 
-        LFPG_Util.Info("Generator " + m_DeviceId + " SourceOn=" + m_SourceOn.ToString());
+        LFPG_Util.Info("Generator " + m_DeviceId + " m_SourceOn=" + m_SourceOn.ToString() + " GetSourceOn=" + LFPG_GetSourceOn().ToString());
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        #endif
+    }
+
+    // v0.7.23 (Bug 5): Prevent picking up / moving placed generators.
+    override bool CanPutInCargo(EntityAI parent)
+    {
+        return false;
+    }
+
+    override bool CanPutIntoHands(EntityAI parent)
+    {
+        return false;
+    }
+
+    // v0.7.27: Delegates to DeviceLifecycle for movement detection.
+    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
+    {
+        super.EEItemLocationChanged(oldLoc, newLoc);
+
+        #ifdef SERVER
+        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
+        if (wiresCut)
+        {
+            // Generator-specific: force off if running
+            if (m_SourceOn)
+            {
+                m_SourceOn = false;
+                SetSynchDirty();
+                ComponentEnergyManager emPickup = GetCompEM();
+                if (emPickup)
+                {
+                    emPickup.SwitchOff();
+                }
+            }
+        }
         #endif
     }
 };
@@ -495,8 +733,25 @@ class LF_TestLamp : Spotlight
     override void SetActions()
     {
         super.SetActions();
+
+        // v0.7.25: Remove vanilla on/off
         RemoveAction(ActionTurnOnSpotlight);
         RemoveAction(ActionTurnOffSpotlight);
+
+        // v0.7.26 (Bug 3): Remove vanilla electrical connection actions.
+        // Spotlight inherits these from its base class hierarchy.
+        // Without explicit removal, players with vanilla CableReel near
+        // an LF_TestLamp see "Plug in" / "Unplug" vanilla actions.
+        RemoveAction(ActionPlugIn);
+        RemoveAction(ActionUnplugThisByCombination);
+    }
+
+    // v0.7.26 (Bug 3): Prevent vanilla electrical system from treating
+    // this as a pluggable appliance. Returns false to block all vanilla
+    // plug/unplug action condition checks from the item side.
+    override bool IsElectricAppliance()
+    {
+        return false;
     }
 
     // ---- Block vanilla Spotlight CompEM hooks ----
@@ -519,8 +774,7 @@ class LF_TestLamp : Spotlight
         }
 
         // v0.7.14: Force CompEM off on init. LFPG manages power
-        // exclusively via m_PoweredNet. Without this, vanilla Spotlight
-        // auto-starts CompEM when placed, interfering with LFPG state.
+        // exclusively via m_PoweredNet.
         ComponentEnergyManager emInit = GetCompEM();
         if (emInit)
         {
@@ -532,18 +786,37 @@ class LF_TestLamp : Spotlight
         LFPG_TryRegister();
     }
 
+    // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
-        // Sprint 4.1: notify graph before unregistering
-        LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(m_DeviceId);
-        LFPG_DeviceRegistry.Get().Unregister(m_DeviceId, this);
-        LFPG_NetworkManager.Get().RequestGlobalSelfHeal();
+        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
         LFPG_DestroyLight();
         #endif
 
         super.EEDelete(parent);
+    }
+
+    // v0.7.26 (Bug 2): Cut all wires when lamp is destroyed.
+    // v0.7.27: Delegates to DeviceLifecycle, then handles lamp-specific state.
+    override void EEKilled(Object killer)
+    {
+        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
+
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+
+        #ifndef SERVER
+        LFPG_DestroyLight();
+        #endif
+
+        super.EEKilled(killer);
     }
 
     override void OnVariablesSynchronized()
@@ -740,6 +1013,35 @@ class LF_TestLamp : Spotlight
         LFPG_Util.Info("[LF_TestLamp] DestroyLight: removing light");
         m_LFPG_Light.FadeOut();
         m_LFPG_Light = null;
+    }
+
+    // v0.7.23 (Bug 5): Prevent picking up / moving placed lamps.
+    override bool CanPutInCargo(EntityAI parent)
+    {
+        return false;
+    }
+
+    override bool CanPutIntoHands(EntityAI parent)
+    {
+        return false;
+    }
+
+    // v0.7.27: Delegates to DeviceLifecycle for movement detection.
+    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
+    {
+        super.EEItemLocationChanged(oldLoc, newLoc);
+
+        #ifdef SERVER
+        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
+        if (wiresCut)
+        {
+            if (m_PoweredNet)
+            {
+                m_PoweredNet = false;
+                SetSynchDirty();
+            }
+        }
+        #endif
     }
 };
 

@@ -1,47 +1,35 @@
 // =========================================================
-// LF_PowerGrid - core defines (v0.7.20)
+// LF_PowerGrid - constants, enums, budgets (v0.7.26, Sprint 4.3+audit4)
+//
+// Sprint 4.3 changes:
+//   - Version bump to 0.7.22
+//   - EDGE_BUDGET activated (was reserved in 4.2)
+//   - Load telemetry constants added
+//   - LFPG_EDGE_BROWNOUT flag added
 // =========================================================
 
-// ---- Anti-exploit hard caps (server authoritative) ----
-static const int   LFPG_MAX_WAYPOINTS      = 20;
-static const float LFPG_MAX_SEGMENT_LEN_M = 25.0;
-static const float LFPG_MAX_WIRE_LEN_M    = 250.0;
-
-// v0.7.12: Shared near-limit threshold (80% of max).
-// Used by ConnectionRules for WARN_SEGMENT_NEAR_LIMIT / WARN_TOTAL_NEAR_LIMIT.
-static const float LFPG_NEAR_LIMIT_RATIO  = 0.80;
-
-// ---- Interaction / actions ----
-static const float LFPG_INTERACT_DIST_M = 3.0;
-
+// ---- Wire construction limits ----
+static const float LFPG_MAX_WIRE_LEN_M    = 100.0;  // single wire total length
+static const float LFPG_MAX_SEG_LEN_M     = 50.0;   // one segment between waypoints
+static const int   LFPG_MAX_WAYPOINTS     = 10;
 static const int   LFPG_MAX_WIRES_PER_DEVICE = 64;
-static const int   LFPG_MAX_WIRES_PER_PLAYER = 100;
-static const float LFPG_RPC_COOLDOWN_S       = 0.50;
 
-// ---- Rendering ----
-static const float LFPG_CULL_DISTANCE_M    = 50.0;
+// ---- Cable rendering (v0.7.7+: Canvas 2D + LOD + depth width + alpha fade) ----
+// Legacy color constants (kept for backward compat; state colors preferred).
+static const int LFPG_COLOR_DEFAULT       = 0xFFFF6600;  // orange
+static const int LFPG_COLOR_POWERED       = 0xFF00FF00;  // green
+static const int LFPG_COLOR_HOVER         = 0xFF00FFFF;  // cyan
 
-// Device proximity bubble (v0.7.7):
-// If the player is farther than this from BOTH endpoints of a wire,
-// the wire is culled early. Acts as a tighter "relevance" radius.
-// Overridden by LFPG_ServerSettings.DeviceBubbleM (configurable).
-// Set to 0 to disable (falls back to LFPG_CULL_DISTANCE_M only).
-static const float LFPG_DEVICE_BUBBLE_M    = 0.0;  // 0 = disabled by default
+// ---- Cable 3D particles (v0.7.12) ----
+// Particle index for cable segments (must match ParticleList registration).
+static const int LFPG_CABLE_PARTICLE_ID = 99801;
 
-// Event-driven cable rendering (v0.7.2):
-static const float LFPG_CULL_TICK_S        = 2.0;
-static const float LFPG_RETRY_TICK_S       = 5.0;
-static const int   LFPG_RETRY_MAX          = 12;
+// ---- Cable sag parameters (v0.7.9: adaptive subdivisions + quadratic scaling) ----
+static const float LFPG_SAG_FACTOR        = 0.06;
+static const float LFPG_SAG_SHORT_THRESH_M = 2.0;
+static const float LFPG_SAG_QUAD_REF_M    = 10.0;
 
-// Catenaria (cable sag simulation)
-// v0.7.9: Adaptive subdivisions + quadratic sag scaling.
-// Subdivisions are determined per-segment based on span length.
-// Sag factor grows quadratically beyond SAG_QUAD_REF_M for realism.
-static const float LFPG_SAG_FACTOR         = 0.08;
-static const float LFPG_SAG_QUAD_REF_M     = 10.0;   // below this: linear sag, above: quadratic
-static const float LFPG_SAG_SHORT_THRESH_M = 3.0;    // below this: no sag at all (cable looks taut)
-
-// Wind sway (v0.7.9): subtle oscillation on intermediate cable points.
+// ---- Cable sway (v0.7.10: environmental animation) ----
 // Applied per-frame during projection. Endpoints (ports) and waypoints
 // do NOT sway — only the sag interpolation points between them.
 static const float LFPG_SWAY_AMPLITUDE     = 0.025;  // metres (vertical)
@@ -57,8 +45,8 @@ enum LFPG_CableState
     POWERED          = 1,   // Connected, owner is active/energized
     RESOLVING        = 2,   // Target entity not yet loaded (network bubble edge)
     DISCONNECTED     = 3,   // Target lost / retry exhausted
-    WARNING_LOAD     = 4,   // High load (future: needs load calculation)
-    CRITICAL_LOAD    = 5,   // Near overload (future)
+    WARNING_LOAD     = 4,   // High load (Sprint 4.3: active via graph load detection)
+    CRITICAL_LOAD    = 5,   // Near/over overload (Sprint 4.3: active)
     ERROR_SHORT      = 6,   // Short circuit / electrical fault (future)
     ERROR_TOPOLOGY   = 7,   // Loop or invalid route (future)
     BLOCKED_LOGIC    = 8,   // Port/switch blocked (future)
@@ -91,44 +79,25 @@ static const int LFPG_STATE_COLOR_SELECTED      = 0xFF00B4D8;  // cyan
 
 // ---- Cable rendering (v0.7.7+: Canvas 2D + LOD + depth width + alpha fade) ----
 // Legacy color constants (kept for backward compat; state colors preferred).
-static const int    LFPG_CABLE_COLOR         = 0xFF505050;
-static const int    LFPG_CABLE_COLOR_OFF     = 0xFF303030;
-static const float  LFPG_CABLE_WIDTH         = 2.5;
+// Close/Medium/Far LOD boundaries in metres.
+static const float LFPG_LOD_CLOSE_M  = 15.0;
+static const float LFPG_LOD_MEDIUM_M = 40.0;
+static const float LFPG_LOD_FAR_M    = 80.0;
 
-// LOD visual tiers (v0.7.7):
-static const float LFPG_LOD_CLOSE_M         = 15.0;
-static const float LFPG_LOD_MID_M           = 30.0;
+// Line widths per LOD band.
+static const float LFPG_LINE_W_CLOSE  = 3.0;
+static const float LFPG_LINE_W_MEDIUM = 2.0;
+static const float LFPG_LINE_W_FAR    = 1.0;
+static const float LFPG_LINE_W_MIN    = 0.8;
 
-// Shadow pass
-static const float LFPG_SHADOW_WIDTH_ADD    = 2.0;
-static const int   LFPG_SHADOW_COLOR        = 0x60000000;
+// Alpha (opacity) by distance (0.0–1.0).
+static const float LFPG_ALPHA_CLOSE   = 1.0;
+static const float LFPG_ALPHA_FAR     = 0.35;
 
-// Highlight pass
-static const float LFPG_HIGHLIGHT_WIDTH_SUB = 1.0;
-static const int   LFPG_HIGHLIGHT_ALPHA     = 0x30;
+// ---- Device proximity bubble (v0.7.7) ----
+static const float LFPG_BUBBLE_M = 150.0;
 
-// Depth-based width modulation (v0.7.7):
-static const float LFPG_DEPTH_WIDTH_REF     = 8.0;
-static const float LFPG_DEPTH_WIDTH_MIN     = 1.0;
-static const float LFPG_DEPTH_WIDTH_MAX     = 6.0;
-
-// Alpha fade by distance (v0.7.7):
-static const float LFPG_ALPHA_FADE_START_M  = 35.0;
-
-// ---- Joints and endcaps (v0.7.8, depth-scaled v0.7.9) ----
-// Visual connectors at waypoints and port endpoints.
-// Only drawn at LOD close (< LFPG_LOD_CLOSE_M).
-// Sizes scale with depth (same reference as cable width).
-static const float LFPG_JOINT_SIZE          = 4.0;   // cross half-size (px) at reference depth
-static const float LFPG_JOINT_SIZE_MIN      = 2.0;   // minimum px
-static const float LFPG_JOINT_SIZE_MAX      = 10.0;  // maximum px
-static const float LFPG_ENDCAP_SIZE         = 5.0;   // tick half-length (px) at reference depth
-static const float LFPG_ENDCAP_SIZE_MIN     = 2.0;
-static const float LFPG_ENDCAP_SIZE_MAX     = 12.0;
-static const float LFPG_ENDCAP_WIDTH        = 2.0;   // tick line width (px)
-
-// ---- Pre-connection validation (v0.7.12 — Sprint 2, B2) ----
-// Result status from LFPG_ConnectionRules.CanPreConnect().
+// ---- Pre-connect status (v0.7.10) ----
 // Values 0-9 = connectable (OK/warnings), 10+ = not connectable (invalid).
 // Helper returns status + reason string, NEVER UI/color.
 enum LFPG_PreConnectStatus
@@ -159,9 +128,9 @@ static const int LFPG_PREVIEW_COLOR_OVER        = 0xFFD39B00;  // amber (total e
 static const int LFPG_PREVIEW_COLOR_INVALID     = 0xFFFF3333;  // red
 static const int LFPG_PREVIEW_COLOR_NO_TARGET   = 0xFF888888;  // grey
 
-// ---- Load calculation (v0.7.8) ----
-// Used in PropagateFrom to determine WARNING/CRITICAL states.
-// LoadRatio = totalConsumption / sourceCapacity.
+// ---- Load calculation (v0.7.8, Sprint 4.3: active in graph propagation) ----
+// LoadRatio = totalDemand / sourceCapacity.
+// These thresholds drive cable visual state on both server (graph) and client (renderer).
 static const float LFPG_LOAD_WARNING_THRESHOLD  = 0.80;   // >= 80% = WARNING
 static const float LFPG_LOAD_CRITICAL_THRESHOLD = 1.00;   // >= 100% = CRITICAL
 
@@ -181,8 +150,11 @@ static const int   LFPG_MAX_WIRES_PER_OWNER_CLIENT = 64;
 static const int   LFPG_MAX_RENDERED_SEGS    = 512;
 
 // ---- Occlusion (raycast-based Z-buffer emulation) ----
-static const float LFPG_OCC_INTERVAL_MS      = 200.0;
-static const int   LFPG_OCC_HYSTERESIS       = 2;
+// v0.7.26 (Audit 4): Increased from 200 to 350ms to reduce raycast pressure
+// in bases with 50+ wires. Combined with stagger and hysteresis, per-wire
+// recheck averages ~1s when moving, ~3.5s when static. Minimal visual impact.
+static const float LFPG_OCC_INTERVAL_MS      = 350.0;
+static const int   LFPG_OCC_HYSTERESIS       = 3;
 static const int   LFPG_OCC_MAX_RAYCASTS     = 20;
 static const float LFPG_OCC_LONG_WIRE_M      = 10.0;
 static const float LFPG_OCC_CAM_MOVE_THRESH  = 0.3;
@@ -262,18 +234,22 @@ static const int LFPG_DIRTY_TOPOLOGY = 1;
 static const int LFPG_DIRTY_INPUT    = 2;
 static const int LFPG_DIRTY_INTERNAL = 4;
 
-// ---- Edge flags (Sprint 4.2, active — used in propagation) ----
+// ---- Edge flags (Sprint 4.2+4.3, active — used in propagation) ----
+// Sprint 4.3: OVERLOADED and BROWNOUT now actively set/cleared during propagation.
+// BROWNOUT means the edge was denied power due to priority-based load allocation.
 static const int LFPG_EDGE_ENABLED    = 1;
 static const int LFPG_EDGE_OVERLOADED = 2;
+static const int LFPG_EDGE_BROWNOUT   = 4;
 
-// ---- Propagation budget (Sprint 4.2, active) ----
+// ---- Propagation budget (Sprint 4.2+4.3, active) ----
 // ProcessDirtyQueue processes at most NODE_BUDGET nodes per tick.
 // At 10Hz tick rate: 640 nodes/second throughput (steady-state).
 static const int LFPG_PROPAGATE_NODE_BUDGET   = 64;
 
-// RESERVED (Sprint 4.3): Edge-level budget for inner loop of ProcessDirtyQueue.
-// Not yet applied — ProcessDirtyQueue only budgets by node count.
-// Will limit total edges visited per tick to prevent hot-node fan-out spikes.
+// ACTIVE (Sprint 4.3): Edge-level budget for inner loop of ProcessDirtyQueue.
+// Limits total edges visited per tick to prevent hot-node fan-out spikes.
+// Each incoming edge evaluation and each outgoing dirty-mark counts as 1 edge visit.
+// At 10Hz: 2560 edges/second throughput (steady-state).
 static const int LFPG_PROPAGATE_EDGE_BUDGET   = 256;
 
 // ACTIVE (Sprint 4.2 S2b, H3): Higher budget during warmup / self-heal drain.
@@ -282,13 +258,27 @@ static const int LFPG_PROPAGATE_EDGE_BUDGET   = 256;
 // At 10Hz: 1280 nodes/second throughput during warmup.
 static const int LFPG_PROPAGATE_WARMUP_BUDGET = 128;
 
+// Sprint 4.3: Edge budget multiplier during warmup. Proportional to node budget ratio.
+static const int LFPG_PROPAGATE_EDGE_WARMUP_BUDGET = 512;
+
+// v0.7.26 (Audit 4): Dynamic budget scaling for large dirty queues.
+// When remaining dirty queue > this threshold, edge budget is doubled
+// temporarily to prevent propagation starvation ("phantom brownout").
+// At 10Hz with 2x budget: 5120 edges/second burst throughput.
+static const int LFPG_DYNAMIC_BUDGET_QUEUE_THRESHOLD = 128;
+
 // ---- Cycle protection (Sprint 4.2, active) ----
 // Max times a node can be re-enqueued within a single epoch (= one ProcessDirtyQueue call).
 // Prevents infinite oscillation in feedback topologies.
 // H7 note: "epoch" here means one tick-batch (one call to ProcessDirtyQueue),
 // NOT a full propagation wave (which may span multiple ticks if queue > budget).
-// Requeue counts are reset at the start of each new epoch.
+// Requeue counts are reset at the start of each new epoch (targeted, Sprint 4.3).
 static const int LFPG_MAX_REQUEUE_PER_EPOCH = 5;
+
+// v0.7.26 (Audit 4): Max nodes visited in cycle detection DFS.
+// Prevents excessive traversal in very dense graphs (10k+ edges).
+// If reached, conservatively returns true (cycle assumed) to reject the wire.
+static const int LFPG_DFS_MAX_VISITED = 2048;
 
 // ---- Propagation epsilon (Sprint 4.2, active) ----
 // Power changes smaller than epsilon do not propagate downstream.
@@ -313,4 +303,9 @@ static const int LFPG_DIRTY_QUEUE_COMPACT_THRESHOLD = 128;
 static const int LFPG_MAX_FANOUT_PER_PORT = 1;
 static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 
-static const string LFPG_VERSION_STR = "0.7.21";
+// ---- Sprint 4.3: Load telemetry ----
+// Interval for per-component load telemetry logging (ms).
+// Only logs when load changes exceed this delta since last log.
+static const float LFPG_LOAD_TELEM_DELTA = 0.05;
+
+static const string LFPG_VERSION_STR = "0.7.26";

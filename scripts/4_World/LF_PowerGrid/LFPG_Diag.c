@@ -4,6 +4,8 @@
 // ServerEcho: sends a message from CLIENT to SERVER via RPC
 // so it appears in the server RPT log. Invaluable when you
 // only have access to the dedicated server log.
+//
+// v0.7.26 (Audit 4): Added DumpGraphFull for admin diagnostics.
 // =========================================================
 
 class LFPG_Diag
@@ -51,5 +53,85 @@ class LFPG_Diag
         rpc.Write((int)LFPG_RPC_SubId.DIAG_CLIENT_LOG);
         rpc.Write(msg);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+    }
+
+    // v0.7.26 (Audit 4): Full graph diagnostic dump.
+    // Prints all nodes, edges, and load metrics to server RPT.
+    // Called via admin command or debug. Server-only.
+    static void DumpGraphFull()
+    {
+        #ifdef SERVER
+        LFPG_NetworkManager mgr = LFPG_NetworkManager.Get();
+        if (!mgr)
+        {
+            LFPG_Util.Warn("[Diag] DumpGraphFull: NetworkManager null");
+            return;
+        }
+
+        LFPG_ElecGraph graph = mgr.GetGraph();
+        if (!graph)
+        {
+            LFPG_Util.Warn("[Diag] DumpGraphFull: Graph null");
+            return;
+        }
+
+        LFPG_Util.Info("=== LFPG GRAPH DUMP START ===");
+        LFPG_Util.Info("[Diag] Nodes=" + graph.GetNodeCount().ToString()
+            + " Edges=" + graph.GetEdgeCount().ToString()
+            + " Components=" + graph.GetComponentCount().ToString()
+            + " DirtyQueue=" + graph.GetDirtyQueueSize().ToString()
+            + " Epoch=" + graph.GetCurrentEpoch().ToString()
+            + " LastRebuild=" + graph.GetLastRebuildMs().ToString() + "ms"
+            + " LastProcess=" + graph.GetLastProcessMs().ToString() + "ms"
+            + " OverloadedSources=" + graph.GetOverloadedSourceCount().ToString());
+
+        // Enumerate registered devices for cross-reference
+        ref array<EntityAI> allDevices = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDevices);
+        LFPG_Util.Info("[Diag] DeviceRegistry count=" + allDevices.Count().ToString());
+
+        int di;
+        for (di = 0; di < allDevices.Count(); di = di + 1)
+        {
+            EntityAI dObj = allDevices[di];
+            if (!dObj) continue;
+
+            string dId = LFPG_DeviceAPI.GetDeviceId(dObj);
+            if (dId == "") continue;
+
+            string devType = "UNK";
+            int dType = LFPG_DeviceAPI.GetDeviceType(dObj);
+            if (dType == LFPG_DeviceType.SOURCE)
+            {
+                devType = "SRC";
+            }
+            else if (dType == LFPG_DeviceType.CONSUMER)
+            {
+                devType = "CON";
+            }
+            else if (dType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                devType = "PAS";
+            }
+
+            LFPG_ElecNode node = graph.GetNode(dId);
+            string nodeInfo = " (not in graph)";
+            if (node)
+            {
+                nodeInfo = " powered=" + node.m_Powered.ToString()
+                    + " outPow=" + node.m_OutputPower.ToString()
+                    + " inPow=" + node.m_InputPower.ToString()
+                    + " loadR=" + node.m_LoadRatio.ToString()
+                    + " comp=" + node.m_ComponentId.ToString();
+            }
+
+            LFPG_Util.Info("[Diag] " + devType + " id=" + dId
+                + " type=" + dObj.GetType()
+                + " pos=" + dObj.GetPosition().ToString()
+                + nodeInfo);
+        }
+
+        LFPG_Util.Info("=== LFPG GRAPH DUMP END ===");
+        #endif
     }
 };

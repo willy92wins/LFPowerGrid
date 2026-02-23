@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - client cable renderer (v0.7.13)
+// LF_PowerGrid - client cable renderer (v0.7.26)
 //
 // Event-driven cable rendering with frozen geometry.
 //
@@ -422,6 +422,11 @@ class LFPG_CableRenderer
     // v0.7.7: cached device bubble distance (read once from settings)
     protected float  m_DeviceBubbleM;
 
+    // v0.7.23 (Bug 2): Painter's algorithm sort buffers.
+    // Indices into m_WireSegments sorted by cachedMinDist descending (far-to-near).
+    protected ref array<int>   m_DrawOrder;
+    protected ref array<float> m_DrawDist;
+
     void LFPG_CableRenderer()
     {
         m_ByOwnerId      = new map<string, ref LFPG_OwnerWireState>;
@@ -434,6 +439,8 @@ class LFPG_CableRenderer
         m_JointScreenPts  = new array<vector>;
         m_ConnCache       = new map<string, string>;
         m_NegCache        = new map<string, float>;
+        m_DrawOrder       = new array<int>;
+        m_DrawDist        = new array<float>;
         m_OccStaggerIdx   = 0;
         m_CamMoved        = true;
         m_TotalSegCount   = 0;
@@ -504,6 +511,41 @@ class LFPG_CableRenderer
         {
             delete s_Instance;
             s_Instance = null;
+        }
+    }
+
+    // v0.7.23 (Bug 4): Force rebuild of all cable geometry.
+    // Destroys all segments and rebuilds from the stored wire data.
+    // Fixes cables that disappear due to stale geometry, failed retries,
+    // or occlusion state corruption. Can be called via admin command or
+    // periodic self-heal timer.
+    void ForceGlobalRefresh()
+    {
+        ref array<string> ownerIds = new array<string>;
+        int i;
+        for (i = 0; i < m_ByOwnerId.Count(); i = i + 1)
+        {
+            ownerIds.Insert(m_ByOwnerId.GetKey(i));
+        }
+
+        int k;
+        for (k = 0; k < ownerIds.Count(); k = k + 1)
+        {
+            string ownerId = ownerIds[k];
+            DestroyOwnerLines(ownerId);
+            ClearOwnerRetries(ownerId);
+            BuildOwnerWires(ownerId);
+        }
+
+        LFPG_Util.Info("[CableRenderer] ForceGlobalRefresh: rebuilt " + ownerIds.Count().ToString() + " owners, totalSegs=" + m_TotalSegCount.ToString());
+    }
+
+    // v0.7.23 (Bug 4): Static accessor for external callers (e.g. admin commands).
+    static void RequestGlobalRefresh()
+    {
+        if (s_Instance)
+        {
+            s_Instance.ForceGlobalRefresh();
         }
     }
 
@@ -1298,16 +1340,14 @@ class LFPG_CableRenderer
                     }
                 }
 
-                // v0.7.11 (A3): cachedMinDist for LOD + alpha fade (used in DrawFrame).
-                // Compute from minimum of endpoint distances (squared), then single sqrt.
-                // Note: for normal wires distA or distB <= distToCenter - radius,
-                // so using min(distASq, distBSq) is equivalent to the old min() logic.
-                float minDistSq = distASq;
-                if (distBSq < minDistSq)
-                {
-                    minDistSq = distBSq;
-                }
-                info.cachedMinDist = Math.Sqrt(minDistSq);
+                // v0.7.23 (Bug 1): cachedMinDist for LOD + alpha fade + depth sort.
+                // Changed from min(distA, distB) to avg(distA, distB).
+                // Using the average ensures the painter's algorithm sorts wires
+                // by their centroid depth, not their nearest endpoint. This fixes
+                // wires with one near and one far endpoint drawing on top of
+                // mid-distance wires.
+                float avgDistSq = (distASq + distBSq) * 0.5;
+                info.cachedMinDist = Math.Sqrt(avgDistSq);
 
                 // v0.7.6: log visibility state for beam debugging
                 if (doCullLog)
@@ -1338,24 +1378,20 @@ class LFPG_CableRenderer
                     wireOverloaded = ((st.lastOverloadMask & wireBit) != 0);
                 }
 
+                // v0.7.23 (Bug 3): Cable state per-wire using overloadMask only.
+                // Previously, WARNING_LOAD was set for ALL wires from a source
+                // when the source's global loadRatio >= 0.80. This caused ALL
+                // cables to show orange even when only specific wires are
+                // overloaded. Now: only the specific wires in the overloadMask
+                // show CRITICAL_LOAD. All other powered wires show POWERED.
+                // Per-wire WARNING_LOAD requires a warningMask (future work).
                 if (wireOverloaded)
                 {
                     info.cableState = LFPG_CableState.CRITICAL_LOAD;
                 }
                 else if (st.lastPowered)
                 {
-                    if (st.lastLoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
-                    {
-                        info.cableState = LFPG_CableState.CRITICAL_LOAD;
-                    }
-                    else if (st.lastLoadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
-                    {
-                        info.cableState = LFPG_CableState.WARNING_LOAD;
-                    }
-                    else
-                    {
-                        info.cableState = LFPG_CableState.POWERED;
-                    }
+                    info.cableState = LFPG_CableState.POWERED;
                 }
                 else
                 {
@@ -1512,7 +1548,46 @@ class LFPG_CableRenderer
         m_LastCamDir = camDir;
 
         int rayBudget = LFPG_OCC_MAX_RAYCASTS;
+        // v0.7.26 (Audit 4): Adaptive raycast budget.
+        // In bases with 50+ wires, raycasts can dominate frame time.
+        // Scale down budget when wire count is high:
+        //   <25 wires: full budget (20 raycasts)
+        //   25-50 wires: half budget (10 raycasts)
+        //   >50 wires: quarter budget (5 raycasts)
+        // Stagger + forced recheck ensure all wires still get checked over time.
+        int visibleWires = m_AllWires.Count();
+        if (visibleWires > 50)
+        {
+            rayBudget = LFPG_OCC_MAX_RAYCASTS / 4;
+            if (rayBudget < 3)
+            {
+                rayBudget = 3;
+            }
+        }
+        else if (visibleWires > 25)
+        {
+            rayBudget = LFPG_OCC_MAX_RAYCASTS / 2;
+            if (rayBudget < 5)
+            {
+                rayBudget = 5;
+            }
+        }
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+
+        // v0.7.23 (Bug 9): State colors only show when holding tools.
+        // Cache this once per frame to avoid per-wire overhead.
+        bool showStateColors = false;
+        if (player)
+        {
+            if (LFPG_WorldUtil.PlayerHasCableReelInHands(player))
+            {
+                showStateColors = true;
+            }
+            else if (LFPG_WorldUtil.PlayerHasPliersInHands(player))
+            {
+                showStateColors = true;
+            }
+        }
 
         // v0.7.9: wrap to prevent unbounded growth in long sessions
         m_OccStaggerIdx = (m_OccStaggerIdx + 1) % 3;
@@ -1526,9 +1601,38 @@ class LFPG_CableRenderer
         float swF = hud.GetScreenW();
         float shF = hud.GetScreenH();
 
-        int i;
-        for (i = 0; i < wireCount; i = i + 1)
+        // v0.7.23 (Bug 2): Painter's algorithm — sort wires far-to-near
+        // so nearer cables draw ON TOP of farther ones.
+        // Insertion sort is O(n²) but n is typically <100 visible wires.
+        m_DrawOrder.Clear();
+        m_DrawDist.Clear();
+        int si;
+        for (si = 0; si < wireCount; si = si + 1)
         {
+            ref LFPG_WireSegmentInfo sortWsi = m_WireSegments.GetElement(si);
+            if (!sortWsi)
+                continue;
+
+            float dist = sortWsi.cachedMinDist;
+            // Insertion sort: find position (descending = farthest first)
+            int insertAt = m_DrawOrder.Count(); // default: end
+            int sj;
+            for (sj = 0; sj < m_DrawDist.Count(); sj = sj + 1)
+            {
+                if (dist > m_DrawDist[sj])
+                {
+                    insertAt = sj;
+                    break;
+                }
+            }
+            m_DrawOrder.InsertAt(insertAt, si);
+            m_DrawDist.InsertAt(insertAt, dist);
+        }
+
+        int di;
+        for (di = 0; di < m_DrawOrder.Count(); di = di + 1)
+        {
+            int i = m_DrawOrder[di];
             ref LFPG_WireSegmentInfo wsi = m_WireSegments.GetElement(i);
             if (!wsi)
                 continue;
@@ -1623,6 +1727,11 @@ class LFPG_CableRenderer
 
             // ---- Colors ----
             int baseColor = GetStateColor(wsi.cableState);
+            // v0.7.23 (Bug 9): Without tools, all cables show neutral IDLE color.
+            if (!showStateColors)
+            {
+                baseColor = LFPG_STATE_COLOR_IDLE;
+            }
             int drawColor = baseColor;
             if (alphaFactor < 0.99)
             {
@@ -1749,10 +1858,23 @@ class LFPG_CableRenderer
                 }
 
                 // Off-screen check (v0.7.9: proportional to resolution, unified with HUD)
-                float margin = shF * 0.25;
-                if (margin < 200.0)
+                // v0.7.23 (Bug 1): Clipped points (near-plane projection) can produce
+                // extreme screen coords that pass the normal generous margin.
+                // Use a tighter margin (50px) when either point was clipped to
+                // prevent "sticky lines at screen edges" during camera rotation.
+                float margin;
+                bool wasClipped = (behindA || behindB);
+                if (wasClipped)
                 {
-                    margin = 200.0;
+                    margin = 50.0;
+                }
+                else
+                {
+                    margin = shF * 0.25;
+                    if (margin < 200.0)
+                    {
+                        margin = 200.0;
+                    }
                 }
                 bool offA = false;
                 if (sx1 < -margin || sx1 > swF + margin || sy1 < -margin || sy1 > shF + margin)
