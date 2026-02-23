@@ -232,7 +232,11 @@ class LF_TestGenerator : PowerGenerator
         super.EEItemAttached(item, slot_name);
 
         #ifdef SERVER
-        if (slot_name == "SparkPlug" && m_SourceOn && m_DeviceId != "")
+        // v0.7.28: Case-insensitive comparison. Some DayZ versions
+        // normalize slot names to lowercase in EEItemAttached/Detached.
+        string slotLower = slot_name;
+        slotLower.ToLower();
+        if (slotLower == "sparkplug" && m_SourceOn && m_DeviceId != "")
         {
             // v0.7.27: Re-validate after attachment (checks health too)
             if (LFPG_DeviceLifecycle.IsSparkPlugValid(this))
@@ -254,7 +258,10 @@ class LF_TestGenerator : PowerGenerator
         super.EEItemDetached(item, slot_name);
 
         #ifdef SERVER
-        if (slot_name == "SparkPlug" && m_SourceOn && m_DeviceId != "")
+        // v0.7.28: Case-insensitive comparison (see EEItemAttached).
+        string slotLowerD = slot_name;
+        slotLowerD.ToLower();
+        if (slotLowerD == "sparkplug" && m_SourceOn && m_DeviceId != "")
         {
             LFPG_Util.Info("[LF_TestGenerator] SparkPlug detached while ON, stopping CompEM + propagating");
 

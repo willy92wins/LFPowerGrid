@@ -2067,6 +2067,12 @@ class LFPG_NetworkManager
             }
             PostBulkRebuildAndPropagate();
             LFPG_Util.Info("[CutAll] All wires removed for device " + deviceId + " type=" + device.GetType());
+
+            // v0.7.28: Safety flush — ensure all queued RPCs reach clients
+            // immediately. Sections 1-4 use direct BroadcastOwnerWires and
+            // RemoveWiresTargeting (which flushes internally), but this
+            // covers any edge case where a broadcast was queued but not sent.
+            FlushBroadcasts();
         }
         #endif
     }
