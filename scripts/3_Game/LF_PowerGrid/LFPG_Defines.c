@@ -14,16 +14,6 @@ static const float LFPG_MAX_SEG_LEN_M     = 50.0;   // one segment between waypo
 static const int   LFPG_MAX_WAYPOINTS     = 10;
 static const int   LFPG_MAX_WIRES_PER_DEVICE = 64;
 
-// ---- Cable rendering (v0.7.7+: Canvas 2D + LOD + depth width + alpha fade) ----
-// Legacy color constants (kept for backward compat; state colors preferred).
-static const int LFPG_COLOR_DEFAULT       = 0xFFFF6600;  // orange
-static const int LFPG_COLOR_POWERED       = 0xFF00FF00;  // green
-static const int LFPG_COLOR_HOVER         = 0xFF00FFFF;  // cyan
-
-// ---- Cable 3D particles (v0.7.12) ----
-// Particle index for cable segments (must match ParticleList registration).
-static const int LFPG_CABLE_PARTICLE_ID = 99801;
-
 // ---- Cable sag parameters (v0.7.9: adaptive subdivisions + quadratic scaling) ----
 static const float LFPG_SAG_FACTOR        = 0.06;
 static const float LFPG_SAG_SHORT_THRESH_M = 2.0;
@@ -77,8 +67,7 @@ static const int LFPG_STATE_COLOR_ERROR_TOPO    = 0xFF8A3FFC;  // purple
 static const int LFPG_STATE_COLOR_BLOCKED       = 0xFF6B7A99;  // blue-gray
 static const int LFPG_STATE_COLOR_SELECTED      = 0xFF00B4D8;  // cyan
 
-// ---- Cable rendering (v0.7.7+: Canvas 2D + LOD + depth width + alpha fade) ----
-// Legacy color constants (kept for backward compat; state colors preferred).
+// ---- Cable rendering LOD boundaries (v0.7.7+) ----
 // Close/Medium/Far LOD boundaries in metres.
 static const float LFPG_LOD_CLOSE_M  = 15.0;
 static const float LFPG_LOD_MEDIUM_M = 40.0;
@@ -308,4 +297,60 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.27";
+static const string LFPG_VERSION_STR = "0.7.28";
+
+// =========================================================
+// Constants that were previously missing definitions.
+// v0.7.28 (Refactor): Consolidated all implicitly-used constants.
+// =========================================================
+
+// ---- Wire construction (alias for segment limit) ----
+static const float LFPG_MAX_SEGMENT_LEN_M    = 50.0;   // alias for LFPG_MAX_SEG_LEN_M
+static const float LFPG_NEAR_LIMIT_RATIO     = 0.80;   // 80% threshold for length warnings
+
+// ---- Per-player quotas ----
+static const int   LFPG_MAX_WIRES_PER_PLAYER = 128;    // global per-player wire cap
+
+// ---- RPC rate limiting ----
+static const float LFPG_RPC_COOLDOWN_S       = 0.5;    // seconds between player RPC actions
+
+// ---- Culling and visibility ----
+static const float LFPG_CULL_DISTANCE_M      = 50.0;   // max render distance for cables
+static const float LFPG_CULL_TICK_S          = 2.0;    // seconds between culling rechecks
+static const float LFPG_DEVICE_BUBBLE_M      = 25.0;   // device proximity bubble (server settings default)
+static const float LFPG_INTERACT_DIST_M      = 5.0;    // max interaction raycast distance
+
+// ---- Alpha fade ----
+static const float LFPG_ALPHA_FADE_START_M   = 35.0;   // distance at which alpha fade begins
+
+// ---- LOD alias ----
+static const float LFPG_LOD_MID_M            = 40.0;   // alias for LFPG_LOD_MEDIUM_M
+
+// ---- Cable visual widths ----
+static const float LFPG_CABLE_WIDTH          = 2.0;    // base cable line width (px)
+static const float LFPG_DEPTH_WIDTH_MIN      = 1.0;    // min depth-scaled width
+static const float LFPG_DEPTH_WIDTH_MAX      = 4.0;    // max depth-scaled width
+static const float LFPG_DEPTH_WIDTH_REF      = 20.0;   // reference distance for depth scaling
+
+// ---- Cable shadow ----
+static const int   LFPG_SHADOW_COLOR         = 0x40000000;  // semi-transparent black
+static const float LFPG_SHADOW_WIDTH_ADD     = 1.5;    // extra width for shadow pass
+
+// ---- Highlight / hover ----
+static const int   LFPG_HIGHLIGHT_ALPHA      = 0x60;   // alpha for highlight overlay
+static const float LFPG_HIGHLIGHT_WIDTH_SUB  = 1.0;    // width subtracted for inner glow
+
+// ---- Endcap (port indicators) ----
+static const float LFPG_ENDCAP_SIZE          = 4.0;    // base endcap size (px)
+static const float LFPG_ENDCAP_SIZE_MIN      = 2.0;    // min endcap size at distance
+static const float LFPG_ENDCAP_SIZE_MAX      = 8.0;    // max endcap size up close
+static const float LFPG_ENDCAP_WIDTH         = 2.0;    // endcap stroke width
+
+// ---- Joint (waypoint indicators) ----
+static const float LFPG_JOINT_SIZE           = 3.0;    // base joint size (px)
+static const float LFPG_JOINT_SIZE_MIN       = 2.0;    // min joint size at distance
+static const float LFPG_JOINT_SIZE_MAX       = 6.0;    // max joint size up close
+
+// ---- Retry system ----
+static const int   LFPG_RETRY_MAX            = 5;      // max retry attempts for deferred wires
+static const float LFPG_RETRY_TICK_S         = 2.0;    // seconds between retry ticks

@@ -24,7 +24,7 @@ class LFPG_CableHUD
     protected int m_CanvasW = 0;
     protected int m_CanvasH = 0;
 
-    // Per-frame cached screen size as floats (used in DrawSegment/DrawCross)
+    // Per-frame cached screen size as floats (used in DrawSegment)
     protected float m_ScreenWF = 0.0;
     protected float m_ScreenHF = 0.0;
 
@@ -178,7 +178,7 @@ class LFPG_CableHUD
             return;
 
         // Cache screen size once per frame (avoids redundant calls in
-        // DrawSegment and DrawCross which previously called GetScreenSize
+        // DrawSegment which previously called GetScreenSize
         // individually — up to ~50 calls/frame with many cables).
         int curW = 0;
         int curH = 0;
@@ -349,39 +349,6 @@ class LFPG_CableHUD
             return;
 
         m_Canvas.Clear();
-    }
-
-
-    // Draw a small cross marker on screen at a world position
-    void DrawCross(vector worldPos, int color, float size)
-    {
-        if (!m_Ready || !m_Canvas)
-            return;
-
-        vector sp = GetGame().GetScreenPos(worldPos);
-
-        // Behind camera or at camera plane
-        if (sp[2] < 0.1)
-            return;
-
-        float x = sp[0];
-        float y = sp[1];
-
-        // Use per-frame cached screen size
-        float swF = m_ScreenWF;
-        float shF = m_ScreenHF;
-
-        if (x < -50.0)
-            return;
-        if (x > swF + 50.0)
-            return;
-        if (y < -50.0)
-            return;
-        if (y > shF + 50.0)
-            return;
-
-        m_Canvas.DrawLine(x - size, y, x + size, y, 2.0, color);
-        m_Canvas.DrawLine(x, y - size, x, y + size, 2.0, color);
     }
 
     // v0.7.8: Draw a small diamond at a world position (joint marker).

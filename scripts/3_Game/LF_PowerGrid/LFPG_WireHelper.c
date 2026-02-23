@@ -141,29 +141,6 @@ class LFPG_WireHelper
         return true;
     }
 
-    // Check for exact duplicate wires in an array.
-    // Returns true if a wire with same target+ports already exists.
-    static bool IsDuplicate(array<ref LFPG_WireData> wires, LFPG_WireData candidate)
-    {
-        if (!wires || !candidate)
-            return false;
-
-        int i;
-        for (i = 0; i < wires.Count(); i = i + 1)
-        {
-            LFPG_WireData e = wires[i];
-            if (!e)
-                continue;
-            if (e.m_TargetDeviceId == candidate.m_TargetDeviceId
-                && e.m_TargetPort == candidate.m_TargetPort
-                && e.m_SourcePort == candidate.m_SourcePort)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // ===========================
     // Wire array manipulation (unchanged from v0.7.11)
     // ===========================
@@ -345,7 +322,7 @@ class LFPG_WireHelper
             maxWires = Math.Min(maxWires, st.MaxWiresPerDevice);
         }
 
-        // v0.7.16 H3: Map-based O(N) dedup instead of O(N²) IsDuplicate loop
+        // v0.7.16 H3: Map-based O(N) dedup (replaced legacy IsDuplicate loop)
         ref map<string, bool> dedupMap = new map<string, bool>;
 
         int discarded = 0;

@@ -156,8 +156,8 @@ class LF_Splitter : Inventory_Base
         return false;
     }
 
-    // v0.7.26 (Bug 2): Immediate movement detection.
-    // Two-layer detection: inventory type transition (primary) + distance (secondary).
+    // v0.7.28 (Refactor): Delegates to DeviceLifecycle for movement detection.
+    // Replaces duplicated inline logic with centralized helper.
     override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
     {
         super.EEItemLocationChanged(oldLoc, newLoc);
@@ -166,45 +166,14 @@ class LF_Splitter : Inventory_Base
         if (m_DeviceId == "")
             return;
 
-        // Primary: inventory location type transition.
-        // GROUND→anything else = picked up (admin tools, physics, scripts).
-        // CanPutInCargo/CanPutIntoHands block normal pickup, but not all paths.
-        bool wasGround = (oldLoc.GetType() == InventoryLocationType.GROUND);
-        bool nowGround = (newLoc.GetType() == InventoryLocationType.GROUND);
-
-        if (wasGround && !nowGround)
+        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
+        if (wiresCut)
         {
-            LFPG_Util.Warn("[LF_Splitter] Picked up (GROUND->" + newLoc.GetType().ToString() + ") id=" + m_DeviceId);
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-
             if (m_PoweredNet)
             {
                 m_PoweredNet = false;
                 SetSynchDirty();
             }
-            return;
-        }
-
-        // Secondary: distance-based for GROUND→GROUND moves.
-        // Catches admin teleport, physics push, building destruction.
-        vector oldPos = oldLoc.GetPos();
-        vector newPos = newLoc.GetPos();
-
-        if (oldPos == vector.Zero)
-            return;
-
-        float dist = vector.Distance(oldPos, newPos);
-        // v0.7.25: Threshold 0.1m (physics bumps can be 0.2-0.4m).
-        if (dist < 0.1)
-            return;
-
-        LFPG_Util.Warn("[LF_Splitter] EEItemLocationChanged: moved " + dist.ToString() + "m id=" + m_DeviceId);
-        LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-
-        if (m_PoweredNet)
-        {
-            m_PoweredNet = false;
-            SetSynchDirty();
         }
         #endif
     }
@@ -237,19 +206,12 @@ class LF_Splitter : Inventory_Base
         #endif
     }
 
-    // v0.7.26 (Bug 2): Cut all wires when splitter is destroyed.
-    // EEKilled fires when entity reaches RUINED state but before deletion.
-    // Without this, a destroyed splitter keeps ghost wires in the graph
-    // for as long as the ruined object persists in the world.
+    // v0.7.28 (Refactor): Delegates to DeviceLifecycle, then handles splitter-specific state.
     override void EEKilled(Object killer)
     {
-        #ifdef SERVER
-        if (m_DeviceId != "")
-        {
-            LFPG_Util.Warn("[LF_Splitter] EEKilled: cutting all wires id=" + m_DeviceId);
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-        }
+        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
+        #ifdef SERVER
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -260,20 +222,10 @@ class LF_Splitter : Inventory_Base
         super.EEKilled(killer);
     }
 
+    // v0.7.28 (Refactor): Delegates to DeviceLifecycle helper.
     override void EEDelete(EntityAI parent)
     {
-        // v0.7.26: Centralized cleanup ensures all wires, graph edges,
-        // reverse index, and player counts are cleaned atomically.
-        #ifdef SERVER
-        if (m_DeviceId != "")
-        {
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
-        }
-        #endif
-
-        // Notify graph and unregister device identity
-        LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(m_DeviceId);
-        LFPG_DeviceRegistry.Get().Unregister(m_DeviceId, this);
+        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
 

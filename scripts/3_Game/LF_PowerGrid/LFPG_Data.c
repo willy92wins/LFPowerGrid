@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - data structures (v0.7.22, Sprint 4.3)
+// LF_PowerGrid - data structures (v0.7.28, Sprint 4.3+refactor)
 //
 // Pure data classes. No logic. No entity references.
 // Instantiated by LFPG_ElecGraph (4_World) or persistence (3_Game).
@@ -9,6 +9,95 @@
 // Sprint 4.3 additions:
 //   - m_LoadRatio, m_OverloadMask on ElecNode (source telemetry)
 //   - m_Demand on ElecEdge (downstream demand for priority allocation)
+//
+// v0.7.28 (Refactor): Consolidated missing data structures:
+//   - LFPG_WireData: single wire endpoint descriptor
+//   - LFPG_PersistBlob: persistence envelope for per-device wires
+//   - LFPG_VanillaWireEntry: single vanilla wire endpoint
+//   - LFPG_VanillaWireStore: persistence envelope for vanilla wires
+// =========================================================
+
+// ---- Wire data (per-wire, serialized to JSON via PersistBlob) ----
+class LFPG_WireData
+{
+    // Target device identity
+    string m_TargetDeviceId;
+    string m_TargetPort;
+    string m_SourcePort;
+
+    // Creator tracking (for per-player cleanup)
+    string m_CreatorId;
+
+    // Route geometry
+    ref array<vector> m_Waypoints;
+
+    // Sprint 4.3: priority for load allocation (0 = default)
+    int m_Priority;
+
+    // Sprint 4.3: bitfield for future states (0 = default)
+    int m_Flags;
+
+    void LFPG_WireData()
+    {
+        m_TargetDeviceId = "";
+        m_TargetPort = "";
+        m_SourcePort = "";
+        m_CreatorId = "";
+        m_Waypoints = new array<vector>;
+        m_Priority = 0;
+        m_Flags = 0;
+    }
+};
+
+// ---- Persistence envelope for per-device wires ----
+class LFPG_PersistBlob
+{
+    int ver;
+    ref array<ref LFPG_WireData> wires;
+
+    void LFPG_PersistBlob()
+    {
+        ver = LFPG_PERSIST_VER;
+        wires = new array<ref LFPG_WireData>;
+    }
+};
+
+// ---- Single vanilla wire entry ----
+class LFPG_VanillaWireEntry
+{
+    string m_OwnerDeviceId;
+    string m_TargetDeviceId;
+    string m_SourcePort;
+    string m_TargetPort;
+    string m_CreatorId;
+    ref array<vector> m_Waypoints;
+
+    void LFPG_VanillaWireEntry()
+    {
+        m_OwnerDeviceId = "";
+        m_TargetDeviceId = "";
+        m_SourcePort = "";
+        m_TargetPort = "";
+        m_CreatorId = "";
+        m_Waypoints = new array<vector>;
+    }
+};
+
+// ---- Persistence envelope for vanilla wires ----
+class LFPG_VanillaWireStore
+{
+    int ver;
+    ref array<ref LFPG_VanillaWireEntry> entries;
+
+    void LFPG_VanillaWireStore()
+    {
+        ver = LFPG_VANILLA_PERSIST_VER;
+        entries = new array<ref LFPG_VanillaWireEntry>;
+    }
+};
+
+// =========================================================
+// Electrical graph data structures
 // =========================================================
 
 class LFPG_ElecNode

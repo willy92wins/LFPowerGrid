@@ -540,15 +540,6 @@ class LFPG_CableRenderer
         LFPG_Util.Info("[CableRenderer] ForceGlobalRefresh: rebuilt " + ownerIds.Count().ToString() + " owners, totalSegs=" + m_TotalSegCount.ToString());
     }
 
-    // v0.7.23 (Bug 4): Static accessor for external callers (e.g. admin commands).
-    static void RequestGlobalRefresh()
-    {
-        if (s_Instance)
-        {
-            s_Instance.ForceGlobalRefresh();
-        }
-    }
-
     // ===========================
     // Entity resolution (client-side)
     // ===========================

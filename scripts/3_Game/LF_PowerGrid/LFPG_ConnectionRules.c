@@ -31,11 +31,6 @@ class LFPG_PreConnectResult
     {
         return (m_Status < 10);
     }
-
-    bool IsWarning()
-    {
-        return (m_Status >= 1 && m_Status < 10);
-    }
 };
 
 // v0.7.13: Parameter struct for CanPreConnect.
