@@ -61,7 +61,22 @@ class LF_TestGenerator : PowerGenerator
         RemoveAction(ActionTurnOnPowerGenerator);
         RemoveAction(ActionTurnOffPowerGenerator);
 
+        // v0.7.27 (Audit 5): Remove vanilla electrical connection actions.
+        // PowerGenerator inherits plug/unplug from its base class hierarchy.
+        // Without explicit removal, players with vanilla CableReel near
+        // an LF_TestGenerator see "Plug in" / "Unplug" vanilla actions.
+        RemoveAction(ActionPlugIn);
+        RemoveAction(ActionUnplugThisByCombination);
+
         AddAction(ActionLFPG_ToggleSource);
+    }
+
+    // v0.7.27 (Audit 5): Prevent vanilla electrical system from treating
+    // this as a pluggable device. Returns false to block all vanilla
+    // plug/unplug action condition checks from the item side.
+    override bool IsElectricAppliance()
+    {
+        return false;
     }
 
     override void EEInit()

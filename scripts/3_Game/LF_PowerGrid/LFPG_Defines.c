@@ -308,4 +308,4 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.26";
+static const string LFPG_VERSION_STR = "0.7.27";

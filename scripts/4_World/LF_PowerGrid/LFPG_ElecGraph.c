@@ -34,6 +34,11 @@
 //   - DFS depth limit in DetectCycleIfAdded (LFPG_DFS_MAX_VISITED)
 //   - NaN/infinity guards on loadRatio + inputSum calculations
 //   - Improved overload reporting when MaxOutput is zero
+//
+// v0.7.27 (Audit 5):
+//   - Pre-allocated temp arrays in AllocateOutputByPriority (GC pressure fix)
+//   - OverloadMask overflow warning for origIdx >= 31
+//   - Final NaN guard on accumulated inputSum
 // =========================================================
 
 class LFPG_ElecGraph
@@ -70,6 +75,12 @@ class LFPG_ElecGraph
     // --- Sprint 4.3: Load telemetry ---
     protected int m_LastOverloadCount;
 
+    // v0.7.27 (Audit 5): Pre-allocated temp arrays for AllocateOutputByPriority.
+    // Avoids GC pressure from creating 3 arrays per call in hot path.
+    protected ref array<int> m_AllocIdxArr;
+    protected ref array<float> m_AllocDemandArr;
+    protected ref array<int> m_AllocPrioArr;
+
     void LFPG_ElecGraph()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -88,6 +99,9 @@ class LFPG_ElecGraph
         m_EnqueuedThisEpoch = new array<string>;
         m_EdgesVisitedThisEpoch = 0;
         m_LastOverloadCount = 0;
+        m_AllocIdxArr = new array<int>;
+        m_AllocDemandArr = new array<float>;
+        m_AllocPrioArr = new array<int>;
     }
 
     // ===========================
@@ -989,6 +1003,13 @@ class LFPG_ElecGraph
                         inputSum = inputSum + edgePower;
                     }
                 }
+                // v0.7.27 (Audit 5): Final guard on accumulated inputSum.
+                // Individual edgePower is guarded, but accumulated sum could
+                // theoretically go negative from floating point corruption.
+                if (inputSum < 0.0)
+                {
+                    inputSum = 0.0;
+                }
                 node.m_InputPower = inputSum;
             }
             else
@@ -1356,9 +1377,14 @@ class LFPG_ElecGraph
             return 0.0;
 
         // Phase 1: Collect enabled edges and their demands
-        ref array<int> idxArr = new array<int>;
-        ref array<float> demandArr = new array<float>;
-        ref array<int> prioArr = new array<int>;
+        // v0.7.27 (Audit 5): Reuse pre-allocated arrays (cleared each call).
+        // Eliminates 3 allocations per source node per propagation tick.
+        m_AllocIdxArr.Clear();
+        m_AllocDemandArr.Clear();
+        m_AllocPrioArr.Clear();
+        array<int> idxArr = m_AllocIdxArr;
+        array<float> demandArr = m_AllocDemandArr;
+        array<int> prioArr = m_AllocPrioArr;
 
         float totalDemand = 0.0;
         int ei;
@@ -1505,6 +1531,11 @@ class LFPG_ElecGraph
                 if (origIdx >= 0 && origIdx < 31)
                 {
                     overloadMask = overloadMask | (1 << origIdx);
+                }
+                else if (origIdx >= 31)
+                {
+                    // v0.7.27 (Audit 5): Log when overload info is lost due to int bitmask limit.
+                    LFPG_Util.Warn("[ElecGraph] OverloadMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId);
                 }
             }
             else
