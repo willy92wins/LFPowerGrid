@@ -132,11 +132,13 @@ class LF_Splitter : Inventory_Base
         RegisterNetSyncVariableInt("m_OverloadMask");
     }
 
-    // Passthrough device: no manual toggle or custom actions.
-    // Port actions (wire/cut) are on LF_CableReel and Pliers.
     override void SetActions()
     {
         super.SetActions();
+
+        // v0.7.28 (Bug 2): Block vanilla take/carry actions.
+        RemoveAction(ActionTakeItem);
+        RemoveAction(ActionTakeItemToHands);
     }
 
     // Prevent players from picking up a placed splitter.

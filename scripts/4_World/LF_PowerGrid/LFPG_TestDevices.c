@@ -68,6 +68,14 @@ class LF_TestGenerator : PowerGenerator
         RemoveAction(ActionPlugIn);
         RemoveAction(ActionUnplugThisByCombination);
 
+        // v0.7.28 (Bug 2): Block vanilla take/carry actions.
+        // CanPutIntoHands/CanPutInCargo return false, but some vanilla
+        // code paths (heavy item carry, inventory drag) can bypass those
+        // checks depending on DayZ version. Explicit removal ensures
+        // the scroll-menu actions never appear.
+        RemoveAction(ActionTakeItem);
+        RemoveAction(ActionTakeItemToHands);
+
         AddAction(ActionLFPG_ToggleSource);
     }
 
@@ -82,6 +90,20 @@ class LF_TestGenerator : PowerGenerator
     override void EEInit()
     {
         super.EEInit();
+
+        // v0.7.28 (Bug 1): Force vanilla CompEM off IMMEDIATELY after super.
+        // PowerGenerator.EEInit() may start CompEM via internal C++ paths
+        // that bypass script hooks (OnWorkStart, OnSwitchOn, CanTurnOn).
+        // We kill it here unconditionally, then re-enable below ONLY if
+        // LFPG validation passes. This closes the timing window where
+        // CompEM is "working" without sparkplug.
+        #ifdef SERVER
+        ComponentEnergyManager emKillVanilla = GetCompEM();
+        if (emKillVanilla)
+        {
+            emKillVanilla.SwitchOff();
+        }
+        #endif
 
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
@@ -759,6 +781,13 @@ class LF_TestLamp : Spotlight
         // an LF_TestLamp see "Plug in" / "Unplug" vanilla actions.
         RemoveAction(ActionPlugIn);
         RemoveAction(ActionUnplugThisByCombination);
+
+        // v0.7.28 (Bug 2): Block vanilla take/carry actions.
+        // CanPutIntoHands/CanPutInCargo return false, but some vanilla
+        // code paths (heavy item carry, inventory drag) bypass those
+        // checks. Explicit removal ensures the actions never appear.
+        RemoveAction(ActionTakeItem);
+        RemoveAction(ActionTakeItemToHands);
     }
 
     // v0.7.26 (Bug 3): Prevent vanilla electrical system from treating

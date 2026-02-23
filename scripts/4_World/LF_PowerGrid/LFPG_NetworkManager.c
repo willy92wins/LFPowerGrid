@@ -102,7 +102,7 @@ class LFPG_NetworkManager
     // admin tool moves and building mod placements more reliably.
     // EEItemLocationChanged on LFPG devices uses 0.1m for instant detection.
     protected static const float MOVE_DETECT_THRESHOLD_M = 0.3;  // 30cm
-    protected static const int   MOVE_DETECT_INTERVAL_MS = 10000; // 10 seconds
+    protected static const int   MOVE_DETECT_INTERVAL_MS = 3000; // 3 seconds (v0.7.28: reduced from 10s)
 
     void LFPG_NetworkManager()
     {
@@ -1277,6 +1277,10 @@ class LFPG_NetworkManager
         }
 
         // Process moved devices outside the iteration loop
+        // v0.7.28 (Bug 2+3): Use centralized CutAllWiresFromDevice instead of
+        // ad-hoc logic. CutAllWiresFromDevice now forces SetPowered(false) on
+        // all neighbors before removing the graph node, preventing orphaned
+        // consumers from keeping stale powered state.
         int mi;
         for (mi = 0; mi < movedIds.Count(); mi = mi + 1)
         {
@@ -1285,42 +1289,22 @@ class LFPG_NetworkManager
 
             LFPG_Util.Warn("[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires");
 
-            // Clear wires owned by this device
-            if (LFPG_DeviceAPI.HasWireStore(movedDev))
-            {
-                LFPG_DeviceAPI.ClearDeviceWires(movedDev);
-                BroadcastOwnerWires(movedDev);
-            }
+            // Centralized wire cut: handles owned wires, vanilla wires,
+            // incoming wires, graph cleanup, and SetPowered(false) on neighbors.
+            CutAllWiresFromDevice(movedDev);
 
-            // Remove wires from vanilla store if applicable
-            if (movedId.IndexOf("vp:") == 0)
+            // Generator-specific: force source off when physically moved.
+            // CutAllWiresFromDevice handles consumers/passthroughs via
+            // SetPowered(false), but generators ignore SetPowered (they
+            // produce, not consume). Must force m_SourceOn off explicitly.
+            LF_TestGenerator gen = LF_TestGenerator.Cast(movedDev);
+            if (gen && gen.LFPG_GetSwitchState())
             {
-                ref array<ref LFPG_WireData> vWires;
-                if (m_VanillaWires.Find(movedId, vWires) && vWires)
-                {
-                    vWires.Clear();
-                    MarkVanillaDirty();
-                }
+                gen.LFPG_ToggleSource();
             }
-
-            // Remove wires targeting this device from all sources
-            int portCount2 = LFPG_DeviceAPI.GetPortCount(movedDev);
-            int pi2;
-            for (pi2 = 0; pi2 < portCount2; pi2 = pi2 + 1)
-            {
-                int pDir2 = LFPG_DeviceAPI.GetPortDir(movedDev, pi2);
-                if (pDir2 == LFPG_PortDir.IN)
-                {
-                    string pName2 = LFPG_DeviceAPI.GetPortName(movedDev, pi2);
-                    RemoveWiresTargeting(movedId, pName2);
-                }
-            }
-
-            // Re-propagate and self-heal
-            RequestPropagate(movedId);
         }
 
-        // Trigger full self-heal if any devices moved
+        // Trigger full self-heal if any devices moved (safety net)
         if (movedIds.Count() > 0)
         {
             LFPG_Util.Info("[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal");
@@ -1883,6 +1867,42 @@ class LFPG_NetworkManager
 
         bool anyChanged = false;
 
+        // --- v0.7.28 (Bug 2+3): Collect all graph neighbors BEFORE cutting ---
+        // When wires are cut, the graph node for this device gets removed.
+        // If we don't force SetPowered(false) on neighbors first, they
+        // become orphan nodes that never receive a powered=false update.
+        // Collect now while the graph still has the edges.
+        ref array<string> neighborIds = new array<string>;
+        if (m_Graph)
+        {
+            ref array<ref LFPG_ElecEdge> preOutEdges = m_Graph.GetOutgoing(deviceId);
+            if (preOutEdges)
+            {
+                int poi;
+                for (poi = 0; poi < preOutEdges.Count(); poi = poi + 1)
+                {
+                    ref LFPG_ElecEdge poEdge = preOutEdges[poi];
+                    if (poEdge && poEdge.m_TargetNodeId != "")
+                    {
+                        neighborIds.Insert(poEdge.m_TargetNodeId);
+                    }
+                }
+            }
+            ref array<ref LFPG_ElecEdge> preInEdges = m_Graph.GetIncoming(deviceId);
+            if (preInEdges)
+            {
+                int pii;
+                for (pii = 0; pii < preInEdges.Count(); pii = pii + 1)
+                {
+                    ref LFPG_ElecEdge piEdge = preInEdges[pii];
+                    if (piEdge && piEdge.m_SourceNodeId != "")
+                    {
+                        neighborIds.Insert(piEdge.m_SourceNodeId);
+                    }
+                }
+            }
+        }
+
         // --- 1. Clear OWNED wires (output side) ---
         if (LFPG_DeviceAPI.HasWireStore(device))
         {
@@ -2015,6 +2035,28 @@ class LFPG_NetworkManager
 
         // --- 5. Cleanup tracking state ---
         m_LastKnownPos.Remove(deviceId);
+
+        // --- 5b. Force powered=false on device and all neighbors (v0.7.28) ---
+        // Must happen BEFORE graph removal (section 6). Once the graph
+        // removes the node, orphaned neighbors never get a propagation
+        // update and their m_PoweredNet stays stale.
+        if (anyChanged)
+        {
+            // Force self off (covers consumers and passthroughs)
+            LFPG_DeviceAPI.SetPowered(device, false);
+
+            // Force all neighbors off — propagation will re-enable
+            // any that still have an alternate power path.
+            int nbi;
+            for (nbi = 0; nbi < neighborIds.Count(); nbi = nbi + 1)
+            {
+                EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborIds[nbi]);
+                if (neighborDev)
+                {
+                    LFPG_DeviceAPI.SetPowered(neighborDev, false);
+                }
+            }
+        }
 
         // --- 6. Notify graph and propagate ---
         if (anyChanged)
