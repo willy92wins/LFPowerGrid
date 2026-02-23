@@ -621,20 +621,34 @@ class LFPG_CableRenderer
     // ===========================
     // Power state detection (client-side)
     // ===========================
+    // v0.7.29 (Audit fix): Separate LFPG path from vanilla CompEM path.
+    // Previously, if GetSourceOn returned false (no sparkplug), the
+    // fallback to em.IsWorking() could return true when CompEM was
+    // activated via vanilla C++ paths. This caused cables to show
+    // green (POWERED) even without a valid sparkplug.
+    // Now: LFPG-native devices (with device ID) use GetSourceOn
+    // exclusively. Only vanilla devices fall back to CompEM.
     protected bool IsOwnerActive(EntityAI ownerObj)
     {
         if (!ownerObj)
             return false;
 
-        bool lfpgOn = LFPG_DeviceAPI.GetSourceOn(ownerObj);
-        if (lfpgOn)
-            return true;
+        // Check if this is an LFPG-native device (has LFPG device ID)
+        // GetDeviceId calls LFPG_GetDeviceId via dynamic dispatch.
+        // Returns "" for vanilla devices (no such method).
+        string devId = LFPG_DeviceAPI.GetDeviceId(ownerObj);
+        if (devId != "")
+        {
+            // LFPG device: use GetSourceOn exclusively.
+            // This includes sparkplug validation and health checks.
+            return LFPG_DeviceAPI.GetSourceOn(ownerObj);
+        }
 
+        // Non-LFPG (vanilla) device: use CompEM as source of truth
         ComponentEnergyManager em = ownerObj.GetCompEM();
         if (em)
         {
-            if (em.IsWorking())
-                return true;
+            return em.IsWorking();
         }
 
         return false;

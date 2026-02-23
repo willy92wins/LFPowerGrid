@@ -269,6 +269,12 @@ static const int LFPG_MAX_REQUEUE_PER_EPOCH = 5;
 // If reached, conservatively returns true (cycle assumed) to reject the wire.
 static const int LFPG_DFS_MAX_VISITED = 2048;
 
+// v0.7.29 (Audit fix): Maximum safe nodes per network graph.
+// Watchdog to prevent players from building excessively large networks
+// that would cause tick rate degradation. When exceeded, new wire
+// connections should be rejected with player feedback.
+static const int LFPG_MAX_SAFE_NODES = 512;
+
 // ---- Propagation epsilon (Sprint 4.2, active) ----
 // Power changes smaller than epsilon do not propagate downstream.
 // Prevents cascading updates from floating point noise.

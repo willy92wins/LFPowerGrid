@@ -254,6 +254,15 @@ class LFPG_ElecGraph
         if (sourceId == "" || targetId == "")
             return false;
 
+        // v0.7.29 (Audit fix): Network size watchdog.
+        // Reject new connections if the graph is at capacity.
+        // Prevents runaway networks from degrading server tick rate.
+        if (m_NodeCount >= LFPG_MAX_SAFE_NODES)
+        {
+            LFPG_Util.Warn("[ElecGraph] OnWireAdded: REJECTED — node limit reached (" + m_NodeCount.ToString() + "/" + LFPG_MAX_SAFE_NODES.ToString() + ")");
+            return false;
+        }
+
         EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
         EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
 

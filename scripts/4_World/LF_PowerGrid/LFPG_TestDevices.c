@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.27)
+// LF_PowerGrid - Example devices (v0.7.29)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
@@ -12,6 +12,10 @@
 //          vanilla plug/unplug on lamps.
 // v0.7.27: Refactored to LFPG_DeviceLifecycle static helpers.
 //          Zero duplicated lifecycle code across device classes.
+// v0.7.29: External audit integration (Audit 1/2/3):
+//          - CompEM SwitchOff on both client+server (visual effects fix)
+//          - CanBePickedUp/IsHeavyBehaviour overrides for lamp
+//          - Position polling timer for heavy carry bypass detection
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -38,6 +42,11 @@ class LF_TestGenerator : PowerGenerator
     // Bit N = 1 means wire at index N exceeded available capacity.
     // Synced to clients for per-wire CRITICAL_LOAD cable state.
     protected int m_OverloadMask = 0;
+
+    // v0.7.29 (Audit fix): Position polling for movement bypass detection.
+    protected vector m_LFPG_LastKnownPos;
+    static const float LFPG_POS_POLL_INTERVAL_S = 2.0;
+    static const float LFPG_POS_DRIFT_THRESHOLD_M = 0.5;
 
     void LF_TestGenerator()
     {
@@ -91,19 +100,17 @@ class LF_TestGenerator : PowerGenerator
     {
         super.EEInit();
 
-        // v0.7.28 (Bug 1): Force vanilla CompEM off IMMEDIATELY after super.
+        // v0.7.29 (Audit fix): Force vanilla CompEM off on BOTH client+server.
         // PowerGenerator.EEInit() may start CompEM via internal C++ paths
         // that bypass script hooks (OnWorkStart, OnSwitchOn, CanTurnOn).
         // We kill it here unconditionally, then re-enable below ONLY if
         // LFPG validation passes. This closes the timing window where
-        // CompEM is "working" without sparkplug.
-        #ifdef SERVER
+        // CompEM is "working" without sparkplug on the client side.
         ComponentEnergyManager emKillVanilla = GetCompEM();
         if (emKillVanilla)
         {
             emKillVanilla.SwitchOff();
         }
-        #endif
 
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
@@ -144,12 +151,60 @@ class LF_TestGenerator : PowerGenerator
 
         if (m_SourceOn)
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+
+        // v0.7.29 (Audit fix): Start position polling (safety net)
+        m_LFPG_LastKnownPos = GetPosition();
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PositionPollTick, LFPG_POS_POLL_INTERVAL_S * 1000.0, true);
+        #endif
+    }
+
+    // v0.7.29 (Audit fix): Periodic position drift check.
+    // Catches admin teleport, physics push, or any mechanism that
+    // moves the generator without firing EEItemLocationChanged.
+    protected void LFPG_PositionPollTick()
+    {
+        #ifdef SERVER
+        if (m_DeviceId == "")
+            return;
+
+        vector currentPos = GetPosition();
+
+        if (m_LFPG_LastKnownPos == vector.Zero)
+        {
+            m_LFPG_LastKnownPos = currentPos;
+            return;
+        }
+
+        float dist = vector.Distance(m_LFPG_LastKnownPos, currentPos);
+        if (dist > LFPG_POS_DRIFT_THRESHOLD_M)
+        {
+            LFPG_Util.Warn("[LF_TestGenerator] Position drift detected: " + dist.ToString() + "m, cutting wires id=" + m_DeviceId);
+            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+
+            if (m_SourceOn)
+            {
+                m_SourceOn = false;
+                SetSynchDirty();
+                ComponentEnergyManager emDrift = GetCompEM();
+                if (emDrift)
+                {
+                    emDrift.SwitchOff();
+                }
+            }
+
+            m_LFPG_LastKnownPos = currentPos;
+        }
         #endif
     }
 
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
+        // v0.7.29: Stop position polling timer
+        #ifdef SERVER
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PositionPollTick);
+        #endif
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
@@ -180,18 +235,17 @@ class LF_TestGenerator : PowerGenerator
 
     // Vanilla CompEM hooks: sync m_SourceOn with vanilla state.
     // v0.7.27: Uses LFPG_DeviceLifecycle.IsSparkPlugValid (includes health check)
+    // v0.7.29 (Audit fix): SwitchOff on BOTH client+server to kill effects.
     override void OnWorkStart()
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             LFPG_Util.Info("[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId);
-            #ifdef SERVER
             ComponentEnergyManager emForce = GetCompEM();
             if (emForce)
             {
                 emForce.SwitchOff();
             }
-            #endif
             return;
         }
 
@@ -291,17 +345,19 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.27: Block vanilla periodic work tick without valid sparkplug.
+    // v0.7.29 (Audit fix): SwitchOff on BOTH sides; m_SourceOn logic server-only.
     override void OnWork(float consumed_energy)
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             LFPG_Util.Info("[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId);
-            #ifdef SERVER
+            // Kill CompEM on BOTH client+server to stop visual effects
             ComponentEnergyManager emKill = GetCompEM();
             if (emKill)
             {
                 emKill.SwitchOff();
             }
+            #ifdef SERVER
             if (m_SourceOn)
             {
                 m_SourceOn = false;
@@ -318,18 +374,18 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.27: Block vanilla SwitchOn without valid sparkplug.
+    // v0.7.29 (Audit fix): SwitchOff on BOTH client+server to kill
+    // visual effects (smoke, noise) that CompEM triggers on client.
     override void OnSwitchOn()
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             LFPG_Util.Info("[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId);
-            #ifdef SERVER
             ComponentEnergyManager emBlock = GetCompEM();
             if (emBlock)
             {
                 emBlock.SwitchOff();
             }
-            #endif
             return;
         }
         super.OnSwitchOn();
@@ -767,6 +823,14 @@ class LF_TestLamp : Spotlight
     // ScriptedLightBase is an engine object (not Managed). Do NOT store as `ref`.
     protected ScriptedLightBase m_LFPG_Light;
 
+    // v0.7.29 (Audit fix): Position polling for heavy carry detection.
+    // DayZ heavy carry can move entities GROUND→GROUND incrementally
+    // (each frame < 0.1m), bypassing EEItemLocationChanged's threshold.
+    // This timer checks total drift from the original wired position.
+    protected vector m_LFPG_LastKnownPos;
+    static const float LFPG_POS_POLL_INTERVAL_S = 2.0;
+    static const float LFPG_POS_DRIFT_THRESHOLD_M = 0.5;
+
     void LF_TestLamp()
     {
         RegisterNetSyncVariableInt("m_DeviceIdLow");
@@ -817,29 +881,81 @@ class LF_TestLamp : Spotlight
     {
         super.EEInit();
 
+        // v0.7.29 (Audit fix): Force CompEM off on BOTH client+server.
+        // LFPG manages power exclusively via m_PoweredNet.
+        // Spotlight base class may activate CompEM via C++ EEInit paths.
+        ComponentEnergyManager emInit = GetCompEM();
+        if (emInit)
+        {
+            emInit.SwitchOff();
+        }
+
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
             SetSynchDirty();
         }
-
-        // v0.7.14: Force CompEM off on init. LFPG manages power
-        // exclusively via m_PoweredNet.
-        ComponentEnergyManager emInit = GetCompEM();
-        if (emInit)
-        {
-            emInit.SwitchOff();
-        }
         #endif
 
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
+
+        // v0.7.29 (Audit fix): Start position polling timer (server-only).
+        // Safety net for heavy carry and other movement bypasses.
+        #ifdef SERVER
+        m_LFPG_LastKnownPos = GetPosition();
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PositionPollTick, LFPG_POS_POLL_INTERVAL_S * 1000.0, true);
+        #endif
+    }
+
+    // v0.7.29 (Audit fix): Periodic position drift check.
+    // Compares current position against last known position.
+    // If drift exceeds threshold, cuts all wires. This catches:
+    //   - Heavy carry system (GROUND→GROUND, incremental, < 0.1m/frame)
+    //   - Admin teleport without EEItemLocationChanged
+    //   - Physics push from vehicles or explosions
+    protected void LFPG_PositionPollTick()
+    {
+        #ifdef SERVER
+        if (m_DeviceId == "")
+            return;
+
+        vector currentPos = GetPosition();
+
+        // Skip if device hasn't been placed yet (zero position)
+        if (m_LFPG_LastKnownPos == vector.Zero)
+        {
+            m_LFPG_LastKnownPos = currentPos;
+            return;
+        }
+
+        float dist = vector.Distance(m_LFPG_LastKnownPos, currentPos);
+        if (dist > LFPG_POS_DRIFT_THRESHOLD_M)
+        {
+            LFPG_Util.Warn("[LF_TestLamp] Position drift detected: " + dist.ToString() + "m, cutting wires id=" + m_DeviceId);
+            LFPG_NetworkManager.Get().CutAllWiresFromDevice(this);
+
+            if (m_PoweredNet)
+            {
+                m_PoweredNet = false;
+                SetSynchDirty();
+            }
+
+            // Update known position to prevent repeated cutting
+            m_LFPG_LastKnownPos = currentPos;
+        }
+        #endif
     }
 
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
+        // v0.7.29: Stop position polling timer
+        #ifdef SERVER
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PositionPollTick);
+        #endif
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
@@ -1073,6 +1189,20 @@ class LF_TestLamp : Spotlight
     }
 
     override bool CanPutIntoHands(EntityAI parent)
+    {
+        return false;
+    }
+
+    // v0.7.29 (Audit fix): Block heavy carry system.
+    // DayZ Spotlight can be a "heavy item" that uses a separate C++ carry
+    // path which may bypass CanPutIntoHands entirely. These overrides
+    // ensure no vanilla carry mechanism can move the placed lamp.
+    override bool CanBePickedUp()
+    {
+        return false;
+    }
+
+    override bool IsHeavyBehaviour()
     {
         return false;
     }

@@ -842,7 +842,21 @@ class ActionLFPG_ToggleSource : ActionInteractBase
             return false;
 
         // v0.7.10: DistSq avoids sqrt in per-frame ActionCondition
-        return LFPG_WorldUtil.DistSq(player.GetPosition(), gen.GetPosition()) <= LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        if (LFPG_WorldUtil.DistSq(player.GetPosition(), gen.GetPosition()) > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
+            return false;
+
+        // v0.7.29 (Audit fix): Dynamic text reflects current state.
+        // Helps player understand current state without using DebugStatus.
+        if (gen.LFPG_GetSwitchState())
+        {
+            m_Text = "Turn Off Generator";
+        }
+        else
+        {
+            m_Text = "Turn On Generator";
+        }
+
+        return true;
     }
 
     override void OnExecuteServer(ActionData action_data)
