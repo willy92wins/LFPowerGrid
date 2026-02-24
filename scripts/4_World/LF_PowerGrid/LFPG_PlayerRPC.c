@@ -1,6 +1,9 @@
 // =========================================================
 // LF_PowerGrid - PlayerBase RPC routing (server authoritative)
 // v0.7.20: Sprint 4.2 S2 — H2 fix: correct bulk mutation order in CutWires/CutPort
+// v0.7.34: Bloque E — Atomic graph mutations in FinishWiring replace phase.
+//   Graph notified on wire removal (was missing → stale edges).
+//   Begin/EndGraphMutation wraps remove+add for same-target safety.
 // =========================================================
 
 modded class PlayerBase
@@ -381,7 +384,15 @@ modded class PlayerBase
 
         // ============================================================
         // REPLACEMENT PHASE: remove ALL conflicting wires BEFORE adding
+        // v0.7.34 (Bloque E): Atomic mutation — prevents premature node
+        // deletion between remove + add (same-target replace bug).
         // ============================================================
+
+        // v0.7.34: Begin atomic mutation batch
+        if (LFPG_NetworkManager.Get().GetGraph())
+        {
+            LFPG_NetworkManager.Get().GetGraph().BeginGraphMutation();
+        }
 
         // 1) Source port replacement: 1 wire per output port.
         //    Remove any existing wire from this source:port.
@@ -397,6 +408,16 @@ modded class PlayerBase
                     if (srcExisting && srcExisting.m_SourcePort == srcPort)
                     {
                         LFPG_Util.Info("[Replace-Src] Removed " + srcRealId + ":" + srcPort + " -> " + srcExisting.m_TargetDeviceId + ":" + srcExisting.m_TargetPort);
+
+                        // v0.7.34 (Bloque E): Notify graph of wire removal.
+                        // Without this, old edge stays stale in the graph.
+                        if (LFPG_NetworkManager.Get().GetGraph())
+                        {
+                            LFPG_NetworkManager.Get().GetGraph().OnWireRemoved(
+                                srcRealId, srcExisting.m_TargetDeviceId,
+                                srcPort, srcExisting.m_TargetPort);
+                        }
+
                         // Incremental reverse index and player count update
                         LFPG_NetworkManager.Get().ReverseIdxRemove(srcExisting.m_TargetDeviceId, srcExisting.m_TargetPort, srcRealId);
                         LFPG_NetworkManager.Get().PlayerWireCountAdd(srcExisting.m_CreatorId, -1);
@@ -430,6 +451,15 @@ modded class PlayerBase
                         if (vExistPort == srcPort)
                         {
                             LFPG_Util.Info("[Replace-Src] Removed vanilla " + srcRealId + ":" + srcPort + " -> " + vExisting.m_TargetDeviceId);
+
+                            // v0.7.34 (Bloque E): Notify graph of wire removal.
+                            if (LFPG_NetworkManager.Get().GetGraph())
+                            {
+                                LFPG_NetworkManager.Get().GetGraph().OnWireRemoved(
+                                    srcRealId, vExisting.m_TargetDeviceId,
+                                    vExistPort, vExisting.m_TargetPort);
+                            }
+
                             // Incremental reverse index and player count update
                             LFPG_NetworkManager.Get().ReverseIdxRemove(vExisting.m_TargetDeviceId, vExisting.m_TargetPort, srcRealId);
                             LFPG_NetworkManager.Get().PlayerWireCountAdd(vExisting.m_CreatorId, -1);
@@ -477,6 +507,11 @@ modded class PlayerBase
 
         if (!stored)
         {
+            // v0.7.34 (Bloque E): Close mutation batch on early exit
+            if (LFPG_NetworkManager.Get().GetGraph())
+            {
+                LFPG_NetworkManager.Get().GetGraph().EndGraphMutation();
+            }
             LFPG_Util.Warn("[FinishWiring-Server] wire storage failed (duplicate or cap)");
             LFPG_SendClientMsg(this, "Wire already exists or device is full.");
             return;
@@ -505,6 +540,16 @@ modded class PlayerBase
         {
             LFPG_Util.Warn("[FinishWiring-Server] Graph edge not inserted (limit or missing node)");
         }
+
+        // v0.7.34 (Bloque E): Close atomic mutation batch.
+        // All removes + the add are now committed atomically.
+        // Deferred orphan cleanup runs here — nodes that lost edges
+        // during remove but gained new ones during add are preserved.
+        if (LFPG_NetworkManager.Get().GetGraph())
+        {
+            LFPG_NetworkManager.Get().GetGraph().EndGraphMutation();
+        }
+
         LFPG_NetworkManager.Get().RequestPropagate(srcRealId);
     }
 

@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - NetworkManager (v0.7.30, Sprint 4.3+audit closure)
+// LF_PowerGrid - NetworkManager (v0.7.34, Sprint 4.3+Bloque E)
 //
 // Server singleton: validation, wire storage, propagation.
 //
@@ -26,6 +26,12 @@
 //   batching. Replaces per-device timers + full-scan approach.
 //   m_TrackedDeviceIds auto-registers on wire add, unregisters on cut.
 //   CheckDeviceMovement processes BATCH_SIZE devices per 500ms tick.
+//
+// v0.7.34 (Bloque E): Atomic graph mutations
+//   - RemoveWiresTargeting now notifies graph via OnWireRemoved
+//     (was missing → stale edges after port replacement)
+//   - CutAllWiresFromDevice wrapped in Begin/EndGraphMutation
+//     (prevents premature orphan cleanup during multi-wire removal)
 //
 // Vanilla wire persistence: saved/loaded via profile JSON.
 //   Position-based IDs survive server restarts.
@@ -684,6 +690,18 @@ class LFPG_NetworkManager
                         LFPG_WireData wd = gWires[gw];
                         if (wd && wd.m_TargetDeviceId == targetDeviceId && wd.m_TargetPort == targetPort)
                         {
+                            // v0.7.34 (Bloque E): Notify graph before removing wire data.
+                            // Without this, replaced edges stay stale in the graph.
+                            if (m_Graph)
+                            {
+                                string srcP = wd.m_SourcePort;
+                                if (srcP == "")
+                                {
+                                    srcP = "output_1";
+                                }
+                                m_Graph.OnWireRemoved(ownerId, targetDeviceId, srcP, targetPort);
+                            }
+
                             PlayerWireCountAdd(wd.m_CreatorId, -1);
                             gWires.Remove(gw);
                             removed = removed + 1;
@@ -713,6 +731,17 @@ class LFPG_NetworkManager
                     LFPG_WireData vwd = vWires[vw];
                     if (vwd && vwd.m_TargetDeviceId == targetDeviceId && vwd.m_TargetPort == targetPort)
                     {
+                        // v0.7.34 (Bloque E): Notify graph before removing wire data.
+                        if (m_Graph)
+                        {
+                            string vSrcP = vwd.m_SourcePort;
+                            if (vSrcP == "")
+                            {
+                                vSrcP = "output_1";
+                            }
+                            m_Graph.OnWireRemoved(ownerId, targetDeviceId, vSrcP, targetPort);
+                        }
+
                         PlayerWireCountAdd(vwd.m_CreatorId, -1);
                         vWires.Remove(vw);
                         removed = removed + 1;
@@ -2086,6 +2115,13 @@ class LFPG_NetworkManager
             }
         }
 
+        // v0.7.34 (Bloque E): Batch all wire removals as atomic mutation.
+        // Prevents premature orphan cleanup between removes.
+        if (m_Graph)
+        {
+            m_Graph.BeginGraphMutation();
+        }
+
         // --- 1. Clear OWNED wires (output side) ---
         if (LFPG_DeviceAPI.HasWireStore(device))
         {
@@ -2242,6 +2278,13 @@ class LFPG_NetworkManager
         }
 
         // --- 6. Notify graph and propagate ---
+        // v0.7.34 (Bloque E): End atomic mutation — flush deferred orphan cleanup.
+        // Must happen before OnDeviceRemoved/PostBulkRebuild.
+        if (m_Graph)
+        {
+            m_Graph.EndGraphMutation();
+        }
+
         if (anyChanged)
         {
             if (m_Graph)

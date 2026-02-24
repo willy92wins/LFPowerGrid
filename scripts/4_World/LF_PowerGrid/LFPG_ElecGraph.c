@@ -45,6 +45,31 @@
 //   - O(1) fast-path via m_ComponentSizes (populated in RebuildComponents)
 //   - BFS fallback only when m_ComponentsDirty or nodes lack componentId
 //   - CountComponentLimited with early exit + reusable buffers
+//
+// v0.7.32 (Bloque C): Consumer Zombie Validation
+//   - ValidateConsumerStates: periodic check for consumers claiming powered
+//     without sufficient incoming power (zombie lights)
+//   - Runs in steady-state (queue empty) using tick-based gating
+//   - Budgeted: LFPG_VALIDATE_BATCH_SIZE consumers per invocation
+//   - Round-robin via m_ValidateNodeIdx to spread cost across ticks
+//   - Reads m_AllocatedPower directly (not GetEdgeAllocatedPower fallback)
+//
+// v0.7.33 (Bloque D): Per-Wire WARNING_LOAD (warningMask)
+//   - Three-tier edge classification in AllocateOutputByPriority Phase 3:
+//     Tier 1 (BROWNOUT): allocated≈0 → overloadMask bit → CRITICAL_LOAD
+//     Tier 2 (PARTIAL):  0<allocated<demand → warningMask bit → WARNING_LOAD
+//     Tier 3 (FULL):     allocated≈demand → neither → POWERED
+//   - m_WarningMask on ElecNode, synced to entity via DeviceAPI
+//   - Zero extra loops: piggybacks on existing Phase 3 allocation pass
+//
+// v0.7.34 (Bloque E): Atomic Graph Mutations
+//   - BeginGraphMutation / EndGraphMutation batch wrapper
+//   - Defers CleanupOrphanNode during multi-op sequences (replace wire,
+//     bulk cut) to prevent premature node deletion between remove + add
+//   - Nesting-safe via m_MutationDepth counter
+//   - Auto-close safety in ProcessDirtyQueue if caller forgot End
+//   - Reusable deferred cleanup buffer (m_DeferredOrphanCleanup)
+//   - Zero overhead when not in mutation (single bool check)
 // =========================================================
 
 class LFPG_ElecGraph
@@ -95,6 +120,28 @@ class LFPG_ElecGraph
     protected ref array<string>     m_WdgQueue;
     protected ref map<string, bool> m_WdgVisited;
 
+    // --- v0.7.32 (Bloque C): Consumer Zombie Validation ---
+    // Periodic sweep of consumer nodes to detect and fix "zombie" powered state.
+    // m_ValidateTickCount: counts ProcessDirtyQueue calls (advances even when idle).
+    // m_LastValidateTick: tick count when last validation batch ran.
+    // m_ValidateNodeIdx: round-robin index into m_Nodes for budgeted batching.
+    // m_ValidateFixCount: telemetry — total zombies fixed since startup.
+    protected int m_ValidateTickCount;
+    protected int m_LastValidateTick;
+    protected int m_ValidateNodeIdx;
+    protected int m_ValidateFixCount;
+
+    // --- v0.7.34 (Bloque E): Atomic Graph Mutations ---
+    // When m_MutationActive is true, CleanupOrphanNode is deferred to
+    // EndGraphMutation. Prevents premature node deletion during multi-op
+    // sequences (e.g. replace wire = remove old + add new).
+    // m_MutationDepth supports safe nesting (Begin can be called N times,
+    // only the outermost End triggers cleanup).
+    // m_DeferredOrphanCleanup: reusable buffer, cleared on End.
+    protected bool m_MutationActive;
+    protected int  m_MutationDepth;
+    protected ref array<string> m_DeferredOrphanCleanup;
+
     void LFPG_ElecGraph()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -121,6 +168,17 @@ class LFPG_ElecGraph
         m_ComponentSizes = new map<int, int>;
         m_WdgQueue = new array<string>;
         m_WdgVisited = new map<string, bool>;
+
+        // v0.7.32 (Bloque C): Consumer Zombie Validation
+        m_ValidateTickCount = 0;
+        m_LastValidateTick = 0;
+        m_ValidateNodeIdx = 0;
+        m_ValidateFixCount = 0;
+
+        // v0.7.34 (Bloque E): Atomic Graph Mutations
+        m_MutationActive = false;
+        m_MutationDepth = 0;
+        m_DeferredOrphanCleanup = new array<string>;
     }
 
     // ===========================
@@ -146,6 +204,14 @@ class LFPG_ElecGraph
         m_DirtyQueueHead = 0;
         m_NodeCount = 0;
         m_EdgeCount = 0;
+
+        // v0.7.34 (Bloque E): Full rebuild invalidates any active mutation
+        if (m_MutationActive)
+        {
+            m_MutationActive = false;
+            m_MutationDepth = 0;
+            m_DeferredOrphanCleanup.Clear();
+        }
 
         // Step 1: Iterate all registered devices to create nodes
         ref array<EntityAI> allDevices = new array<EntityAI>;
@@ -549,8 +615,24 @@ class LFPG_ElecGraph
     {
         #ifdef SERVER
         RemoveEdgeInternal(sourceId, targetId, sourcePort, targetPort);
-        CleanupOrphanNode(sourceId);
-        CleanupOrphanNode(targetId);
+
+        // v0.7.34 (Bloque E): Defer orphan cleanup during atomic mutations.
+        // In a replace sequence (remove old + add new), the target node
+        // temporarily has no incoming edges after remove. Immediate cleanup
+        // would delete it, losing m_Consumption/m_MaxOutput state. The new
+        // OnWireAdded would recreate it via EnsureNode, but with default
+        // values — causing a stale-state propagation bug.
+        if (m_MutationActive)
+        {
+            m_DeferredOrphanCleanup.Insert(sourceId);
+            m_DeferredOrphanCleanup.Insert(targetId);
+        }
+        else
+        {
+            CleanupOrphanNode(sourceId);
+            CleanupOrphanNode(targetId);
+        }
+
         m_ComponentsDirty = true;
 
         MarkNodeDirty(sourceId, LFPG_DIRTY_TOPOLOGY);
@@ -608,12 +690,102 @@ class LFPG_ElecGraph
         int ai;
         for (ai = 0; ai < affectedNeighbors.Count(); ai = ai + 1)
         {
-            CleanupOrphanNode(affectedNeighbors[ai]);
+            // v0.7.34 (Bloque E): Defer orphan cleanup during atomic mutations.
+            // Neighbors may be targets of subsequent operations in the same batch.
+            if (m_MutationActive)
+            {
+                m_DeferredOrphanCleanup.Insert(affectedNeighbors[ai]);
+            }
+            else
+            {
+                CleanupOrphanNode(affectedNeighbors[ai]);
+            }
             MarkNodeDirty(affectedNeighbors[ai], LFPG_DIRTY_TOPOLOGY);
         }
 
         m_ComponentsDirty = true;
         #endif
+    }
+
+    // ===========================
+    // v0.7.34 (Bloque E): Atomic Graph Mutations
+    // ===========================
+
+    // Begin a batch of graph mutations. While active, CleanupOrphanNode
+    // is deferred to EndGraphMutation to prevent premature node deletion
+    // during multi-op sequences (replace wire, multi-port cut, etc.).
+    //
+    // Nesting-safe: Begin can be called N times; only the outermost End
+    // triggers deferred cleanups. This allows helper methods to wrap
+    // their own Begin/End without conflicting with caller batches.
+    //
+    // Usage (caller in NetworkManager or PlayerRPC):
+    //   m_Graph.BeginGraphMutation();
+    //   m_Graph.OnWireRemoved(oldSrc, oldTgt, srcP, tgtP);
+    //   m_Graph.OnWireAdded(newSrc, newTgt, srcP, tgtP, wireRef);
+    //   m_Graph.EndGraphMutation();
+    //
+    // Cost: zero when not in mutation (single bool check in OnWireRemoved).
+    void BeginGraphMutation()
+    {
+        #ifdef SERVER
+        m_MutationDepth = m_MutationDepth + 1;
+        m_MutationActive = true;
+        #endif
+    }
+
+    // End a batch of graph mutations. When the outermost batch closes
+    // (depth reaches 0), processes all deferred orphan cleanups.
+    //
+    // Dirty marks were already accumulated during the mutation via
+    // MarkNodeDirty (idempotent — m_InQueue prevents duplicates).
+    // Components will be rebuilt on next ProcessDirtyQueue if needed
+    // (m_ComponentsDirty was set by each OnWireAdded/Removed).
+    void EndGraphMutation()
+    {
+        #ifdef SERVER
+        if (m_MutationDepth <= 0)
+        {
+            LFPG_Util.Warn("[ElecGraph] EndGraphMutation called without matching Begin");
+            m_MutationActive = false;
+            m_MutationDepth = 0;
+            // v0.7.34: Safety clear — prevent stale deferred entries from leaking
+            m_DeferredOrphanCleanup.Clear();
+            return;
+        }
+
+        m_MutationDepth = m_MutationDepth - 1;
+
+        if (m_MutationDepth > 0)
+            return;  // Still inside nested mutation
+
+        m_MutationActive = false;
+
+        // Process deferred orphan cleanups.
+        // Some nodes may have gained new edges during the mutation,
+        // so CleanupOrphanNode correctly skips them (checks hasOut/hasIn).
+        int deferredCount = m_DeferredOrphanCleanup.Count();
+        int ci;
+        for (ci = 0; ci < deferredCount; ci = ci + 1)
+        {
+            CleanupOrphanNode(m_DeferredOrphanCleanup[ci]);
+        }
+
+        if (deferredCount > 0)
+        {
+            LFPG_Util.Debug("[ElecGraph] EndGraphMutation: flushed "
+                + deferredCount.ToString() + " deferred orphan checks");
+        }
+
+        m_DeferredOrphanCleanup.Clear();
+        #endif
+    }
+
+    // Check if a graph mutation batch is currently active.
+    // Used by callers to avoid redundant Begin/End wrapping.
+    bool IsGraphMutationActive()
+    {
+        return m_MutationActive;
     }
 
     // ===========================
@@ -1186,6 +1358,29 @@ class LFPG_ElecGraph
     int ProcessDirtyQueue(int nodeBudget, int edgeBudget)
     {
         #ifdef SERVER
+
+        // v0.7.32 (Bloque C): Tick counter advances on every call,
+        // including when queue is empty. Used for validation gating.
+        m_ValidateTickCount = m_ValidateTickCount + 1;
+
+        // v0.7.34 (Bloque E): Auto-close stale mutation if caller forgot
+        // EndGraphMutation. This is a safety net — should never trigger
+        // in normal operation. If it does, the log helps diagnose the
+        // caller that forgot to close its batch.
+        if (m_MutationActive)
+        {
+            LFPG_Util.Warn("[ElecGraph] ProcessDirtyQueue: mutation still active (depth="
+                + m_MutationDepth.ToString() + "), force-closing");
+            m_MutationActive = false;
+            m_MutationDepth = 0;
+            int sci;
+            for (sci = 0; sci < m_DeferredOrphanCleanup.Count(); sci = sci + 1)
+            {
+                CleanupOrphanNode(m_DeferredOrphanCleanup[sci]);
+            }
+            m_DeferredOrphanCleanup.Clear();
+        }
+
         int queueLen = m_DirtyQueue.Count() - m_DirtyQueueHead;
         if (queueLen <= 0)
         {
@@ -1194,6 +1389,11 @@ class LFPG_ElecGraph
                 m_DirtyQueue.Clear();
                 m_DirtyQueueHead = 0;
             }
+
+            // v0.7.32 (Bloque C): Also validate during idle periods.
+            // Queue is empty — all propagation is complete, safe to check.
+            ValidateConsumerStates();
+
             return 0;
         }
 
@@ -1376,6 +1576,7 @@ class LFPG_ElecGraph
                 {
                     node.m_LoadRatio = 0.0;
                     node.m_OverloadMask = 0;
+                    node.m_WarningMask = 0;  // v0.7.33 (Bloque D)
                 }
             }
 
@@ -1431,6 +1632,10 @@ class LFPG_ElecGraph
         {
             m_DirtyQueue.Clear();
             m_DirtyQueueHead = 0;
+
+            // v0.7.32 (Bloque C): Validate consumers in steady-state.
+            // Only runs when no pending propagation (queue fully drained).
+            ValidateConsumerStates();
         }
         else if (m_DirtyQueueHead >= LFPG_DIRTY_QUEUE_COMPACT_THRESHOLD)
         {
@@ -1520,10 +1725,185 @@ class LFPG_ElecGraph
                 node.m_LastSyncedLoadRatio = node.m_LoadRatio;
             }
             LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
+            LFPG_DeviceAPI.SetWarningMask(entObj, node.m_WarningMask);  // v0.7.33 (Bloque D)
             return;
         }
 
         LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
+        #endif
+    }
+
+    // ===========================
+    // v0.7.32 (Bloque C): Consumer Zombie Validation
+    // ===========================
+
+    // Periodic sweep to detect consumers claiming m_Powered=true without
+    // sufficient incoming power. This catches edge cases where the graph
+    // changes without propagating to a downstream consumer (timing gaps,
+    // entity deletion races, or hypothetical propagation bugs).
+    //
+    // Design:
+    //   - Runs when queue is empty (either post-drain or idle).
+    //   - Throttled by LFPG_CONSUMER_VALIDATE_TICK_INTERVAL ticks.
+    //     Uses m_ValidateTickCount (increments on every ProcessDirtyQueue call,
+    //     including early-returns) so validation fires even during idle periods.
+    //   - Budgeted: checks LFPG_VALIDATE_BATCH_SIZE (32) nodes per call.
+    //   - Round-robin via m_ValidateNodeIdx — full sweep of N nodes takes
+    //     ceil(N/32) invocations × interval each = predictable spread.
+    //   - When a zombie is found: sets m_Powered=false, syncs to entity,
+    //     and logs for telemetry. Does NOT re-enqueue (avoids cascading).
+    //
+    // Power source: reads inEdge.m_AllocatedPower directly (NOT via
+    //   GetEdgeAllocatedPower). Intentional: the helper's equal-split
+    //   fallback can mask brownout edges (m_AllocatedPower=0 but fallback
+    //   returns non-zero). Direct read gives ground truth in steady-state.
+    //
+    // Cost: O(batch * avg_incoming_edges). At 32 nodes/tick with avg 2
+    //       incoming edges = ~64 edge checks per tick. Negligible.
+    //
+    // Returns number of zombies fixed in this batch.
+    protected int ValidateConsumerStates()
+    {
+        #ifdef SERVER
+        int nodeTotal = m_Nodes.Count();
+        if (nodeTotal <= 0)
+            return 0;
+
+        // Tick interval gate (advances even when queue is idle)
+        int tickDelta = m_ValidateTickCount - m_LastValidateTick;
+        if (tickDelta < LFPG_CONSUMER_VALIDATE_TICK_INTERVAL)
+            return 0;
+
+        // Clamp round-robin index if graph shrank
+        if (m_ValidateNodeIdx >= nodeTotal)
+            m_ValidateNodeIdx = 0;
+
+        int batchSize = LFPG_VALIDATE_BATCH_SIZE;
+        if (batchSize > nodeTotal)
+            batchSize = nodeTotal;
+
+        int checked = 0;
+        int fixed = 0;
+
+        while (checked < batchSize)
+        {
+            // Bounds check before access
+            if (m_ValidateNodeIdx >= nodeTotal)
+                m_ValidateNodeIdx = 0;
+
+            string nodeId = m_Nodes.GetKey(m_ValidateNodeIdx);
+            ref LFPG_ElecNode node = m_Nodes.GetElement(m_ValidateNodeIdx);
+
+            m_ValidateNodeIdx = m_ValidateNodeIdx + 1;
+            checked = checked + 1;
+
+            if (!node)
+                continue;
+
+            // Only validate powered consumers
+            if (node.m_DeviceType != LFPG_DeviceType.CONSUMER)
+                continue;
+
+            if (!node.m_Powered)
+                continue;
+
+            // Skip nodes currently in the dirty queue — they have pending updates
+            if (node.m_InQueue || node.m_Dirty)
+                continue;
+
+            // Sum actual incoming power from enabled edges.
+            // Reads m_AllocatedPower directly — see method doc above for rationale.
+            float incomingPower = 0.0;
+            bool hasAnyIncoming = false;
+
+            ref array<ref LFPG_ElecEdge> inEdges;
+            if (m_Incoming.Find(nodeId, inEdges) && inEdges)
+            {
+                int ii;
+                for (ii = 0; ii < inEdges.Count(); ii = ii + 1)
+                {
+                    ref LFPG_ElecEdge inEdge = inEdges[ii];
+                    if (!inEdge)
+                        continue;
+
+                    if ((inEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                        continue;
+
+                    hasAnyIncoming = true;
+                    float edgePower = inEdge.m_AllocatedPower;
+                    if (edgePower < 0.0)
+                    {
+                        edgePower = 0.0;
+                    }
+                    incomingPower = incomingPower + edgePower;
+                }
+            }
+
+            // v0.7.32: Final NaN/negative guard on accumulated sum.
+            // Matches ProcessDirtyQueue pattern (v0.7.27 Audit 5).
+            if (incomingPower < 0.0)
+            {
+                incomingPower = 0.0;
+            }
+
+            // Determine if this consumer should actually be powered
+            bool shouldBePowered = false;
+
+            if (hasAnyIncoming)
+            {
+                if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+                {
+                    // Declared consumption: needs enough power to meet demand
+                    if (incomingPower + LFPG_PROPAGATION_EPSILON >= node.m_Consumption)
+                    {
+                        shouldBePowered = true;
+                    }
+                }
+                else
+                {
+                    // Legacy consumer (consumption=0): any power suffices
+                    if (incomingPower > LFPG_PROPAGATION_EPSILON)
+                    {
+                        shouldBePowered = true;
+                    }
+                }
+            }
+
+            // Zombie detected: node thinks it's powered but shouldn't be
+            if (!shouldBePowered)
+            {
+                node.m_Powered = false;
+                node.m_InputPower = incomingPower;
+
+                // Sync corrected state to entity
+                SyncNodeToEntity(nodeId, node);
+
+                fixed = fixed + 1;
+                m_ValidateFixCount = m_ValidateFixCount + 1;
+
+                LFPG_Util.Warn("[ElecGraph] Zombie consumer fixed: " + nodeId
+                    + " inPower=" + incomingPower.ToString()
+                    + " consumption=" + node.m_Consumption.ToString()
+                    + " totalFixes=" + m_ValidateFixCount.ToString());
+            }
+        }
+
+        // Wrap index for next invocation
+        if (m_ValidateNodeIdx >= nodeTotal)
+            m_ValidateNodeIdx = 0;
+
+        // Update tick gate — next batch runs after interval elapses
+        m_LastValidateTick = m_ValidateTickCount;
+
+        if (fixed > 0)
+        {
+            LFPG_Util.Info("[ElecGraph] ValidateConsumers: "
+                + fixed.ToString() + " zombies fixed this batch, tick=" + m_ValidateTickCount.ToString());
+        }
+
+        return fixed;
+        #else
+        return 0;
         #endif
     }
 
@@ -1761,6 +2141,7 @@ class LFPG_ElecGraph
         // Phase 3: Allocate power in priority order
         float remaining = availableOutput;
         int overloadMask = 0;
+        int warningMask = 0;  // v0.7.33 (Bloque D): partial allocation bitmask
         bool isOverloaded = false;
         if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
         {
@@ -1798,9 +2179,13 @@ class LFPG_ElecGraph
             allocEdge.m_AllocatedPower = allocated;
             allocEdge.m_Demand = edgeDemand;
 
-            // Mark brownout
+            // v0.7.33 (Bloque D): Three-tier edge state classification.
+            //   Tier 1 (BROWNOUT): zero allocation with positive demand → CRITICAL_LOAD
+            //   Tier 2 (PARTIAL):  getting power but less than demanded → WARNING_LOAD
+            //   Tier 3 (FULL):     fully supplied → POWERED
             if (allocated < LFPG_PROPAGATION_EPSILON && edgeDemand > LFPG_PROPAGATION_EPSILON)
             {
+                // Tier 1: BROWNOUT — no power reaching this edge
                 allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_BROWNOUT;
                 allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_OVERLOADED;
                 // Sprint 4.3 fix: use origIdx (actual array position) for overload mask bit,
@@ -1815,8 +2200,23 @@ class LFPG_ElecGraph
                     LFPG_Util.Warn("[ElecGraph] OverloadMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId);
                 }
             }
+            else if (edgeDemand > allocated + LFPG_PROPAGATION_EPSILON)
+            {
+                // Tier 2: PARTIAL — getting power but not full demand
+                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
+                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
+                if (origIdx >= 0 && origIdx < 31)
+                {
+                    warningMask = warningMask | (1 << origIdx);
+                }
+                else if (origIdx >= 31)
+                {
+                    LFPG_Util.Warn("[ElecGraph] WarningMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId);
+                }
+            }
             else
             {
+                // Tier 3: FULL — demand fully met
                 allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
                 allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
             }
@@ -1856,6 +2256,7 @@ class LFPG_ElecGraph
                     }
                 }
                 srcNode.m_OverloadMask = overloadMask;
+                srcNode.m_WarningMask = warningMask;  // v0.7.33 (Bloque D)
             }
         }
 

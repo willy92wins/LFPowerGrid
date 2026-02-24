@@ -277,6 +277,17 @@ static const int LFPG_DFS_MAX_VISITED = 2048;
 static const int LFPG_MAX_NODES_PER_COMPONENT = 256;
 static const int LFPG_MAX_NODES_GLOBAL        = 2048;
 
+// v0.7.32 (Bloque C): Consumer Zombie Validation — periodic sweep constants.
+// Tick interval between validation batches (ProcessDirtyQueue call count).
+// Uses call count (not epoch) so validation fires even during idle periods.
+// At 10Hz with 10-tick interval = ~1 second between batches.
+// Full sweep of 200 nodes = ceil(200/32) x 1s = ~7 seconds.
+static const int LFPG_CONSUMER_VALIDATE_TICK_INTERVAL = 10;
+
+// Nodes checked per validation invocation.
+// 32 nodes x avg 2 incoming edges = ~64 edge checks per batch. Negligible.
+static const int LFPG_VALIDATE_BATCH_SIZE = 32;
+
 // ---- Propagation epsilon (Sprint 4.2, active) ----
 // Power changes smaller than epsilon do not propagate downstream.
 // Prevents cascading updates from floating point noise.
@@ -305,7 +316,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.31";
+static const string LFPG_VERSION_STR = "0.7.32";
 
 // =========================================================
 // Constants that were previously missing definitions.
