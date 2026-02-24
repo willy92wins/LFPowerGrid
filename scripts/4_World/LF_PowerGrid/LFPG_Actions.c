@@ -1,8 +1,12 @@
 // =========================================================
-// LF_PowerGrid - Actions (v0.7.14)
+// LF_PowerGrid - Actions (v0.7.35)
 //
 // v0.7.14: LFPG_FormatFloat hardened against NaN/overflow.
 //          OnExecuteServer hardened with null/empty guards.
+//
+// v0.7.35 (Bloque F): ToggleSource text debounce — prevents
+//   scroll menu flicker when net-synced switch state oscillates
+//   during client-server roundtrip. 800ms hysteresis window.
 //
 // Per-port scroll actions:
 //   Port0..Port5: aim at device with CableReel -> shows each
@@ -815,6 +819,19 @@ class ActionLFPG_CutPort5 : ActionLFPG_CutPortBase
 // ---------------------------------------------------------
 class ActionLFPG_ToggleSource : ActionInteractBase
 {
+    // v0.7.35 (Bloque F): Debounce cache to prevent scroll menu text flicker.
+    // After a toggle, the net-synced switch state can oscillate briefly on the
+    // client. Without debounce, m_Text flips between "Turn On" / "Turn Off"
+    // every frame during that window, causing visible flicker in the scroll menu.
+    // Fix: suppress text changes for DEBOUNCE_MS after the last change.
+    // s_LastTargetLow/High tracks which generator owns the cache — if the player
+    // switches target, text updates immediately with no debounce.
+    protected static int s_LastChangeMs   = -1;
+    protected static int s_LastTargetLow  = -1;
+    protected static int s_LastTargetHigh = -1;
+
+    static const int TOGGLE_TEXT_DEBOUNCE_MS = 800;
+
     void ActionLFPG_ToggleSource()
     {
         m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
@@ -845,15 +862,43 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (LFPG_WorldUtil.DistSq(player.GetPosition(), gen.GetPosition()) > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
-        // v0.7.29 (Audit fix): Dynamic text reflects current state.
-        // Helps player understand current state without using DebugStatus.
-        if (gen.LFPG_GetSwitchState())
+        // v0.7.35 (Bloque F): Debounced dynamic text to avoid scroll menu flicker.
+        bool isOn = gen.LFPG_GetSwitchState();
+
+        string newText = "Turn On Generator";
+        if (isOn)
         {
-            m_Text = "Turn Off Generator";
+            newText = "Turn Off Generator";
         }
-        else
+
+        // Identity check: different generator → update immediately, no debounce.
+        int tLow = 0;
+        int tHigh = 0;
+        gen.GetNetworkID(tLow, tHigh);
+
+        if (tLow != s_LastTargetLow || tHigh != s_LastTargetHigh)
         {
-            m_Text = "Turn On Generator";
+            m_Text = newText;
+            s_LastTargetLow = tLow;
+            s_LastTargetHigh = tHigh;
+            s_LastChangeMs = GetGame().GetTickCount();
+            return true;
+        }
+
+        // Same generator: only allow text change if debounce window expired.
+        if (newText != m_Text)
+        {
+            int nowMs = GetGame().GetTickCount();
+            if (s_LastChangeMs >= 0)
+            {
+                int elapsed = nowMs - s_LastChangeMs;
+                if (elapsed >= 0 && elapsed < TOGGLE_TEXT_DEBOUNCE_MS)
+                {
+                    return true;  // suppress change, keep current m_Text
+                }
+            }
+            m_Text = newText;
+            s_LastChangeMs = nowMs;
         }
 
         return true;
