@@ -389,10 +389,7 @@ modded class PlayerBase
         // ============================================================
 
         // v0.7.34: Begin atomic mutation batch
-        if (LFPG_NetworkManager.Get().GetGraph())
-        {
-            LFPG_NetworkManager.Get().GetGraph().BeginGraphMutation();
-        }
+        LFPG_NetworkManager.Get().BeginGraphMutation();
 
         // 1) Source port replacement: 1 wire per output port.
         //    Remove any existing wire from this source:port.
@@ -411,12 +408,9 @@ modded class PlayerBase
 
                         // v0.7.34 (Bloque E): Notify graph of wire removal.
                         // Without this, old edge stays stale in the graph.
-                        if (LFPG_NetworkManager.Get().GetGraph())
-                        {
-                            LFPG_NetworkManager.Get().GetGraph().OnWireRemoved(
-                                srcRealId, srcExisting.m_TargetDeviceId,
-                                srcPort, srcExisting.m_TargetPort);
-                        }
+                        LFPG_NetworkManager.Get().NotifyGraphWireRemoved(
+                            srcRealId, srcExisting.m_TargetDeviceId,
+                            srcPort, srcExisting.m_TargetPort);
 
                         // Incremental reverse index and player count update
                         LFPG_NetworkManager.Get().ReverseIdxRemove(srcExisting.m_TargetDeviceId, srcExisting.m_TargetPort, srcRealId);
@@ -453,12 +447,9 @@ modded class PlayerBase
                             LFPG_Util.Info("[Replace-Src] Removed vanilla " + srcRealId + ":" + srcPort + " -> " + vExisting.m_TargetDeviceId);
 
                             // v0.7.34 (Bloque E): Notify graph of wire removal.
-                            if (LFPG_NetworkManager.Get().GetGraph())
-                            {
-                                LFPG_NetworkManager.Get().GetGraph().OnWireRemoved(
-                                    srcRealId, vExisting.m_TargetDeviceId,
-                                    vExistPort, vExisting.m_TargetPort);
-                            }
+                            LFPG_NetworkManager.Get().NotifyGraphWireRemoved(
+                                srcRealId, vExisting.m_TargetDeviceId,
+                                vExistPort, vExisting.m_TargetPort);
 
                             // Incremental reverse index and player count update
                             LFPG_NetworkManager.Get().ReverseIdxRemove(vExisting.m_TargetDeviceId, vExisting.m_TargetPort, srcRealId);
@@ -508,10 +499,7 @@ modded class PlayerBase
         if (!stored)
         {
             // v0.7.34 (Bloque E): Close mutation batch on early exit
-            if (LFPG_NetworkManager.Get().GetGraph())
-            {
-                LFPG_NetworkManager.Get().GetGraph().EndGraphMutation();
-            }
+            LFPG_NetworkManager.Get().EndGraphMutation();
             LFPG_Util.Warn("[FinishWiring-Server] wire storage failed (duplicate or cap)");
             LFPG_SendClientMsg(this, "Wire already exists or device is full.");
             return;
@@ -536,21 +524,28 @@ modded class PlayerBase
         // NotifyGraphWireAdded adds the edge and marks both endpoints dirty.
         // RequestPropagate additionally refreshes source state from entity.
         bool edgeAdded = LFPG_NetworkManager.Get().NotifyGraphWireAdded(srcRealId, dstRealId, srcPort, dstPort, wd);
-        if (!edgeAdded)
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] Graph edge not inserted (limit or missing node)");
-        }
 
         // v0.7.34 (Bloque E): Close atomic mutation batch.
         // All removes + the add are now committed atomically.
         // Deferred orphan cleanup runs here — nodes that lost edges
         // during remove but gained new ones during add are preserved.
-        if (LFPG_NetworkManager.Get().GetGraph())
-        {
-            LFPG_NetworkManager.Get().GetGraph().EndGraphMutation();
-        }
+        LFPG_NetworkManager.Get().EndGraphMutation();
 
-        LFPG_NetworkManager.Get().RequestPropagate(srcRealId);
+        if (!edgeAdded)
+        {
+            // Edge not inserted (node cap or missing node). Wire data is stored
+            // but graph doesn't have the edge. Deferred orphan cleanup in
+            // EndGraphMutation above may have deleted the target node (it had
+            // no incoming edge from our perspective). Force full rebuild to
+            // reconcile graph with wire data. This is a rare edge case
+            // (requires saturating LFPG_MAX_NODES_GLOBAL).
+            LFPG_Util.Warn("[FinishWiring-Server] Graph edge not inserted (limit or missing node) — forcing rebuild");
+            LFPG_NetworkManager.Get().PostBulkRebuildAndPropagate();
+        }
+        else
+        {
+            LFPG_NetworkManager.Get().RequestPropagate(srcRealId);
+        }
     }
 
     // =====================================

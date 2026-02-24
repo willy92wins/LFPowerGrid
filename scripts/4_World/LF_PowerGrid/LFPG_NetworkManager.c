@@ -28,10 +28,12 @@
 //   CheckDeviceMovement processes BATCH_SIZE devices per 500ms tick.
 //
 // v0.7.34 (Bloque E): Atomic graph mutations
+//   - New wrappers: BeginGraphMutation, EndGraphMutation,
+//     NotifyGraphWireRemoved (encapsulate graph access for callers)
 //   - RemoveWiresTargeting now notifies graph via OnWireRemoved
 //     (was missing → stale edges after port replacement)
-//   - CutAllWiresFromDevice wrapped in Begin/EndGraphMutation
-//     (prevents premature orphan cleanup during multi-wire removal)
+//   - CutAllWiresFromDevice: NO incremental graph updates needed
+//     (OnDeviceRemoved + PostBulkRebuild handles full cleanup)
 //
 // Vanilla wire persistence: saved/loaded via profile JSON.
 //   Position-based IDs survive server restarts.
@@ -354,6 +356,43 @@ class LFPG_NetworkManager
         return inserted;
         #else
         return false;
+        #endif
+    }
+
+    // v0.7.34 (Bloque E): Notify the graph that a wire was removed.
+    // Called BEFORE or AFTER the wire is removed from the data store.
+    // Removes the directed edge from the graph and marks endpoints dirty.
+    void NotifyGraphWireRemoved(string sourceId, string targetId, string sourcePort, string targetPort)
+    {
+        #ifdef SERVER
+        if (!m_Graph)
+            return;
+        m_Graph.OnWireRemoved(sourceId, targetId, sourcePort, targetPort);
+        #endif
+    }
+
+    // v0.7.34 (Bloque E): Begin an atomic graph mutation batch.
+    // While active, orphan node cleanup is deferred to EndGraphMutation.
+    // Use when multiple wires are removed+added in a single operation
+    // (e.g. replace wire = remove old + add new on same target).
+    void BeginGraphMutation()
+    {
+        #ifdef SERVER
+        if (!m_Graph)
+            return;
+        m_Graph.BeginGraphMutation();
+        #endif
+    }
+
+    // v0.7.34 (Bloque E): End an atomic graph mutation batch.
+    // Flushes deferred orphan cleanup. Nesting-safe: only the
+    // outermost End triggers the flush.
+    void EndGraphMutation()
+    {
+        #ifdef SERVER
+        if (!m_Graph)
+            return;
+        m_Graph.EndGraphMutation();
         #endif
     }
 
@@ -692,14 +731,12 @@ class LFPG_NetworkManager
                         {
                             // v0.7.34 (Bloque E): Notify graph before removing wire data.
                             // Without this, replaced edges stay stale in the graph.
+                            // LFPG wires: use m_SourcePort as-is (no normalization).
+                            // This matches RebuildFromWires which also does NOT normalize
+                            // LFPG wire source ports.
                             if (m_Graph)
                             {
-                                string srcP = wd.m_SourcePort;
-                                if (srcP == "")
-                                {
-                                    srcP = "output_1";
-                                }
-                                m_Graph.OnWireRemoved(ownerId, targetDeviceId, srcP, targetPort);
+                                m_Graph.OnWireRemoved(ownerId, targetDeviceId, wd.m_SourcePort, targetPort);
                             }
 
                             PlayerWireCountAdd(wd.m_CreatorId, -1);
@@ -732,6 +769,8 @@ class LFPG_NetworkManager
                     if (vwd && vwd.m_TargetDeviceId == targetDeviceId && vwd.m_TargetPort == targetPort)
                     {
                         // v0.7.34 (Bloque E): Notify graph before removing wire data.
+                        // Vanilla wires: normalize empty sourcePort to "output_1".
+                        // This matches RebuildFromWires which normalizes vanilla ports.
                         if (m_Graph)
                         {
                             string vSrcP = vwd.m_SourcePort;
@@ -2115,14 +2154,11 @@ class LFPG_NetworkManager
             }
         }
 
-        // v0.7.34 (Bloque E): Batch all wire removals as atomic mutation.
-        // Prevents premature orphan cleanup between removes.
-        if (m_Graph)
-        {
-            m_Graph.BeginGraphMutation();
-        }
-
         // --- 1. Clear OWNED wires (output side) ---
+        // NOTE: Individual OnWireRemoved calls are NOT needed here.
+        // Section 6 calls OnDeviceRemoved + PostBulkRebuildAndPropagate,
+        // which does a full graph rebuild from wire data. Any incremental
+        // graph updates would be immediately discarded.
         if (LFPG_DeviceAPI.HasWireStore(device))
         {
             ref array<ref LFPG_WireData> ownedWires = LFPG_DeviceAPI.GetDeviceWires(device);
@@ -2137,12 +2173,6 @@ class LFPG_NetworkManager
                     {
                         ReverseIdxRemove(wd.m_TargetDeviceId, wd.m_TargetPort, deviceId);
                         PlayerWireCountAdd(wd.m_CreatorId, -1);
-
-                        // Notify graph of each wire removal
-                        if (m_Graph)
-                        {
-                            m_Graph.OnWireRemoved(deviceId, wd.m_TargetDeviceId, wd.m_SourcePort, wd.m_TargetPort);
-                        }
                     }
                     ow = ow - 1;
                 }
@@ -2167,11 +2197,6 @@ class LFPG_NetworkManager
                     {
                         ReverseIdxRemove(vwd.m_TargetDeviceId, vwd.m_TargetPort, deviceId);
                         PlayerWireCountAdd(vwd.m_CreatorId, -1);
-
-                        if (m_Graph)
-                        {
-                            m_Graph.OnWireRemoved(deviceId, vwd.m_TargetDeviceId, vwd.m_SourcePort, vwd.m_TargetPort);
-                        }
                     }
                     vw = vw - 1;
                 }
@@ -2231,12 +2256,6 @@ class LFPG_NetworkManager
                     {
                         LFPG_Util.Warn("[CutAll-Fallback] Found stale wire: " + srcId + " -> " + deviceId);
                         PlayerWireCountAdd(swd.m_CreatorId, -1);
-
-                        if (m_Graph)
-                        {
-                            m_Graph.OnWireRemoved(srcId, deviceId, swd.m_SourcePort, swd.m_TargetPort);
-                        }
-
                         srcWires.Remove(sw);
                         srcChanged = true;
                         anyChanged = true;
@@ -2278,12 +2297,6 @@ class LFPG_NetworkManager
         }
 
         // --- 6. Notify graph and propagate ---
-        // v0.7.34 (Bloque E): End atomic mutation — flush deferred orphan cleanup.
-        // Must happen before OnDeviceRemoved/PostBulkRebuild.
-        if (m_Graph)
-        {
-            m_Graph.EndGraphMutation();
-        }
 
         if (anyChanged)
         {
