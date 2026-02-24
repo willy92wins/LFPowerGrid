@@ -39,6 +39,12 @@
 //   - Pre-allocated temp arrays in AllocateOutputByPriority (GC pressure fix)
 //   - OverloadMask overflow warning for origIdx >= 31
 //   - Final NaN guard on accumulated inputSum
+//
+// v0.7.31 (Bloque B): Component Watchdog
+//   - Per-component node limit replaces global cap (Audit2 #2)
+//   - O(1) fast-path via m_ComponentSizes (populated in RebuildComponents)
+//   - BFS fallback only when m_ComponentsDirty or nodes lack componentId
+//   - CountComponentLimited with early exit + reusable buffers
 // =========================================================
 
 class LFPG_ElecGraph
@@ -81,6 +87,14 @@ class LFPG_ElecGraph
     protected ref array<float> m_AllocDemandArr;
     protected ref array<int> m_AllocPrioArr;
 
+    // --- v0.7.31 (Bloque B): Component Watchdog ---
+    // m_ComponentSizes: populated in RebuildComponents(), keyed by componentId.
+    // m_WdgQueue/m_WdgVisited: reusable BFS buffers for CountComponentLimited().
+    // Max 256 entries → Clear() is negligible cost.
+    protected ref map<int, int>     m_ComponentSizes;
+    protected ref array<string>     m_WdgQueue;
+    protected ref map<string, bool> m_WdgVisited;
+
     void LFPG_ElecGraph()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -102,6 +116,11 @@ class LFPG_ElecGraph
         m_AllocIdxArr = new array<int>;
         m_AllocDemandArr = new array<float>;
         m_AllocPrioArr = new array<int>;
+
+        // v0.7.31 (Bloque B): Component Watchdog buffers
+        m_ComponentSizes = new map<int, int>;
+        m_WdgQueue = new array<string>;
+        m_WdgVisited = new map<string, bool>;
     }
 
     // ===========================
@@ -248,21 +267,260 @@ class LFPG_ElecGraph
     // Incremental operations
     // ===========================
 
+    // v0.7.31 (Bloque B): BFS acotada para watchdog por componente.
+    // Counts nodes in the connected component containing startId.
+    // Early exits when count exceeds limit (returns limit+1).
+    // Uses reusable buffers m_WdgQueue/m_WdgVisited — zero alloc per call.
+    // Undirected traversal: walks both m_Outgoing and m_Incoming.
+    protected int CountComponentLimited(string startId, int limit)
+    {
+        #ifdef SERVER
+        if (startId == "" || limit <= 0)
+            return 0;
+
+        m_WdgQueue.Clear();
+        m_WdgVisited.Clear();
+
+        m_WdgQueue.Insert(startId);
+        m_WdgVisited.Set(startId, true);
+
+        int count = 0;
+        int headIdx = 0;
+
+        while (headIdx < m_WdgQueue.Count())
+        {
+            string currId = m_WdgQueue[headIdx];
+            headIdx = headIdx + 1;
+            count = count + 1;
+
+            // Early exit: component exceeds limit
+            if (count > limit)
+                return count;
+
+            // Explore outgoing neighbors
+            ref array<ref LFPG_ElecEdge> outEdges;
+            if (m_Outgoing.Find(currId, outEdges) && outEdges)
+            {
+                int oi;
+                for (oi = 0; oi < outEdges.Count(); oi = oi + 1)
+                {
+                    ref LFPG_ElecEdge oEdge = outEdges[oi];
+                    if (oEdge && oEdge.m_TargetNodeId != "")
+                    {
+                        bool oVisited = false;
+                        m_WdgVisited.Find(oEdge.m_TargetNodeId, oVisited);
+                        if (!oVisited)
+                        {
+                            m_WdgVisited.Set(oEdge.m_TargetNodeId, true);
+                            m_WdgQueue.Insert(oEdge.m_TargetNodeId);
+                        }
+                    }
+                }
+            }
+
+            // Explore incoming neighbors (undirected traversal)
+            ref array<ref LFPG_ElecEdge> inEdges;
+            if (m_Incoming.Find(currId, inEdges) && inEdges)
+            {
+                int ii;
+                for (ii = 0; ii < inEdges.Count(); ii = ii + 1)
+                {
+                    ref LFPG_ElecEdge iEdge = inEdges[ii];
+                    if (iEdge && iEdge.m_SourceNodeId != "")
+                    {
+                        bool iVisited = false;
+                        m_WdgVisited.Find(iEdge.m_SourceNodeId, iVisited);
+                        if (!iVisited)
+                        {
+                            m_WdgVisited.Set(iEdge.m_SourceNodeId, true);
+                            m_WdgQueue.Insert(iEdge.m_SourceNodeId);
+                        }
+                    }
+                }
+            }
+        }
+
+        return count;
+        #else
+        return 0;
+        #endif
+    }
+
     bool OnWireAdded(string sourceId, string targetId, string sourcePort, string targetPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
+        // ==========================================
+        // PASO 0: Null guards + self-loop
+        // ==========================================
         if (sourceId == "" || targetId == "")
             return false;
 
-        // v0.7.29 (Audit fix): Network size watchdog.
-        // Reject new connections if the graph is at capacity.
-        // Prevents runaway networks from degrading server tick rate.
-        if (m_NodeCount >= LFPG_MAX_SAFE_NODES)
+        if (sourceId == targetId)
+            return false;
+
+        // ==========================================
+        // PASO 1: Global hard-cap O(1)
+        // ==========================================
+        if (m_NodeCount >= LFPG_MAX_NODES_GLOBAL)
         {
-            LFPG_Util.Warn("[ElecGraph] OnWireAdded: REJECTED — node limit reached (" + m_NodeCount.ToString() + "/" + LFPG_MAX_SAFE_NODES.ToString() + ")");
+            LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: global cap ("
+                + m_NodeCount.ToString() + "/" + LFPG_MAX_NODES_GLOBAL.ToString() + ")");
             return false;
         }
 
+        // ==========================================
+        // PASO 2: Component Watchdog (v0.7.31)
+        // ==========================================
+        ref LFPG_ElecNode nodeA;
+        ref LFPG_ElecNode nodeB;
+        bool hasA = m_Nodes.Find(sourceId, nodeA);
+        bool hasB = m_Nodes.Find(targetId, nodeB);
+
+        // Fast-paths: only when components are clean (already rebuilt)
+        if (!m_ComponentsDirty)
+        {
+            int compA = -1;
+            int compB = -1;
+            if (hasA && nodeA)
+                compA = nodeA.m_ComponentId;
+            if (hasB && nodeB)
+                compB = nodeB.m_ComponentId;
+
+            // 2a: Same component — internal cable, size unchanged → ALLOW
+            if (compA >= 0 && compA == compB)
+            {
+                // Skip watchdog, proceed directly to insert
+            }
+            // 2b: Different known components — O(1) size lookup
+            else if (compA >= 0 && compB >= 0)
+            {
+                int sizeA = 0;
+                int sizeB = 0;
+                m_ComponentSizes.Find(compA, sizeA);
+                m_ComponentSizes.Find(compB, sizeB);
+
+                int mergedSize = sizeA + sizeB;
+                if (mergedSize > LFPG_MAX_NODES_PER_COMPONENT)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merge exceeds component limit ("
+                        + mergedSize.ToString() + "/" + LFPG_MAX_NODES_PER_COMPONENT.ToString() + ")");
+                    return false;
+                }
+                // Merged size OK, proceed to insert
+            }
+            // 2c: One or both nodes are new (compId == -1) — BFS fallback
+            else
+            {
+                int limit = LFPG_MAX_NODES_PER_COMPONENT;
+                int bfsSizeA = 1;
+                int bfsSizeB = 1;
+
+                if (hasA && nodeA)
+                {
+                    if (compA >= 0)
+                    {
+                        m_ComponentSizes.Find(compA, bfsSizeA);
+                    }
+                    else
+                    {
+                        bfsSizeA = CountComponentLimited(sourceId, limit);
+                    }
+                }
+
+                if (bfsSizeA > limit)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: source component exceeds limit");
+                    return false;
+                }
+
+                int remaining = limit - bfsSizeA;
+                if (remaining <= 0)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: no budget for target");
+                    return false;
+                }
+
+                if (hasB && nodeB)
+                {
+                    if (compB >= 0)
+                    {
+                        m_ComponentSizes.Find(compB, bfsSizeB);
+                    }
+                    else
+                    {
+                        bfsSizeB = CountComponentLimited(targetId, remaining);
+                    }
+                }
+
+                int totalSize = bfsSizeA + bfsSizeB;
+                if (totalSize > limit)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merged size ("
+                        + totalSize.ToString() + "/" + limit.ToString() + ")");
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            // ==========================================
+            // PASO 3: Components dirty — BFS fallback
+            // ==========================================
+            int limit = LFPG_MAX_NODES_PER_COMPONENT;
+            int sizeA = 1;
+            bool ranBfsA = false;
+
+            if (hasA && nodeA)
+            {
+                sizeA = CountComponentLimited(sourceId, limit);
+                ranBfsA = true;
+            }
+
+            if (sizeA > limit)
+            {
+                LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: source exceeds limit (dirty)");
+                return false;
+            }
+
+            // If we ran BFS for A, check if B was already visited (= same component).
+            // This avoids double-counting that would cause false rejections.
+            // Only safe to check m_WdgVisited when it was freshly populated by BFS-A.
+            bool bInA = false;
+            if (ranBfsA && hasB && nodeB)
+            {
+                m_WdgVisited.Find(targetId, bInA);
+            }
+
+            if (!bInA)
+            {
+                // Different components (or A was new) — count B with remaining budget
+                int remaining = limit - sizeA;
+                if (remaining <= 0)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: no budget for target (dirty)");
+                    return false;
+                }
+
+                int sizeB = 1;
+                if (hasB && nodeB)
+                {
+                    sizeB = CountComponentLimited(targetId, remaining);
+                }
+
+                int totalSize = sizeA + sizeB;
+                if (totalSize > limit)
+                {
+                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merged size ("
+                        + totalSize.ToString() + "/" + limit.ToString() + ") (dirty)");
+                    return false;
+                }
+            }
+            // else: bInA — same component, size doesn't grow, sizeA <= limit already checked
+        }
+
+        // ==========================================
+        // PASO 4: Insert edge (original logic preserved)
+        // ==========================================
         EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
         EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
 
@@ -443,6 +701,9 @@ class LFPG_ElecGraph
                 rNode.m_ComponentId = -1;
         }
 
+        // v0.7.31: Clear component sizes for rebuild
+        m_ComponentSizes.Clear();
+
         int nextId = 0;
 
         int ni;
@@ -453,6 +714,9 @@ class LFPG_ElecGraph
                 continue;
             if (startNode.m_ComponentId != -1)
                 continue;
+
+            // v0.7.31: Count nodes per component during BFS
+            int compSize = 0;
 
             ref array<string> queue = new array<string>;
             queue.Insert(m_Nodes.GetKey(ni));
@@ -470,6 +734,7 @@ class LFPG_ElecGraph
                     continue;
 
                 curNode.m_ComponentId = nextId;
+                compSize = compSize + 1;
 
                 ref array<ref LFPG_ElecEdge> outE;
                 if (m_Outgoing.Find(curId, outE) && outE)
@@ -509,6 +774,9 @@ class LFPG_ElecGraph
                     }
                 }
             }
+
+            // v0.7.31: Store component size for O(1) watchdog lookups
+            m_ComponentSizes.Set(nextId, compSize);
 
             nextId = nextId + 1;
         }

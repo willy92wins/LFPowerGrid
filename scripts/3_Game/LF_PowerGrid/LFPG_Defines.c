@@ -269,11 +269,13 @@ static const int LFPG_MAX_REQUEUE_PER_EPOCH = 5;
 // If reached, conservatively returns true (cycle assumed) to reject the wire.
 static const int LFPG_DFS_MAX_VISITED = 2048;
 
-// v0.7.29 (Audit fix): Maximum safe nodes per network graph.
-// Watchdog to prevent players from building excessively large networks
-// that would cause tick rate degradation. When exceeded, new wire
-// connections should be rejected with player feedback.
-static const int LFPG_MAX_SAFE_NODES = 512;
+// v0.7.31 (Bloque B): Component Watchdog — per-subnet limits.
+// MAX_NODES_PER_COMPONENT: max nodes in a single connected island/subnet.
+// Prevents any one subnet from degrading server tick rate without
+// blocking unrelated subnets from other players (fixes Audit2 #2).
+// MAX_NODES_GLOBAL: hard-cap O(1) safety net for total graph size.
+static const int LFPG_MAX_NODES_PER_COMPONENT = 256;
+static const int LFPG_MAX_NODES_GLOBAL        = 2048;
 
 // ---- Propagation epsilon (Sprint 4.2, active) ----
 // Power changes smaller than epsilon do not propagate downstream.
@@ -303,7 +305,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.30";
+static const string LFPG_VERSION_STR = "0.7.31";
 
 // =========================================================
 // Constants that were previously missing definitions.
