@@ -119,15 +119,15 @@ class LFPG_NetworkManager
         m_PendingBroadcastLFPG = new map<string, EntityAI>;
         m_PendingBroadcastVanilla = new map<string, EntityAI>;
         m_LastKnownPos = new map<string, vector>;
-        // v0.7.30: Tracked device set for centralized polling (server-only)
-        if (GetGame().IsServer())
-        {
-            m_TrackedDeviceIds = new array<string>;
-            m_TrackedDeviceIndex = new map<string, int>;
-            m_TrackCursor = 0;
-        }
 
         #ifdef SERVER
+        // v0.7.30: Tracked device set for centralized polling.
+        // Always allocated when compiled as server (dedicated + SP host).
+        // Methods have runtime IsServer() guards for extra safety.
+        m_TrackedDeviceIds = new array<string>;
+        m_TrackedDeviceIndex = new map<string, int>;
+        m_TrackCursor = 0;
+
         m_Graph = new LFPG_ElecGraph();
         m_WarmupActive = false;
         m_TelemTickCount = 0;
