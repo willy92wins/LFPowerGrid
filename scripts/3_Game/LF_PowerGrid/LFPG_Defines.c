@@ -1,5 +1,9 @@
 // =========================================================
-// LF_PowerGrid - constants, enums, budgets (v0.7.26, Sprint 4.3+audit4)
+// LF_PowerGrid - constants, enums, budgets (v0.7.33, Sprint 4.3+audit4)
+//
+// v0.7.33 changes:
+//   - A4-2/3: LFPG_DIAG_ENABLED default false (production)
+//   - Fix #14: LFPG_WIRING_SESSION_TIMEOUT_MS added
 //
 // Sprint 4.3 changes:
 //   - Version bump to 0.7.22
@@ -130,6 +134,12 @@ static const float LFPG_LOAD_CRITICAL_THRESHOLD = 1.00;   // >= 100% = CRITICAL
 static const float LFPG_DEFAULT_SOURCE_CAPACITY    = 50.0;  // units/s
 static const float LFPG_DEFAULT_CONSUMER_CONSUMPTION = 10.0; // units/s
 
+// v0.7.33 (Fix #22): Default max throughput for PASSTHROUGH devices (splitters).
+// Caps how much power a passthrough can relay regardless of input.
+// Set to 4x source capacity — generous for splitting networks.
+// Devices can override via LFPG_GetCapacity().
+static const float LFPG_DEFAULT_PASSTHROUGH_CAPACITY = 200.0; // units/s
+
 // v0.7.10: Client-side wire count limit per owner (DecodeOwner).
 // Guards against malformed/malicious JSON payloads flooding the client.
 // Matches server-side LFPG_MAX_WIRES_PER_DEVICE by default.
@@ -200,7 +210,10 @@ static const float LFPG_TELEM_INTERVAL_MS = 5000.0;
 static const string LFPG_LOG_PREFIX = "[LF_PowerGrid] ";
 static const bool   LFPG_LOG_ENABLED  = true;
 static const int    LFPG_LOG_LEVEL    = 2;
-static const bool   LFPG_DIAG_ENABLED = true;
+// v0.7.33 (A4-2/3): Default to false in production. Set true only for debug.
+// When false, ServerEcho calls (~15 in CableRenderer hot path) are no-ops.
+// Controlled at compile-time — no runtime branch cost when false.
+static const bool   LFPG_DIAG_ENABLED = false;
 
 // ---- Device types (Sprint 4.1) ----
 // Determines node behavior in the electrical graph and future propagation.
@@ -316,7 +329,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.32";
+static const string LFPG_VERSION_STR = "0.7.33";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -373,6 +386,12 @@ static const float LFPG_JOINT_SIZE_MAX       = 6.0;    // max joint size up clos
 // ---- Retry system ----
 static const int   LFPG_RETRY_MAX            = 5;      // max retry attempts for deferred wires
 static const float LFPG_RETRY_TICK_S         = 2.0;    // seconds between retry ticks
+
+// ---- Wiring session timeout (v0.7.33, Fix #14) ----
+// Maximum duration a wiring session can remain active (ms).
+// Auto-cancels to prevent stuck sessions from disconnect, alt-tab, etc.
+// 120s generous enough for complex multi-waypoint routes.
+static const float LFPG_WIRING_SESSION_TIMEOUT_MS = 120000.0;
 
 // ---- Centralized position polling (v0.7.30, Audit 1+2 closure) ----
 // Single global timer in NetworkManager replaces N per-device timers.

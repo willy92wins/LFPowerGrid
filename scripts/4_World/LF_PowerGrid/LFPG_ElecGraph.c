@@ -98,7 +98,11 @@ class LFPG_ElecGraph
     protected int m_LastProcessMs;        // Sprint 4.2 S2: time spent in ProcessDirtyQueue
 
     // --- Sprint 4.3: Targeted requeue tracking ---
-    protected ref array<string> m_EnqueuedThisEpoch;
+    // v0.7.33 (Fix #15): Changed from array<string> to map<string, bool>.
+    // Prevents duplicates when a node is dequeued, re-dirtied, and re-enqueued
+    // within the same epoch (feedback topologies). Map provides O(1) dedup
+    // vs O(n) linear scan on array. ResetRequeueCounts no longer iterates dupes.
+    protected ref map<string, bool> m_EnqueuedThisEpoch;
 
     // --- Sprint 4.3: Edge budget tracking ---
     protected int m_EdgesVisitedThisEpoch;
@@ -157,7 +161,7 @@ class LFPG_ElecGraph
         m_EdgeCount = 0;
         m_LastRebuildMs = 0;
         m_LastProcessMs = 0;
-        m_EnqueuedThisEpoch = new array<string>;
+        m_EnqueuedThisEpoch = new map<string, bool>;
         m_EdgesVisitedThisEpoch = 0;
         m_LastOverloadCount = 0;
         m_AllocIdxArr = new array<int>;
@@ -1308,7 +1312,7 @@ class LFPG_ElecGraph
         {
             node.m_InQueue = true;
             m_DirtyQueue.Insert(nodeId);
-            m_EnqueuedThisEpoch.Insert(nodeId);
+            m_EnqueuedThisEpoch.Set(nodeId, true);
         }
         #endif
     }
@@ -1512,6 +1516,12 @@ class LFPG_ElecGraph
                 {
                     newPowered = true;
                     newOutput = inputSum;
+                    // v0.7.33 (Fix #22): Cap output to max throughput capacity.
+                    // Without this, passthrough relayed infinite power.
+                    if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
+                    {
+                        newOutput = node.m_MaxOutput;
+                    }
                 }
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
@@ -1948,7 +1958,14 @@ class LFPG_ElecGraph
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                node.m_MaxOutput = 0.0;
+                // v0.7.33 (Fix #22): Read max throughput capacity from device.
+                // Previously hardcoded to 0.0 (infinite passthrough).
+                // Now uses LFPG_GetCapacity if available, else default constant.
+                node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
+                if (node.m_MaxOutput < LFPG_PROPAGATION_EPSILON)
+                {
+                    node.m_MaxOutput = LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
+                }
             }
 
             if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
@@ -2296,13 +2313,14 @@ class LFPG_ElecGraph
     }
 
     // Sprint 4.3: Targeted reset — only resets nodes that were actually enqueued.
+    // v0.7.33 (Fix #15): m_EnqueuedThisEpoch is now a map — no duplicates to iterate.
     protected void ResetRequeueCounts()
     {
         #ifdef SERVER
         int ri;
         for (ri = 0; ri < m_EnqueuedThisEpoch.Count(); ri = ri + 1)
         {
-            string rNodeId = m_EnqueuedThisEpoch[ri];
+            string rNodeId = m_EnqueuedThisEpoch.GetKey(ri);
             ref LFPG_ElecNode rNode;
             if (m_Nodes.Find(rNodeId, rNode) && rNode)
             {

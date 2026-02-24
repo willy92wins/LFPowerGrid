@@ -1510,10 +1510,19 @@ class LFPG_NetworkManager
                     movedIds.Insert(devId);
                     movedDevs.Insert(dev);
                 }
+                // v0.7.33 (Fix #21): Do NOT update baseline position every tick.
+                // Previous behavior reset m_LastKnownPos each tick, so micro-drift
+                // (e.g., 0.1m/tick from physics jitter) never accumulated past
+                // the 0.3m threshold. Now the baseline stays at the position when
+                // the device was first tracked (wire connected). Drift accumulates
+                // until it crosses the threshold, triggering wire disconnect.
+                // Baseline is reset when device is untracked+retracked (new wire).
             }
-
-            // Always update position snapshot
-            m_LastKnownPos.Set(devId, currentPos);
+            else
+            {
+                // First time tracking this device — record initial baseline
+                m_LastKnownPos.Set(devId, currentPos);
+            }
         }
 
         // Advance cursor (wraps naturally on next tick)
@@ -1713,6 +1722,15 @@ class LFPG_NetworkManager
         // Devices that were moved/destroyed leave orphaned wires in the
         // central store. Persist the pruned state on next flush.
         PruneUnresolvableVanillaWires();
+
+        // v0.7.32 (Audit P2): Flush vanilla immediately after prune.
+        // Self-heal runs once at startup and after critical failures.
+        // If server crashes before the periodic timer flush (30s),
+        // stale wires reappear on next restart → repeat prune cycle.
+        if (m_VanillaDirty)
+        {
+            FlushVanillaIfDirty();
+        }
 
         // Sprint 4.1→4.2: rebuild electrical graph from wire data,
         // then populate node electrical states and mark sources dirty.
@@ -2312,6 +2330,16 @@ class LFPG_NetworkManager
             // RemoveWiresTargeting (which flushes internally), but this
             // covers any edge case where a broadcast was queued but not sent.
             FlushBroadcasts();
+
+            // v0.7.32 (Audit P2): Immediate vanilla flush after critical cut.
+            // MarkVanillaDirty() was called in section 2, but FlushVanillaIfDirty
+            // runs on a 30s timer. If server crashes in that window, vanilla
+            // wires are lost. CutAll is infrequent enough that synchronous
+            // flush has negligible perf impact.
+            if (m_VanillaDirty)
+            {
+                FlushVanillaIfDirty();
+            }
         }
 
         // --- 7. Untrack from centralized polling (v0.7.30) ---

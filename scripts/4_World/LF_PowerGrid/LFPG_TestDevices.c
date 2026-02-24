@@ -590,6 +590,20 @@ class LF_TestGenerator : PowerGenerator
 
     bool LFPG_AddWire(LFPG_WireData wd)
     {
+        if (!wd) return false;
+
+        // v0.7.32 (Audit): Port validation (defense-in-depth).
+        // The RPC handler validates before calling, but this guard protects
+        // against future callers (migration, self-heal, other mods).
+        if (wd.m_SourcePort == "")
+            wd.m_SourcePort = LFPG_PORT_OUTPUT_1;
+
+        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
+        {
+            LFPG_Util.Warn("[LF_TestGenerator] AddWire rejected: invalid port: " + wd.m_SourcePort);
+            return false;
+        }
+
         bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
         if (result)
         {

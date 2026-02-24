@@ -149,6 +149,27 @@ modded class PlayerBase
         }
         LFPG_Util.Debug("[FinishWiring-Server] waypoints=" + wpCount.ToString());
 
+        // v0.7.32 (Audit): Validate RPC waypoints for NaN, range, and inter-wp distance.
+        // ValidateWaypoints is called during deserialization but was missing from the
+        // creation path. A modified client could inject extreme/NaN coordinates that
+        // corrupt persistence and downstream calculations.
+        if (waypoints && waypoints.Count() > 0)
+        {
+            if (waypoints.Count() > LFPG_MAX_WAYPOINTS)
+            {
+                LFPG_Util.Warn("[FinishWiring-Server] denied (too many waypoints: " + waypoints.Count().ToString() + ")");
+                LFPG_SendClientMsg(this, "Too many waypoints.");
+                return;
+            }
+
+            if (!LFPG_WireHelper.ValidateWaypoints(waypoints, "FinishWiring-RPC", dstDeviceId))
+            {
+                LFPG_Util.Warn("[FinishWiring-Server] denied (corrupt waypoints from RPC)");
+                LFPG_SendClientMsg(this, "Invalid wire path.");
+                return;
+            }
+        }
+
         // Resolve objects by network ID
         EntityAI srcObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(srcLow, srcHigh));
         EntityAI dstObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(dstLow, dstHigh));
@@ -500,6 +521,15 @@ modded class PlayerBase
         {
             // v0.7.34 (Bloque E): Close mutation batch on early exit
             LFPG_NetworkManager.Get().EndGraphMutation();
+
+            // v0.7.33 (Fix #18b): If vanilla wires were removed during replacement phase
+            // but the new wire failed to store, we must still persist the removal.
+            // Without this, server restart would resurrect the removed wire.
+            if (anyRemoved && !isLfpgOwner)
+            {
+                LFPG_NetworkManager.Get().MarkVanillaDirty();
+            }
+
             LFPG_Util.Warn("[FinishWiring-Server] wire storage failed (duplicate or cap)");
             LFPG_SendClientMsg(this, "Wire already exists or device is full.");
             return;
@@ -517,6 +547,10 @@ modded class PlayerBase
         else
         {
             LFPG_NetworkManager.Get().BroadcastVanillaWires(srcRealId, srcObj);
+            // v0.7.33 (Fix #18): Mark vanilla store dirty for persistence.
+            // Was missing — CutWires and CutPort both call this but FinishWiring didn't.
+            // Without this, new vanilla wire is lost if server restarts before periodic flush.
+            LFPG_NetworkManager.Get().MarkVanillaDirty();
         }
 
         // Propagate power to all consumers (LFPG and vanilla via SetPowered)

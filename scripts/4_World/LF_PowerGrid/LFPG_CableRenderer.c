@@ -329,9 +329,24 @@ class LFPG_WireSegmentInfo
 
     // Update hysteresis state after occlusion check.
     // blocked = true if ALL sample points are occluded.
-    void UpdateOcclusion(bool blocked, float nowMs)
+    // v0.7.32 (Audit P2): Accept distance to scale recheck interval.
+    // Wires near the culling bubble edge get longer intervals to reduce
+    // flickering from rapid visibility changes during player movement.
+    void UpdateOcclusion(bool blocked, float nowMs, float wireDist)
     {
-        occNextCheckMs = nowMs + LFPG_OCC_INTERVAL_MS;
+        // v0.7.32 (Audit P2): Distance-scaled interval.
+        // Close wires: 350ms (base). Far wires (near bubble edge): up to ~1s.
+        // Linear scale from 1.0x at 0m to 3.0x at CULL_DISTANCE_M.
+        float distScale = 1.0;
+        if (wireDist > 0.0 && LFPG_CULL_DISTANCE_M > 0.0)
+        {
+            distScale = 1.0 + (wireDist / LFPG_CULL_DISTANCE_M) * 2.0;
+            if (distScale > 3.0)
+            {
+                distScale = 3.0;
+            }
+        }
+        occNextCheckMs = nowMs + LFPG_OCC_INTERVAL_MS * distScale;
 
         if (blocked)
         {
@@ -363,6 +378,18 @@ class LFPG_WireSegmentInfo
 
     void SetVisible(bool vis)
     {
+        // v0.7.33 (Fix P6): When wire goes invisible via culling,
+        // reset occlusion hysteresis. Without this, a wire re-entering
+        // visibility drags old occConsecCount — causing delayed
+        // occlusion transitions (e.g., stuck half-faded for 3+ frames).
+        // On re-entry, wire starts fresh: assume visible, let raycasts
+        // determine actual state from clean baseline.
+        if (!vis && visible)
+        {
+            occConsecCount = 0;
+            occBlockedRatio = 0.0;
+            occluded = false;
+        }
         visible = vis;
     }
 
@@ -1877,7 +1904,7 @@ class LFPG_CableRenderer
                 if (samplesNeeded <= rayBudget)
                 {
                     bool allBlocked = CheckWireOcclusion(camPos, wsi, player);
-                    wsi.UpdateOcclusion(allBlocked, nowMs);
+                    wsi.UpdateOcclusion(allBlocked, nowMs, wsi.cachedMinDist);
                     rayBudget = rayBudget - samplesNeeded;
                 }
             }

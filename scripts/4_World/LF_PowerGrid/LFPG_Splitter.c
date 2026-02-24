@@ -92,13 +92,21 @@ class LF_Splitter_Kit : Inventory_Base
             splitter.SetOrientation(finalOri);
             splitter.Update();
             LFPG_Util.Info("[Splitter_Kit] Deployed LF_Splitter at " + finalPos.ToString() + " ori=" + finalOri.ToString());
+
+            // v0.7.32 (Audit): Only delete kit on successful spawn.
+            // If CreateObjectEx fails, the player keeps the kit.
+            GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[Splitter_Kit] Failed to create LF_Splitter!");
+            LFPG_Util.Error("[Splitter_Kit] Failed to create LF_Splitter! Kit preserved.");
+            // Kit remains on ground — player can pick it up and try again.
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                pb.MessageStatus("[LFPG] Splitter placement failed. Kit preserved.");
+            }
         }
-
-        GetGame().ObjectDelete(this);
         #endif
     }
 };
@@ -355,6 +363,16 @@ class LF_Splitter : Inventory_Base
     bool LFPG_IsSource()
     {
         return true;
+    }
+
+    // v0.7.33 (Fix #22): Max throughput capacity for this passthrough.
+    // Caps how much power the splitter can relay to its 3 outputs.
+    // Without this, a passthrough had infinite capacity — any input
+    // passed through without limit. Now capped to default passthrough
+    // capacity (200 units/s). Future: configurable per-device via settings.
+    float LFPG_GetCapacity()
+    {
+        return LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
     }
 
     // Sprint 4.1: Electrical graph node type.

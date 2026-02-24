@@ -61,6 +61,10 @@ class LFPG_WiringClient
     protected int m_LastPreConnectStatus;
     protected string m_LastPreConnectReason;
 
+    // v0.7.33 (Fix #14): Session start time for timeout detection.
+    // Prevents stuck sessions from disconnect, alt-tab, or unresponsive server.
+    protected float m_SessionStartMs;
+
     void LFPG_WiringClient()
     {
         m_Waypoints = new array<vector>;
@@ -69,6 +73,7 @@ class LFPG_WiringClient
         m_PreviewScreenPts = new array<vector>;
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
+        m_SessionStartMs = 0.0;
     }
 
     static LFPG_WiringClient Get()
@@ -162,6 +167,7 @@ class LFPG_WiringClient
         m_FrameCounter = 0;
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
+        m_SessionStartMs = GetGame().GetTime();
 
         m_Waypoints.Clear();
 
@@ -311,6 +317,7 @@ class LFPG_WiringClient
         m_Waypoints.Clear();
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
+        m_SessionStartMs = 0.0;
 
         // v0.7.10: Explicitly clear canvas to prevent ghost preview lines
         // persisting for one frame if Cancel() fires outside the normal draw cycle.
@@ -335,6 +342,22 @@ class LFPG_WiringClient
         LFPG_WiringClient wc = Get();
         if (!wc.m_Active)
             return;
+
+        // v0.7.33 (Fix #14): Session timeout — auto-cancel stale sessions.
+        // Prevents stuck state from disconnect, alt-tab, or unresponsive server.
+        float nowMs = GetGame().GetTime();
+        float elapsed = nowMs - wc.m_SessionStartMs;
+        if (elapsed > LFPG_WIRING_SESSION_TIMEOUT_MS)
+        {
+            LFPG_Util.Warn("[WiringClient] Session TIMEOUT after " + elapsed.ToString() + "ms — auto-cancelling");
+            PlayerBase timeoutPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            if (timeoutPlayer)
+            {
+                timeoutPlayer.MessageStatus("[LFPG] Wiring session timed out.");
+            }
+            wc.Cancel();
+            return;
+        }
 
         wc.DrawPreviewFrame();
     }
