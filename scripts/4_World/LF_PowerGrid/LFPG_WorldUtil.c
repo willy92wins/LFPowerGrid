@@ -163,6 +163,13 @@ class LFPG_WorldUtil
 
         float t = (nearClip - dA) / denom;
 
+        // v0.7.35 (F1.4): NaN guard — floating point edge cases in Enforce VM
+        // can produce NaN that passes through clamp (NaN comparisons are false).
+        if (t != t)
+        {
+            return GetGame().GetScreenPos(visibleWorld);
+        }
+
         // Clamp t to [0,1] for safety
         if (t < 0.0)
         {

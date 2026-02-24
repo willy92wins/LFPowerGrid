@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - client cable renderer (v0.7.26)
+// LF_PowerGrid - client cable renderer (v0.7.35)
 //
 // Event-driven cable rendering with frozen geometry.
 //
@@ -12,6 +12,26 @@
 //      segments via Canvas 2D with raycast occlusion.
 //   4. RetryTick (5s timer) -> builds wires whose target entity
 //      was not available at initial build time (network bubble edge).
+//
+// v0.7.35 (Fase 1) changes:
+//   F1.1 — Fixed crash: m_AllWires → m_WireSegments (undefined member)
+//   F1.2 — Cohen-Sutherland screen clipping replaces offA&&offB cull.
+//          Fixes cables vanishing when segment spans viewport.
+//   F1.3 — warningMask integration: per-wire WARNING_LOAD state
+//          using LFPG_DeviceAPI.GetWarningMask() bitmask.
+//   F1.4 — Sway-aware behind-camera clipping: ClipBehindCamera now
+//          receives swayed world coords instead of frozen geometry.
+//
+// v0.7.35 (Fase 2) changes:
+//   F2.1 — Behind-camera dot product early-out in DrawFrame.
+//          Skips projection for wires whose bounding sphere is
+//          entirely behind the camera.
+//   F2.2 — Ultra-LOD for distant wires (lodTier 2, >40m).
+//          Projects only endpoints, draws 1 straight line.
+//          Skips catenary, sway, endcaps, joints.
+//   F2.3 — Partial occlusion alpha: wires with some (not all)
+//          occlusion samples blocked fade proportionally instead
+//          of the all-or-nothing visibility switch.
 //
 // v0.7.7 improvements:
 //   - Bounding sphere culling (fixes midpoint-near-player bug)
@@ -57,6 +77,10 @@ class LFPG_OwnerWireState
 
     // v0.7.8: Bitmask of overloaded output wires (bit N = wire N overloaded).
     int lastOverloadMask;
+
+    // v0.7.35 (Fase1 F1.3): Bitmask of warning-level output wires.
+    // Bit N = wire N is at WARNING_LOAD (80%+ capacity but not overloaded).
+    int lastWarningMask;
 
     // v0.7.9: Pre-computed wire keys ("ownerId|0", "ownerId|1", etc.)
     // Populated in BuildOwnerWires. Eliminates string concat in CullTick.
@@ -112,6 +136,11 @@ class LFPG_WireSegmentInfo
     float  occNextCheckMs;    // game time for next recheck
     int    occConsecCount;    // positive=consecutive visible, negative=consecutive occluded
 
+    // v0.7.35 (F2.3): Ratio of occluded samples (0.0 = fully visible, 1.0 = fully blocked).
+    // Updated by CheckWireOcclusion. Used in DrawFrame to fade partially
+    // occluded wires instead of all-or-nothing. Only meaningful when occluded == false.
+    float  occBlockedRatio;
+
     void LFPG_WireSegmentInfo()
     {
         segments   = new array<ref LFPG_CableParticle>;
@@ -121,6 +150,7 @@ class LFPG_WireSegmentInfo
         occluded   = false;
         occNextCheckMs  = 0;
         occConsecCount  = 0;
+        occBlockedRatio = 0.0;
         cachedCenter    = "0 0 0";
         cachedRadius    = 0.0;
         cachedMinDist   = 0.0;
@@ -427,6 +457,11 @@ class LFPG_CableRenderer
     protected ref array<int>   m_DrawOrder;
     protected ref array<float> m_DrawDist;
 
+    // v0.7.35 (F1.2): Cohen-Sutherland screen clipping temp output vectors.
+    // Reused per-segment to avoid allocation. [0]=x, [1]=y.
+    protected vector m_ClipA;
+    protected vector m_ClipB;
+
     void LFPG_CableRenderer()
     {
         m_ByOwnerId      = new map<string, ref LFPG_OwnerWireState>;
@@ -441,6 +476,8 @@ class LFPG_CableRenderer
         m_NegCache        = new map<string, float>;
         m_DrawOrder       = new array<int>;
         m_DrawDist        = new array<float>;
+        m_ClipA           = "0 0 0";
+        m_ClipB           = "0 0 0";
         m_OccStaggerIdx   = 0;
         m_CamMoved        = true;
         m_TotalSegCount   = 0;
@@ -901,6 +938,7 @@ class LFPG_CableRenderer
         st.lastPowered = IsOwnerActive(ownerObj);
         st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
         st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
+        st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
 
         // v0.7.9: Pre-build wire keys for this owner (used by CullTick)
         st.cachedWireKeys = new array<string>;
@@ -1182,6 +1220,9 @@ class LFPG_CableRenderer
                 // v0.7.8: read overload bitmask from owner
                 st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
 
+                // v0.7.35 (F1.3): read warning bitmask from owner
+                st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
+
                 // v0.7.7: Owner early-out.
                 // If the owner entity itself is farther than cull distance + margin,
                 // skip processing all its individual wires (saves iteration).
@@ -1373,26 +1414,29 @@ class LFPG_CableRenderer
                 info.powered = st.lastPowered;
 
                 // v0.7.8: update cable visual state based on powered + load + overload
-                // Check if THIS specific wire is overloaded (bit in mask)
+                // Check if THIS specific wire is overloaded or at warning level.
                 // v0.7.9: Guard against shift overflow — Enforce int is 32-bit signed,
                 // so 1 << 31 = negative (undefined). Limit bitmask to indices 0-30.
+                //
+                // v0.7.35 (F1.3): warningMask integrated. Single bounds check,
+                // shared bit computation. Priority:
+                //   CRITICAL_LOAD > WARNING_LOAD > POWERED > IDLE
                 bool wireOverloaded = false;
+                bool wireWarning = false;
                 if (info.wireIndex >= 0 && info.wireIndex < 31)
                 {
                     int wireBit = 1 << info.wireIndex;
                     wireOverloaded = ((st.lastOverloadMask & wireBit) != 0);
+                    wireWarning = ((st.lastWarningMask & wireBit) != 0);
                 }
 
-                // v0.7.23 (Bug 3): Cable state per-wire using overloadMask only.
-                // Previously, WARNING_LOAD was set for ALL wires from a source
-                // when the source's global loadRatio >= 0.80. This caused ALL
-                // cables to show orange even when only specific wires are
-                // overloaded. Now: only the specific wires in the overloadMask
-                // show CRITICAL_LOAD. All other powered wires show POWERED.
-                // Per-wire WARNING_LOAD requires a warningMask (future work).
                 if (wireOverloaded)
                 {
                     info.cableState = LFPG_CableState.CRITICAL_LOAD;
+                }
+                else if (wireWarning)
+                {
+                    info.cableState = LFPG_CableState.WARNING_LOAD;
                 }
                 else if (st.lastPowered)
                 {
@@ -1507,6 +1551,137 @@ class LFPG_CableRenderer
     }
 
     // ===========================
+    // Cohen-Sutherland screen-space line clipping (v0.7.35 F1.2)
+    // ===========================
+    // Fixes Bug 3: segments spanning the viewport with both endpoints
+    // off-screen were incorrectly culled. Cohen-Sutherland properly
+    // detects crossing segments and clips them to screen bounds.
+    //
+    // Outcode bits: 1=LEFT, 2=RIGHT, 4=TOP, 8=BOTTOM
+    protected int ComputeOutcode(float x, float y, float minX, float minY, float maxX, float maxY)
+    {
+        int code = 0;
+        if (x < minX)
+        {
+            code = code | 1;
+        }
+        if (x > maxX)
+        {
+            code = code | 2;
+        }
+        if (y < minY)
+        {
+            code = code | 4;
+        }
+        if (y > maxY)
+        {
+            code = code | 8;
+        }
+        return code;
+    }
+
+    // Cohen-Sutherland line clipping against screen rectangle.
+    // Returns true if any portion is visible (result in m_ClipA, m_ClipB).
+    // Returns false if the segment is entirely outside the rectangle.
+    // Max 8 iterations to guarantee termination (standard CS needs at most 4,
+    // but floating point edge cases can cause extra rounds).
+    protected bool ClipSegToScreen(float x1, float y1, float x2, float y2,
+                                   float minX, float minY, float maxX, float maxY)
+    {
+        int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+        int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+
+        int iter = 0;
+        while (iter < 8)
+        {
+            iter = iter + 1;
+
+            // Both inside: accept
+            if ((codeA | codeB) == 0)
+            {
+                m_ClipA[0] = x1;
+                m_ClipA[1] = y1;
+                m_ClipB[0] = x2;
+                m_ClipB[1] = y2;
+                return true;
+            }
+
+            // Both on same outside side: reject
+            if ((codeA & codeB) != 0)
+            {
+                return false;
+            }
+
+            // Pick the endpoint that is outside
+            int codeOut = codeA;
+            if (codeOut == 0)
+            {
+                codeOut = codeB;
+            }
+
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            float cx = 0.0;
+            float cy = 0.0;
+
+            // Clip against the boundary indicated by codeOut
+            if ((codeOut & 8) != 0)
+            {
+                // Below screen (high Y)
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (maxY - y1) / dy;
+                cy = maxY;
+            }
+            else if ((codeOut & 4) != 0)
+            {
+                // Above screen (low Y)
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (minY - y1) / dy;
+                cy = minY;
+            }
+            else if ((codeOut & 2) != 0)
+            {
+                // Right of screen
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (maxX - x1) / dx;
+                cx = maxX;
+            }
+            else if ((codeOut & 1) != 0)
+            {
+                // Left of screen
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (minX - x1) / dx;
+                cx = minX;
+            }
+
+            // Replace the outside endpoint with the clipped point
+            if (codeOut == codeA)
+            {
+                x1 = cx;
+                y1 = cy;
+                codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+            }
+            else
+            {
+                x2 = cx;
+                y2 = cy;
+                codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+            }
+        }
+
+        // Max iterations reached — accept with current coords (safety fallback)
+        m_ClipA[0] = x1;
+        m_ClipA[1] = y1;
+        m_ClipB[0] = x2;
+        m_ClipB[1] = y2;
+        return true;
+    }
+
+    // ===========================
     // DrawFrame - per-frame Canvas 2D rendering
     // ===========================
     // Called every frame from MissionGameplay.OnUpdate.
@@ -1560,7 +1735,7 @@ class LFPG_CableRenderer
         //   25-50 wires: half budget (10 raycasts)
         //   >50 wires: quarter budget (5 raycasts)
         // Stagger + forced recheck ensure all wires still get checked over time.
-        int visibleWires = m_AllWires.Count();
+        int visibleWires = m_WireSegments.Count();
         if (visibleWires > 50)
         {
             rayBudget = LFPG_OCC_MAX_RAYCASTS / 4;
@@ -1651,6 +1826,26 @@ class LFPG_CableRenderer
                 continue;
             }
 
+            // v0.7.35 (F2.1): Behind-camera early-out.
+            // Dot product of (wireCenter - camPos) with camDir.
+            // If the entire bounding sphere is behind the camera, skip
+            // projection + drawing entirely. Cost: 3 mul + 3 add + 1 cmp.
+            // Saves all GetScreenPos + drawing for wires behind the player.
+            // Component-wise to avoid vector allocation on heap per wire.
+            {
+                float dcx = wsi.cachedCenter[0] - camPos[0];
+                float dcy = wsi.cachedCenter[1] - camPos[1];
+                float dcz = wsi.cachedCenter[2] - camPos[2];
+                float dot = dcx * camDir[0] + dcy * camDir[1] + dcz * camDir[2];
+                // dot < 0 means center is behind camera.
+                // Add radius to account for sphere extent toward camera.
+                if (dot + wsi.cachedRadius < 0.0)
+                {
+                    tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+                    continue;
+                }
+            }
+
             // ---- Occlusion recheck ----
             // v0.7.9: When camera moves, recheck at normal interval (200ms staggered).
             // When camera is static, add forced delay to catch moving objects
@@ -1730,6 +1925,22 @@ class LFPG_CableRenderer
                 continue;
             }
 
+            // v0.7.35 (F2.3): Partial occlusion alpha.
+            // When some (but not all) occlusion samples are blocked, reduce
+            // alpha proportionally. This gives a visual "fade through walls"
+            // effect instead of the abrupt all-or-nothing occlusion.
+            // Only applies when wire has 2+ samples (medium/long wires).
+            // Short wires with 1 sample remain all-or-nothing (acceptable).
+            if (wsi.occBlockedRatio > 0.01 && !wsi.occluded)
+            {
+                float occAlpha = 1.0 - (wsi.occBlockedRatio * 0.7);
+                if (occAlpha < 0.15)
+                {
+                    occAlpha = 0.15;
+                }
+                alphaFactor = alphaFactor * occAlpha;
+            }
+
             // ---- Colors ----
             int baseColor = GetStateColor(wsi.cableState);
             // v0.7.23 (Bug 9): Without tools, all cables show neutral IDLE color.
@@ -1762,6 +1973,57 @@ class LFPG_CableRenderer
                 {
                     highlightColor = ApplyAlpha(highlightColor, alphaFactor);
                 }
+            }
+
+            // ================================================
+            // v0.7.35 (F2.2): Ultra-LOD for distant wires (lodTier 2).
+            // Skip catenary subdivision, sway, endcaps, joints.
+            // Project only the two port endpoints and draw a single
+            // straight line. Saves (segCount-1) GetScreenPos calls
+            // and all multi-pass drawing overhead for far cables.
+            // ================================================
+            if (lodTier == 2)
+            {
+                vector ulA = GetGame().GetScreenPos(wsi.cachedPosA);
+                vector ulB = GetGame().GetScreenPos(wsi.cachedPosB);
+
+                // At >40m any endpoint behind camera means the visible
+                // portion is negligible. Skip entirely (both OR either).
+                if (ulA[2] < 0.1 || ulB[2] < 0.1)
+                {
+                    tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+                    continue;
+                }
+
+                float ulx1 = ulA[0];
+                float uly1 = ulA[1];
+                float ulx2 = ulB[0];
+                float uly2 = ulB[1];
+
+                // Screen clipping (fast-path + Cohen-Sutherland)
+                bool ulOutA = (ulx1 < -200.0 || ulx1 > swF + 200.0 || uly1 < -200.0 || uly1 > shF + 200.0);
+                bool ulOutB = (ulx2 < -200.0 || ulx2 > swF + 200.0 || uly2 < -200.0 || uly2 > shF + 200.0);
+                if (ulOutA || ulOutB)
+                {
+                    bool ulVis = ClipSegToScreen(ulx1, uly1, ulx2, uly2,
+                        -200.0, -200.0, swF + 200.0, shF + 200.0);
+                    if (!ulVis)
+                    {
+                        tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+                        continue;
+                    }
+                    ulx1 = m_ClipA[0];
+                    uly1 = m_ClipA[1];
+                    ulx2 = m_ClipB[0];
+                    uly2 = m_ClipB[1];
+                }
+
+                // Draw single line with minimum width
+                hud.DrawLineScreen(ulx1, uly1, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, drawColor);
+
+                tRnd.m_WiresDrawn = tRnd.m_WiresDrawn + 1;
+                tRnd.m_SegmentsDrawn = tRnd.m_SegmentsDrawn + 1;
+                continue;  // Skip Phase 1/2/3 entirely
             }
 
             // ================================================
@@ -1837,20 +2099,38 @@ class LFPG_CableRenderer
                 // v0.7.14: When one point is behind the camera, GetScreenPos
                 // returns garbage. Clip the segment against the camera near plane
                 // in 3D world space and re-project for a correct screen position.
+                //
+                // v0.7.35 (F1.4): Use swayed world coords for clipping.
+                // Previously used frozen segW.m_From/m_To which don't include
+                // wind sway, causing a visual jump at the near-plane boundary.
+                // Reconstruct swayed positions inline (only on behind-camera path).
                 if (behindA || behindB)
                 {
                     LFPG_CableParticle segW = wsi.segments[s];
                     if (segW)
                     {
+                        // Reconstruct swayed world coords matching Phase 1 projection
+                        vector swayWorldA = segW.m_From;
+                        if (s > 0)
+                        {
+                            swayWorldA[1] = swayWorldA[1] + swayOff;
+                        }
+                        vector swayWorldB = segW.m_To;
+                        bool isLastSeg = (s == segCount - 1);
+                        if (!isLastSeg)
+                        {
+                            swayWorldB[1] = swayWorldB[1] + swayOff;
+                        }
+
                         if (behindA)
                         {
-                            vector clipA = LFPG_WorldUtil.ClipBehindCamera(segW.m_From, segW.m_To, camPos, camDir);
+                            vector clipA = LFPG_WorldUtil.ClipBehindCamera(swayWorldA, swayWorldB, camPos, camDir);
                             sx1 = clipA[0];
                             sy1 = clipA[1];
                         }
                         else
                         {
-                            vector clipB = LFPG_WorldUtil.ClipBehindCamera(segW.m_To, segW.m_From, camPos, camDir);
+                            vector clipB = LFPG_WorldUtil.ClipBehindCamera(swayWorldB, swayWorldA, camPos, camDir);
                             sx2 = clipB[0];
                             sy2 = clipB[1];
                         }
@@ -1862,11 +2142,13 @@ class LFPG_CableRenderer
                     }
                 }
 
-                // Off-screen check (v0.7.9: proportional to resolution, unified with HUD)
-                // v0.7.23 (Bug 1): Clipped points (near-plane projection) can produce
-                // extreme screen coords that pass the normal generous margin.
-                // Use a tighter margin (50px) when either point was clipped to
-                // prevent "sticky lines at screen edges" during camera rotation.
+                // v0.7.35 (F1.2): Screen clipping with fast-path.
+                // Most segments are fully on-screen → cheap inline check.
+                // Only segments with an endpoint outside invoke Cohen-Sutherland
+                // to correctly handle segments that SPAN the viewport.
+                //
+                // Margin: tighter for near-plane clipped points (extreme coords),
+                // generous for normal segments (smooth edge transition).
                 float margin;
                 bool wasClipped = (behindA || behindB);
                 if (wasClipped)
@@ -1881,18 +2163,27 @@ class LFPG_CableRenderer
                         margin = 200.0;
                     }
                 }
-                bool offA = false;
-                if (sx1 < -margin || sx1 > swF + margin || sy1 < -margin || sy1 > shF + margin)
+
+                // Fast-path: check if either endpoint is outside screen bounds.
+                // If both are inside, skip clipping entirely (zero function calls).
+                bool outsideA = (sx1 < -margin || sx1 > swF + margin || sy1 < -margin || sy1 > shF + margin);
+                bool outsideB = (sx2 < -margin || sx2 > swF + margin || sy2 < -margin || sy2 > shF + margin);
+
+                if (outsideA || outsideB)
                 {
-                    offA = true;
+                    // One or both endpoints outside: use Cohen-Sutherland.
+                    // This correctly handles segments that cross the viewport
+                    // (old code incorrectly culled these with offA && offB).
+                    bool segVisible = ClipSegToScreen(sx1, sy1, sx2, sy2,
+                        -margin, -margin, swF + margin, shF + margin);
+                    if (!segVisible)
+                        continue;
+
+                    sx1 = m_ClipA[0];
+                    sy1 = m_ClipA[1];
+                    sx2 = m_ClipB[0];
+                    sy2 = m_ClipB[1];
                 }
-                bool offB = false;
-                if (sx2 < -margin || sx2 > swF + margin || sy2 < -margin || sy2 > shF + margin)
-                {
-                    offB = true;
-                }
-                if (offA && offB)
-                    continue;
 
                 // Depth-based width (use z of visible point for behind-camera cases)
                 float zA = sA[2];
@@ -2119,6 +2410,20 @@ class LFPG_CableRenderer
         }
 
         // Occluded only if ALL samples are blocked
+        // v0.7.35 (F2.3): Store blocked ratio for partial occlusion alpha.
+        // Use float intermediates — Enforce implicit int→float is safe;
+        // explicit (float) cast is untested in this codebase.
+        if (sampleCount > 0)
+        {
+            float fBlocked = blockedCount;
+            float fTotal = sampleCount;
+            wsi.occBlockedRatio = fBlocked / fTotal;
+        }
+        else
+        {
+            wsi.occBlockedRatio = 0.0;
+        }
+
         if (blockedCount >= sampleCount)
             return true;
 
@@ -2271,6 +2576,7 @@ class LFPG_CableRenderer
             st.lastPowered = IsOwnerActive(ownerObj);
             st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
             st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
+            st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
             BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex);
 
             m_RetryQueue.Remove(wireKey);

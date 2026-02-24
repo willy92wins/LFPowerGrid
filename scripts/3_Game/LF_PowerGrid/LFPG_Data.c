@@ -127,6 +127,7 @@ class LFPG_ElecNode
     // --- Sprint 4.3: load telemetry (source nodes only) ---
     float  m_LoadRatio;        // totalDemand / m_MaxOutput (0.0 = idle, >1.0 = overloaded)
     int    m_OverloadMask;     // Bitmask: bit N = 1 means outgoing edge N is overloaded/brownout
+    int    m_WarningMask;      // v0.7.35 (F1.3): bit N = 1 means edge N has partial allocation
     float  m_LastSyncedLoadRatio;  // Last load ratio synced to entity (avoids redundant syncs)
 
     void LFPG_ElecNode()
@@ -147,6 +148,7 @@ class LFPG_ElecNode
         m_Consumption = 0.0;
         m_LoadRatio = 0.0;
         m_OverloadMask = 0;
+        m_WarningMask = 0;
         m_LastSyncedLoadRatio = -1.0;
     }
 };

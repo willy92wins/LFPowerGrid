@@ -605,6 +605,22 @@ class LFPG_DeviceAPI
         CallVoid(e, "LFPG_SetOverloadMask", p);
     }
 
+    // v0.7.35 (F1.3): Warning bitmask (partial allocation — demand > allocated).
+    // Bit N = 1 means wire at index N is receiving power but less than demanded.
+    // Used by CableRenderer for per-wire WARNING_LOAD visual state.
+    static int GetWarningMask(EntityAI e)
+    {
+        if (!e) return 0;
+        return CallInt(e, "LFPG_GetWarningMask", null, 0);
+    }
+
+    static void SetWarningMask(EntityAI e, int mask)
+    {
+        if (!e) return;
+        Param1<int> p = new Param1<int>(mask);
+        CallVoid(e, "LFPG_SetWarningMask", p);
+    }
+
     // ----- Port enumeration (with vanilla fallback) -----
 
     // Total number of ports on this device.

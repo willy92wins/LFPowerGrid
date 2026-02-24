@@ -123,6 +123,9 @@ class LF_Splitter : Inventory_Base
     // v0.7.8: Bitmask of overloaded output wires.
     protected int m_OverloadMask = 0;
 
+    // v0.7.35 (F1.3): Bitmask of warning-level output wires.
+    protected int m_WarningMask = 0;
+
     void LF_Splitter()
     {
         m_Wires = new array<ref LFPG_WireData>;
@@ -130,6 +133,7 @@ class LF_Splitter : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableInt("m_OverloadMask");
+        RegisterNetSyncVariableInt("m_WarningMask");
     }
 
     override void SetActions()
@@ -401,6 +405,23 @@ class LF_Splitter : Inventory_Base
         if (m_OverloadMask != mask)
         {
             m_OverloadMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // v0.7.35 (F1.3): Warning bitmask (partial allocation)
+    int LFPG_GetWarningMask()
+    {
+        return m_WarningMask;
+    }
+
+    void LFPG_SetWarningMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_WarningMask != mask)
+        {
+            m_WarningMask = mask;
             SetSynchDirty();
         }
         #endif

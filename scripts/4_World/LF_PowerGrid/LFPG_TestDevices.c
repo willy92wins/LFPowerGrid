@@ -46,6 +46,11 @@ class LF_TestGenerator : PowerGenerator
     // Synced to clients for per-wire CRITICAL_LOAD cable state.
     protected int m_OverloadMask = 0;
 
+    // v0.7.35 (F1.3): Bitmask of warning-level output wires.
+    // Bit N = 1 means wire at index N is getting power but less than demanded.
+    // Synced to clients for per-wire WARNING_LOAD cable state.
+    protected int m_WarningMask = 0;
+
     // v0.7.30: Per-device position polling removed.
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
     // with round-robin batching (Audit 1+2 closure).
@@ -58,6 +63,7 @@ class LF_TestGenerator : PowerGenerator
         RegisterNetSyncVariableBool("m_SourceOn");
         RegisterNetSyncVariableFloat("m_LoadRatio", 0.0, 5.0, 2);
         RegisterNetSyncVariableInt("m_OverloadMask");
+        RegisterNetSyncVariableInt("m_WarningMask");
     }
 
     override void SetActions()
@@ -525,6 +531,23 @@ class LF_TestGenerator : PowerGenerator
         if (m_OverloadMask != mask)
         {
             m_OverloadMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // v0.7.35 (F1.3): Warning bitmask (partial allocation)
+    int LFPG_GetWarningMask()
+    {
+        return m_WarningMask;
+    }
+
+    void LFPG_SetWarningMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_WarningMask != mask)
+        {
+            m_WarningMask = mask;
             SetSynchDirty();
         }
         #endif
