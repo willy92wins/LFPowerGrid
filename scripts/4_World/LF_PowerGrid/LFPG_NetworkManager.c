@@ -2025,14 +2025,6 @@ class LFPG_NetworkManager
         // v0.7.16 H6: Track loaded version for save guard
         m_VanillaLoadedVer = store.ver;
 
-        // v0.7.15 (Sprint 3 P1): Apply migration chain
-        int oldVer = store.ver;
-        int finalVer = LFPG_Migrators.MigrateVanillaStore(store);
-        if (finalVer != oldVer)
-        {
-            LFPG_Util.Info("[VanillaWires] Migrated schema v" + oldVer.ToString() + " → v" + finalVer.ToString());
-        }
-
         // v0.7.16 H6: If loaded from a newer schema, enter read-only mode
         if (m_VanillaLoadedVer > LFPG_VANILLA_PERSIST_VER)
         {

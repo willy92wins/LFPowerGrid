@@ -9,7 +9,7 @@
 //
 // v0.7.15 (Sprint 3):
 //   - ValidateWireData: exhaustive per-wire sanitization
-//   - DeserializeJSON: integrated migrator chain + sanitization
+//   - DeserializeJSON: exhaustive per-wire validation
 //   - ValidateWaypoints: NaN + range check per waypoint
 //
 // v0.7.16 (Hotfix):
@@ -284,8 +284,9 @@ class LFPG_WireHelper
     }
 
     // Deserialize JSON into wire array (clears existing contents).
-    // v0.7.15: Applies migration chain + exhaustive per-wire validation.
+    // v0.7.15: Exhaustive per-wire validation.
     // v0.7.16: H1 fix migration log, H3 map-based O(N) dedup.
+    // v0.7.34: Removed migrator chain (no production saves exist pre-v3).
     static void DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
     {
         if (!wires)
@@ -302,14 +303,6 @@ class LFPG_WireHelper
         {
             LFPG_Util.Info("[" + debugLabel + "] Deserialize wires failed: " + err);
             return;
-        }
-
-        // v0.7.16 H1: Save oldVer BEFORE migration (MigrateBlob updates blob.ver)
-        int oldVer = blob.ver;
-        int finalVer = LFPG_Migrators.MigrateBlob(blob);
-        if (finalVer != oldVer)
-        {
-            LFPG_Util.Info("[" + debugLabel + "] Migrated schema v" + oldVer.ToString() + " → v" + finalVer.ToString());
         }
 
         if (!blob.wires)
