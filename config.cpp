@@ -1,6 +1,6 @@
 class CfgPatches
 {
-    class LF_PowerGrid
+    class LFPowerGrid
     {
         units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter" };
         weapons[] = {};
@@ -11,15 +11,15 @@ class CfgPatches
 
 class CfgMods
 {
-    class LF_PowerGrid
+    class LFPowerGrid
     {
-        dir = "LF_PowerGrid";
+        dir = "LFPowerGrid";
         picture = "";
         action = "";
         hideName = 0;
         hidePicture = 0;
-        name = "LF_PowerGrid";
-        prefix = "LF_PowerGrid";
+        name = "LFPowerGrid";
+        prefix = "LFPowerGrid";
         credits = "";
         author = "LF";
         authorID = "0";
@@ -34,17 +34,17 @@ class CfgMods
             {
                 value = "";
                 // Tolerant paths to survive different packers (with/without root folder, case differences)
-                files[] = { "LF_PowerGrid/scripts/3_Game", "LF_PowerGrid/Scripts/3_Game", "scripts/3_Game", "Scripts/3_Game" };
+                files[] = { "LFPowerGrid/scripts/3_Game", "LFPowerGrid/Scripts/3_Game", "scripts/3_Game", "Scripts/3_Game" };
             };
             class worldScriptModule
             {
                 value = "";
-                files[] = { "LF_PowerGrid/scripts/4_World", "LF_PowerGrid/Scripts/4_World", "scripts/4_World", "Scripts/4_World" };
+                files[] = { "LFPowerGrid/scripts/4_World", "LFPowerGrid/Scripts/4_World", "scripts/4_World", "Scripts/4_World" };
             };
             class missionScriptModule
             {
                 value = "";
-                files[] = { "LF_PowerGrid/scripts/5_Mission", "LF_PowerGrid/Scripts/5_Mission", "scripts/5_Mission", "Scripts/5_Mission" };
+                files[] = { "LFPowerGrid/scripts/5_Mission", "LFPowerGrid/Scripts/5_Mission", "scripts/5_Mission", "Scripts/5_Mission" };
             };
         };
     };
@@ -94,7 +94,7 @@ class CfgVehicles
         scope = 2;
         displayName = "Splitter Kit";
         descriptionShort = "A power splitter. Place to deploy.";
-        model = "\LF_PowerGrid\data\splitter\lf_splitter.p3d";
+        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
         weight = 3000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
@@ -118,7 +118,7 @@ class CfgVehicles
         scope = 2;
         displayName = "Power Splitter";
         descriptionShort = "Splits incoming power into 3 outputs.";
-        model = "\LF_PowerGrid\data\splitter\lf_splitter.p3d";
+        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
         weight = 5000;
         itemSize[] = {3, 3};
         rotationFlags = 17;

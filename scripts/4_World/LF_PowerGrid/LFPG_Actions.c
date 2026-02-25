@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Actions (v0.7.35)
+// LF_PowerGrid - Actions (v0.7.37)
 //
 // v0.7.14: LFPG_FormatFloat hardened against NaN/overflow.
 //          OnExecuteServer hardened with null/empty guards.
@@ -7,6 +7,11 @@
 // v0.7.35 (Bloque F): ToggleSource text debounce — prevents
 //   scroll menu flicker when net-synced switch state oscillates
 //   during client-server roundtrip. 800ms hysteresis window.
+//
+// v0.7.37 (Bug fix): Sparkplug validation in ToggleSource.
+//   - ActionCondition: hide "Turn On" without valid sparkplug
+//   - OnExecuteServer: server-side gate before LFPG_ToggleSource
+//   Both client and server now enforce sparkplug requirement.
 //
 // Per-port scroll actions:
 //   Port0..Port5: aim at device with CableReel -> shows each
@@ -862,13 +867,24 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (LFPG_WorldUtil.DistSq(player.GetPosition(), gen.GetPosition()) > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
-        // v0.7.35 (Bloque F): Debounced dynamic text to avoid scroll menu flicker.
+        // v0.7.37 (Bug fix): Sparkplug gate + debounced dynamic text.
+        // When OFF: only show action if sparkplug is present and not ruined.
+        //   Prevents turning on without sparkplug entirely.
+        // When ON:  always show "Turn Off" (player must be able to shut down).
+        // IsSparkPlugValid uses FindAttachmentBySlotName which works on
+        // both client and server (attachment state is synced via network).
         bool isOn = gen.LFPG_GetSwitchState();
 
         string newText = "Turn On Generator";
         if (isOn)
         {
             newText = "Turn Off Generator";
+        }
+        else
+        {
+            // Generator is OFF — only allow turning on with valid sparkplug
+            if (!LFPG_DeviceLifecycle.IsSparkPlugValid(gen))
+                return false;
         }
 
         // Identity check: different generator → update immediately, no debounce.
@@ -919,24 +935,33 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (!gen)
             return;
 
-        // v0.7.23b: Simple toggle — always succeeds.
+        // v0.7.37 (Bug fix): Server-side sparkplug gate before toggle.
+        // If player wants to turn ON but sparkplug is missing/ruined,
+        // block and give clear feedback. Turn OFF always allowed.
+        bool wasOn = gen.LFPG_GetSwitchState();
+
+        if (!wasOn && !LFPG_DeviceLifecycle.IsSparkPlugValid(gen))
+        {
+            // Trying to turn ON without valid sparkplug — block
+            PlayerBase blockPlayer = PlayerBase.Cast(action_data.m_Player);
+            if (blockPlayer)
+            {
+                blockPlayer.MessageStatus("[LFPG] Cannot start: needs Spark Plug");
+            }
+            return;
+        }
+
         gen.LFPG_ToggleSource();
 
-        // Feedback: show switch state + whether actually producing power
+        // Feedback: show resulting state
         PlayerBase execPlayer = PlayerBase.Cast(action_data.m_Player);
         if (execPlayer)
         {
-            bool switchOn = gen.LFPG_GetSwitchState();
-            bool producing = gen.LFPG_GetSourceOn();
+            bool nowOn = gen.LFPG_GetSwitchState();
 
-            if (!switchOn)
+            if (!nowOn)
             {
                 execPlayer.MessageStatus("[LFPG] Generator OFF");
-            }
-            else if (!producing)
-            {
-                // ON but not producing — missing spark plug
-                execPlayer.MessageStatus("[LFPG] Generator ON (not producing - needs Spark Plug)");
             }
             else
             {
