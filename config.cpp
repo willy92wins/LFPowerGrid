@@ -23,7 +23,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.7.32";
+        version = "0.7.36";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };

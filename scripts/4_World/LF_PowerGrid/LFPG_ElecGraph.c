@@ -1198,6 +1198,98 @@ class LFPG_ElecGraph
         return null;
     }
 
+    // v0.7.36 (Audit Feb2026): Pre-check component size before wire storage.
+    // Returns true if adding a wire between sourceId and targetId would
+    // cause the merged component to exceed LFPG_MAX_NODES_PER_COMPONENT.
+    // Called from FinishWiring BEFORE the replacement phase so the player
+    // gets clear feedback without any data mutation.
+    // Logic mirrors OnWireAdded watchdog but is read-only.
+    bool WouldExceedComponentLimit(string sourceId, string targetId)
+    {
+        #ifdef SERVER
+        if (sourceId == "" || targetId == "")
+            return false;
+
+        // Global hard-cap
+        if (m_NodeCount >= LFPG_MAX_NODES_GLOBAL)
+            return true;
+
+        int limit = LFPG_MAX_NODES_PER_COMPONENT;
+
+        ref LFPG_ElecNode nodeA;
+        ref LFPG_ElecNode nodeB;
+        bool hasA = m_Nodes.Find(sourceId, nodeA);
+        bool hasB = m_Nodes.Find(targetId, nodeB);
+
+        // Both nodes are new (not in graph yet) → merged size = 2, always OK
+        if (!hasA && !hasB)
+            return false;
+
+        if (!m_ComponentsDirty)
+        {
+            int compA = -1;
+            int compB = -1;
+            if (hasA && nodeA)
+                compA = nodeA.m_ComponentId;
+            if (hasB && nodeB)
+                compB = nodeB.m_ComponentId;
+
+            // Same component → no size growth
+            if (compA >= 0 && compA == compB)
+                return false;
+
+            // Different known components → O(1) size lookup
+            if (compA >= 0 && compB >= 0)
+            {
+                int sizeA = 0;
+                int sizeB = 0;
+                m_ComponentSizes.Find(compA, sizeA);
+                m_ComponentSizes.Find(compB, sizeB);
+                int mergedSize = sizeA + sizeB;
+                if (mergedSize > limit)
+                    return true;
+                return false;
+            }
+        }
+
+        // Fallback: BFS count (handles dirty components or new nodes)
+        int bfsSizeA = 1;
+        if (hasA && nodeA)
+        {
+            bfsSizeA = CountComponentLimited(sourceId, limit);
+        }
+        if (bfsSizeA > limit)
+            return true;
+
+        // Check if B is already in A's component (same component, no growth)
+        bool bInA = false;
+        if (hasA && nodeA && hasB && nodeB)
+        {
+            m_WdgVisited.Find(targetId, bInA);
+        }
+        if (bInA)
+            return false;
+
+        int remaining = limit - bfsSizeA;
+        if (remaining <= 0)
+            return true;
+
+        int bfsSizeB = 1;
+        if (hasB && nodeB)
+        {
+            bfsSizeB = CountComponentLimited(targetId, remaining);
+        }
+
+        int totalSize = bfsSizeA + bfsSizeB;
+        if (totalSize > limit)
+            return true;
+
+        return false;
+        #else
+        return false;
+        #endif
+    }
+
     array<ref LFPG_ElecEdge> GetIncoming(string deviceId)
     {
         ref array<ref LFPG_ElecEdge> arr;
@@ -2083,7 +2175,22 @@ class LFPG_ElecGraph
                     edgeDemand = targetNode.m_LastStableOutput;
                     if (edgeDemand < LFPG_PROPAGATION_EPSILON)
                     {
-                        edgeDemand = 0.0;
+                        // v0.7.36 (Audit Feb2026): Cold-start demand fallback.
+                        // When a passthrough hasn't been evaluated yet (fresh connect
+                        // or restart), m_LastStableOutput is 0. Using 0 as demand
+                        // causes the source to allocate 0 power → passthrough stays
+                        // at 0 output → perpetual deadlock. Use m_MaxOutput as the
+                        // upper-bound demand to bootstrap the passthrough.
+                        // After the first propagation tick, m_LastStableOutput will
+                        // have a real value and this fallback won't trigger.
+                        if (targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                        {
+                            edgeDemand = targetNode.m_MaxOutput;
+                        }
+                        else
+                        {
+                            edgeDemand = 0.0;
+                        }
                     }
                 }
             }

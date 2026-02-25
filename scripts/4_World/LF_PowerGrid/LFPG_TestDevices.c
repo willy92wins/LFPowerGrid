@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.29)
+// LF_PowerGrid - Example devices (v0.7.36)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
@@ -374,6 +374,29 @@ class LF_TestGenerator : PowerGenerator
     {
         super.OnVariablesSynchronized();
         LFPG_TryRegister();
+
+        #ifndef SERVER
+        // v0.7.35 D1+D4: Ensure renderer has wire data + immediate visual refresh
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                if (!r.HasOwnerData(m_DeviceId))
+                {
+                    // D1: Device just entered bubble — renderer lacks wire data.
+                    // Request sync from server (cooldown-throttled).
+                    r.RequestDeviceSync(m_DeviceId);
+                }
+                else
+                {
+                    // D4: Already have wire data — immediately refresh visual state
+                    // (LoadRatio, OverloadMask, WarningMask) to eliminate CullTick delay.
+                    r.NotifyOwnerVisualChanged(m_DeviceId);
+                }
+            }
+        }
+        #endif
     }
 
     protected void LFPG_UpdateDeviceIdString()
@@ -771,6 +794,20 @@ class LF_TestGenerator : PowerGenerator
         return false;
     }
 
+    // v0.7.36 (M4): Block heavy carry system.
+    // PowerGenerator is a heavy item in vanilla DayZ with its own C++ carry
+    // path that can bypass CanPutIntoHands entirely. These overrides match
+    // the pattern already applied to LF_TestLamp (v0.7.29 audit fix).
+    override bool CanBePickedUp()
+    {
+        return false;
+    }
+
+    override bool IsHeavyBehaviour()
+    {
+        return false;
+    }
+
     // v0.7.27: Delegates to DeviceLifecycle for movement detection.
     override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
     {
@@ -939,6 +976,17 @@ class LF_TestLamp : Spotlight
         else
         {
             LFPG_DestroyLight();
+        }
+
+        // v0.7.35 D1: Consumer entered bubble — request sync so owner wires
+        // targeting this device become visible. Cooldown-throttled per deviceId.
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                r.RequestDeviceSync(m_DeviceId);
+            }
         }
         #endif
     }

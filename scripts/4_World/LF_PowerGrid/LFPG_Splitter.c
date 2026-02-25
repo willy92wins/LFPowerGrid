@@ -247,6 +247,28 @@ class LF_Splitter : Inventory_Base
     {
         super.OnVariablesSynchronized();
         LFPG_TryRegister();
+
+        #ifndef SERVER
+        // v0.7.35 D1+D4: Splitter is both owner (has output wires) and consumer
+        // (receives input from Generator). Always request sync because a distant
+        // owner may have wires targeting this splitter that aren't synced yet.
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                // D1: Request sync for any missing wire data (cooldown-throttled)
+                r.RequestDeviceSync(m_DeviceId);
+
+                // D4: If we already have our own owner data, immediately refresh
+                // visual state (OverloadMask, WarningMask) to eliminate CullTick delay.
+                if (r.HasOwnerData(m_DeviceId))
+                {
+                    r.NotifyOwnerVisualChanged(m_DeviceId);
+                }
+            }
+        }
+        #endif
     }
 
     protected void LFPG_UpdateDeviceIdString()

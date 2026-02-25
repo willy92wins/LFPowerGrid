@@ -3,6 +3,7 @@
 //
 // v0.7.15 (Sprint 3 P2b): Atomic save + backup restore.
 // v0.7.16 (Hotfix H4): AtomicVerifyReadback setting.
+// v0.7.35 (Gemini 3b): Range validation + clamping on load.
 // =========================================================
 
 class LFPG_ServerSettings
@@ -35,6 +36,19 @@ class LFPG_ServerSettings
     bool AtomicVerifyReadback = true;
 };
 
+// ---- Validation bounds (v0.7.35, Gemini 3b) ----
+// Hard limits for settings loaded from JSON. Values outside these
+// ranges are clamped and logged as warnings. Prevents misconfigured
+// servers from causing OOM, spam, or invisible-wire issues.
+static const int   LFPG_SETTINGS_MIN_WIRES_PLAYER = 1;
+static const int   LFPG_SETTINGS_MAX_WIRES_PLAYER = 1024;
+static const int   LFPG_SETTINGS_MIN_WIRES_DEVICE = 1;
+static const int   LFPG_SETTINGS_MAX_WIRES_DEVICE = 128;
+static const float LFPG_SETTINGS_MIN_RPC_COOLDOWN = 0.1;
+static const float LFPG_SETTINGS_MAX_RPC_COOLDOWN = 30.0;
+static const float LFPG_SETTINGS_MIN_BUBBLE_M     = 0.0;
+static const float LFPG_SETTINGS_MAX_BUBBLE_M     = 500.0;
+
 class LFPG_Settings
 {
     protected static ref LFPG_ServerSettings s_Settings;
@@ -47,6 +61,111 @@ class LFPG_Settings
         if (!s_Settings)
             Load();
         return s_Settings;
+    }
+
+    // ---- v0.7.35 (Gemini 3b): Range validation helpers ----
+    // Returns clamped value. Enforce has no Math.Clamp for int/float,
+    // so we do manual min/max comparisons.
+
+    protected static int ClampInt(int val, int lo, int hi)
+    {
+        if (val < lo)
+            return lo;
+        if (val > hi)
+            return hi;
+        return val;
+    }
+
+    protected static float ClampFloat(float val, float lo, float hi)
+    {
+        if (val < lo)
+            return lo;
+        if (val > hi)
+            return hi;
+        return val;
+    }
+
+    // v0.7.35 (Gemini 3b): Validate and clamp all numeric settings.
+    // Called after successful JSON deserialization. Logs a warning
+    // for every field that required clamping so admins know their
+    // settings.json has out-of-range values.
+    protected static void ValidateAndClamp()
+    {
+        if (!s_Settings)
+            return;
+
+        int clamped = 0;
+        int intVal;
+        float floatVal;
+
+        // --- ver: must be >= 1 ---
+        if (s_Settings.ver < 1)
+        {
+            LFPG_Util.Warn("Settings: ver=" + s_Settings.ver.ToString() + " invalid, reset to 1");
+            s_Settings.ver = 1;
+            clamped = clamped + 1;
+        }
+
+        // --- MaxWiresPerPlayer ---
+        intVal = ClampInt(s_Settings.MaxWiresPerPlayer,
+                          LFPG_SETTINGS_MIN_WIRES_PLAYER,
+                          LFPG_SETTINGS_MAX_WIRES_PLAYER);
+        if (intVal != s_Settings.MaxWiresPerPlayer)
+        {
+            LFPG_Util.Warn("Settings: MaxWiresPerPlayer=" + s_Settings.MaxWiresPerPlayer.ToString()
+                + " clamped to " + intVal.ToString()
+                + " [" + LFPG_SETTINGS_MIN_WIRES_PLAYER.ToString()
+                + ".." + LFPG_SETTINGS_MAX_WIRES_PLAYER.ToString() + "]");
+            s_Settings.MaxWiresPerPlayer = intVal;
+            clamped = clamped + 1;
+        }
+
+        // --- MaxWiresPerDevice ---
+        intVal = ClampInt(s_Settings.MaxWiresPerDevice,
+                          LFPG_SETTINGS_MIN_WIRES_DEVICE,
+                          LFPG_SETTINGS_MAX_WIRES_DEVICE);
+        if (intVal != s_Settings.MaxWiresPerDevice)
+        {
+            LFPG_Util.Warn("Settings: MaxWiresPerDevice=" + s_Settings.MaxWiresPerDevice.ToString()
+                + " clamped to " + intVal.ToString()
+                + " [" + LFPG_SETTINGS_MIN_WIRES_DEVICE.ToString()
+                + ".." + LFPG_SETTINGS_MAX_WIRES_DEVICE.ToString() + "]");
+            s_Settings.MaxWiresPerDevice = intVal;
+            clamped = clamped + 1;
+        }
+
+        // --- RpcCooldownSeconds ---
+        floatVal = ClampFloat(s_Settings.RpcCooldownSeconds,
+                              LFPG_SETTINGS_MIN_RPC_COOLDOWN,
+                              LFPG_SETTINGS_MAX_RPC_COOLDOWN);
+        if (floatVal != s_Settings.RpcCooldownSeconds)
+        {
+            LFPG_Util.Warn("Settings: RpcCooldownSeconds=" + s_Settings.RpcCooldownSeconds.ToString()
+                + " clamped to " + floatVal.ToString()
+                + " [" + LFPG_SETTINGS_MIN_RPC_COOLDOWN.ToString()
+                + ".." + LFPG_SETTINGS_MAX_RPC_COOLDOWN.ToString() + "]");
+            s_Settings.RpcCooldownSeconds = floatVal;
+            clamped = clamped + 1;
+        }
+
+        // --- DeviceBubbleM ---
+        floatVal = ClampFloat(s_Settings.DeviceBubbleM,
+                              LFPG_SETTINGS_MIN_BUBBLE_M,
+                              LFPG_SETTINGS_MAX_BUBBLE_M);
+        if (floatVal != s_Settings.DeviceBubbleM)
+        {
+            LFPG_Util.Warn("Settings: DeviceBubbleM=" + s_Settings.DeviceBubbleM.ToString()
+                + " clamped to " + floatVal.ToString()
+                + " [" + LFPG_SETTINGS_MIN_BUBBLE_M.ToString()
+                + ".." + LFPG_SETTINGS_MAX_BUBBLE_M.ToString() + "]");
+            s_Settings.DeviceBubbleM = floatVal;
+            clamped = clamped + 1;
+        }
+
+        if (clamped > 0)
+        {
+            LFPG_Util.Warn("Settings: " + clamped.ToString() + " value(s) clamped. Review LF_PowerGrid.json");
+        }
     }
 
     static void Load()
@@ -75,6 +194,9 @@ class LFPG_Settings
             }
             else
             {
+                // v0.7.35 (Gemini 3b): Validate ranges before logging
+                ValidateAndClamp();
+
                 string msg = "Settings loaded:";
                 msg = msg + " MaxWiresPerPlayer=" + s_Settings.MaxWiresPerPlayer.ToString();
                 msg = msg + " MaxWiresPerDevice=" + s_Settings.MaxWiresPerDevice.ToString();

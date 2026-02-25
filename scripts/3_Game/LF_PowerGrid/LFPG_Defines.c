@@ -197,7 +197,8 @@ enum LFPG_RPC_SubId
     SYNC_OWNER_WIRES = 5,
     DIAG_CLIENT_LOG = 7,
     CLIENT_MSG = 8,
-    CUT_PORT = 9
+    CUT_PORT = 9,
+    REQUEST_DEVICE_SYNC = 10    // v0.7.35 D1: client requests wire sync for a specific device
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
@@ -329,7 +330,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.33";
+static const string LFPG_VERSION_STR = "0.7.36";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -345,6 +346,7 @@ static const int   LFPG_MAX_WIRES_PER_PLAYER = 128;    // global per-player wire
 
 // ---- RPC rate limiting ----
 static const float LFPG_RPC_COOLDOWN_S       = 0.5;    // seconds between player RPC actions
+static const float LFPG_DEVICE_SYNC_COOLDOWN_S = 30.0;  // v0.7.35 D1: client-side cooldown per device sync request
 
 // ---- Culling and visibility ----
 static const float LFPG_CULL_DISTANCE_M      = 50.0;   // max render distance for cables

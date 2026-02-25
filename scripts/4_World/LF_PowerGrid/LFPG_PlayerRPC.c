@@ -40,6 +40,10 @@ modded class PlayerBase
         {
             HandleLFPG_DiagClientLog(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.REQUEST_DEVICE_SYNC)
+        {
+            HandleLFPG_RequestDeviceSync(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -390,6 +394,18 @@ modded class PlayerBase
         // Resolve source as LFPG or vanilla
         bool isLfpgOwner = LFPG_DeviceAPI.HasWireStore(srcObj);
         bool anyRemoved = false;
+
+        // ============================================================
+        // COMPONENT SIZE CHECK (v0.7.36, Audit Feb2026): reject wire
+        // if it would merge two components into one exceeding the
+        // per-component node limit. Must run BEFORE any modifications.
+        // ============================================================
+        if (LFPG_NetworkManager.Get().CheckComponentSizeBeforeWire(srcRealId, dstRealId))
+        {
+            LFPG_Util.Warn("[FinishWiring-Server] denied (component size limit) " + srcRealId + " -> " + dstRealId);
+            LFPG_SendClientMsg(this, "Network too large. Cannot add more connections to this grid.");
+            return;
+        }
 
         // ============================================================
         // CYCLE CHECK (Sprint 4.1): reject wire if it would create a
@@ -1021,6 +1037,34 @@ modded class PlayerBase
         LFPG_Util.Info("FullSync requested by pid=" + sender.GetPlainId());
         PlayerBase player = this;
         LFPG_NetworkManager.Get().SendFullSyncTo(player);
+    }
+
+    // =====================================
+    // SERVER: Device-specific sync request (v0.7.35 D1)
+    // Client sends deviceId when entering range of a device
+    // whose wires are missing from the renderer.
+    // =====================================
+    protected void HandleLFPG_RequestDeviceSync(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender) return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
+        string deviceId;
+        if (!ctx.Read(deviceId))
+        {
+            LFPG_Util.Warn("[SERVER] RequestDeviceSync: read deviceId FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+
+        if (deviceId == "")
+            return;
+
+        LFPG_Util.Info("[SERVER] RequestDeviceSync deviceId=" + deviceId + " pid=" + sender.GetPlainId());
+
+        PlayerBase player = this;
+        LFPG_NetworkManager.Get().SendDeviceSyncTo(player, deviceId);
     }
 
     // =====================================

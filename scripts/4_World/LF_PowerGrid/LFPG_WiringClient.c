@@ -17,6 +17,11 @@
 // v0.7.14: Fixed behind-camera preview lines (parallel to screen edges).
 //   Replaced screen-space extension with 3D near-plane clipping.
 //
+// v0.7.36 (Audit Lote 1):
+//   H1 — Cohen-Sutherland screen clipping for preview (same fix as F1.2)
+//   M1 — Reusable PreConnectParams (avoids per-frame allocation)
+//   L3 — FrameCounter wrap to prevent overflow
+//
 // Colour coding (hologram style, v0.7.12 semáforo):
 //   GREEN  (0xFF00DD00) - connection valid + within limits
 //   YELLOW (0xFFFFDD00) - segment near limit (80%+)
@@ -65,6 +70,15 @@ class LFPG_WiringClient
     // Prevents stuck sessions from disconnect, alt-tab, or unresponsive server.
     protected float m_SessionStartMs;
 
+    // v0.7.36 (H1): Cohen-Sutherland clip output buffers.
+    // Reused per-segment to avoid allocation (mirrors CableRenderer approach).
+    protected vector m_ClipA;
+    protected vector m_ClipB;
+
+    // v0.7.36 (M1): Reusable PreConnectParams to avoid per-frame allocation.
+    // Fields are overwritten each frame in DrawPreviewFrame.
+    protected ref LFPG_PreConnectParams m_PreConnectParams;
+
     void LFPG_WiringClient()
     {
         m_Waypoints = new array<vector>;
@@ -74,6 +88,9 @@ class LFPG_WiringClient
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
         m_SessionStartMs = 0.0;
+        m_ClipA = "0 0 0";
+        m_ClipB = "0 0 0";
+        m_PreConnectParams = new LFPG_PreConnectParams();
     }
 
     static LFPG_WiringClient Get()
@@ -417,12 +434,138 @@ class LFPG_WiringClient
         return firstAny;
     }
 
+    // =========================================================
+    // v0.7.36 (H1): Cohen-Sutherland screen clipping for preview.
+    // Mirrors CableRenderer implementation. Fixes preview segments
+    // spanning the viewport with both endpoints off-screen being
+    // incorrectly culled (same bug as committed cables F1.2).
+    //
+    // Outcode bits: 1=LEFT, 2=RIGHT, 4=TOP, 8=BOTTOM
+    // =========================================================
+    protected int ComputeOutcode(float x, float y, float minX, float minY, float maxX, float maxY)
+    {
+        int code = 0;
+        if (x < minX)
+        {
+            code = code | 1;
+        }
+        if (x > maxX)
+        {
+            code = code | 2;
+        }
+        if (y < minY)
+        {
+            code = code | 4;
+        }
+        if (y > maxY)
+        {
+            code = code | 8;
+        }
+        return code;
+    }
+
+    // Cohen-Sutherland line clipping against screen rectangle.
+    // Returns true if any portion is visible (result in m_ClipA, m_ClipB).
+    // Returns false if entirely outside.
+    // Max 8 iterations to guarantee termination.
+    protected bool ClipSegToScreen(float x1, float y1, float x2, float y2,
+                                   float minX, float minY, float maxX, float maxY)
+    {
+        int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+        int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+
+        int iter = 0;
+        while (iter < 8)
+        {
+            iter = iter + 1;
+
+            if ((codeA | codeB) == 0)
+            {
+                m_ClipA[0] = x1;
+                m_ClipA[1] = y1;
+                m_ClipB[0] = x2;
+                m_ClipB[1] = y2;
+                return true;
+            }
+
+            if ((codeA & codeB) != 0)
+            {
+                return false;
+            }
+
+            int codeOut = codeA;
+            if (codeOut == 0)
+            {
+                codeOut = codeB;
+            }
+
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            float cx = 0.0;
+            float cy = 0.0;
+
+            if ((codeOut & 8) != 0)
+            {
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (maxY - y1) / dy;
+                cy = maxY;
+            }
+            else if ((codeOut & 4) != 0)
+            {
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (minY - y1) / dy;
+                cy = minY;
+            }
+            else if ((codeOut & 2) != 0)
+            {
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (maxX - x1) / dx;
+                cx = maxX;
+            }
+            else if ((codeOut & 1) != 0)
+            {
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (minX - x1) / dx;
+                cx = minX;
+            }
+
+            if (codeOut == codeA)
+            {
+                x1 = cx;
+                y1 = cy;
+                codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+            }
+            else
+            {
+                x2 = cx;
+                y2 = cy;
+                codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+            }
+        }
+
+        m_ClipA[0] = x1;
+        m_ClipA[1] = y1;
+        m_ClipB[0] = x2;
+        m_ClipB[1] = y2;
+        return true;
+    }
+
     protected void DrawPreviewFrame()
     {
         if (GetGame().IsDedicatedServer())
             return;
 
         m_FrameCounter = m_FrameCounter + 1;
+        // v0.7.36 (L3): Wrap to prevent int overflow in very long sessions.
+        // 30000 frames ≈ 8.3 minutes at 60fps, safely above the 300-frame log interval.
+        if (m_FrameCounter >= 30000)
+        {
+            m_FrameCounter = 0;
+        }
 
         bool doLog = (m_FrameCounter % 300 == 1);
 
@@ -517,20 +660,20 @@ class LFPG_WiringClient
         }
 
         // B2: Evaluate connection rules via shared helper
-        LFPG_PreConnectParams pcp2 = new LFPG_PreConnectParams();
-        pcp2.srcEntity = srcObj;
-        pcp2.srcDeviceId = m_SrcDeviceId;
-        pcp2.srcPort = m_SrcPort;
-        pcp2.srcPortDir = m_SrcPortDir;
-        pcp2.dstEntity = targetDevice;
-        pcp2.dstDeviceId = snapDstDeviceId;
-        pcp2.dstPort = snapDstPort;
-        pcp2.dstPortDir = snapDstPortDir;
-        pcp2.waypoints = m_Waypoints;
-        pcp2.startPos = startPos;
-        pcp2.endPos = cursorPos;
+        // v0.7.36 (M1): Reuse class member instead of allocating per-frame.
+        m_PreConnectParams.srcEntity = srcObj;
+        m_PreConnectParams.srcDeviceId = m_SrcDeviceId;
+        m_PreConnectParams.srcPort = m_SrcPort;
+        m_PreConnectParams.srcPortDir = m_SrcPortDir;
+        m_PreConnectParams.dstEntity = targetDevice;
+        m_PreConnectParams.dstDeviceId = snapDstDeviceId;
+        m_PreConnectParams.dstPort = snapDstPort;
+        m_PreConnectParams.dstPortDir = snapDstPortDir;
+        m_PreConnectParams.waypoints = m_Waypoints;
+        m_PreConnectParams.startPos = startPos;
+        m_PreConnectParams.endPos = cursorPos;
 
-        LFPG_PreConnectResult preResult = LFPG_ConnectionRules.CanPreConnect(pcp2);
+        LFPG_PreConnectResult preResult = LFPG_ConnectionRules.CanPreConnect(m_PreConnectParams);
 
         m_LastPreConnectStatus = preResult.m_Status;
         m_LastPreConnectReason = preResult.m_Reason;
@@ -728,7 +871,9 @@ class LFPG_WiringClient
                     sy2 = clipPB[1];
                 }
 
-                // Off-screen culling
+                // v0.7.36 (H1): Cohen-Sutherland screen clipping for preview.
+                // Replaces offA && offB cull that incorrectly culled segments
+                // spanning the viewport (same bug as committed cables F1.2).
                 bool offA = false;
                 if (sx1 < -margin || sx1 > swF + margin || sy1 < -margin || sy1 > shF + margin)
                 {
@@ -739,10 +884,19 @@ class LFPG_WiringClient
                 {
                     offB = true;
                 }
-                if (offA && offB)
+                if (offA || offB)
                 {
-                    tPrv.m_CulledOffScreen = tPrv.m_CulledOffScreen + 1;
-                    continue;
+                    bool segVisible = ClipSegToScreen(sx1, sy1, sx2, sy2,
+                        -margin, -margin, swF + margin, shF + margin);
+                    if (!segVisible)
+                    {
+                        tPrv.m_CulledOffScreen = tPrv.m_CulledOffScreen + 1;
+                        continue;
+                    }
+                    sx1 = m_ClipA[0];
+                    sy1 = m_ClipA[1];
+                    sx2 = m_ClipB[0];
+                    sy2 = m_ClipB[1];
                 }
 
                 hud.DrawLineScreen(sx1, sy1, sx2, sy2, 3.0, color);

@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - client cable renderer (v0.7.35)
+// LF_PowerGrid - client cable renderer (v0.7.36)
 //
 // Event-driven cable rendering with frozen geometry.
 //
@@ -276,9 +276,13 @@ class LFPG_WireSegmentInfo
         int i;
         LFPG_CableParticle seg;
 
-        // Add first point of first segment
-        sumPos = sumPos + segments[0].m_From;
-        pointCount = pointCount + 1;
+        // Add first point of first segment (with null guard)
+        // v0.7.36 (L1): segments[0] can be null if first Create() failed.
+        if (segments[0])
+        {
+            sumPos = sumPos + segments[0].m_From;
+            pointCount = pointCount + 1;
+        }
 
         for (i = 0; i < segments.Count(); i = i + 1)
         {
@@ -305,10 +309,14 @@ class LFPG_WireSegmentInfo
         float maxDist = 0.0;
         float d;
 
-        d = vector.Distance(cachedCenter, segments[0].m_From);
-        if (d > maxDist)
+        // v0.7.36 (L1): null guard on segments[0] for radius calc
+        if (segments[0])
         {
-            maxDist = d;
+            d = vector.Distance(cachedCenter, segments[0].m_From);
+            if (d > maxDist)
+            {
+                maxDist = d;
+            }
         }
 
         for (i = 0; i < segments.Count(); i = i + 1)
@@ -430,6 +438,11 @@ class LFPG_RetryEntry
 class LFPG_CableRenderer
 {
     protected static ref LFPG_CableRenderer s_Instance;
+
+    // v0.7.35 D1: Cooldown map for REQUEST_DEVICE_SYNC RPCs.
+    // Maps deviceId -> tick time of last request. Prevents RPC spam
+    // when entering a large base with many devices.
+    protected static ref map<string, float> s_DeviceSyncCooldowns;
 
     protected ref map<string, ref LFPG_OwnerWireState> m_ByOwnerId;
 
@@ -571,6 +584,10 @@ class LFPG_CableRenderer
     // segments and caches from the previous session.
     static void Reset()
     {
+        // v0.7.36 (M3): Clear static cooldown map to prevent stale
+        // throttle entries from a previous server session.
+        s_DeviceSyncCooldowns = null;
+
         if (s_Instance)
         {
             delete s_Instance;
@@ -758,6 +775,13 @@ class LFPG_CableRenderer
             // Decode succeeded: now safe to destroy old geometry and rebuild
             st.lastJson = json;
 
+            // v0.7.35 D2: Reset visual state masks on topology change.
+            // Old mask bits may map to different wires after add/remove.
+            // CullTick or NotifyOwnerVisualChanged will repopulate from SyncVars.
+            st.lastOverloadMask = 0;
+            st.lastWarningMask  = 0;
+            st.lastLoadRatio    = 0.0;
+
             // Topology changed: destroy old segments + clear retries for this owner
             DestroyOwnerLines(ownerDeviceId);
             ClearOwnerRetries(ownerDeviceId);
@@ -785,6 +809,111 @@ class LFPG_CableRenderer
         else
         {
             LFPG_Util.Debug("[CableRenderer] UpsertOwnerBlob SKIP (json unchanged) owner=" + ownerDeviceId);
+        }
+    }
+
+    // ==========================================================
+    // v0.7.35 D1: Check if renderer already has data for an owner
+    // ==========================================================
+    bool HasOwnerData(string ownerDeviceId)
+    {
+        if (ownerDeviceId == "") return false;
+
+        ref LFPG_OwnerWireState st;
+        if (m_ByOwnerId.Find(ownerDeviceId, st) && st)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    // ==========================================================
+    // v0.7.35 D4: Immediate visual state refresh from SyncVars.
+    // Called from OnVariablesSynchronized on owner devices
+    // (Generator, Splitter) to eliminate the 0-2s CullTick delay.
+    // ==========================================================
+    void NotifyOwnerVisualChanged(string ownerDeviceId)
+    {
+        if (ownerDeviceId == "") return;
+
+        ref LFPG_OwnerWireState st;
+        if (!m_ByOwnerId.Find(ownerDeviceId, st) || !st) return;
+
+        EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+        if (!ownerObj) return;
+
+        st.lastPowered      = IsOwnerActive(ownerObj);
+        st.lastLoadRatio     = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
+        st.lastOverloadMask  = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
+        st.lastWarningMask   = LFPG_DeviceAPI.GetWarningMask(ownerObj);
+
+        LFPG_Util.Debug("[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId
+            + " load=" + st.lastLoadRatio.ToString()
+            + " overload=" + st.lastOverloadMask.ToString()
+            + " warning=" + st.lastWarningMask.ToString());
+    }
+
+    // ==========================================================
+    // v0.7.35 D1: Client sends REQUEST_DEVICE_SYNC RPC.
+    // Cooldown per deviceId prevents spam when entering large bases.
+    // Server responds with owner wire blobs relevant to this device.
+    // ==========================================================
+    void RequestDeviceSync(string deviceId)
+    {
+        if (deviceId == "") return;
+
+        if (!s_DeviceSyncCooldowns)
+        {
+            s_DeviceSyncCooldowns = new map<string, float>;
+        }
+
+        float now = GetGame().GetTickTime();
+
+        // Check cooldown: skip if recently requested
+        float lastReq;
+        if (s_DeviceSyncCooldowns.Find(deviceId, lastReq))
+        {
+            if ((now - lastReq) < LFPG_DEVICE_SYNC_COOLDOWN_S)
+            {
+                LFPG_Util.Debug("[CableRenderer] RequestDeviceSync THROTTLED deviceId=" + deviceId);
+                return;
+            }
+        }
+
+        s_DeviceSyncCooldowns[deviceId] = now;
+
+        // Periodic purge of stale entries to prevent unbounded map growth
+        if (s_DeviceSyncCooldowns.Count() > 50)
+        {
+            PurgeStaleDeviceSyncCooldowns(now);
+        }
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player) return;
+
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write((int)LFPG_RPC_SubId.REQUEST_DEVICE_SYNC);
+        rpc.Write(deviceId);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+
+        LFPG_Util.Info("[CableRenderer] RequestDeviceSync sent deviceId=" + deviceId);
+    }
+
+    // Helper: remove cooldown entries older than 60s
+    protected void PurgeStaleDeviceSyncCooldowns(float now)
+    {
+        array<string> toRemove = new array<string>;
+        int i;
+        for (i = 0; i < s_DeviceSyncCooldowns.Count(); i = i + 1)
+        {
+            if ((now - s_DeviceSyncCooldowns.GetElement(i)) > 60.0)
+            {
+                toRemove.Insert(s_DeviceSyncCooldowns.GetKey(i));
+            }
+        }
+        for (i = 0; i < toRemove.Count(); i = i + 1)
+        {
+            s_DeviceSyncCooldowns.Remove(toRemove[i]);
         }
     }
 
@@ -1492,7 +1621,7 @@ class LFPG_CableRenderer
             for (gk = 0; gk < ghostKeys.Count(); gk = gk + 1)
             {
                 string ghostId = ghostKeys[gk];
-                LFPG_Util.Info("[CableRenderer] CullTick: removing ghost owner=" + ghostId + " (entity null for 10+s)");
+                LFPG_Util.Info("[CableRenderer] CullTick: removing ghost owner=" + ghostId + " (entity null for 30+s)");
                 DestroyOwnerLines(ghostId);
                 ClearOwnerRetries(ghostId);
                 m_ByOwnerId.Remove(ghostId);
@@ -2782,19 +2911,22 @@ class LFPG_CableRenderer
         m_TempKeys.Clear();
         string prefix = ownerId + "|";
 
+        // v0.7.36 (L2): Filter during collection instead of collecting all keys.
+        // With 200+ wires across 20+ owners, this avoids copying ~190 irrelevant keys.
         int i;
         for (i = 0; i < m_WireSegments.Count(); i = i + 1)
         {
-            m_TempKeys.Insert(m_WireSegments.GetKey(i));
+            string key = m_WireSegments.GetKey(i);
+            if (key.IndexOf(prefix) == 0)
+            {
+                m_TempKeys.Insert(key);
+            }
         }
 
         int k;
         for (k = 0; k < m_TempKeys.Count(); k = k + 1)
         {
-            if (m_TempKeys[k].IndexOf(prefix) == 0)
-            {
-                DestroyWire(m_TempKeys[k]);
-            }
+            DestroyWire(m_TempKeys[k]);
         }
     }
 

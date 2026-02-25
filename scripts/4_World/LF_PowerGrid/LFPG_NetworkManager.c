@@ -338,6 +338,20 @@ class LFPG_NetworkManager
         #endif
     }
 
+    // v0.7.36 (Audit Feb2026): Pre-check component size before wire storage.
+    // Returns true if the merged component would exceed the node limit.
+    // Called from FinishWiring before any mutations.
+    bool CheckComponentSizeBeforeWire(string sourceId, string targetId)
+    {
+        #ifdef SERVER
+        if (!m_Graph)
+            return false;
+        return m_Graph.WouldExceedComponentLimit(sourceId, targetId);
+        #else
+        return false;
+        #endif
+    }
+
     // Notify the graph that a wire was successfully added.
     // Called AFTER the wire is stored in the device or vanilla store.
     // Sprint 4.2 S2 (H1): returns false if edge was not actually inserted.
@@ -973,10 +987,37 @@ class LFPG_NetworkManager
 
         LFPG_Util.Info("[BroadcastOwnerWires] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + owner.GetType() + " jsonLen=" + json.Length().ToString());
 
+        // v0.7.35 D8: Warn if blob approaching practical RPC size limit
+        if (json.Length() > 12000)
+        {
+            LFPG_Util.Warn("[BroadcastOwnerWires] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
+        }
+
         // v0.7.11 (A3): Precompute squared threshold for player distance culling.
         float syncMaxDist = LFPG_CULL_DISTANCE_M + 20.0;
         float syncMaxDistSq = syncMaxDist * syncMaxDist;
         vector ownerPos = owner.GetPosition();
+
+        // v0.7.35 B-CRIT2: Collect unique target device positions.
+        // Players near ANY target also need the owner's wire blob.
+        array<vector> targetPositions = new array<vector>;
+        ref array<ref LFPG_WireData> ownerWires = LFPG_DeviceAPI.GetDeviceWires(owner);
+        if (ownerWires)
+        {
+            LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
+            int tw;
+            for (tw = 0; tw < ownerWires.Count(); tw = tw + 1)
+            {
+                if (!ownerWires[tw]) continue;
+                if (ownerWires[tw].targetDeviceId == "") continue;
+
+                EntityAI targetObj = reg.FindById(ownerWires[tw].targetDeviceId);
+                if (targetObj)
+                {
+                    targetPositions.Insert(targetObj.GetPosition());
+                }
+            }
+        }
 
         int i;
         for (i = 0; i < players.Count(); i = i + 1)
@@ -984,9 +1025,26 @@ class LFPG_NetworkManager
             PlayerBase pb = PlayerBase.Cast(players[i]);
             if (!pb) continue;
 
+            vector playerPos = pb.GetPosition();
+
             // v0.7.11 (A3): Compare in squared domain — eliminates sqrt per player.
-            if (LFPG_WorldUtil.DistSq(pb.GetPosition(), ownerPos) > syncMaxDistSq)
-                continue;
+            bool inRange = (LFPG_WorldUtil.DistSq(playerPos, ownerPos) <= syncMaxDistSq);
+
+            // v0.7.35 B-CRIT2: Also check distance to each target device
+            if (!inRange)
+            {
+                int tp;
+                for (tp = 0; tp < targetPositions.Count(); tp = tp + 1)
+                {
+                    if (LFPG_WorldUtil.DistSq(playerPos, targetPositions[tp]) <= syncMaxDistSq)
+                    {
+                        inRange = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!inRange) continue;
 
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES);
@@ -1038,15 +1096,51 @@ class LFPG_NetworkManager
         float vSyncMaxDistSq = vSyncMaxDist * vSyncMaxDist;
         vector ownerObjPos = ownerObj.GetPosition();
 
+        // v0.7.35 B-CRIT2: Collect target positions from vanilla wires
+        array<vector> vTargetPositions = new array<vector>;
+        if (wires)
+        {
+            LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
+            int tw;
+            for (tw = 0; tw < wires.Count(); tw = tw + 1)
+            {
+                if (!wires[tw]) continue;
+                if (wires[tw].targetDeviceId == "") continue;
+
+                EntityAI targetObj = reg.FindById(wires[tw].targetDeviceId);
+                if (targetObj)
+                {
+                    vTargetPositions.Insert(targetObj.GetPosition());
+                }
+            }
+        }
+
         int i;
         for (i = 0; i < players.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(players[i]);
             if (!pb) continue;
 
+            vector playerPos = pb.GetPosition();
+
             // v0.7.11 (A3): Compare in squared domain — eliminates sqrt per player.
-            if (LFPG_WorldUtil.DistSq(pb.GetPosition(), ownerObjPos) > vSyncMaxDistSq)
-                continue;
+            bool inRange = (LFPG_WorldUtil.DistSq(playerPos, ownerObjPos) <= vSyncMaxDistSq);
+
+            // v0.7.35 B-CRIT2: Also check distance to target devices
+            if (!inRange)
+            {
+                int tp;
+                for (tp = 0; tp < vTargetPositions.Count(); tp = tp + 1)
+                {
+                    if (LFPG_WorldUtil.DistSq(playerPos, vTargetPositions[tp]) <= vSyncMaxDistSq)
+                    {
+                        inRange = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!inRange) continue;
 
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES);
@@ -1140,6 +1234,12 @@ class LFPG_NetworkManager
 
             LFPG_Util.Info("[FullSync] LFPG dev=" + devId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + all[i].GetType() + " jsonLen=" + json.Length().ToString());
 
+            // v0.7.35 D8: Warn if blob approaching practical RPC size limit
+            if (json.Length() > 12000)
+            {
+                LFPG_Util.Warn("[FullSync] LARGE BLOB dev=" + devId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
+            }
+
             rpc.Write(json);
 
             rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
@@ -1158,6 +1258,129 @@ class LFPG_NetworkManager
                 continue;
 
             SendVanillaWiresTo(player, vId, vObj);
+        }
+    }
+
+    // ===========================
+    // v0.7.35 D1: Device-specific sync (unicast)
+    // Sends wire blobs for all owners relevant to deviceId:
+    //   1. If deviceId is a wire-owner → send its own blob
+    //   2. Any wire-owner whose wires target deviceId → send those blobs
+    //   3. Vanilla wires owned by or targeting deviceId
+    // ===========================
+    void SendDeviceSyncTo(PlayerBase player, string deviceId)
+    {
+        if (!player || deviceId == "") return;
+
+        LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
+        if (!reg) return;
+
+        // 1. If the device itself is a wire-owner, send its blob
+        EntityAI deviceObj = reg.FindById(deviceId);
+        if (deviceObj && LFPG_DeviceAPI.HasWireStore(deviceObj))
+        {
+            SendOwnerBlobTo(player, deviceObj, deviceId);
+        }
+
+        // 2. Iterate all wire-owning devices to find owners targeting this device
+        array<EntityAI> all = new array<EntityAI>;
+        reg.GetAll(all);
+
+        int i;
+        for (i = 0; i < all.Count(); i = i + 1)
+        {
+            if (!all[i]) continue;
+            if (!LFPG_DeviceAPI.HasWireStore(all[i])) continue;
+
+            string ownerId = LFPG_DeviceAPI.GetDeviceId(all[i]);
+            if (ownerId == deviceId) continue;  // Already sent above
+
+            ref array<ref LFPG_WireData> wires = LFPG_DeviceAPI.GetDeviceWires(all[i]);
+            if (!wires) continue;
+
+            bool targetsDevice = false;
+            int w;
+            for (w = 0; w < wires.Count(); w = w + 1)
+            {
+                if (wires[w] && wires[w].targetDeviceId == deviceId)
+                {
+                    targetsDevice = true;
+                    break;
+                }
+            }
+
+            if (targetsDevice)
+            {
+                SendOwnerBlobTo(player, all[i], ownerId);
+            }
+        }
+
+        // 3. Vanilla wires: check if deviceId is owner or target
+        int vk;
+        for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
+        {
+            string vOwnerId = m_VanillaWires.GetKey(vk);
+
+            bool shouldSend = false;
+            if (vOwnerId == deviceId)
+            {
+                shouldSend = true;
+            }
+            else
+            {
+                ref array<ref LFPG_WireData> vWires = m_VanillaWires.GetElement(vk);
+                if (vWires)
+                {
+                    int vw;
+                    for (vw = 0; vw < vWires.Count(); vw = vw + 1)
+                    {
+                        if (vWires[vw] && vWires[vw].targetDeviceId == deviceId)
+                        {
+                            shouldSend = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (shouldSend)
+            {
+                EntityAI vObj = reg.FindById(vOwnerId);
+                if (vObj)
+                {
+                    SendVanillaWiresTo(player, vOwnerId, vObj);
+                }
+            }
+        }
+
+        LFPG_Util.Info("[SendDeviceSyncTo] Completed for deviceId=" + deviceId);
+    }
+
+    // Helper: unicast a single owner's wire blob to one player
+    void SendOwnerBlobTo(PlayerBase player, EntityAI ownerObj, string ownerId)
+    {
+        if (!player || !ownerObj || ownerId == "") return;
+
+        string json = LFPG_DeviceAPI.GetWiresJSON(ownerObj);
+
+        int low = 0;
+        int high = 0;
+        ownerObj.GetNetworkID(low, high);
+
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES);
+        rpc.Write(ownerId);
+        rpc.Write(low);
+        rpc.Write(high);
+        rpc.Write(json);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+
+        LFPG_Util.Info("[SendOwnerBlobTo] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString());
+
+        // v0.7.35 D8: Warn if blob approaching practical RPC size limit
+        if (json.Length() > 12000)
+        {
+            LFPG_Util.Warn("[SendOwnerBlobTo] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
         }
     }
 
@@ -1526,7 +1749,13 @@ class LFPG_NetworkManager
         }
 
         // Advance cursor (wraps naturally on next tick)
-        m_TrackCursor = batchEnd;
+        // v0.7.36 (Audit Feb2026): Cursor advancement deferred to AFTER all
+        // untracking. Previously set here before untracking, which caused the
+        // cursor to point past the shrunk array when multiple devices were
+        // removed in the same batch. Each UntrackDeviceFromPolling call would
+        // independently clamp to 0, creating uneven scan rates.
+        // Now we advance once at the end after all array mutations are done.
+        int newCursor = batchEnd;
 
         // Process disappeared devices (just untrack, no wire cut needed)
         int di;
@@ -1564,6 +1793,22 @@ class LFPG_NetworkManager
         {
             LFPG_Util.Info("[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal");
             RequestGlobalSelfHeal();
+        }
+
+        // v0.7.36 (Audit Feb2026): Final cursor update after all array mutations.
+        // Single clamp ensures cursor is valid for the post-untrack array size.
+        int trackedCount = m_TrackedDeviceIds.Count();
+        if (trackedCount == 0)
+        {
+            m_TrackCursor = 0;
+        }
+        else if (newCursor >= trackedCount)
+        {
+            m_TrackCursor = 0;
+        }
+        else
+        {
+            m_TrackCursor = newCursor;
         }
         #endif
     }
