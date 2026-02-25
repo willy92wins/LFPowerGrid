@@ -326,10 +326,11 @@ class LFPG_ElecGraph
         int elapsed = GetGame().GetTickCount() - startMs;
         m_LastRebuildMs = elapsed;
 
-        LFPG_Util.Info("[ElecGraph] Rebuilt: " + m_NodeCount.ToString() + " nodes, "
-            + m_EdgeCount.ToString() + " edges, "
-            + m_NextComponentId.ToString() + " components in "
-            + elapsed.ToString() + "ms");
+        string rbMsg = "[ElecGraph] Rebuilt: " + m_NodeCount.ToString() + " nodes, ";
+        rbMsg = rbMsg + m_EdgeCount.ToString() + " edges, ";
+        rbMsg = rbMsg + m_NextComponentId.ToString() + " components in ";
+        rbMsg = rbMsg + elapsed.ToString() + "ms";
+        LFPG_Util.Info(rbMsg);
         #endif
     }
 
@@ -351,8 +352,9 @@ class LFPG_ElecGraph
         m_WdgQueue.Clear();
         m_WdgVisited.Clear();
 
+        bool bTrue = true;
         m_WdgQueue.Insert(startId);
-        m_WdgVisited.Set(startId, true);
+        m_WdgVisited.Set(startId, bTrue);
 
         int count = 0;
         int headIdx = 0;
@@ -381,7 +383,7 @@ class LFPG_ElecGraph
                         m_WdgVisited.Find(oEdge.m_TargetNodeId, oVisited);
                         if (!oVisited)
                         {
-                            m_WdgVisited.Set(oEdge.m_TargetNodeId, true);
+                            m_WdgVisited.Set(oEdge.m_TargetNodeId, bTrue);
                             m_WdgQueue.Insert(oEdge.m_TargetNodeId);
                         }
                     }
@@ -402,7 +404,7 @@ class LFPG_ElecGraph
                         m_WdgVisited.Find(iEdge.m_SourceNodeId, iVisited);
                         if (!iVisited)
                         {
-                            m_WdgVisited.Set(iEdge.m_SourceNodeId, true);
+                            m_WdgVisited.Set(iEdge.m_SourceNodeId, bTrue);
                             m_WdgQueue.Insert(iEdge.m_SourceNodeId);
                         }
                     }
@@ -433,8 +435,8 @@ class LFPG_ElecGraph
         // ==========================================
         if (m_NodeCount >= LFPG_MAX_NODES_GLOBAL)
         {
-            LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: global cap ("
-                + m_NodeCount.ToString() + "/" + LFPG_MAX_NODES_GLOBAL.ToString() + ")");
+            string capMsg = "[ElecGraph] OnWireAdded REJECTED: global cap (" + m_NodeCount.ToString() + "/" + LFPG_MAX_NODES_GLOBAL.ToString() + ")";
+            LFPG_Util.Warn(capMsg);
             return false;
         }
 
@@ -472,8 +474,8 @@ class LFPG_ElecGraph
                 int mergedSize = sizeA + sizeB;
                 if (mergedSize > LFPG_MAX_NODES_PER_COMPONENT)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merge exceeds component limit ("
-                        + mergedSize.ToString() + "/" + LFPG_MAX_NODES_PER_COMPONENT.ToString() + ")");
+                    string mergeMsg = "[ElecGraph] OnWireAdded REJECTED: merge exceeds component limit (" + mergedSize.ToString() + "/" + LFPG_MAX_NODES_PER_COMPONENT.ToString() + ")";
+                    LFPG_Util.Warn(mergeMsg);
                     return false;
                 }
                 // Merged size OK, proceed to insert
@@ -499,14 +501,16 @@ class LFPG_ElecGraph
 
                 if (bfsSizeA > limit)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: source component exceeds limit");
+                    string wMsg = "[ElecGraph] OnWireAdded REJECTED: source component exceeds limit";
+                    LFPG_Util.Warn(wMsg);
                     return false;
                 }
 
                 int remaining = limit - bfsSizeA;
                 if (remaining <= 0)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: no budget for target");
+                    string wMsg2 = "[ElecGraph] OnWireAdded REJECTED: no budget for target";
+                    LFPG_Util.Warn(wMsg2);
                     return false;
                 }
 
@@ -525,8 +529,8 @@ class LFPG_ElecGraph
                 int totalSize = bfsSizeA + bfsSizeB;
                 if (totalSize > limit)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merged size ("
-                        + totalSize.ToString() + "/" + limit.ToString() + ")");
+                    string szMsg = "[ElecGraph] OnWireAdded REJECTED: merged size (" + totalSize.ToString() + "/" + limit.ToString() + ")";
+                    LFPG_Util.Warn(szMsg);
                     return false;
                 }
             }
@@ -548,7 +552,8 @@ class LFPG_ElecGraph
 
             if (sizeA > limit)
             {
-                LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: source exceeds limit (dirty)");
+                string wMsgD = "[ElecGraph] OnWireAdded REJECTED: source exceeds limit (dirty)";
+                LFPG_Util.Warn(wMsgD);
                 return false;
             }
 
@@ -567,7 +572,8 @@ class LFPG_ElecGraph
                 int remaining = limit - sizeA;
                 if (remaining <= 0)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: no budget for target (dirty)");
+                    string wMsgD2 = "[ElecGraph] OnWireAdded REJECTED: no budget for target (dirty)";
+                    LFPG_Util.Warn(wMsgD2);
                     return false;
                 }
 
@@ -580,8 +586,8 @@ class LFPG_ElecGraph
                 int totalSize = sizeA + sizeB;
                 if (totalSize > limit)
                 {
-                    LFPG_Util.Warn("[ElecGraph] OnWireAdded REJECTED: merged size ("
-                        + totalSize.ToString() + "/" + limit.ToString() + ") (dirty)");
+                    string szMsgD = "[ElecGraph] OnWireAdded REJECTED: merged size (" + totalSize.ToString() + "/" + limit.ToString() + ") (dirty)";
+                    LFPG_Util.Warn(szMsgD);
                     return false;
                 }
             }
@@ -600,7 +606,8 @@ class LFPG_ElecGraph
         bool inserted = AddEdgeInternal(sourceId, targetId, sourcePort, targetPort, wireRef);
         if (!inserted)
         {
-            LFPG_Util.Warn("[ElecGraph] OnWireAdded: edge not inserted " + sourceId + " -> " + targetId);
+            string wInsMsg = "[ElecGraph] OnWireAdded: edge not inserted " + sourceId + " -> " + targetId;
+            LFPG_Util.Warn(wInsMsg);
             return false;
         }
 
@@ -750,7 +757,8 @@ class LFPG_ElecGraph
         #ifdef SERVER
         if (m_MutationDepth <= 0)
         {
-            LFPG_Util.Warn("[ElecGraph] EndGraphMutation called without matching Begin");
+            string wMutMsg = "[ElecGraph] EndGraphMutation called without matching Begin";
+            LFPG_Util.Warn(wMutMsg);
             m_MutationActive = false;
             m_MutationDepth = 0;
             // v0.7.34: Safety clear — prevent stale deferred entries from leaking
@@ -777,8 +785,8 @@ class LFPG_ElecGraph
 
         if (deferredCount > 0)
         {
-            LFPG_Util.Debug("[ElecGraph] EndGraphMutation: flushed "
-                + deferredCount.ToString() + " deferred orphan checks");
+            string dbgFlush = "[ElecGraph] EndGraphMutation: flushed " + deferredCount.ToString() + " deferred orphan checks";
+            LFPG_Util.Debug(dbgFlush);
         }
 
         m_DeferredOrphanCleanup.Clear();
@@ -807,6 +815,7 @@ class LFPG_ElecGraph
 
         stack.Insert(targetId);
         int visitedCount = 0;
+        bool bVisTrue = true;
 
         while (stack.Count() > 0)
         {
@@ -814,7 +823,8 @@ class LFPG_ElecGraph
             // Conservatively assumes cycle if limit reached (safe: rejects wire).
             if (visitedCount >= LFPG_DFS_MAX_VISITED)
             {
-                LFPG_Util.Warn("[ElecGraph] DetectCycle: visited limit reached (" + visitedCount.ToString() + "), assuming cycle");
+                string wDfsMsg = "[ElecGraph] DetectCycle: visited limit reached (" + visitedCount.ToString() + "), assuming cycle";
+                LFPG_Util.Warn(wDfsMsg);
                 return true;
             }
 
@@ -830,7 +840,7 @@ class LFPG_ElecGraph
             if (alreadyVisited)
                 continue;
 
-            visited.Set(current, true);
+            visited.Set(current, bVisTrue);
             visitedCount = visitedCount + 1;
 
             ref array<ref LFPG_ElecEdge> edges;
@@ -1001,7 +1011,8 @@ class LFPG_ElecGraph
             EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
             if (!srcObj)
             {
-                LFPG_Util.Warn("[ElecGraph] AddEdge rejected: source " + sourceId + " not in registry");
+                string wSrcReg = "[ElecGraph] AddEdge rejected: source " + sourceId + " not in registry";
+                LFPG_Util.Warn(wSrcReg);
                 return false;
             }
             EnsureNode(sourceId, srcObj);
@@ -1013,7 +1024,8 @@ class LFPG_ElecGraph
             EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
             if (!tgtObj)
             {
-                LFPG_Util.Warn("[ElecGraph] AddEdge rejected: target " + targetId + " not in registry");
+                string wTgtReg = "[ElecGraph] AddEdge rejected: target " + targetId + " not in registry";
+                LFPG_Util.Warn(wTgtReg);
                 return false;
             }
             EnsureNode(targetId, tgtObj);
@@ -1024,7 +1036,8 @@ class LFPG_ElecGraph
         {
             if (existOut.Count() >= LFPG_MAX_EDGES_PER_NODE)
             {
-                LFPG_Util.Warn("[ElecGraph] AddEdge rejected: source limit " + sourceId + " (out=" + existOut.Count().ToString() + ")");
+                string wOutLim = "[ElecGraph] AddEdge rejected: source limit " + sourceId + " (out=" + existOut.Count().ToString() + ")";
+                LFPG_Util.Warn(wOutLim);
                 return false;
             }
         }
@@ -1034,7 +1047,8 @@ class LFPG_ElecGraph
         {
             if (existIn.Count() >= LFPG_MAX_EDGES_PER_NODE)
             {
-                LFPG_Util.Warn("[ElecGraph] AddEdge rejected: target limit " + targetId + " (in=" + existIn.Count().ToString() + ")");
+                string wInLim = "[ElecGraph] AddEdge rejected: target limit " + targetId + " (in=" + existIn.Count().ToString() + ")";
+                LFPG_Util.Warn(wInLim);
                 return false;
             }
         }
@@ -1378,7 +1392,8 @@ class LFPG_ElecGraph
         PopulateAllNodeElecStates();
         MarkSourcesDirty();
 
-        LFPG_Util.Info("[ElecGraph] PostBulkRebuild: rebuilt + populated + sources dirty");
+        string infoRebuild = "[ElecGraph] PostBulkRebuild: rebuilt + populated + sources dirty";
+        LFPG_Util.Info(infoRebuild);
         #endif
     }
 
@@ -1404,7 +1419,8 @@ class LFPG_ElecGraph
         {
             node.m_InQueue = true;
             m_DirtyQueue.Insert(nodeId);
-            m_EnqueuedThisEpoch.Set(nodeId, true);
+            bool bEnq = true;
+            m_EnqueuedThisEpoch.Set(nodeId, bEnq);
         }
         #endif
     }
@@ -1443,7 +1459,8 @@ class LFPG_ElecGraph
             }
         }
 
-        LFPG_Util.Info("[ElecGraph] MarkSourcesDirty: queued " + m_DirtyQueue.Count().ToString() + " sources");
+        string infoSrcDirty = "[ElecGraph] MarkSourcesDirty: queued " + m_DirtyQueue.Count().ToString() + " sources";
+        LFPG_Util.Info(infoSrcDirty);
         #endif
     }
 
@@ -1465,8 +1482,8 @@ class LFPG_ElecGraph
         // caller that forgot to close its batch.
         if (m_MutationActive)
         {
-            LFPG_Util.Warn("[ElecGraph] ProcessDirtyQueue: mutation still active (depth="
-                + m_MutationDepth.ToString() + "), force-closing");
+            string mutMsg = "[ElecGraph] ProcessDirtyQueue: mutation still active (depth=" + m_MutationDepth.ToString() + "), force-closing";
+            LFPG_Util.Warn(mutMsg);
             m_MutationActive = false;
             m_MutationDepth = 0;
             int sci;
@@ -1532,7 +1549,8 @@ class LFPG_ElecGraph
 
             if (node.m_RequeueCount > LFPG_MAX_REQUEUE_PER_EPOCH)
             {
-                LFPG_Util.Warn("[ElecGraph] Requeue limit reached for " + nodeId + " epoch=" + m_CurrentEpoch.ToString());
+                string wReqMsg = "[ElecGraph] Requeue limit reached for " + nodeId + " epoch=" + m_CurrentEpoch.ToString();
+                LFPG_Util.Warn(wReqMsg);
                 node.m_Dirty = false;
                 node.m_InQueue = false;
                 node.m_DirtyMask = 0;
@@ -1762,11 +1780,8 @@ class LFPG_ElecGraph
 
         if (processed > 0)
         {
-            LFPG_Util.Debug("[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString()
-                + " edges=" + m_EdgesVisitedThisEpoch.ToString()
-                + " remaining=" + remaining.ToString()
-                + " epoch=" + m_CurrentEpoch.ToString()
-                + " ms=" + elapsed.ToString());
+            string dbgProc = "[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString() + " edges=" + m_EdgesVisitedThisEpoch.ToString() + " remaining=" + remaining.ToString() + " epoch=" + m_CurrentEpoch.ToString() + " ms=" + elapsed.ToString();
+            LFPG_Util.Debug(dbgProc);
         }
 
         return remaining;
@@ -1817,11 +1832,12 @@ class LFPG_ElecGraph
                     {
                         loadState = "WARNING";
                     }
-                    LFPG_Util.Info("[LoadTelem] " + nodeId
-                        + " load=" + node.m_LoadRatio.ToString()
-                        + " prev=" + node.m_LastSyncedLoadRatio.ToString()
-                        + " cap=" + node.m_MaxOutput.ToString()
-                        + " state=" + loadState);
+                    string telemMsg = "[LoadTelem] " + nodeId;
+                    telemMsg = telemMsg + " load=" + node.m_LoadRatio.ToString();
+                    telemMsg = telemMsg + " prev=" + node.m_LastSyncedLoadRatio.ToString();
+                    telemMsg = telemMsg + " cap=" + node.m_MaxOutput.ToString();
+                    telemMsg = telemMsg + " state=" + loadState;
+                    LFPG_Util.Info(telemMsg);
                 }
 
                 node.m_LastSyncedLoadRatio = node.m_LoadRatio;
@@ -1983,10 +1999,11 @@ class LFPG_ElecGraph
                 fixed = fixed + 1;
                 m_ValidateFixCount = m_ValidateFixCount + 1;
 
-                LFPG_Util.Warn("[ElecGraph] Zombie consumer fixed: " + nodeId
-                    + " inPower=" + incomingPower.ToString()
-                    + " consumption=" + node.m_Consumption.ToString()
-                    + " totalFixes=" + m_ValidateFixCount.ToString());
+                string zombMsg = "[ElecGraph] Zombie consumer fixed: " + nodeId;
+                zombMsg = zombMsg + " inPower=" + incomingPower.ToString();
+                zombMsg = zombMsg + " consumption=" + node.m_Consumption.ToString();
+                zombMsg = zombMsg + " totalFixes=" + m_ValidateFixCount.ToString();
+                LFPG_Util.Warn(zombMsg);
             }
         }
 
@@ -1999,8 +2016,9 @@ class LFPG_ElecGraph
 
         if (fixed > 0)
         {
-            LFPG_Util.Info("[ElecGraph] ValidateConsumers: "
-                + fixed.ToString() + " zombies fixed this batch, tick=" + m_ValidateTickCount.ToString());
+            string valMsg = "[ElecGraph] ValidateConsumers: ";
+            valMsg = valMsg + fixed.ToString() + " zombies fixed this batch, tick=" + m_ValidateTickCount.ToString();
+            LFPG_Util.Info(valMsg);
         }
 
         return fixed;
@@ -2066,7 +2084,8 @@ class LFPG_ElecGraph
             }
         }
 
-        LFPG_Util.Info("[ElecGraph] PopulateAllNodeElecStates: " + m_Nodes.Count().ToString() + " nodes");
+        string infoPopulate = "[ElecGraph] PopulateAllNodeElecStates: " + m_Nodes.Count().ToString() + " nodes";
+        LFPG_Util.Info(infoPopulate);
         #endif
     }
 
@@ -2321,7 +2340,8 @@ class LFPG_ElecGraph
                 else if (origIdx >= 31)
                 {
                     // v0.7.27 (Audit 5): Log when overload info is lost due to int bitmask limit.
-                    LFPG_Util.Warn("[ElecGraph] OverloadMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId);
+                    string wOvfMsg = "[ElecGraph] OverloadMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId;
+                    LFPG_Util.Warn(wOvfMsg);
                 }
             }
             else if (edgeDemand > allocated + LFPG_PROPAGATION_EPSILON)
@@ -2335,7 +2355,8 @@ class LFPG_ElecGraph
                 }
                 else if (origIdx >= 31)
                 {
-                    LFPG_Util.Warn("[ElecGraph] WarningMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId);
+                    string wWrnMsg = "[ElecGraph] WarningMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId;
+                    LFPG_Util.Warn(wWrnMsg);
                 }
             }
             else

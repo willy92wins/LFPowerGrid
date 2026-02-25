@@ -2,6 +2,8 @@
 // LF_PowerGrid - Hologram override for wall-aware placement
 //
 // v0.7.26: Wall placement support for LF_Splitter_Kit.
+// v0.7.36: Fix Enforce compile errors (literal in func params),
+//          force green holo in wall mode, use Math.AbsFloat.
 //
 // Strategy:
 //   1. Do a forward raycast from the camera
@@ -49,7 +51,7 @@ modded class Hologram
         m_LFPG_IsSplitterKit = true;
 
         // --- Forward raycast to detect wall vs floor ---
-        PlayerBase player = GetParentPlayer();
+        PlayerBase player = m_Player;
         if (!player)
         {
             super.UpdateHologram(timeslice);
@@ -62,22 +64,17 @@ modded class Hologram
 
         vector hitPos;
         vector hitNormal;
-        int contactComponent;
+        int contactComponent;  // required out param for RaycastRV, unused
 
-        bool hit = DayZPhysics.RaycastRV(
-            camPos,
-            rayEnd,
-            hitPos,
-            hitNormal,
-            contactComponent,
-            null,
-            null,
-            player,
-            false,
-            false,              // ground_only = false (critical for walls)
-            ObjIntersectGeom,
-            0.0
-        );
+        // v0.7.36: Pre-assign literal to local var — Enforce rejects
+        // bare literals like 0.0 inside function parameter lists.
+        float rayRadius = 0.0;
+        set<Object> rayResults = null;
+        Object rayWith = null;
+        bool bSorted = false;
+        bool bGroundOnly = false;
+
+        bool hit = DayZPhysics.RaycastRV(camPos, rayEnd, hitPos, hitNormal, contactComponent, rayResults, rayWith, player, bSorted, bGroundOnly, ObjIntersectGeom, rayRadius);
 
         if (!hit)
         {
@@ -87,8 +84,8 @@ modded class Hologram
         }
 
         // Classify surface by vertical component of normal
-        float normalY = hitNormal[1];
-        if (normalY < 0) normalY = normalY * -1.0; // abs
+        // v0.7.36: Use Math.AbsFloat instead of manual negation
+        float normalY = Math.AbsFloat(hitNormal[1]);
 
         if (normalY >= LFPG_HOLO_WALL_THRESHOLD)
         {
@@ -116,10 +113,11 @@ modded class Hologram
         projection.SetPosition(finalPos);
         projection.SetOrientation(finalOri);
 
-        // Force collision state: we bypass EvaluateCollision() entirely because
-        // vanilla checks (angle, floating, surface) would reject wall placement.
-        // Validation is handled by IsColliding/IsCollidingAngle/IsFloating overrides below.
-        // Do NOT call EvaluateCollision() or SetIsColliding() here.
+        // v0.7.36: Force green hologram — since we skip super.UpdateHologram()
+        // vanilla never calls EvaluateCollision(), leaving the holo color stale.
+        // SetIsColliding(false) forces the green (valid) material.
+        bool bNoCollide = false;
+        SetIsColliding(bNoCollide);
     }
 
     // ---- Main collision gate: action system calls this to allow/block placement ----

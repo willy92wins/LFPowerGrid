@@ -6,6 +6,8 @@
 // only have access to the dedicated server log.
 //
 // v0.7.26 (Audit 4): Added DumpGraphFull for admin diagnostics.
+// v0.7.36: Pre-build strings for Enforce compat (no long
+//          concat inside function params).
 // =========================================================
 
 class LFPG_Diag
@@ -23,12 +25,14 @@ class LFPG_Diag
 
         if (GetGame().IsDedicatedServer())
         {
-            Print(LFPG_LOG_PREFIX + "[CLI-ECHO] " + msg);
+            string srvMsg = LFPG_LOG_PREFIX + "[CLI-ECHO] " + msg;
+            Print(srvMsg);
             return;
         }
 
         // Also print locally for client RPT
-        Print(LFPG_LOG_PREFIX + "[DIAG] " + msg);
+        string cliMsg = LFPG_LOG_PREFIX + "[DIAG] " + msg;
+        Print(cliMsg);
 
         // Rate limit: max ~10 per second
         float now = GetGame().GetTickTime();
@@ -76,19 +80,24 @@ class LFPG_Diag
         }
 
         LFPG_Util.Info("=== LFPG GRAPH DUMP START ===");
-        LFPG_Util.Info("[Diag] Nodes=" + graph.GetNodeCount().ToString()
-            + " Edges=" + graph.GetEdgeCount().ToString()
-            + " Components=" + graph.GetComponentCount().ToString()
-            + " DirtyQueue=" + graph.GetDirtyQueueSize().ToString()
-            + " Epoch=" + graph.GetCurrentEpoch().ToString()
-            + " LastRebuild=" + graph.GetLastRebuildMs().ToString() + "ms"
-            + " LastProcess=" + graph.GetLastProcessMs().ToString() + "ms"
-            + " OverloadedSources=" + graph.GetOverloadedSourceCount().ToString());
+
+        // v0.7.36: Pre-build summary string to avoid Enforce parser errors
+        string sum = "[Diag] Nodes=" + graph.GetNodeCount().ToString();
+        sum = sum + " Edges=" + graph.GetEdgeCount().ToString();
+        sum = sum + " Components=" + graph.GetComponentCount().ToString();
+        sum = sum + " DirtyQueue=" + graph.GetDirtyQueueSize().ToString();
+        sum = sum + " Epoch=" + graph.GetCurrentEpoch().ToString();
+        sum = sum + " LastRebuild=" + graph.GetLastRebuildMs().ToString() + "ms";
+        sum = sum + " LastProcess=" + graph.GetLastProcessMs().ToString() + "ms";
+        sum = sum + " OverloadedSources=" + graph.GetOverloadedSourceCount().ToString();
+        LFPG_Util.Info(sum);
 
         // Enumerate registered devices for cross-reference
         ref array<EntityAI> allDevices = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevices);
-        LFPG_Util.Info("[Diag] DeviceRegistry count=" + allDevices.Count().ToString());
+
+        string countMsg = "[Diag] DeviceRegistry count=" + allDevices.Count().ToString();
+        LFPG_Util.Info(countMsg);
 
         int di;
         for (di = 0; di < allDevices.Count(); di = di + 1)
@@ -118,17 +127,18 @@ class LFPG_Diag
             string nodeInfo = " (not in graph)";
             if (node)
             {
-                nodeInfo = " powered=" + node.m_Powered.ToString()
-                    + " outPow=" + node.m_OutputPower.ToString()
-                    + " inPow=" + node.m_InputPower.ToString()
-                    + " loadR=" + node.m_LoadRatio.ToString()
-                    + " comp=" + node.m_ComponentId.ToString();
+                nodeInfo = " powered=" + node.m_Powered.ToString();
+                nodeInfo = nodeInfo + " outPow=" + node.m_OutputPower.ToString();
+                nodeInfo = nodeInfo + " inPow=" + node.m_InputPower.ToString();
+                nodeInfo = nodeInfo + " loadR=" + node.m_LoadRatio.ToString();
+                nodeInfo = nodeInfo + " comp=" + node.m_ComponentId.ToString();
             }
 
-            LFPG_Util.Info("[Diag] " + devType + " id=" + dId
-                + " type=" + dObj.GetType()
-                + " pos=" + dObj.GetPosition().ToString()
-                + nodeInfo);
+            string devMsg = "[Diag] " + devType + " id=" + dId;
+            devMsg = devMsg + " type=" + dObj.GetType();
+            devMsg = devMsg + " pos=" + dObj.GetPosition().ToString();
+            devMsg = devMsg + nodeInfo;
+            LFPG_Util.Info(devMsg);
         }
 
         LFPG_Util.Info("=== LFPG GRAPH DUMP END ===");

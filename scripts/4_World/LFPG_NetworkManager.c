@@ -144,24 +144,27 @@ class LFPG_NetworkManager
         m_TelemTotalNodesProcessed = 0;
         m_TelemTotalEdgesVisited = 0;
         m_TelemLastDumpMs = -99999.0;
-        LFPG_Util.Info("NetworkManager init (server).");
+        string initMsg = "NetworkManager init (server).";
+        LFPG_Util.Info(initMsg);
         LoadVanillaWires();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(ValidateAllWiresAndPropagate, 5000, false);
+        bool bFalse = false;
+        bool bTrue = true;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(ValidateAllWiresAndPropagate, 5000, bFalse);
         // Periodic rate limiter cleanup (every 5 minutes)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(PurgeStaleRateLimiters, 300000, true);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(PurgeStaleRateLimiters, 300000, bTrue);
         // v0.7.4: periodic vanilla wire flush (deferred persistence)
         int flushMs = (int)(LFPG_VANILLA_FLUSH_S * 1000.0);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(FlushVanillaIfDirty, flushMs, true);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(FlushVanillaIfDirty, flushMs, bTrue);
         // Sprint 4.2: periodic propagation tick (event-driven via graph dirty queue)
         int propTickMs = (int)LFPG_PROPAGATE_TICK_MS;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(TickPropagation, propTickMs, true);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(TickPropagation, propTickMs, bTrue);
         // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
         // Replaces per-device timers. Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
         // Runtime guard: prevents timer registration in SP/local-host hybrid contexts
         // where #ifdef SERVER is active but the instance isn't a true dedicated server.
         if (GetGame().IsServer())
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, true);
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, bTrue);
         }
         #endif
     }
@@ -225,7 +228,8 @@ class LFPG_NetworkManager
 
         if (removed > 0)
         {
-            LFPG_Util.Info("[RateLimiter] Purged " + removed.ToString() + " stale entries");
+            string purgeMsg = "[RateLimiter] Purged " + removed.ToString() + " stale entries";
+            LFPG_Util.Info(purgeMsg);
         }
         #endif
     }
@@ -757,7 +761,8 @@ class LFPG_NetworkManager
                             gWires.Remove(gw);
                             removed = removed + 1;
                             ownerChanged = true;
-                            LFPG_Util.Info("[PortReplace] Removed wire from " + ownerId + " -> " + targetDeviceId + ":" + normPort);
+                            string prMsg = "[PortReplace] Removed wire from " + ownerId + " -> " + targetDeviceId + ":" + normPort;
+                            LFPG_Util.Info(prMsg);
                         }
                         gw = gw - 1;
                     }
@@ -799,7 +804,8 @@ class LFPG_NetworkManager
                         vWires.Remove(vw);
                         removed = removed + 1;
                         vChanged = true;
-                        LFPG_Util.Info("[PortReplace] Removed vanilla wire from " + ownerId + " -> " + targetDeviceId + ":" + normPort);
+                        string prVMsg = "[PortReplace] Removed vanilla wire from " + ownerId + " -> " + targetDeviceId + ":" + normPort;
+                        LFPG_Util.Info(prVMsg);
                     }
                     vw = vw - 1;
                 }
@@ -985,12 +991,14 @@ class LFPG_NetworkManager
         int high = 0;
         owner.GetNetworkID(low, high);
 
-        LFPG_Util.Info("[BroadcastOwnerWires] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + owner.GetType() + " jsonLen=" + json.Length().ToString());
+        string bcastMsg = "[BroadcastOwnerWires] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + owner.GetType() + " jsonLen=" + json.Length().ToString();
+        LFPG_Util.Info(bcastMsg);
 
         // v0.7.35 D8: Warn if blob approaching practical RPC size limit
         if (json.Length() > 12000)
         {
-            LFPG_Util.Warn("[BroadcastOwnerWires] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
+            string bcastWarn = "[BroadcastOwnerWires] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
+            LFPG_Util.Warn(bcastWarn);
         }
 
         // v0.7.11 (A3): Precompute squared threshold for player distance culling.
@@ -1052,7 +1060,9 @@ class LFPG_NetworkManager
             rpc.Write(low);
             rpc.Write(high);
             rpc.Write(json);
-            rpc.Send(pb, LFPG_RPC_CHANNEL, true, null);
+            bool bRpcGuaranteed = true;
+            PlayerIdentity noExclude = null;
+            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
         }
     }
 
@@ -1148,7 +1158,9 @@ class LFPG_NetworkManager
             rpc.Write(low);
             rpc.Write(high);
             rpc.Write(json);
-            rpc.Send(pb, LFPG_RPC_CHANNEL, true, null);
+            bool bRpcGuaranteed = true;
+            PlayerIdentity noExclude = null;
+            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
         }
     }
 
@@ -1189,7 +1201,9 @@ class LFPG_NetworkManager
         rpc.Write(low);
         rpc.Write(high);
         rpc.Write(json);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        bool bRpcGuaranteed = true;
+        PlayerIdentity noExclude = null;
+        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
     }
 
     // ===========================
@@ -1207,7 +1221,8 @@ class LFPG_NetworkManager
         array<EntityAI> all = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(all);
 
-        LFPG_Util.Info("[FullSync] devices=" + all.Count().ToString() + " playerPos=" + pp.ToString());
+        string fsMsg = "[FullSync] devices=" + all.Count().ToString() + " playerPos=" + pp.ToString();
+        LFPG_Util.Info(fsMsg);
 
         // Sync LFPG wire-owning devices (Generator, Splitter, etc.)
         int i;
@@ -1232,17 +1247,21 @@ class LFPG_NetworkManager
             rpc.Write(low);
             rpc.Write(high);
 
-            LFPG_Util.Info("[FullSync] LFPG dev=" + devId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + all[i].GetType() + " jsonLen=" + json.Length().ToString());
+            string fsDevMsg = "[FullSync] LFPG dev=" + devId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + all[i].GetType() + " jsonLen=" + json.Length().ToString();
+            LFPG_Util.Info(fsDevMsg);
 
             // v0.7.35 D8: Warn if blob approaching practical RPC size limit
             if (json.Length() > 12000)
             {
-                LFPG_Util.Warn("[FullSync] LARGE BLOB dev=" + devId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
+                string fsWarn = "[FullSync] LARGE BLOB dev=" + devId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
+                LFPG_Util.Warn(fsWarn);
             }
 
             rpc.Write(json);
 
-            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+            bool bRpcGuaranteed = true;
+            PlayerIdentity noExclude = null;
+            rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
         }
 
         // Sync vanilla source wires (UNICAST to this player only)
@@ -1353,7 +1372,8 @@ class LFPG_NetworkManager
             }
         }
 
-        LFPG_Util.Info("[SendDeviceSyncTo] Completed for deviceId=" + deviceId);
+        string sdMsg = "[SendDeviceSyncTo] Completed for deviceId=" + deviceId;
+        LFPG_Util.Info(sdMsg);
     }
 
     // Helper: unicast a single owner's wire blob to one player
@@ -1373,14 +1393,18 @@ class LFPG_NetworkManager
         rpc.Write(low);
         rpc.Write(high);
         rpc.Write(json);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        bool bRpcGuaranteed = true;
+        PlayerIdentity noExclude = null;
+        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
 
-        LFPG_Util.Info("[SendOwnerBlobTo] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString());
+        string sobMsg = "[SendOwnerBlobTo] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString();
+        LFPG_Util.Info(sobMsg);
 
         // v0.7.35 D8: Warn if blob approaching practical RPC size limit
         if (json.Length() > 12000)
         {
-            LFPG_Util.Warn("[SendOwnerBlobTo] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit");
+            string sobWarn = "[SendOwnerBlobTo] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
+            LFPG_Util.Warn(sobWarn);
         }
     }
 
@@ -1398,7 +1422,8 @@ class LFPG_NetworkManager
 
         if (!m_Graph)
         {
-            LFPG_Util.Warn("[Propagate] Graph null, cannot propagate " + sourceDeviceId);
+            string gNullMsg = "[Propagate] Graph null, cannot propagate " + sourceDeviceId;
+            LFPG_Util.Warn(gNullMsg);
             return;
         }
 
@@ -1408,7 +1433,8 @@ class LFPG_NetworkManager
         // Mark dirty — will be picked up by next TickPropagation
         m_Graph.MarkNodeDirty(sourceDeviceId, LFPG_DIRTY_INTERNAL);
 
-        LFPG_Util.Debug("[Propagate] Queued dirty: " + sourceDeviceId);
+        string qdMsg = "[Propagate] Queued dirty: " + sourceDeviceId;
+        LFPG_Util.Debug(qdMsg);
         #endif
     }
 
@@ -1447,15 +1473,14 @@ class LFPG_NetworkManager
         if (remaining <= 0 && m_WarmupActive)
         {
             m_WarmupActive = false;
-            LFPG_Util.Info("[Propagate] Warmup drain complete");
+            string wdMsg = "[Propagate] Warmup drain complete";
+            LFPG_Util.Info(wdMsg);
         }
 
         if (remaining > 0)
         {
-            LFPG_Util.Debug("[Propagate] Tick: " + remaining.ToString() + " remaining"
-                + " nodeBudget=" + nodeBudget.ToString()
-                + " edgeBudget=" + edgeBudget.ToString()
-                + " edgesUsed=" + m_Graph.GetLastEdgesVisited().ToString());
+            string tickMsg = "[Propagate] Tick: " + remaining.ToString() + " remaining" + " nodeBudget=" + nodeBudget.ToString() + " edgeBudget=" + edgeBudget.ToString() + " edgesUsed=" + m_Graph.GetLastEdgesVisited().ToString();
+            LFPG_Util.Debug(tickMsg);
         }
 
         // Sprint 4.3: Accumulate propagation telemetry
@@ -1670,7 +1695,8 @@ class LFPG_NetworkManager
             }
         }
 
-        LFPG_Util.Info("[Movement] RebuildTrackedDevices: tracking " + m_TrackedDeviceIds.Count().ToString() + " wired devices");
+        string rtdMsg = "[Movement] RebuildTrackedDevices: tracking " + m_TrackedDeviceIds.Count().ToString() + " wired devices";
+        LFPG_Util.Info(rtdMsg);
         #endif
     }
 
@@ -1771,7 +1797,8 @@ class LFPG_NetworkManager
             EntityAI movedDev = movedDevs[mi];
             string movedId = movedIds[mi];
 
-            LFPG_Util.Warn("[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires");
+            string mvMsg = "[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires";
+            LFPG_Util.Warn(mvMsg);
 
             // CutAllWiresFromDevice handles: owned wires, vanilla wires,
             // incoming wires, graph cleanup, SetPowered(false) on neighbors,
@@ -1791,7 +1818,8 @@ class LFPG_NetworkManager
         // Trigger self-heal if any devices moved
         if (movedIds.Count() > 0)
         {
-            LFPG_Util.Info("[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal");
+            string mvCntMsg = "[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal";
+            LFPG_Util.Info(mvCntMsg);
             RequestGlobalSelfHeal();
         }
 
@@ -1822,7 +1850,8 @@ class LFPG_NetworkManager
         #ifdef SERVER
         if (m_SelfHealQueued) return;
         m_SelfHealQueued = true;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DoGlobalSelfHeal, 500, false);
+        bool bOnce = false;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DoGlobalSelfHeal, 500, bOnce);
         #endif
     }
 
@@ -1904,7 +1933,8 @@ class LFPG_NetworkManager
         LFPG_DeviceRegistry.Get().GetAll(all);
 
         int deviceCount = all.Count();
-        LFPG_Util.Debug("SelfHeal: scanning devices=" + deviceCount.ToString());
+        string shScanMsg = "SelfHeal: scanning devices=" + deviceCount.ToString();
+        LFPG_Util.Debug(shScanMsg);
 
         // Step 3: Build valid device IDs ONCE for all PruneMissingTargets calls
         m_CachedValidIds = new map<string, bool>;
@@ -1957,7 +1987,8 @@ class LFPG_NetworkManager
             }
         }
 
-        LFPG_Util.Debug("SelfHeal: done. pruned=" + ownersPruned.ToString() + " propagated=" + sourcesQueued.ToString());
+        string shDoneMsg = "SelfHeal: done. pruned=" + ownersPruned.ToString() + " propagated=" + sourcesQueued.ToString();
+        LFPG_Util.Debug(shDoneMsg);
 
         // Full rebuild of indexes on self-heal (authoritative baseline)
         RebuildReverseIdx();
@@ -1987,7 +2018,8 @@ class LFPG_NetworkManager
             m_Graph.PopulateAllNodeElecStates();
             m_Graph.MarkSourcesDirty();
             m_WarmupActive = true;
-            LFPG_Util.Info("[SelfHeal] Graph warmup: rebuilt + populated + sources dirty (warmup budget active)");
+            string shWarmMsg = "[SelfHeal] Graph warmup: rebuilt + populated + sources dirty (warmup budget active)";
+            LFPG_Util.Info(shWarmMsg);
         }
 
         // v0.7.26 (Audit 4): Prune stale entries from m_LastKnownPos.
@@ -2069,7 +2101,8 @@ class LFPG_NetworkManager
                 }
                 if (!tObj)
                 {
-                    LFPG_Util.Debug("[VanillaPrune] Removed wire " + ownerId + " -> " + wd.m_TargetDeviceId + " (target unresolvable)");
+                    string vpMsg = "[VanillaPrune] Removed wire " + ownerId + " -> " + wd.m_TargetDeviceId + " (target unresolvable)";
+                    LFPG_Util.Debug(vpMsg);
                     wires.Remove(w);
                     totalPruned = totalPruned + 1;
                 }
@@ -2093,7 +2126,8 @@ class LFPG_NetworkManager
 
         if (totalPruned > 0)
         {
-            LFPG_Util.Info("[SelfHeal] Pruned " + totalPruned.ToString() + " unresolvable vanilla wire(s), " + emptyOwners.Count().ToString() + " empty owner(s)");
+            string shPruneMsg = "[SelfHeal] Pruned " + totalPruned.ToString() + " unresolvable vanilla wire(s), " + emptyOwners.Count().ToString() + " empty owner(s)";
+            LFPG_Util.Info(shPruneMsg);
             MarkVanillaDirty();
         }
         #endif
@@ -2135,7 +2169,8 @@ class LFPG_NetworkManager
 
         if (staleIds.Count() > 0)
         {
-            LFPG_Util.Debug("[SelfHeal] Pruned " + staleIds.Count().ToString() + " stale position tracking entries");
+            string shStaleMsg = "[SelfHeal] Pruned " + staleIds.Count().ToString() + " stale position tracking entries";
+            LFPG_Util.Debug(shStaleMsg);
         }
         #endif
     }
@@ -2173,7 +2208,8 @@ class LFPG_NetworkManager
         #ifdef SERVER
         if (m_VanillaDirty)
         {
-            LFPG_Util.Info("[VanillaWires] Flushing on shutdown...");
+            string vFlushMsg = "[VanillaWires] Flushing on shutdown...";
+            LFPG_Util.Info(vFlushMsg);
             SaveVanillaWires();
             m_VanillaDirty = false;
         }
@@ -2187,7 +2223,8 @@ class LFPG_NetworkManager
         // Saving would strip unknown fields and downgrade the version marker.
         if (m_VanillaReadOnly)
         {
-            LFPG_Util.Warn("[VanillaWires] SAVE BLOCKED: loaded from schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Upgrade the mod to save changes.");
+            string saveBlockMsg = "[VanillaWires] SAVE BLOCKED: loaded from schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Upgrade the mod to save changes.";
+            LFPG_Util.Warn(saveBlockMsg);
             return;
         }
 
@@ -2234,11 +2271,13 @@ class LFPG_NetworkManager
         // v0.7.15 (Sprint 3 P2b): Atomic save with backup rotation
         if (LFPG_FileUtil.AtomicSaveVanillaWires(VANILLA_WIRES_FILE, store))
         {
-            LFPG_Util.Info("[VanillaWires] Saved " + store.entries.Count().ToString() + " entries (atomic)");
+            string vSaveMsg = "[VanillaWires] Saved " + store.entries.Count().ToString() + " entries (atomic)";
+            LFPG_Util.Info(vSaveMsg);
         }
         else
         {
-            LFPG_Util.Error("[VanillaWires] Atomic save failed!");
+            string vSaveErr = "[VanillaWires] Atomic save failed!";
+            LFPG_Util.Error(vSaveErr);
         }
         #endif
     }
@@ -2249,7 +2288,8 @@ class LFPG_NetworkManager
         // v0.7.15 (Sprint 3 P2b): Attempt backup restore if main file missing
         if (!LFPG_FileUtil.EnsureFileOrRestore(VANILLA_WIRES_FILE))
         {
-            LFPG_Util.Info("[VanillaWires] No saved file found, starting fresh.");
+            string vFreshMsg = "[VanillaWires] No saved file found, starting fresh.";
+            LFPG_Util.Info(vFreshMsg);
             return;
         }
 
@@ -2257,13 +2297,15 @@ class LFPG_NetworkManager
         string err;
         if (!JsonFileLoader<LFPG_VanillaWireStore>.LoadFile(VANILLA_WIRES_FILE, store, err))
         {
-            LFPG_Util.Warn("[VanillaWires] Load failed: " + err);
+            string vLoadErr = "[VanillaWires] Load failed: " + err;
+            LFPG_Util.Warn(vLoadErr);
             return;
         }
 
         if (!store.entries)
         {
-            LFPG_Util.Info("[VanillaWires] Loaded empty store.");
+            string vEmptyMsg = "[VanillaWires] Loaded empty store.";
+            LFPG_Util.Info(vEmptyMsg);
             return;
         }
 
@@ -2274,7 +2316,8 @@ class LFPG_NetworkManager
         if (m_VanillaLoadedVer > LFPG_VANILLA_PERSIST_VER)
         {
             m_VanillaReadOnly = true;
-            LFPG_Util.Warn("[VanillaWires] Schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Entering READ-ONLY mode to protect data. Upgrade the mod.");
+            string vSchemaMsg = "[VanillaWires] Schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Entering READ-ONLY mode to protect data. Upgrade the mod.";
+            LFPG_Util.Warn(vSchemaMsg);
         }
 
         int loaded = 0;
@@ -2334,7 +2377,8 @@ class LFPG_NetworkManager
                 duplicates = duplicates + 1;
                 continue;
             }
-            ownerDedup.Set(dedupKey, true);
+            bool bDedup = true;
+            ownerDedup.Set(dedupKey, bDedup);
 
             // Insert into wire map
             ref array<ref LFPG_WireData> wires;
@@ -2475,7 +2519,8 @@ class LFPG_NetworkManager
                 if (removed > 0)
                 {
                     anyChanged = true;
-                    LFPG_Util.Info("[CutAll] Removed " + removed.ToString() + " incoming wire(s) on " + deviceId + ":" + portName);
+                    string cutMsg = "[CutAll] Removed " + removed.ToString() + " incoming wire(s) on " + deviceId + ":" + portName;
+                    LFPG_Util.Info(cutMsg);
                 }
             }
         }
@@ -2509,7 +2554,8 @@ class LFPG_NetworkManager
                     LFPG_WireData swd = srcWires[sw];
                     if (swd && swd.m_TargetDeviceId == deviceId)
                     {
-                        LFPG_Util.Warn("[CutAll-Fallback] Found stale wire: " + srcId + " -> " + deviceId);
+                        string cutFbMsg = "[CutAll-Fallback] Found stale wire: " + srcId + " -> " + deviceId;
+                        LFPG_Util.Warn(cutFbMsg);
                         PlayerWireCountAdd(swd.m_CreatorId, -1);
                         srcWires.Remove(sw);
                         srcChanged = true;
@@ -2536,7 +2582,8 @@ class LFPG_NetworkManager
         if (anyChanged)
         {
             // Force self off (covers consumers and passthroughs)
-            LFPG_DeviceAPI.SetPowered(device, false);
+            bool bPwrOff = false;
+            LFPG_DeviceAPI.SetPowered(device, bPwrOff);
 
             // Force all neighbors off — propagation will re-enable
             // any that still have an alternate power path.
@@ -2546,7 +2593,7 @@ class LFPG_NetworkManager
                 EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborIds[nbi]);
                 if (neighborDev)
                 {
-                    LFPG_DeviceAPI.SetPowered(neighborDev, false);
+                    LFPG_DeviceAPI.SetPowered(neighborDev, bPwrOff);
                 }
             }
         }
@@ -2560,7 +2607,8 @@ class LFPG_NetworkManager
                 m_Graph.OnDeviceRemoved(deviceId);
             }
             PostBulkRebuildAndPropagate();
-            LFPG_Util.Info("[CutAll] All wires removed for device " + deviceId + " type=" + device.GetType());
+            string cutAllMsg = "[CutAll] All wires removed for device " + deviceId + " type=" + device.GetType();
+            LFPG_Util.Info(cutAllMsg);
 
             // v0.7.28: Safety flush — ensure all queued RPCs reach clients
             // immediately. Sections 1-4 use direct BroadcastOwnerWires and

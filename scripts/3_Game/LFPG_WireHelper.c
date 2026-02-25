@@ -110,14 +110,15 @@ class LFPG_WireHelper
                 return false;
             }
 
-            // Out-of-range check — discard wire (v0.7.16 H2: was clamp, now discard)
-            if (px < LFPG_COORD_MIN || px > LFPG_COORD_MAX
-                || pz < LFPG_COORD_MIN || pz > LFPG_COORD_MAX
-                || py < -500.0 || py > 2000.0)
-            {
-                LFPG_Util.Warn("[" + debugLabel + "] Wire discarded: waypoint[" + i.ToString() + "] out of range (target=" + wireId + ")");
-                return false;
-            }
+            bool outX = (px < LFPG_COORD_MIN || px > LFPG_COORD_MAX);
+			bool outZ = (pz < LFPG_COORD_MIN || pz > LFPG_COORD_MAX);
+			bool outY = (py < -500.0 || py > 2000.0);
+
+			if (outX || outZ || outY)
+			{
+				LFPG_Util.Warn("[" + debugLabel + "] Wire discarded: waypoint[" + i.ToString() + "] out of range (target=" + wireId + ")");
+				return false;
+			}
 
             // Inter-waypoint distance check (v0.7.16 H2)
             // If consecutive waypoints are farther than MAX_WIRE_LEN_M,

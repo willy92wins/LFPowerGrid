@@ -61,7 +61,9 @@ class LF_TestGenerator : PowerGenerator
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_SourceOn");
-        RegisterNetSyncVariableFloat("m_LoadRatio", 0.0, 5.0, 2);
+        float syncMin = 0.0;
+        float syncMax = 5.0;
+        RegisterNetSyncVariableFloat("m_LoadRatio", syncMin, syncMax, 2);
         RegisterNetSyncVariableInt("m_OverloadMask");
         RegisterNetSyncVariableInt("m_WarningMask");
     }
@@ -148,7 +150,8 @@ class LF_TestGenerator : PowerGenerator
                     // Persisted ON but sparkplug invalid: clear m_SourceOn
                     m_SourceOn = false;
                     SetSynchDirty();
-                    LFPG_Util.Info("[LF_TestGenerator] EEInit: cleared m_SourceOn (invalid SparkPlug) id=" + m_DeviceId);
+                    string eeMsg = "[LF_TestGenerator] EEInit: cleared m_SourceOn (invalid SparkPlug) id=" + m_DeviceId;
+                    LFPG_Util.Info(eeMsg);
                 }
             }
         }
@@ -201,7 +204,8 @@ class LF_TestGenerator : PowerGenerator
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            LFPG_Util.Info("[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId);
+            string wsBlkMsg = "[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId;
+            LFPG_Util.Info(wsBlkMsg);
             ComponentEnergyManager emForce = GetCompEM();
             if (emForce)
             {
@@ -216,7 +220,8 @@ class LF_TestGenerator : PowerGenerator
         m_SourceOn = true;
         SetSynchDirty();
 
-        LFPG_Util.Info("[LF_TestGenerator] OnWorkStart id=" + m_DeviceId + " SourceOn=true");
+        string wsMsg = "[LF_TestGenerator] OnWorkStart id=" + m_DeviceId + " SourceOn=true";
+        LFPG_Util.Info(wsMsg);
         if (m_DeviceId != "")
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
@@ -232,7 +237,8 @@ class LF_TestGenerator : PowerGenerator
         m_SourceOn = false;
         SetSynchDirty();
 
-        LFPG_Util.Info("[LF_TestGenerator] OnWorkStop id=" + m_DeviceId + " SourceOn=false");
+        string wstpMsg = "[LF_TestGenerator] OnWorkStop id=" + m_DeviceId + " SourceOn=false";
+        LFPG_Util.Info(wstpMsg);
         if (m_DeviceId != "")
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
@@ -256,7 +262,8 @@ class LF_TestGenerator : PowerGenerator
             // v0.7.27: Re-validate after attachment (checks health too)
             if (LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
-                LFPG_Util.Info("[LF_TestGenerator] SparkPlug attached while ON, starting CompEM + propagating");
+                string spAMsg = "[LF_TestGenerator] SparkPlug attached while ON, starting CompEM + propagating";
+                LFPG_Util.Info(spAMsg);
                 ComponentEnergyManager emAttach = GetCompEM();
                 if (emAttach)
                 {
@@ -278,7 +285,8 @@ class LF_TestGenerator : PowerGenerator
         slotLowerD.ToLower();
         if (slotLowerD == "sparkplug" && m_SourceOn && m_DeviceId != "")
         {
-            LFPG_Util.Info("[LF_TestGenerator] SparkPlug detached while ON, stopping CompEM + propagating");
+            string spDMsg = "[LF_TestGenerator] SparkPlug detached while ON, stopping CompEM + propagating";
+            LFPG_Util.Info(spDMsg);
 
             // v0.7.25 (Bug 1): Clear m_SourceOn FIRST — the generator cannot
             // run without sparkplug, period.
@@ -295,15 +303,10 @@ class LF_TestGenerator : PowerGenerator
         #endif
     }
 
-    // v0.7.27: Centralized sparkplug validation (includes ruined health)
-    override bool CanTurnOn()
-    {
-        if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
-        {
-            return false;
-        }
-        return super.CanTurnOn();
-    }
+    // v0.7.27: Centralized sparkplug validation (includes ruined health).
+    // NOTE: CanTurnOn does NOT exist in the PowerGeneratorBase/ItemBase hierarchy —
+    // removed to fix compile error. Sparkplug validation is already enforced by
+    // OnWorkStart, OnWork, and OnSwitchOn guards above and below.
 
     // v0.7.27: Block vanilla periodic work tick without valid sparkplug.
     // v0.7.29 (Audit fix): SwitchOff on BOTH sides; m_SourceOn logic server-only.
@@ -311,7 +314,8 @@ class LF_TestGenerator : PowerGenerator
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            LFPG_Util.Info("[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId);
+            string owBlkMsg = "[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId;
+            LFPG_Util.Info(owBlkMsg);
             // Kill CompEM on BOTH client+server to stop visual effects
             ComponentEnergyManager emKill = GetCompEM();
             if (emKill)
@@ -341,7 +345,8 @@ class LF_TestGenerator : PowerGenerator
     {
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            LFPG_Util.Info("[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId);
+            string soBlkMsg = "[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId;
+            LFPG_Util.Info(soBlkMsg);
             ComponentEnergyManager emBlock = GetCompEM();
             if (emBlock)
             {
@@ -361,7 +366,8 @@ class LF_TestGenerator : PowerGenerator
         {
             m_SourceOn = false;
             SetSynchDirty();
-            LFPG_Util.Info("[LF_TestGenerator] OnSwitchOff: cleared m_SourceOn id=" + m_DeviceId);
+            string soffMsg = "[LF_TestGenerator] OnSwitchOff: cleared m_SourceOn id=" + m_DeviceId;
+            LFPG_Util.Info(soffMsg);
             if (m_DeviceId != "")
             {
                 LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
@@ -537,7 +543,8 @@ class LF_TestGenerator : PowerGenerator
         {
             m_LoadRatio = ratio;
             SetSynchDirty();
-            LFPG_Util.Debug("[LF_TestGenerator] LoadRatio=" + m_LoadRatio.ToString() + " id=" + m_DeviceId);
+            string lrMsg = "[LF_TestGenerator] LoadRatio=" + m_LoadRatio.ToString() + " id=" + m_DeviceId;
+            LFPG_Util.Debug(lrMsg);
         }
         #endif
     }
@@ -623,7 +630,8 @@ class LF_TestGenerator : PowerGenerator
 
         if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
         {
-            LFPG_Util.Warn("[LF_TestGenerator] AddWire rejected: invalid port: " + wd.m_SourcePort);
+            string awMsg = "[LF_TestGenerator] AddWire rejected: invalid port: " + wd.m_SourcePort;
+            LFPG_Util.Warn(awMsg);
             return false;
         }
 
@@ -713,13 +721,15 @@ class LF_TestGenerator : PowerGenerator
 
         if (!ctx.Read(m_DeviceIdLow))
         {
-            LFPG_Util.Error("OnStoreLoad: failed to read m_DeviceIdLow");
+            string slErrLow = "OnStoreLoad: failed to read m_DeviceIdLow";
+            LFPG_Util.Error(slErrLow);
             return false;
         }
 
         if (!ctx.Read(m_DeviceIdHigh))
         {
-            LFPG_Util.Error("OnStoreLoad: failed to read m_DeviceIdHigh");
+            string slErrHigh = "OnStoreLoad: failed to read m_DeviceIdHigh";
+            LFPG_Util.Error(slErrHigh);
             return false;
         }
 
@@ -727,14 +737,16 @@ class LF_TestGenerator : PowerGenerator
 
         if (!ctx.Read(m_SourceOn))
         {
-            LFPG_Util.Error("OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId);
+            string slErrSrc = "OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId;
+            LFPG_Util.Error(slErrSrc);
             return false;
         }
 
         string json;
         if (!ctx.Read(json))
         {
-            LFPG_Util.Error("OnStoreLoad: failed to read wires json for " + m_DeviceId);
+            string slErrJson = "OnStoreLoad: failed to read wires json for " + m_DeviceId;
+            LFPG_Util.Error(slErrJson);
             return false;
         }
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_TestGenerator");
@@ -764,7 +776,8 @@ class LF_TestGenerator : PowerGenerator
         {
             if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
-                LFPG_Util.Info("[LF_TestGenerator] Toggle ON blocked: invalid SparkPlug id=" + m_DeviceId);
+                string togBlk = "[LF_TestGenerator] Toggle ON blocked: invalid SparkPlug id=" + m_DeviceId;
+                LFPG_Util.Info(togBlk);
                 return;
             }
 
@@ -778,7 +791,8 @@ class LF_TestGenerator : PowerGenerator
             }
         }
 
-        LFPG_Util.Info("Generator " + m_DeviceId + " m_SourceOn=" + m_SourceOn.ToString() + " GetSourceOn=" + LFPG_GetSourceOn().ToString());
+        string genDbg = "Generator " + m_DeviceId + " m_SourceOn=" + m_SourceOn.ToString() + " GetSourceOn=" + LFPG_GetSourceOn().ToString();
+        LFPG_Util.Info(genDbg);
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         #endif
     }
@@ -795,13 +809,9 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.36 (M4): Block heavy carry system.
-    // PowerGenerator is a heavy item in vanilla DayZ with its own C++ carry
-    // path that can bypass CanPutIntoHands entirely. These overrides match
-    // the pattern already applied to LF_TestLamp (v0.7.29 audit fix).
-    override bool CanBePickedUp()
-    {
-        return false;
-    }
+    // NOTE: CanBePickedUp does NOT exist in PowerGeneratorBase/ItemBase hierarchy —
+    // removed to fix compile error. Protection is via CanPutInCargo,
+    // CanPutIntoHands (above), and IsHeavyBehaviour (below).
 
     override bool IsHeavyBehaviour()
     {
@@ -967,7 +977,8 @@ class LF_TestLamp : Spotlight
 
         #ifndef SERVER
         bool hasLight = (m_LFPG_Light != null);
-        LFPG_Util.Debug("[LF_TestLamp] OnVarSync powered=" + m_PoweredNet.ToString() + " id=" + m_DeviceId + " hasLight=" + hasLight.ToString());
+        string vsMsg = "[LF_TestLamp] OnVarSync powered=" + m_PoweredNet.ToString() + " id=" + m_DeviceId + " hasLight=" + hasLight.ToString();
+        LFPG_Util.Debug(vsMsg);
 
         if (m_PoweredNet)
         {
@@ -1071,7 +1082,8 @@ class LF_TestLamp : Spotlight
     void LFPG_SetPowered(bool powered)
     {
         #ifdef SERVER
-        LFPG_Util.Debug("[LF_TestLamp] LFPG_SetPowered(" + powered.ToString() + ") current=" + m_PoweredNet.ToString() + " id=" + m_DeviceId);
+        string spMsg = "[LF_TestLamp] LFPG_SetPowered(" + powered.ToString() + ") current=" + m_PoweredNet.ToString() + " id=" + m_DeviceId;
+        LFPG_Util.Debug(spMsg);
 
         if (m_PoweredNet == powered)
             return;
@@ -1079,7 +1091,8 @@ class LF_TestLamp : Spotlight
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        LFPG_Util.Debug("[LF_TestLamp] m_PoweredNet set to " + m_PoweredNet.ToString());
+        string pnMsg = "[LF_TestLamp] m_PoweredNet set to " + m_PoweredNet.ToString();
+        LFPG_Util.Debug(pnMsg);
         #endif
     }
 
@@ -1107,13 +1120,15 @@ class LF_TestLamp : Spotlight
 
         if (!ctx.Read(m_DeviceIdLow))
         {
-            LFPG_Util.Error("LF_TestLamp.OnStoreLoad: failed to read m_DeviceIdLow");
+            string tlErrLow = "LF_TestLamp.OnStoreLoad: failed to read m_DeviceIdLow";
+            LFPG_Util.Error(tlErrLow);
             return false;
         }
 
         if (!ctx.Read(m_DeviceIdHigh))
         {
-            LFPG_Util.Error("LF_TestLamp.OnStoreLoad: failed to read m_DeviceIdHigh");
+            string tlErrHigh = "LF_TestLamp.OnStoreLoad: failed to read m_DeviceIdHigh";
+            LFPG_Util.Error(tlErrHigh);
             return false;
         }
 
@@ -1121,7 +1136,8 @@ class LF_TestLamp : Spotlight
 
         if (!ctx.Read(m_PoweredNet))
         {
-            LFPG_Util.Error("LF_TestLamp.OnStoreLoad: failed to read m_PoweredNet for " + m_DeviceId);
+            string tlErrPwr = "LF_TestLamp.OnStoreLoad: failed to read m_PoweredNet for " + m_DeviceId;
+            LFPG_Util.Error(tlErrPwr);
             return false;
         }
 
@@ -1135,7 +1151,8 @@ class LF_TestLamp : Spotlight
     {
         if (m_LFPG_Light)
         {
-            LFPG_Util.Info("[LF_TestLamp] CreateLight: already exists");
+            string clExMsg = "[LF_TestLamp] CreateLight: already exists";
+            LFPG_Util.Info(clExMsg);
             return;
         }
 
@@ -1147,13 +1164,16 @@ class LF_TestLamp : Spotlight
         {
             m_LFPG_Light.AttachOnObject(this, "0 1.1 0");
             m_LFPG_Light.SetLifetime(1000000);
-            m_LFPG_Light.SetEnabled(true);
+            bool bEnable = true;
+            m_LFPG_Light.SetEnabled(bEnable);
 
-            LFPG_Util.Info("[LF_TestLamp] CreateLight: OK at " + lightPos.ToString());
+            string clOkMsg = "[LF_TestLamp] CreateLight: OK at " + lightPos.ToString();
+            LFPG_Util.Info(clOkMsg);
         }
         else
         {
-            LFPG_Util.Error("[LF_TestLamp] CreateLight: ScriptedLightBase.CreateLight FAILED");
+            string clFailMsg = "[LF_TestLamp] CreateLight: ScriptedLightBase.CreateLight FAILED";
+            LFPG_Util.Error(clFailMsg);
         }
     }
 
@@ -1162,7 +1182,8 @@ class LF_TestLamp : Spotlight
         if (!m_LFPG_Light)
             return;
 
-        LFPG_Util.Info("[LF_TestLamp] DestroyLight: removing light");
+        string dlMsg = "[LF_TestLamp] DestroyLight: removing light";
+        LFPG_Util.Info(dlMsg);
         m_LFPG_Light.FadeOut();
         m_LFPG_Light = null;
     }
@@ -1180,12 +1201,10 @@ class LF_TestLamp : Spotlight
 
     // v0.7.29 (Audit fix): Block heavy carry system.
     // DayZ Spotlight can be a "heavy item" that uses a separate C++ carry
-    // path which may bypass CanPutIntoHands entirely. These overrides
-    // ensure no vanilla carry mechanism can move the placed lamp.
-    override bool CanBePickedUp()
-    {
-        return false;
-    }
+    // path which may bypass CanPutIntoHands entirely.
+    // NOTE: CanBePickedUp does NOT exist in the Spotlight/ItemBase hierarchy —
+    // removed to fix compile error. Protection is via CanPutInCargo,
+    // CanPutIntoHands (above), and IsHeavyBehaviour (below).
 
     override bool IsHeavyBehaviour()
     {
