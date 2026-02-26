@@ -180,8 +180,10 @@ static const int   LFPG_MAX_RENDERED_SEGS    = 512;
 // v0.7.26 (Audit 4): Increased from 200 to 350ms to reduce raycast pressure
 // in bases with 50+ wires. Combined with stagger and hysteresis, per-wire
 // recheck averages ~1s when moving, ~3.5s when static. Minimal visual impact.
-static const float LFPG_OCC_INTERVAL_MS      = 350.0;
-static const int   LFPG_OCC_HYSTERESIS       = 3;
+static const float LFPG_OCC_INTERVAL_MS      = 250.0;  // v0.7.38: 350→250 (faster base cycle)
+static const int   LFPG_OCC_HYSTERESIS_HIDE  = 2;      // v0.7.38: fast to hide (visible→occluded)
+static const int   LFPG_OCC_HYSTERESIS_SHOW  = 3;      // v0.7.38: cautious to reveal (prevent pop)
+static const float LFPG_OCC_PARTIAL_THRESHOLD = 0.66;  // v0.7.38: blocked ratio above this counts as occluded for hysteresis (2/3 samples)
 static const int   LFPG_OCC_MAX_RAYCASTS     = 20;
 static const float LFPG_OCC_DIST_SCALE_MAX   = 3.0;    // v0.7.38: max recheck interval multiplier
 static const float LFPG_OCC_SAMPLE_LIFT_M    = 0.08;   // v0.7.38: sample point Y offset above cable
@@ -194,7 +196,7 @@ static const float LFPG_OCC_CAM_DIR_THRESH   = 0.02;
 // objects (doors, vehicles) that may occlude/reveal cables
 // while the player stands still. Combined with stagger,
 // each wire rechecks every ~3s when camera is static.
-static const float LFPG_OCC_FORCED_RECHECK_MS = 800.0;
+static const float LFPG_OCC_FORCED_RECHECK_MS = 300.0;  // v0.7.38: 800→300 (less penalty when static)
 
 
 // ---- Persistence (v0.7.15, Sprint 3) ----

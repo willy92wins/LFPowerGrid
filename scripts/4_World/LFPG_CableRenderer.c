@@ -388,11 +388,15 @@ class LFPG_WireSegmentInfo
     // v0.7.32 (Audit P2): Accept distance to scale recheck interval.
     // Wires near the culling bubble edge get longer intervals to reduce
     // flickering from rapid visibility changes during player movement.
+    // v0.7.38: Asymmetric hysteresis — fast to hide (2 checks), slow to
+    // reveal (3 checks). Prevents "ghost cables" behind walls while
+    // avoiding pop-in on reveal. Also: high occBlockedRatio (>=0.66)
+    // counts as "blocked" for hysteresis to handle edge-of-wall cases
+    // where 1 of 3 samples barely passes through.
     void UpdateOcclusion(bool blocked, float nowMs, float wireDist)
     {
         // v0.7.32 (Audit P2): Distance-scaled interval.
-        // Close wires: 350ms (base). Far wires (near bubble edge): up to ~1s.
-        // Linear scale from 1.0x at 0m to 3.0x at CULL_DISTANCE_M.
+        // Close wires: 250ms (base). Far wires (near bubble edge): up to ~750ms.
         float distScale = 1.0;
         if (wireDist > 0.0 && LFPG_CULL_DISTANCE_M > 0.0)
         {
@@ -404,7 +408,10 @@ class LFPG_WireSegmentInfo
         }
         occNextCheckMs = nowMs + LFPG_OCC_INTERVAL_MS * distScale;
 
-        if (blocked)
+        // v0.7.38: High blocked ratio counts as blocked for hysteresis.
+        // Fixes edge-of-wall case: 2 of 3 samples blocked (ratio>=0.66)
+        // but "all blocked" never triggers → counter resets every check.
+        if (blocked || occBlockedRatio >= LFPG_OCC_PARTIAL_THRESHOLD)
         {
             if (occConsecCount > 0)
             {
@@ -412,7 +419,8 @@ class LFPG_WireSegmentInfo
             }
             occConsecCount = occConsecCount - 1;
 
-            if (occConsecCount <= -LFPG_OCC_HYSTERESIS)
+            // v0.7.38: Asymmetric — HIDE threshold (fast)
+            if (occConsecCount <= -LFPG_OCC_HYSTERESIS_HIDE)
             {
                 occluded = true;
             }
@@ -425,7 +433,8 @@ class LFPG_WireSegmentInfo
             }
             occConsecCount = occConsecCount + 1;
 
-            if (occConsecCount >= LFPG_OCC_HYSTERESIS)
+            // v0.7.38: Asymmetric — SHOW threshold (cautious)
+            if (occConsecCount >= LFPG_OCC_HYSTERESIS_SHOW)
             {
                 occluded = false;
             }
@@ -2072,7 +2081,7 @@ class LFPG_CableRenderer
             // v0.7.9: When camera moves, recheck at normal interval (200ms staggered).
             // When camera is static, add forced delay to catch moving objects
             // (doors, vehicles) that may occlude/reveal cables.
-            // Per-wire rate: ~600ms when moving, ~3s when static.
+
             bool doOccCheck = false;
             if (rayBudget > 0)
             {
@@ -2089,6 +2098,24 @@ class LFPG_CableRenderer
                     if (wsi.occStaggerGroup == (m_OccStaggerIdx % 3))
                     {
                         doOccCheck = true;
+
+                        // v0.7.38 (Synergy S2): Skip raycast for wires behind player.
+                        // Only checked for wires that WOULD consume budget (passed
+                        // deadline + stagger). Avoids wasting GetScreenPos on all
+                        // visible wires every frame.
+                        // Cost: 1 GetScreenPos per eligible wire (2-10/frame).
+                        // Save: 1-3 raycasts freed for wires the player can see.
+                        if (plOccActive)
+                        {
+                            vector scrPlCenter = GetGame().GetScreenPos(wsi.cachedCenter);
+                            if (scrPlCenter[2] > 0.0 && scrPlCenter[2] > plDepthThreshold)
+                            {
+                                if (scrPlCenter[0] > plRectX1 && scrPlCenter[0] < plRectX2 && scrPlCenter[1] > plRectY1 && scrPlCenter[1] < plRectY2)
+                                {
+                                    doOccCheck = false;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2216,10 +2243,20 @@ class LFPG_CableRenderer
             // Pre-compute once per wire so per-segment test is a simple select.
             // Derive from drawColor/shadowColor/highlightColor which already
             // incorporate alphaFactor and showStateColors.
+            //
+            // v0.7.38 (Synergy S1): Skip player clipping when wire is already
+            // faded by world occlusion. At alphaFactor<0.5, plOcc segments
+            // would be at <4% alpha (invisible). Saves ClipSegToScreen +
+            // up to 6 extra DrawLineScreen per segment.
+            bool wirePlOcc = false;
+            if (plOccActive && alphaFactor >= 0.5)
+            {
+                wirePlOcc = true;
+            }
             int plOccDrawColor = 0;
             int plOccShadowColor = 0;
             int plOccHighlightColor = 0;
-            if (plOccActive)
+            if (wirePlOcc)
             {
                 plOccDrawColor = ApplyAlpha(drawColor, LFPG_PLOCC_ALPHA);
                 if (lodTier <= 1)
@@ -2281,7 +2318,7 @@ class LFPG_CableRenderer
                 // Draw single line with minimum width.
                 // v0.7.38: Negative clipping — split into opaque→faded→opaque
                 // at the exact edges of the player rect.
-                if (plOccActive)
+                if (wirePlOcc)
                 {
                     float ulAvgZ = (ulA[2] + ulB[2]) * 0.5;
                     if (ulAvgZ > plDepthThreshold)
@@ -2491,7 +2528,7 @@ class LFPG_CableRenderer
                 float plClY1 = 0.0;
                 float plClX2 = 0.0;
                 float plClY2 = 0.0;
-                if (plOccActive)
+                if (wirePlOcc)
                 {
                     // avgZ is valid here: behindA/behindB segments already
                     // skipped via continue, so zA==sA[2] and zB==sB[2].

@@ -25,9 +25,13 @@ class LFPG_DeviceAPI
         if (devId != "")
             return true;
 
-        // Vanilla: has ComponentEnergyManager
-        ComponentEnergyManager em = e.GetCompEM();
-        if (em)
+        // v0.7.38 (BugFix): Restrict vanilla to known types.
+        // Previously accepted ANY entity with CompEM (flashlights, stoves,
+        // radios, barrels...). Now only PowerGenerator and Spotlight.
+        if (IsVanillaSource(e))
+            return true;
+
+        if (IsVanillaConsumer(e))
             return true;
 
         return false;
@@ -70,13 +74,12 @@ class LFPG_DeviceAPI
             }
         }
 
-        // Vanilla: has EM but is NOT a source
-        ComponentEnergyManager em = e.GetCompEM();
-        if (em)
-        {
-            if (!IsVanillaSource(e))
-                return true;
-        }
+        // v0.7.38 (BugFix): Use IsVanillaConsumer (restricted whitelist).
+        // Previously checked CompEM + !IsVanillaSource which accepted
+        // flashlights, stoves, radios, etc. This path is the server-side
+        // gate in HandleLFPG_FinishWiring — must be consistent with client.
+        if (IsVanillaConsumer(e))
+            return true;
 
         return false;
     }

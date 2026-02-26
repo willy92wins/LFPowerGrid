@@ -831,11 +831,11 @@ class ActionLFPG_ToggleSource : ActionInteractBase
     // Fix: suppress text changes for DEBOUNCE_MS after the last change.
     // s_LastTargetLow/High tracks which generator owns the cache — if the player
     // switches target, text updates immediately with no debounce.
-    protected static int s_LastChangeMs   = -1;
+    protected static float s_LastChangeMs   = -1.0;
     protected static int s_LastTargetLow  = -1;
     protected static int s_LastTargetHigh = -1;
 
-    static const int TOGGLE_TEXT_DEBOUNCE_MS = 800;
+    static const float TOGGLE_TEXT_DEBOUNCE_MS = 800.0;
 
     void ActionLFPG_ToggleSource()
     {
@@ -897,18 +897,18 @@ class ActionLFPG_ToggleSource : ActionInteractBase
             m_Text = newText;
             s_LastTargetLow = tLow;
             s_LastTargetHigh = tHigh;
-            s_LastChangeMs = GetGame().GetTickCount();
+            s_LastChangeMs = GetGame().GetTime();
             return true;
         }
 
         // Same generator: only allow text change if debounce window expired.
         if (newText != m_Text)
         {
-            int nowMs = GetGame().GetTickCount();
-            if (s_LastChangeMs >= 0)
+            float nowMs = GetGame().GetTime();
+            if (s_LastChangeMs >= 0.0)
             {
-                int elapsed = nowMs - s_LastChangeMs;
-                if (elapsed >= 0 && elapsed < TOGGLE_TEXT_DEBOUNCE_MS)
+                float elapsed = nowMs - s_LastChangeMs;
+                if (elapsed >= 0.0 && elapsed < TOGGLE_TEXT_DEBOUNCE_MS)
                 {
                     return true;  // suppress change, keep current m_Text
                 }
