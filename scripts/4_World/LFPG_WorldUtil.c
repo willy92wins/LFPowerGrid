@@ -185,4 +185,132 @@ class LFPG_WorldUtil
 
         return GetGame().GetScreenPos(clipped);
     }
+
+    // =========================================================
+    // Cohen-Sutherland line clipping (v0.7.38 H1)
+    // =========================================================
+    // Shared implementation used by both CableRenderer and WiringClient.
+    // Clips a 2D line segment to a rectangular region.
+    // Returns true if any portion is visible.
+    // Clipped coordinates written to clipA[0..1] and clipB[0..1].
+
+    // Outcode bits: 1=LEFT, 2=RIGHT, 4=TOP, 8=BOTTOM
+    static int ComputeOutcode(float x, float y, float minX, float minY, float maxX, float maxY)
+    {
+        int code = 0;
+        if (x < minX)
+        {
+            code = code | 1;
+        }
+        if (x > maxX)
+        {
+            code = code | 2;
+        }
+        if (y < minY)
+        {
+            code = code | 4;
+        }
+        if (y > maxY)
+        {
+            code = code | 8;
+        }
+        return code;
+    }
+
+    // Cohen-Sutherland line clipping against screen rectangle.
+    // Returns true if any portion is visible (clipped result in clipA, clipB).
+    // Returns false if the segment is entirely outside the rectangle.
+    // Max 8 iterations to guarantee termination.
+    static bool ClipSegToScreen(float x1, float y1, float x2, float y2,
+                                float minX, float minY, float maxX, float maxY,
+                                vector clipA, vector clipB)
+    {
+        int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+        int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+
+        int iter = 0;
+        while (iter < 8)
+        {
+            iter = iter + 1;
+
+            // Both inside: accept
+            if ((codeA | codeB) == 0)
+            {
+                clipA[0] = x1;
+                clipA[1] = y1;
+                clipB[0] = x2;
+                clipB[1] = y2;
+                return true;
+            }
+
+            // Both on same outside side: reject
+            if ((codeA & codeB) != 0)
+            {
+                return false;
+            }
+
+            // Pick the endpoint that is outside
+            int codeOut = codeA;
+            if (codeOut == 0)
+            {
+                codeOut = codeB;
+            }
+
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            float cx = 0.0;
+            float cy = 0.0;
+
+            // Clip against the boundary indicated by codeOut
+            if ((codeOut & 8) != 0)
+            {
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (maxY - y1) / dy;
+                cy = maxY;
+            }
+            else if ((codeOut & 4) != 0)
+            {
+                if (dy > -0.001 && dy < 0.001)
+                    return false;
+                cx = x1 + dx * (minY - y1) / dy;
+                cy = minY;
+            }
+            else if ((codeOut & 2) != 0)
+            {
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (maxX - x1) / dx;
+                cx = maxX;
+            }
+            else if ((codeOut & 1) != 0)
+            {
+                if (dx > -0.001 && dx < 0.001)
+                    return false;
+                cy = y1 + dy * (minX - x1) / dx;
+                cx = minX;
+            }
+
+            // Replace the outside endpoint with the clipped point
+            if (codeOut == codeA)
+            {
+                x1 = cx;
+                y1 = cy;
+                codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
+            }
+            else
+            {
+                x2 = cx;
+                y2 = cy;
+                codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
+            }
+        }
+
+        // Max iterations reached — accept with current coords (safety fallback)
+        clipA[0] = x1;
+        clipA[1] = y1;
+        clipB[0] = x2;
+        clipB[1] = y2;
+        return true;
+    }
 };

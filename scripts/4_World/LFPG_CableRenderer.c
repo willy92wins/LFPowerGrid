@@ -1,5 +1,16 @@
 // =========================================================
-// LF_PowerGrid - client cable renderer (v0.7.36)
+// LF_PowerGrid - client cable renderer (v0.7.38)
+//
+// v0.7.38 (Audit Phase 1) changes:
+//   C1 — Painter's sort: swap-based selection sort replaces O(n³) InsertAt.
+//   C2 — All LFPG_Diag.ServerEcho calls guarded with LFPG_DIAG_ENABLED
+//        to prevent string concatenation when diagnostics disabled.
+//   C3 — CullTick log block gated by LFPG_DIAG_ENABLED. Interval
+//        increased from 10s/21% to 30s/~7%.
+//   C4 — Bitmask guard changed from < 31 to <= 30 (explicit safe range).
+//        Documented MAX_EDGES_PER_NODE = 12 makes overflow academic.
+//   L9 — CullTick visibility: removed redundant endpoint distance checks
+//        (bounding sphere already covers endpoints by definition).
 //
 // Event-driven cable rendering with frozen geometry.
 //
@@ -141,6 +152,11 @@ class LFPG_WireSegmentInfo
     // occluded wires instead of all-or-nothing. Only meaningful when occluded == false.
     float  occBlockedRatio;
 
+    // v0.7.38 (H6): Stable stagger group for occlusion round-robin.
+    // Computed once at BuildWire from wireIndex. Avoids flicker caused by
+    // map-index-based stagger shifting when wires are added/removed.
+    int    occStaggerGroup;
+
     void LFPG_WireSegmentInfo()
     {
         segments   = new array<ref LFPG_CableParticle>;
@@ -151,6 +167,7 @@ class LFPG_WireSegmentInfo
         occNextCheckMs  = 0;
         occConsecCount  = 0;
         occBlockedRatio = 0.0;
+        occStaggerGroup = 0;
         cachedCenter    = "0 0 0";
         cachedRadius    = 0.0;
         cachedMinDist   = 0.0;
@@ -433,6 +450,10 @@ class LFPG_RetryEntry
     // v0.7.10: Reason for retry (TARGET_MISSING vs BUDGET).
     // Budget retries do not count toward retry limit.
     int reason;  // LFPG_RetryReason enum
+
+    // v0.7.38 (M11): Creation timestamp for TTL expiry.
+    // BUDGET entries without TTL accumulate indefinitely in long sessions.
+    float createdMs;
 };
 
 class LFPG_CableRenderer
@@ -635,7 +656,10 @@ class LFPG_CableRenderer
         EntityAI found = LFPG_DeviceRegistry.Get().FindById(deviceId);
         if (found)
         {
-            LFPG_Diag.ServerEcho("[Resolve] HIT registry id=" + deviceId + " type=" + found.GetType());
+            if (LFPG_DIAG_ENABLED)
+            {
+                LFPG_Diag.ServerEcho("[Resolve] HIT registry id=" + deviceId + " type=" + found.GetType());
+            }
             return found;
         }
 
@@ -647,7 +671,10 @@ class LFPG_CableRenderer
             float age = nowMs - failTime;
             if (age < NEG_CACHE_TTL_MS)
             {
-                LFPG_Diag.ServerEcho("[Resolve] NegCache block id=" + deviceId + " age=" + age.ToString());
+                if (LFPG_DIAG_ENABLED)
+                {
+                    LFPG_Diag.ServerEcho("[Resolve] NegCache block id=" + deviceId + " age=" + age.ToString());
+                }
                 return null;
             }
             m_NegCache.Remove(deviceId);
@@ -659,14 +686,20 @@ class LFPG_CableRenderer
             EntityAI vObj = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
             if (vObj)
             {
-                LFPG_Diag.ServerEcho("[Resolve] HIT vanilla id=" + deviceId + " type=" + vObj.GetType());
+                if (LFPG_DIAG_ENABLED)
+                {
+                    LFPG_Diag.ServerEcho("[Resolve] HIT vanilla id=" + deviceId + " type=" + vObj.GetType());
+                }
                 return vObj;
             }
         }
 
         // 4. Resolution failed
         m_NegCache[deviceId] = nowMs;
-        LFPG_Diag.ServerEcho("[Resolve] MISS id=" + deviceId + " -> NegCache");
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[Resolve] MISS id=" + deviceId + " -> NegCache");
+        }
         return null;
     }
 
@@ -750,7 +783,10 @@ class LFPG_CableRenderer
 
         string uobMsg = "[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString();
         LFPG_Util.Info(uobMsg);
-        LFPG_Diag.ServerEcho("[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " jsonLen=" + json.Length().ToString());
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " jsonLen=" + json.Length().ToString());
+        }
 
         ref LFPG_OwnerWireState st;
         if (!m_ByOwnerId.Find(ownerDeviceId, st) || !st)
@@ -972,7 +1008,10 @@ class LFPG_CableRenderer
         // Build into temporary array; only assign to st.wires at the end.
         ref array<ref LFPG_WireData> parsed = new array<ref LFPG_WireData>;
 
-        LFPG_Diag.ServerEcho("[CableRenderer] DecodeOwner " + st.ownerDeviceId + " wires=" + blob.wires.Count().ToString());
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[CableRenderer] DecodeOwner " + st.ownerDeviceId + " wires=" + blob.wires.Count().ToString());
+        }
         int i;
         for (i = 0; i < srcCount; i = i + 1)
         {
@@ -991,7 +1030,10 @@ class LFPG_CableRenderer
             {
                 wpCnt = dwd.m_Waypoints.Count();
             }
-            LFPG_Diag.ServerEcho("[CableRenderer] wire[" + i.ToString() + "] target=" + dwd.m_TargetDeviceId + " srcPort=" + dwd.m_SourcePort + " dstPort=" + dwd.m_TargetPort + " wps=" + wpCnt.ToString());
+            if (LFPG_DIAG_ENABLED)
+            {
+                LFPG_Diag.ServerEcho("[CableRenderer] wire[" + i.ToString() + "] target=" + dwd.m_TargetDeviceId + " srcPort=" + dwd.m_SourcePort + " dstPort=" + dwd.m_TargetPort + " wps=" + wpCnt.ToString());
+            }
         }
 
         // Success: replace wires with parsed data
@@ -1094,7 +1136,10 @@ class LFPG_CableRenderer
             // Owner not yet loaded on client: queue ALL wires for retry
             string bowNullMsg = "[CableRenderer] BuildOwnerWires: ownerObj NULL net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString();
             LFPG_Util.Warn(bowNullMsg);
-            LFPG_Diag.ServerEcho("[CableRenderer] ownerObj NULL net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString());
+            if (LFPG_DIAG_ENABLED)
+            {
+                LFPG_Diag.ServerEcho("[CableRenderer] ownerObj NULL net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString());
+            }
             int rw;
             for (rw = 0; rw < st.wires.Count(); rw = rw + 1)
             {
@@ -1103,7 +1148,10 @@ class LFPG_CableRenderer
             return;
         }
 
-        LFPG_Diag.ServerEcho("[CableRenderer] ownerObj OK type=" + ownerObj.GetType() + " pos=" + ownerObj.GetPosition().ToString());
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[CableRenderer] ownerObj OK type=" + ownerObj.GetType() + " pos=" + ownerObj.GetPosition().ToString());
+        }
 
         st.lastPowered = IsOwnerActive(ownerObj);
         st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
@@ -1135,14 +1183,20 @@ class LFPG_CableRenderer
             {
                 string tgtNullMsg = "[CableRenderer] BuildOwnerWires: target NULL id=" + wd.m_TargetDeviceId + " -> RETRY";
                 LFPG_Util.Warn(tgtNullMsg);
-                LFPG_Diag.ServerEcho("[CableRenderer] target NULL id=" + wd.m_TargetDeviceId);
+                if (LFPG_DIAG_ENABLED)
+                {
+                    LFPG_Diag.ServerEcho("[CableRenderer] target NULL id=" + wd.m_TargetDeviceId);
+                }
                 AddRetry(ownerDeviceId, w, LFPG_RetryReason.TARGET_MISSING);
                 // G5: wire waiting for target entity resolution
                 bldTelRnd.m_WiresResolving = bldTelRnd.m_WiresResolving + 1;
                 continue;
             }
 
-            LFPG_Diag.ServerEcho("[CableRenderer] target OK type=" + targetObj.GetType() + " pos=" + targetObj.GetPosition().ToString());
+            if (LFPG_DIAG_ENABLED)
+            {
+                LFPG_Diag.ServerEcho("[CableRenderer] target OK type=" + targetObj.GetType() + " pos=" + targetObj.GetPosition().ToString());
+            }
 
             // Compute endpoint positions
             string srcPort = wd.m_SourcePort;
@@ -1156,7 +1210,10 @@ class LFPG_CableRenderer
             a = LFPG_WorldUtil.ClampAboveSurface(a);
             b = LFPG_WorldUtil.ClampAboveSurface(b);
 
-            LFPG_Diag.ServerEcho("[CableRenderer] portA=" + a.ToString() + " portB=" + b.ToString());
+            if (LFPG_DIAG_ENABLED)
+            {
+                LFPG_Diag.ServerEcho("[CableRenderer] portA=" + a.ToString() + " portB=" + b.ToString());
+            }
 
             // Build raw point chain
             m_TempPoints.Clear();
@@ -1167,7 +1224,7 @@ class LFPG_CableRenderer
                 int j;
                 for (j = 0; j < wd.m_Waypoints.Count(); j = j + 1)
                 {
-                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], 0.02));
+                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], LFPG_SURFACE_CLAMP_M));
                 }
             }
             else
@@ -1301,7 +1358,7 @@ class LFPG_CableRenderer
             int wi;
             for (wi = 0; wi < waypoints.Count(); wi = wi + 1)
             {
-                info.cachedJoints.Insert(LFPG_WorldUtil.ClampAboveSurface(waypoints[wi], 0.02));
+                info.cachedJoints.Insert(LFPG_WorldUtil.ClampAboveSurface(waypoints[wi], LFPG_SURFACE_CLAMP_M));
             }
         }
 
@@ -1317,6 +1374,8 @@ class LFPG_CableRenderer
 
         // v0.7.8: store wire index for overload mask lookup
         info.wireIndex = wireIdx;
+        // v0.7.38 (H6): Stable stagger group from wireIndex.
+        info.occStaggerGroup = wireIdx % 3;
 
         // v0.7.9: pre-compute wire key to avoid string concat in CullTick
         info.cachedWireKey = wireKey;
@@ -1326,7 +1385,10 @@ class LFPG_CableRenderer
         // v0.7.9: update incremental segment counter
         m_TotalSegCount = m_TotalSegCount + createdOk;
 
-        LFPG_Diag.ServerEcho("[CableRenderer] BuildWire " + wireKey + " segs=" + createdOk.ToString() + "/" + segCount.ToString() + " center=" + info.cachedCenter.ToString() + " radius=" + info.cachedRadius.ToString());
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[CableRenderer] BuildWire " + wireKey + " segs=" + createdOk.ToString() + "/" + segCount.ToString() + " center=" + info.cachedCenter.ToString() + " radius=" + info.cachedRadius.ToString());
+        }
         if (createdFail > 0)
         {
             string failMsg = "[CableRenderer] BuildWire " + wireKey + " FAILED segs=" + createdFail.ToString();
@@ -1356,17 +1418,22 @@ class LFPG_CableRenderer
         // v0.7.9: prepare deferred removal list for ghost owners
         m_TempKeys.Clear();
 
-        // Periodic diagnostic (every ~10s)
+        // v0.7.38 (C3): Guard entire log block with DIAG check.
+        // Prevents 5+ string concatenations per CullTick when diagnostics off.
         int debugTick = GetGame().GetTime();
-        bool doCullLog = (debugTick % 10000 < 2100);
-        if (doCullLog)
+        bool doCullLog = false;
+        if (LFPG_DIAG_ENABLED)
         {
-            string rd = "[CableRenderer] CullTick: owners=" + m_ByOwnerId.Count().ToString();
-            rd = rd + " wireSegs=" + m_WireSegments.Count().ToString();
-            rd = rd + " retries=" + m_RetryQueue.Count().ToString();
-            rd = rd + " playerPos=" + pp.ToString();
-            rd = rd + " bubble=" + bubbleM.ToString();
-            LFPG_Diag.ServerEcho(rd);
+            doCullLog = (debugTick % 30000 < 2000);
+            if (doCullLog)
+            {
+                string rd = "[CableRenderer] CullTick: owners=" + m_ByOwnerId.Count().ToString();
+                rd = rd + " wireSegs=" + m_WireSegments.Count().ToString();
+                rd = rd + " retries=" + m_RetryQueue.Count().ToString();
+                rd = rd + " playerPos=" + pp.ToString();
+                rd = rd + " bubble=" + bubbleM.ToString();
+                LFPG_Diag.ServerEcho(rd);
+            }
         }
 
         // v0.7.11 (A3): Precompute squared thresholds outside loop.
@@ -1518,40 +1585,18 @@ class LFPG_CableRenderer
                 if (!m_WireSegments.Find(wireKey, info) || !info)
                     continue; // Not built yet (pending retry)
 
-                // v0.7.7: Bounding sphere culling.
-                // Uses center + radius instead of just endpoints.
-                // Fixes: cables with waypoints disappearing when player is near midpoint.
-                // v0.7.11 (A3): All comparisons in squared domain.
-                // Bounding sphere check reformulated:
-                //   distToCenter - radius <= CULL_DIST
-                //   → distToCenter <= CULL_DIST + radius
-                //   → distToCenterSq <= (CULL_DIST + radius)²
+                // v0.7.38 (L9): Bounding sphere culling is sufficient for visibility.
+                // Endpoints are inside the sphere by definition, so separate
+                // endpoint distance checks are redundant. distASq/distBSq are
+                // still needed for bubble check and cachedMinDist below.
                 float distToCenterSq = LFPG_WorldUtil.DistSq(pp, info.cachedCenter);
                 float cullPlusRadius = LFPG_CULL_DISTANCE_M + info.cachedRadius;
                 float cullPlusRadiusSq = cullPlusRadius * cullPlusRadius;
 
-                // Also check endpoint distances for backward compatibility
                 float distASq = LFPG_WorldUtil.DistSq(pp, info.cachedPosA);
                 float distBSq = LFPG_WorldUtil.DistSq(pp, info.cachedPosB);
 
-                bool shouldBeVisible = false;
-
-                // v0.7.11 (A3): Visibility checks entirely in squared domain.
-                // Bounding sphere: visible if player within (cullDist + radius) of center
-                if (distToCenterSq <= cullPlusRadiusSq)
-                {
-                    shouldBeVisible = true;
-                }
-                // Endpoint A within cull distance
-                if (distASq <= cullDistSq)
-                {
-                    shouldBeVisible = true;
-                }
-                // Endpoint B within cull distance
-                if (distBSq <= cullDistSq)
-                {
-                    shouldBeVisible = true;
-                }
+                bool shouldBeVisible = (distToCenterSq <= cullPlusRadiusSq);
 
                 // v0.7.7: Device bubble check (tighter radius).
                 // If bubble > 0 and player is beyond bubble from BOTH endpoints,
@@ -1574,7 +1619,7 @@ class LFPG_CableRenderer
                 float avgDistSq = (distASq + distBSq) * 0.5;
                 info.cachedMinDist = Math.Sqrt(avgDistSq);
 
-                // v0.7.6: log visibility state for beam debugging
+                // v0.7.38 (C3): Per-wire log gated by DIAG + doCullLog.
                 if (doCullLog)
                 {
                     string vl = "[CableRenderer] Cull " + wireKey;
@@ -1592,17 +1637,15 @@ class LFPG_CableRenderer
                 // Update powered flag
                 info.powered = st.lastPowered;
 
-                // v0.7.8: update cable visual state based on powered + load + overload
-                // Check if THIS specific wire is overloaded or at warning level.
-                // v0.7.9: Guard against shift overflow — Enforce int is 32-bit signed,
-                // so 1 << 31 = negative (undefined). Limit bitmask to indices 0-30.
-                //
-                // v0.7.35 (F1.3): warningMask integrated. Single bounds check,
-                // shared bit computation. Priority:
-                //   CRITICAL_LOAD > WARNING_LOAD > POWERED > IDLE
+                // v0.7.38 (C4): Overload/warning bitmask check.
+                // Enforce int is 32-bit signed: 1 << 31 is undefined behavior.
+                // Safe range: bits 0-30 (indices 0-30) = 31 wires per owner.
+                // In practice, LFPG_MAX_EDGES_PER_NODE = 12 so wireIndex <= 11,
+                // well within the safe range. Guard at 30 is defensive.
+                // Full 64-wire support would need dual-mask server-side change.
                 bool wireOverloaded = false;
                 bool wireWarning = false;
-                if (info.wireIndex >= 0 && info.wireIndex < 31)
+                if (info.wireIndex >= 0 && info.wireIndex <= 30)
                 {
                     int wireBit = 1 << info.wireIndex;
                     wireOverloaded = ((st.lastOverloadMask & wireBit) != 0);
@@ -1730,136 +1773,8 @@ class LFPG_CableRenderer
         return LFPG_STATE_COLOR_IDLE;
     }
 
-    // ===========================
-    // Cohen-Sutherland screen-space line clipping (v0.7.35 F1.2)
-    // ===========================
-    // Fixes Bug 3: segments spanning the viewport with both endpoints
-    // off-screen were incorrectly culled. Cohen-Sutherland properly
-    // detects crossing segments and clips them to screen bounds.
-    //
-    // Outcode bits: 1=LEFT, 2=RIGHT, 4=TOP, 8=BOTTOM
-    protected int ComputeOutcode(float x, float y, float minX, float minY, float maxX, float maxY)
-    {
-        int code = 0;
-        if (x < minX)
-        {
-            code = code | 1;
-        }
-        if (x > maxX)
-        {
-            code = code | 2;
-        }
-        if (y < minY)
-        {
-            code = code | 4;
-        }
-        if (y > maxY)
-        {
-            code = code | 8;
-        }
-        return code;
-    }
-
-    // Cohen-Sutherland line clipping against screen rectangle.
-    // Returns true if any portion is visible (result in m_ClipA, m_ClipB).
-    // Returns false if the segment is entirely outside the rectangle.
-    // Max 8 iterations to guarantee termination (standard CS needs at most 4,
-    // but floating point edge cases can cause extra rounds).
-    protected bool ClipSegToScreen(float x1, float y1, float x2, float y2,
-                                   float minX, float minY, float maxX, float maxY)
-    {
-        int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
-        int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
-
-        int iter = 0;
-        while (iter < 8)
-        {
-            iter = iter + 1;
-
-            // Both inside: accept
-            if ((codeA | codeB) == 0)
-            {
-                m_ClipA[0] = x1;
-                m_ClipA[1] = y1;
-                m_ClipB[0] = x2;
-                m_ClipB[1] = y2;
-                return true;
-            }
-
-            // Both on same outside side: reject
-            if ((codeA & codeB) != 0)
-            {
-                return false;
-            }
-
-            // Pick the endpoint that is outside
-            int codeOut = codeA;
-            if (codeOut == 0)
-            {
-                codeOut = codeB;
-            }
-
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            float cx = 0.0;
-            float cy = 0.0;
-
-            // Clip against the boundary indicated by codeOut
-            if ((codeOut & 8) != 0)
-            {
-                // Below screen (high Y)
-                if (dy > -0.001 && dy < 0.001)
-                    return false;
-                cx = x1 + dx * (maxY - y1) / dy;
-                cy = maxY;
-            }
-            else if ((codeOut & 4) != 0)
-            {
-                // Above screen (low Y)
-                if (dy > -0.001 && dy < 0.001)
-                    return false;
-                cx = x1 + dx * (minY - y1) / dy;
-                cy = minY;
-            }
-            else if ((codeOut & 2) != 0)
-            {
-                // Right of screen
-                if (dx > -0.001 && dx < 0.001)
-                    return false;
-                cy = y1 + dy * (maxX - x1) / dx;
-                cx = maxX;
-            }
-            else if ((codeOut & 1) != 0)
-            {
-                // Left of screen
-                if (dx > -0.001 && dx < 0.001)
-                    return false;
-                cy = y1 + dy * (minX - x1) / dx;
-                cx = minX;
-            }
-
-            // Replace the outside endpoint with the clipped point
-            if (codeOut == codeA)
-            {
-                x1 = cx;
-                y1 = cy;
-                codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
-            }
-            else
-            {
-                x2 = cx;
-                y2 = cy;
-                codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
-            }
-        }
-
-        // Max iterations reached — accept with current coords (safety fallback)
-        m_ClipA[0] = x1;
-        m_ClipA[1] = y1;
-        m_ClipB[0] = x2;
-        m_ClipB[1] = y2;
-        return true;
-    }
+    // v0.7.38 (H1): Cohen-Sutherland moved to LFPG_WorldUtil.ClipSegToScreen
+    // and LFPG_WorldUtil.ComputeOutcode (shared with WiringClient).
 
     // ===========================
     // DrawFrame - per-frame Canvas 2D rendering
@@ -1961,9 +1876,11 @@ class LFPG_CableRenderer
         float swF = hud.GetScreenW();
         float shF = hud.GetScreenH();
 
-        // v0.7.23 (Bug 2): Painter's algorithm — sort wires far-to-near
+        // v0.7.38 (C1): Painter's algorithm — sort wires far-to-near
         // so nearer cables draw ON TOP of farther ones.
-        // Insertion sort is O(n²) but n is typically <100 visible wires.
+        // Phase A: Fill arrays without sorting (O(n)).
+        // Phase B: Selection sort in-place (O(n²) compares, O(n) swaps).
+        // Replaces old InsertAt approach which was O(n³) due to array shifts.
         m_DrawOrder.Clear();
         m_DrawDist.Clear();
         int si;
@@ -1973,20 +1890,38 @@ class LFPG_CableRenderer
             if (!sortWsi)
                 continue;
 
-            float dist = sortWsi.cachedMinDist;
-            // Insertion sort: find position (descending = farthest first)
-            int insertAt = m_DrawOrder.Count(); // default: end
+            m_DrawOrder.Insert(si);
+            m_DrawDist.Insert(sortWsi.cachedMinDist);
+        }
+
+        // Selection sort descending (farthest first).
+        // Swaps only — no array shifts, no InsertAt.
+        int sortCount = m_DrawOrder.Count();
+        int si2;
+        for (si2 = 0; si2 < sortCount - 1; si2 = si2 + 1)
+        {
+            int maxIdx = si2;
+            float maxDist = m_DrawDist[si2];
             int sj;
-            for (sj = 0; sj < m_DrawDist.Count(); sj = sj + 1)
+            for (sj = si2 + 1; sj < sortCount; sj = sj + 1)
             {
-                if (dist > m_DrawDist[sj])
+                if (m_DrawDist[sj] > maxDist)
                 {
-                    insertAt = sj;
-                    break;
+                    maxIdx = sj;
+                    maxDist = m_DrawDist[sj];
                 }
             }
-            m_DrawOrder.InsertAt(insertAt, si);
-            m_DrawDist.InsertAt(insertAt, dist);
+            if (maxIdx != si2)
+            {
+                // Swap m_DrawOrder
+                int tmpIdx = m_DrawOrder[si2];
+                m_DrawOrder[si2] = m_DrawOrder[maxIdx];
+                m_DrawOrder[maxIdx] = tmpIdx;
+                // Swap m_DrawDist
+                float tmpDist = m_DrawDist[si2];
+                m_DrawDist[si2] = m_DrawDist[maxIdx];
+                m_DrawDist[maxIdx] = tmpDist;
+            }
         }
 
         int di;
@@ -2042,7 +1977,9 @@ class LFPG_CableRenderer
 
                 if (nowMs >= occDeadline)
                 {
-                    if ((i % 3) == (m_OccStaggerIdx % 3))
+                    // v0.7.38 (H6): Use stable stagger group (set at BuildWire)
+                    // instead of map index which shifts on add/remove.
+                    if (wsi.occStaggerGroup == (m_OccStaggerIdx % 3))
                     {
                         doOccCheck = true;
                     }
@@ -2099,7 +2036,7 @@ class LFPG_CableRenderer
                 }
             }
 
-            if (alphaFactor < 0.02)
+            if (alphaFactor < LFPG_ALPHA_MIN_THRESHOLD)
             {
                 tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
                 continue;
@@ -2114,9 +2051,9 @@ class LFPG_CableRenderer
             if (wsi.occBlockedRatio > 0.01 && !wsi.occluded)
             {
                 float occAlpha = 1.0 - (wsi.occBlockedRatio * 0.7);
-                if (occAlpha < 0.15)
+                if (occAlpha < LFPG_OCC_ALPHA_MIN)
                 {
-                    occAlpha = 0.15;
+                    occAlpha = LFPG_OCC_ALPHA_MIN;
                 }
                 alphaFactor = alphaFactor * occAlpha;
             }
@@ -2181,15 +2118,15 @@ class LFPG_CableRenderer
                 float uly2 = ulB[1];
 
                 // Screen clipping (fast-path + Cohen-Sutherland)
-                bool ulOutA = (ulx1 < -200.0 || ulx1 > swF + 200.0 || uly1 < -200.0 || uly1 > shF + 200.0);
-                bool ulOutB = (ulx2 < -200.0 || ulx2 > swF + 200.0 || uly2 < -200.0 || uly2 > shF + 200.0);
+                bool ulOutA = (ulx1 < -LFPG_ULTRA_LOD_MARGIN_PX || ulx1 > swF + LFPG_ULTRA_LOD_MARGIN_PX || uly1 < -LFPG_ULTRA_LOD_MARGIN_PX || uly1 > shF + LFPG_ULTRA_LOD_MARGIN_PX);
+                bool ulOutB = (ulx2 < -LFPG_ULTRA_LOD_MARGIN_PX || ulx2 > swF + LFPG_ULTRA_LOD_MARGIN_PX || uly2 < -LFPG_ULTRA_LOD_MARGIN_PX || uly2 > shF + LFPG_ULTRA_LOD_MARGIN_PX);
                 if (ulOutA || ulOutB)
                 {
-                    float ulMinX = -200.0;
-                    float ulMinY = -200.0;
-                    float ulMaxX = swF + 200.0;
-                    float ulMaxY = shF + 200.0;
-                    bool ulVis = ClipSegToScreen(ulx1, uly1, ulx2, uly2, ulMinX, ulMinY, ulMaxX, ulMaxY);
+                    float ulMinX = -LFPG_ULTRA_LOD_MARGIN_PX;
+                    float ulMinY = -LFPG_ULTRA_LOD_MARGIN_PX;
+                    float ulMaxX = swF + LFPG_ULTRA_LOD_MARGIN_PX;
+                    float ulMaxY = shF + LFPG_ULTRA_LOD_MARGIN_PX;
+                    bool ulVis = LFPG_WorldUtil.ClipSegToScreen(ulx1, uly1, ulx2, uly2, ulMinX, ulMinY, ulMaxX, ulMaxY, m_ClipA, m_ClipB);
                     if (!ulVis)
                     {
                         tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
@@ -2270,81 +2207,31 @@ class LFPG_CableRenderer
                 // Behind camera check
                 bool behindA = (sA[2] < 0.1);
                 bool behindB = (sB[2] < 0.1);
-                if (behindA && behindB)
+
+                // v0.7.38: Skip segments with any endpoint behind camera.
+                // Previous approach (ClipBehindCamera) clipped to near plane
+                // and re-projected, producing extreme screen coords that
+                // Cohen-Sutherland then clipped to screen edges — creating
+                // diagonal artifact lines during camera rotation.
+                // Catenary has multiple sub-segments, losing one at the
+                // camera transition is imperceptible and artifact-free.
+                if (behindA || behindB)
                     continue;
 
-                // Resolve screen coords (behind-camera near-plane clipping)
+                // Resolve screen coords
                 float sx1 = sA[0];
                 float sy1 = sA[1];
                 float sx2 = sB[0];
                 float sy2 = sB[1];
 
-                // v0.7.14: When one point is behind the camera, GetScreenPos
-                // returns garbage. Clip the segment against the camera near plane
-                // in 3D world space and re-project for a correct screen position.
-                //
-                // v0.7.35 (F1.4): Use swayed world coords for clipping.
-                // Previously used frozen segW.m_From/m_To which don't include
-                // wind sway, causing a visual jump at the near-plane boundary.
-                // Reconstruct swayed positions inline (only on behind-camera path).
-                if (behindA || behindB)
-                {
-                    LFPG_CableParticle segW = wsi.segments[s];
-                    if (segW)
-                    {
-                        // Reconstruct swayed world coords matching Phase 1 projection
-                        vector swayWorldA = segW.m_From;
-                        if (s > 0)
-                        {
-                            swayWorldA[1] = swayWorldA[1] + swayOff;
-                        }
-                        vector swayWorldB = segW.m_To;
-                        bool isLastSeg = (s == segCount - 1);
-                        if (!isLastSeg)
-                        {
-                            swayWorldB[1] = swayWorldB[1] + swayOff;
-                        }
-
-                        if (behindA)
-                        {
-                            vector clipA = LFPG_WorldUtil.ClipBehindCamera(swayWorldA, swayWorldB, camPos, camDir);
-                            sx1 = clipA[0];
-                            sy1 = clipA[1];
-                        }
-                        else
-                        {
-                            vector clipB = LFPG_WorldUtil.ClipBehindCamera(swayWorldB, swayWorldA, camPos, camDir);
-                            sx2 = clipB[0];
-                            sy2 = clipB[1];
-                        }
-                    }
-                    else
-                    {
-                        // Null segment: skip drawing
-                        continue;
-                    }
-                }
-
                 // v0.7.35 (F1.2): Screen clipping with fast-path.
                 // Most segments are fully on-screen → cheap inline check.
                 // Only segments with an endpoint outside invoke Cohen-Sutherland
                 // to correctly handle segments that SPAN the viewport.
-                //
-                // Margin: tighter for near-plane clipped points (extreme coords),
-                // generous for normal segments (smooth edge transition).
-                float margin;
-                bool wasClipped = (behindA || behindB);
-                if (wasClipped)
+                float margin = shF * LFPG_SCREEN_MARGIN_RATIO;
+                if (margin < LFPG_SCREEN_MARGIN_MIN_PX)
                 {
-                    margin = 50.0;
-                }
-                else
-                {
-                    margin = shF * 0.25;
-                    if (margin < 200.0)
-                    {
-                        margin = 200.0;
-                    }
+                    margin = LFPG_SCREEN_MARGIN_MIN_PX;
                 }
 
                 // Fast-path: check if either endpoint is outside screen bounds.
@@ -2361,7 +2248,7 @@ class LFPG_CableRenderer
                     float csMinY = -margin;
                     float csMaxX = swF + margin;
                     float csMaxY = shF + margin;
-                    bool segVisible = ClipSegToScreen(sx1, sy1, sx2, sy2, csMinX, csMinY, csMaxX, csMaxY);
+                    bool segVisible = LFPG_WorldUtil.ClipSegToScreen(sx1, sy1, sx2, sy2, csMinX, csMinY, csMaxX, csMaxY, m_ClipA, m_ClipB);
                     if (!segVisible)
                         continue;
 
@@ -2658,6 +2545,20 @@ class LFPG_CableRenderer
                 continue;
             }
 
+            // v0.7.38 (M11): TTL expiry for BUDGET retries.
+            // BUDGET entries accumulate indefinitely in long sessions when
+            // segment budget is always saturated. Expire after 60s — the wire
+            // will be rebuilt on next CullTick if still visible.
+            if (entry.reason == LFPG_RetryReason.BUDGET)
+            {
+                float ageS = GetGame().GetTickTime() - entry.createdMs;
+                if (ageS > LFPG_RETRY_BUDGET_TTL_S)
+                {
+                    m_RetryQueue.Remove(wireKey);
+                    continue;
+                }
+            }
+
             // Find owner state
             ref LFPG_OwnerWireState st;
             if (!m_ByOwnerId.Find(entry.ownerDeviceId, st) || !st || !st.wires)
@@ -2739,7 +2640,7 @@ class LFPG_CableRenderer
                 int j;
                 for (j = 0; j < wd.m_Waypoints.Count(); j = j + 1)
                 {
-                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], 0.02));
+                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], LFPG_SURFACE_CLAMP_M));
                 }
             }
             else
@@ -2794,6 +2695,7 @@ class LFPG_CableRenderer
         entry.wireIndex = wireIndex;
         entry.retryCount = 0;
         entry.reason = retryReason;
+        entry.createdMs = GetGame().GetTickTime();
 
         m_RetryQueue[wireKey] = entry;
     }
@@ -2908,7 +2810,7 @@ class LFPG_CableRenderer
                     lerp[1] = lerp[1] - sag;
 
                     // Clamp sag point above terrain surface
-                    lerp = LFPG_WorldUtil.ClampAboveSurface(lerp, 0.02);
+                    lerp = LFPG_WorldUtil.ClampAboveSurface(lerp, LFPG_SURFACE_CLAMP_M);
 
                     m_SagPoints.Insert(lerp);
                 }

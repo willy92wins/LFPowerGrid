@@ -1,13 +1,16 @@
 // =========================================================
-// LF_PowerGrid - Cable HUD (2D line overlay) (v0.7.11)
+// LF_PowerGrid - Cable HUD (2D line overlay) (v0.7.38)
+//
+// v0.7.38 (Audit Phase 1) changes:
+//   H2 — Removed DrawSegment dead code (113 lines, zero callers).
+//        Updated stale comments referencing DrawSegment.
 //
 // Uses CanvasWidget to draw cable lines on screen.
 // Works on RETAIL client (Shape.CreateLines only works in Diag EXE).
 //
 // Initializes via layout file (gui/layouts/cable_hud.layout).
 //
-// v0.6.3: Cached GetScreenSize per frame to avoid redundant
-//         calls in DrawSegment/DrawCross.
+// v0.6.3: Cached GetScreenSize per frame to avoid redundant calls.
 // =========================================================
 
 class LFPG_CableHUD
@@ -24,7 +27,7 @@ class LFPG_CableHUD
     protected int m_CanvasW = 0;
     protected int m_CanvasH = 0;
 
-    // Per-frame cached screen size as floats (used in DrawSegment)
+    // Per-frame cached screen size as floats (used by CableRenderer/WiringClient)
     protected float m_ScreenWF = 0.0;
     protected float m_ScreenHF = 0.0;
 
@@ -117,7 +120,7 @@ class LFPG_CableHUD
             return;
 
         // Load CanvasWidget from layout
-        Widget root = ws.CreateWidgets("LF_PowerGrid/gui/layouts/cable_hud.layout");
+        Widget root = ws.CreateWidgets("LFPowerGrid/gui/layouts/cable_hud.layout");
         if (root)
         {
             m_Canvas = CanvasWidget.Cast(root);
@@ -177,18 +180,19 @@ class LFPG_CableHUD
         if (!m_Ready || !m_Canvas)
             return;
 
-        // Cache screen size once per frame (avoids redundant calls in
-        // DrawSegment which previously called GetScreenSize
-        // individually — up to ~50 calls/frame with many cables).
+        // Cache screen size once per frame (avoids redundant calls).
         int curW = 0;
         int curH = 0;
         GetScreenSize(curW, curH);
 
-        // v0.7.10: Guard against transient 0x0 resolution (alt-tab, loading,
-        // resolution change). Keep last valid dimensions instead of corrupting
-        // cache, which would cause division issues in margin/extScale calcs.
+        // v0.7.38 (M12): Guard against transient 0x0 resolution (alt-tab, loading,
+        // resolution change). Clear canvas first to avoid frozen last-frame artifacts,
+        // then return without updating dimensions (keeps last valid size).
         if (curW <= 0 || curH <= 0)
+        {
+            m_Canvas.Clear();
             return;
+        }
 
         m_ScreenWF = curW;
         m_ScreenHF = curH;
@@ -207,122 +211,9 @@ class LFPG_CableHUD
         m_SegmentsCulled = 0;
     }
 
-    // Draw a 3D line segment projected onto the 2D screen.
-    // color: ARGB int (e.g. 0xFFFF0000 = red)
-    // width: line width in pixels (2-4 recommended)
-    void DrawSegment(vector worldA, vector worldB, int color, float width)
-    {
-        if (!m_Ready || !m_Canvas)
-            return;
-
-        // Project 3D to screen coords
-        vector sa = GetGame().GetScreenPos(worldA);
-        vector sb = GetGame().GetScreenPos(worldB);
-
-        // Behind camera check: z < 0.1 means at or behind camera plane
-        bool behindA = (sa[2] < 0.1);
-        bool behindB = (sb[2] < 0.1);
-
-        // Diagnostic: log first few segments per frame for debugging
-        if (m_SegmentsDrawn < 2 && m_FrameNum % 300 == 1)
-        {
-            string dbg = "[HUD-Draw] worldA=" + worldA.ToString() + " sA=" + sa.ToString();
-            dbg = dbg + " worldB=" + worldB.ToString() + " sB=" + sb.ToString();
-            dbg = dbg + " behindA=" + behindA.ToString() + " behindB=" + behindB.ToString();
-            LFPG_Diag.ServerEcho(dbg);
-        }
-
-        // Both behind camera: completely invisible
-        if (behindA && behindB)
-        {
-            m_SegmentsCulled = m_SegmentsCulled + 1;
-            return;
-        }
-
-        // Use per-frame cached screen size (set in BeginFrame)
-        float swF = m_ScreenWF;
-        float shF = m_ScreenHF;
-
-        // v0.7.6: Fixed behind-camera clamp.
-        // When GetScreenPos projects a behind-camera point, the returned x/y
-        // are "inverted" through the vanishing point. The old code extended
-        // toward screen center which produced wild diagonal lines.
-        // Fix: extend from the visible point AWAY from the inverted position
-        // of the behind-camera point — i.e. in direction (visible - inverted)
-        // — which follows the actual cable geometry on screen.
-        if (behindA)
-        {
-            float dxBA = sb[0] - sa[0];
-            float dyBA = sb[1] - sa[1];
-            float lenBA = Math.Sqrt(dxBA * dxBA + dyBA * dyBA);
-            if (lenBA < 1.0)
-            {
-                sa[0] = sb[0];
-                sa[1] = sb[1] - swF;
-            }
-            else
-            {
-                float extA = (swF + shF) / lenBA;
-                sa[0] = sb[0] + dxBA * extA;
-                sa[1] = sb[1] + dyBA * extA;
-            }
-        }
-        else if (behindB)
-        {
-            float dxAB = sa[0] - sb[0];
-            float dyAB = sa[1] - sb[1];
-            float lenAB = Math.Sqrt(dxAB * dxAB + dyAB * dyAB);
-            if (lenAB < 1.0)
-            {
-                sb[0] = sa[0];
-                sb[1] = sa[1] - swF;
-            }
-            else
-            {
-                float extB = (swF + shF) / lenAB;
-                sb[0] = sa[0] + dxAB * extB;
-                sb[1] = sa[1] + dyAB * extB;
-            }
-        }
-
-        // Screen bounds check with resolution-proportional margin.
-        // v0.7.9: Fixed 400px was excessive at 720p and tight at 4K.
-        // Using 25% of screen height (min 200px) scales naturally.
-        float margin = shF * 0.25;
-        if (margin < 200.0)
-        {
-            margin = 200.0;
-        }
-
-        bool offA = false;
-        if (sa[0] < -margin)
-            offA = true;
-        if (sa[0] > swF + margin)
-            offA = true;
-        if (sa[1] < -margin)
-            offA = true;
-        if (sa[1] > shF + margin)
-            offA = true;
-
-        bool offB = false;
-        if (sb[0] < -margin)
-            offB = true;
-        if (sb[0] > swF + margin)
-            offB = true;
-        if (sb[1] < -margin)
-            offB = true;
-        if (sb[1] > shF + margin)
-            offB = true;
-
-        if (offA && offB)
-        {
-            m_SegmentsCulled = m_SegmentsCulled + 1;
-            return;
-        }
-
-        m_Canvas.DrawLine(sa[0], sa[1], sb[0], sb[1], width, color);
-        m_SegmentsDrawn = m_SegmentsDrawn + 1;
-    }
+    // v0.7.38 (H2): DrawSegment removed — dead code since v0.7.9.
+    // Superseded by DrawLineScreen which accepts pre-projected screen coords.
+    // Active path: CableRenderer.DrawFrame → Phase 1 projection → DrawLineScreen.
 
     void EndFrame()
     {

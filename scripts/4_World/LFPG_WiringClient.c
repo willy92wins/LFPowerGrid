@@ -434,125 +434,8 @@ class LFPG_WiringClient
         return firstAny;
     }
 
-    // =========================================================
-    // v0.7.36 (H1): Cohen-Sutherland screen clipping for preview.
-    // Mirrors CableRenderer implementation. Fixes preview segments
-    // spanning the viewport with both endpoints off-screen being
-    // incorrectly culled (same bug as committed cables F1.2).
-    //
-    // Outcode bits: 1=LEFT, 2=RIGHT, 4=TOP, 8=BOTTOM
-    // =========================================================
-    protected int ComputeOutcode(float x, float y, float minX, float minY, float maxX, float maxY)
-    {
-        int code = 0;
-        if (x < minX)
-        {
-            code = code | 1;
-        }
-        if (x > maxX)
-        {
-            code = code | 2;
-        }
-        if (y < minY)
-        {
-            code = code | 4;
-        }
-        if (y > maxY)
-        {
-            code = code | 8;
-        }
-        return code;
-    }
-
-    // Cohen-Sutherland line clipping against screen rectangle.
-    // Returns true if any portion is visible (result in m_ClipA, m_ClipB).
-    // Returns false if entirely outside.
-    // Max 8 iterations to guarantee termination.
-    protected bool ClipSegToScreen(float x1, float y1, float x2, float y2,
-                                   float minX, float minY, float maxX, float maxY)
-    {
-        int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
-        int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
-
-        int iter = 0;
-        while (iter < 8)
-        {
-            iter = iter + 1;
-
-            if ((codeA | codeB) == 0)
-            {
-                m_ClipA[0] = x1;
-                m_ClipA[1] = y1;
-                m_ClipB[0] = x2;
-                m_ClipB[1] = y2;
-                return true;
-            }
-
-            if ((codeA & codeB) != 0)
-            {
-                return false;
-            }
-
-            int codeOut = codeA;
-            if (codeOut == 0)
-            {
-                codeOut = codeB;
-            }
-
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            float cx = 0.0;
-            float cy = 0.0;
-
-            if ((codeOut & 8) != 0)
-            {
-                if (dy > -0.001 && dy < 0.001)
-                    return false;
-                cx = x1 + dx * (maxY - y1) / dy;
-                cy = maxY;
-            }
-            else if ((codeOut & 4) != 0)
-            {
-                if (dy > -0.001 && dy < 0.001)
-                    return false;
-                cx = x1 + dx * (minY - y1) / dy;
-                cy = minY;
-            }
-            else if ((codeOut & 2) != 0)
-            {
-                if (dx > -0.001 && dx < 0.001)
-                    return false;
-                cy = y1 + dy * (maxX - x1) / dx;
-                cx = maxX;
-            }
-            else if ((codeOut & 1) != 0)
-            {
-                if (dx > -0.001 && dx < 0.001)
-                    return false;
-                cy = y1 + dy * (minX - x1) / dx;
-                cx = minX;
-            }
-
-            if (codeOut == codeA)
-            {
-                x1 = cx;
-                y1 = cy;
-                codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
-            }
-            else
-            {
-                x2 = cx;
-                y2 = cy;
-                codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);
-            }
-        }
-
-        m_ClipA[0] = x1;
-        m_ClipA[1] = y1;
-        m_ClipB[0] = x2;
-        m_ClipB[1] = y2;
-        return true;
-    }
+    // v0.7.38 (H1): Cohen-Sutherland moved to LFPG_WorldUtil.ClipSegToScreen
+    // (shared with CableRenderer).
 
     protected void DrawPreviewFrame()
     {
@@ -844,7 +727,13 @@ class LFPG_WiringClient
                 // Behind camera check
                 bool behindA = (scrA[2] < 0.1);
                 bool behindB = (scrB[2] < 0.1);
-                if (behindA && behindB)
+
+                // v0.7.38: Skip segments with any endpoint behind camera.
+                // Both-behind AND single-behind: skip entirely.
+                // ClipBehindCamera produced extreme screen coords causing
+                // diagonal artifacts. Losing one sub-segment at the camera
+                // transition is imperceptible with catenary subdivision.
+                if (behindA || behindB)
                 {
                     tPrv.m_CulledBehind = tPrv.m_CulledBehind + 1;
                     continue;
@@ -854,22 +743,6 @@ class LFPG_WiringClient
                 float sy1 = scrA[1];
                 float sx2 = scrB[0];
                 float sy2 = scrB[1];
-
-                // v0.7.14: When one point is behind camera, clip the segment
-                // against the camera near plane in 3D world space and re-project.
-                // Old approach used garbage screen coords → lines parallel to edges.
-                if (behindA)
-                {
-                    vector clipPA = LFPG_WorldUtil.ClipBehindCamera(m_SagPts[ss], m_SagPts[ss + 1], camPos, camDir);
-                    sx1 = clipPA[0];
-                    sy1 = clipPA[1];
-                }
-                else if (behindB)
-                {
-                    vector clipPB = LFPG_WorldUtil.ClipBehindCamera(m_SagPts[ss + 1], m_SagPts[ss], camPos, camDir);
-                    sx2 = clipPB[0];
-                    sy2 = clipPB[1];
-                }
 
                 // v0.7.36 (H1): Cohen-Sutherland screen clipping for preview.
                 // Replaces offA && offB cull that incorrectly culled segments
@@ -886,8 +759,8 @@ class LFPG_WiringClient
                 }
                 if (offA || offB)
                 {
-                    bool segVisible = ClipSegToScreen(sx1, sy1, sx2, sy2,
-                        -margin, -margin, swF + margin, shF + margin);
+                    bool segVisible = LFPG_WorldUtil.ClipSegToScreen(sx1, sy1, sx2, sy2,
+                        -margin, -margin, swF + margin, shF + margin, m_ClipA, m_ClipB);
                     if (!segVisible)
                     {
                         tPrv.m_CulledOffScreen = tPrv.m_CulledOffScreen + 1;

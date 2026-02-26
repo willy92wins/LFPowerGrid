@@ -356,6 +356,16 @@ static const float LFPG_INTERACT_DIST_M      = 5.0;    // max interaction raycas
 
 // ---- Alpha fade ----
 static const float LFPG_ALPHA_FADE_START_M   = 35.0;   // distance at which alpha fade begins
+static const float LFPG_ALPHA_MIN_THRESHOLD  = 0.02;   // v0.7.38 (M1): skip wire if alpha below this
+static const float LFPG_OCC_ALPHA_MIN        = 0.15;   // v0.7.38 (M1): min alpha for occluded wires (ghost)
+
+// ---- Screen margins (v0.7.38 M1) ----
+static const float LFPG_SCREEN_MARGIN_RATIO  = 0.25;   // margin as fraction of screen height
+static const float LFPG_SCREEN_MARGIN_MIN_PX = 200.0;  // minimum margin in pixels
+static const float LFPG_ULTRA_LOD_MARGIN_PX  = 200.0;  // ultra-LOD fast-path margin
+
+// ---- Surface clamp ----
+static const float LFPG_SURFACE_CLAMP_M      = 0.02;   // v0.7.38 (M1): waypoint min offset above terrain
 
 // ---- LOD alias ----
 static const float LFPG_LOD_MID_M            = 40.0;   // alias for LFPG_LOD_MEDIUM_M
@@ -388,6 +398,7 @@ static const float LFPG_JOINT_SIZE_MAX       = 6.0;    // max joint size up clos
 // ---- Retry system ----
 static const int   LFPG_RETRY_MAX            = 5;      // max retry attempts for deferred wires
 static const float LFPG_RETRY_TICK_S         = 2.0;    // seconds between retry ticks
+static const float LFPG_RETRY_BUDGET_TTL_S   = 60.0;   // v0.7.38 (M11): TTL for BUDGET retries
 
 // ---- Wiring session timeout (v0.7.33, Fix #14) ----
 // Maximum duration a wiring session can remain active (ms).
