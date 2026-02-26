@@ -146,7 +146,7 @@ class LFPG_WiringClient
 
         // v0.7.9: Clamp waypoint to terrain surface at insertion time.
         // Ensures preview and committed cable use identical waypoint positions.
-        pos = LFPG_WorldUtil.ClampAboveSurface(pos, 0.02);
+        pos = LFPG_WorldUtil.ClampAboveSurface(pos, LFPG_SURFACE_CLAMP_M);
 
         // v0.7.10: Reject waypoints nearly identical to the previous one.
         // Prevents degenerate spans, visual noise, and wasted sub-segments.
@@ -579,9 +579,9 @@ class LFPG_WiringClient
         int w;
         for (w = 0; w < wpCount; w = w + 1)
         {
-            m_PreviewPts.Insert(LFPG_WorldUtil.ClampAboveSurface(m_Waypoints[w], 0.02));
+            m_PreviewPts.Insert(LFPG_WorldUtil.ClampAboveSurface(m_Waypoints[w], LFPG_SURFACE_CLAMP_M));
         }
-        m_PreviewPts.Insert(LFPG_WorldUtil.ClampAboveSurface(cursorPos, 0.02));
+        m_PreviewPts.Insert(LFPG_WorldUtil.ClampAboveSurface(cursorPos, LFPG_SURFACE_CLAMP_M));
 
         // ---------- Draw with catenaria sag (v0.7.10: screen-space) ----------
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
@@ -689,7 +689,7 @@ class LFPG_WiringClient
                     vector lerp = spanA + (spanB - spanA) * t;
                     float sag = sagAmount * 4.0 * t * (1.0 - t);
                     lerp[1] = lerp[1] - sag;
-                    lerp = LFPG_WorldUtil.ClampAboveSurface(lerp, 0.02);
+                    lerp = LFPG_WorldUtil.ClampAboveSurface(lerp, LFPG_SURFACE_CLAMP_M);
                     m_SagPts.Insert(lerp);
                 }
             }
@@ -725,8 +725,8 @@ class LFPG_WiringClient
                     continue;
 
                 // Behind camera check
-                bool behindA = (scrA[2] < 0.1);
-                bool behindB = (scrB[2] < 0.1);
+                bool behindA = (scrA[2] < LFPG_BEHIND_CAM_Z);
+                bool behindB = (scrB[2] < LFPG_BEHIND_CAM_Z);
 
                 // v0.7.38: Skip segments with any endpoint behind camera.
                 // Both-behind AND single-behind: skip entirely.
@@ -784,7 +784,7 @@ class LFPG_WiringClient
         {
             vector wpScr = GetGame().GetScreenPos(m_Waypoints[m]);
             tPrv.m_Projections = tPrv.m_Projections + 1;
-            if (wpScr[2] > 0.1)
+            if (wpScr[2] > LFPG_BEHIND_CAM_Z)
             {
                 hud.DrawCrossScreen(wpScr[0], wpScr[1], 0xFF00FFFF, 12.0);
             }
@@ -795,7 +795,7 @@ class LFPG_WiringClient
         {
             vector snapScr = GetGame().GetScreenPos(cursorPos);
             tPrv.m_Projections = tPrv.m_Projections + 1;
-            if (snapScr[2] > 0.1 && snapScr[0] == snapScr[0] && snapScr[1] == snapScr[1])
+            if (snapScr[2] > LFPG_BEHIND_CAM_Z && snapScr[0] == snapScr[0] && snapScr[1] == snapScr[1])
             {
                 // Diamond marker at snap point using the semáforo color
                 hud.DrawCrossScreen(snapScr[0], snapScr[1], globalColor, 10.0);

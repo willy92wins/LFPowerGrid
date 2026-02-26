@@ -83,14 +83,18 @@ class LFPG_WorldUtil
 
     // For straight wires (no waypoints): generate a midpoint that clears terrain.
     // This avoids "wire under the ground" when endpoints are near/below the surface or terrain is between them.
-    static vector AutoMidpointAboveTerrain(vector a, vector b, float lift = 0.25, int samples = 6)
+    // v0.7.38 (M8): Increased default samples from 6 to 10 for better
+    // hill detection. Replaced (float) cast with explicit float division.
+    // Only called at build time (not per-frame), so extra samples are free.
+    static vector AutoMidpointAboveTerrain(vector a, vector b, float lift = 0.25, int samples = 10)
     {
         float maxY = -10000.0;
+        float fSamples = samples;
 
         int i;
         for (i = 0; i <= samples; i = i + 1)
         {
-            float t = i / (float)samples;
+            float t = i / fSamples;
             vector p = a + (b - a) * t;
             float sy = GetGame().SurfaceY(p[0], p[2]);
             if (sy > maxY) maxY = sy;
@@ -223,7 +227,7 @@ class LFPG_WorldUtil
     // Max 8 iterations to guarantee termination.
     static bool ClipSegToScreen(float x1, float y1, float x2, float y2,
                                 float minX, float minY, float maxX, float maxY,
-                                vector clipA, vector clipB)
+                                out vector clipA, out vector clipB)
     {
         int codeA = ComputeOutcode(x1, y1, minX, minY, maxX, maxY);
         int codeB = ComputeOutcode(x2, y2, minX, minY, maxX, maxY);

@@ -34,6 +34,11 @@ static const float LFPG_SWAY_SPEED         = 0.0008; // radians per millisecond 
 static const float LFPG_SWAY_HASH_X        = 17.3;
 static const float LFPG_SWAY_HASH_Z        = 31.7;
 
+// v0.7.38 (L8): Z-depth threshold for behind-camera detection.
+// GetScreenPos returns z < threshold when the point is at or behind
+// the camera plane. 0.1 is conservative to avoid near-plane distortion.
+static const float LFPG_BEHIND_CAM_Z       = 0.1;
+
 // ---- Cable state system (v0.7.8) ----
 // Each committed wire has a visual state that determines color,
 // and in the future, pattern (dash, pulse, etc.).
@@ -161,6 +166,8 @@ static const int   LFPG_MAX_RENDERED_SEGS    = 512;
 static const float LFPG_OCC_INTERVAL_MS      = 350.0;
 static const int   LFPG_OCC_HYSTERESIS       = 3;
 static const int   LFPG_OCC_MAX_RAYCASTS     = 20;
+static const float LFPG_OCC_DIST_SCALE_MAX   = 3.0;    // v0.7.38: max recheck interval multiplier
+static const float LFPG_OCC_SAMPLE_LIFT_M    = 0.08;   // v0.7.38: sample point Y offset above cable
 static const float LFPG_OCC_LONG_WIRE_M      = 10.0;
 static const float LFPG_OCC_CAM_MOVE_THRESH  = 0.3;
 static const float LFPG_OCC_CAM_DIR_THRESH   = 0.02;
@@ -374,7 +381,7 @@ static const float LFPG_ULTRA_LOD_MARGIN_RATIO = 0.15;  // ultra-LOD margin as f
 static const float LFPG_SURFACE_CLAMP_M      = 0.02;   // v0.7.38 (M1): waypoint min offset above terrain
 
 // ---- LOD alias ----
-static const float LFPG_LOD_MID_M            = 40.0;   // alias for LFPG_LOD_MEDIUM_M
+// v0.7.38 (M2): LOD_MID_M alias removed. Use LFPG_LOD_MEDIUM_M directly.
 
 // ---- Cable visual widths ----
 static const float LFPG_CABLE_WIDTH          = 2.0;    // base cable line width (px)

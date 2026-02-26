@@ -33,6 +33,11 @@
 //   L4 — Ghost keys use pre-allocated m_GhostKeys instead of per-CullTick new.
 //   L6 — Endcap size computed once per wire instead of twice (A + B).
 //
+// v0.7.38 (Audit Phase 4) changes:
+//   M2 — LOD_MID_M alias removed; uses canonical LFPG_LOD_MEDIUM_M.
+//   L8 — All z-depth behind-camera thresholds use LFPG_BEHIND_CAM_Z.
+//   Remaining M1 — OCC_DIST_SCALE_MAX, OCC_SAMPLE_LIFT_M extracted.
+//
 // Event-driven cable rendering with frozen geometry.
 //
 // Architecture:
@@ -387,9 +392,9 @@ class LFPG_WireSegmentInfo
         if (wireDist > 0.0 && LFPG_CULL_DISTANCE_M > 0.0)
         {
             distScale = 1.0 + (wireDist / LFPG_CULL_DISTANCE_M) * 2.0;
-            if (distScale > 3.0)
+            if (distScale > LFPG_OCC_DIST_SCALE_MAX)
             {
-                distScale = 3.0;
+                distScale = LFPG_OCC_DIST_SCALE_MAX;
             }
         }
         occNextCheckMs = nowMs + LFPG_OCC_INTERVAL_MS * distScale;
@@ -1611,7 +1616,7 @@ class LFPG_CableRenderer
                 // v0.7.38 (L9): Bounding sphere culling is sufficient for visibility.
                 // Endpoints are inside the sphere by definition, so separate
                 // endpoint distance checks are redundant. distASq/distBSq are
-                // still needed for bubble check and cachedMinDist below.
+                // still needed for the bubble check below.
                 float distToCenterSq = LFPG_WorldUtil.DistSq(pp, info.cachedCenter);
                 float cullPlusRadius = LFPG_CULL_DISTANCE_M + info.cachedRadius;
                 float cullPlusRadiusSq = cullPlusRadius * cullPlusRadius;
@@ -2047,7 +2052,7 @@ class LFPG_CableRenderer
             {
                 lodTier = 0;
             }
-            else if (wireDist < LFPG_LOD_MID_M)
+            else if (wireDist < LFPG_LOD_MEDIUM_M)
             {
                 lodTier = 1;
             }
@@ -2137,7 +2142,7 @@ class LFPG_CableRenderer
 
                 // At >40m any endpoint behind camera means the visible
                 // portion is negligible. Skip entirely (both OR either).
-                if (ulA[2] < 0.1 || ulB[2] < 0.1)
+                if (ulA[2] < LFPG_BEHIND_CAM_Z || ulB[2] < LFPG_BEHIND_CAM_Z)
                 {
                     tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
                     continue;
@@ -2236,8 +2241,8 @@ class LFPG_CableRenderer
                 vector sB = m_ScreenPts[s + 1];
 
                 // Behind camera check
-                bool behindA = (sA[2] < 0.1);
-                bool behindB = (sB[2] < 0.1);
+                bool behindA = (sA[2] < LFPG_BEHIND_CAM_Z);
+                bool behindB = (sB[2] < LFPG_BEHIND_CAM_Z);
 
                 // v0.7.38: Skip segments with any endpoint behind camera.
                 // Previous approach (ClipBehindCamera) clipped to near plane
@@ -2303,7 +2308,7 @@ class LFPG_CableRenderer
                 float avgZ = (zA + zB) * 0.5;
                 float depthWidth = LFPG_CABLE_WIDTH;
 
-                if (avgZ > 0.1)
+                if (avgZ > LFPG_BEHIND_CAM_Z)
                 {
                     depthWidth = LFPG_CABLE_WIDTH * (LFPG_DEPTH_WIDTH_REF / avgZ);
                     if (depthWidth < LFPG_DEPTH_WIDTH_MIN)
@@ -2365,7 +2370,7 @@ class LFPG_CableRenderer
                 if (m_ScreenPts.Count() >= 2)
                 {
                     vector ecA = m_ScreenPts[0];
-                    if (ecA[2] > 0.1)
+                    if (ecA[2] > LFPG_BEHIND_CAM_Z)
                     {
                         vector ecA2 = m_ScreenPts[1];
                         float edx = ecA2[0] - ecA[0];
@@ -2388,7 +2393,7 @@ class LFPG_CableRenderer
                 if (lastPtIdx >= 1)
                 {
                     vector ecB = m_ScreenPts[lastPtIdx];
-                    if (ecB[2] > 0.1)
+                    if (ecB[2] > LFPG_BEHIND_CAM_Z)
                     {
                         vector ecB2 = m_ScreenPts[lastPtIdx - 1];
                         float edxB = ecB[0] - ecB2[0];
@@ -2435,7 +2440,7 @@ class LFPG_CableRenderer
                         for (ji = 0; ji < m_JointScreenPts.Count(); ji = ji + 1)
                         {
                             vector jScreen = m_JointScreenPts[ji];
-                            if (jScreen[2] > 0.1)
+                            if (jScreen[2] > LFPG_BEHIND_CAM_Z)
                             {
                                 hud.DrawJointScreen(jScreen[0], jScreen[1], jSize, drawColor);
                             }
@@ -2472,7 +2477,7 @@ class LFPG_CableRenderer
         {
             // Slight Y offset to avoid ground self-occlusion
             vector target = wsi.occSamples[si];
-            target[1] = target[1] + 0.08;
+            target[1] = target[1] + LFPG_OCC_SAMPLE_LIFT_M;
 
             vector hitPos;
             vector hitNormal;
