@@ -12,6 +12,27 @@
 //   L9 — CullTick visibility: removed redundant endpoint distance checks
 //        (bounding sphere already covers endpoints by definition).
 //
+// v0.7.38 (Audit Phase 2) changes:
+//   H1 — Cohen-Sutherland + ComputeOutcode moved to LFPG_WorldUtil
+//        (shared with WiringClient, ~120 lines removed per file).
+//   H6 — Occlusion stagger uses stable occStaggerGroup from wireIndex
+//        instead of map index which shifts on add/remove.
+//   M1 — Magic numbers replaced with named constants from Defines
+//        (LFPG_ALPHA_MIN_THRESHOLD, LFPG_OCC_ALPHA_MIN,
+//         LFPG_SCREEN_MARGIN_*, LFPG_SURFACE_CLAMP_M).
+//   M11 — BUDGET retry entries get createdMs + TTL expiry (60s).
+//   M12 — (CableHUD) Canvas.Clear before early return in BeginFrame.
+//
+// v0.7.38 (Audit Phase 3) changes:
+//   H3 — Ultra-LOD margin: proportional (shF * 0.15) replaces fixed 200px.
+//   M3 — cachedMinDist: bounding sphere closest-point estimate
+//        (distToCenter - radius) replaces avg(endpointA, endpointB).
+//   M6 — (CableHUD) EndFrame diagnostic guarded with LFPG_DIAG_ENABLED.
+//   L1 — (WiringClient) Preview line width uses LFPG_PREVIEW_LINE_WIDTH.
+//   L2 — Sway hash primes use LFPG_SWAY_HASH_X/Z constants.
+//   L4 — Ghost keys use pre-allocated m_GhostKeys instead of per-CullTick new.
+//   L6 — Endcap size computed once per wire instead of twice (A + B).
+//
 // Event-driven cable rendering with frozen geometry.
 //
 // Architecture:
@@ -478,6 +499,7 @@ class LFPG_CableRenderer
     protected ref array<vector> m_TempPoints;
     protected ref array<vector> m_SagPoints;     // catenaria output buffer
     protected ref array<string> m_TempKeys;      // reused in DestroyOwnerLines etc.
+    protected ref array<string> m_GhostKeys;     // v0.7.38 (L4): reused for ghost owner cleanup
 
     // v0.7.9: Per-frame screen projection cache.
     // Stores projected screen coords for all unique points of a wire.
@@ -531,6 +553,7 @@ class LFPG_CableRenderer
         m_TempPoints      = new array<vector>;
         m_SagPoints       = new array<vector>;
         m_TempKeys        = new array<string>;
+        m_GhostKeys       = new array<string>;
         m_ScreenPts       = new array<vector>;
         m_JointScreenPts  = new array<vector>;
         m_ConnCache       = new map<string, string>;
@@ -1610,14 +1633,18 @@ class LFPG_CableRenderer
                     }
                 }
 
-                // v0.7.23 (Bug 1): cachedMinDist for LOD + alpha fade + depth sort.
-                // Changed from min(distA, distB) to avg(distA, distB).
-                // Using the average ensures the painter's algorithm sorts wires
-                // by their centroid depth, not their nearest endpoint. This fixes
-                // wires with one near and one far endpoint drawing on top of
-                // mid-distance wires.
-                float avgDistSq = (distASq + distBSq) * 0.5;
-                info.cachedMinDist = Math.Sqrt(avgDistSq);
+                // v0.7.38 (M3): cachedMinDist from bounding sphere.
+                // Uses max(distToCenter - radius, 0) as closest-point estimate.
+                // More accurate than avg(distA, distB) for LOD, alpha fade, and
+                // painter's sort — especially for wires with waypoints where
+                // the cable midpoint may be much closer than either endpoint.
+                float distToCenter = Math.Sqrt(distToCenterSq);
+                float closestEst = distToCenter - info.cachedRadius;
+                if (closestEst < 0.0)
+                {
+                    closestEst = 0.0;
+                }
+                info.cachedMinDist = closestEst;
 
                 // v0.7.38 (C3): Per-wire log gated by DIAG + doCullLog.
                 if (doCullLog)
@@ -1671,22 +1698,22 @@ class LFPG_CableRenderer
             }
         }
 
-        // v0.7.9: Deferred cleanup of owners whose entity has been null for 10+ seconds.
-        // Cannot modify m_ByOwnerId during iteration, so we collected keys in m_TempKeys.
-        // IMPORTANT: Copy to local array first because DestroyOwnerLines() clears m_TempKeys.
+        // v0.7.38 (L4): Deferred cleanup of owners whose entity has been null for 30+s.
+        // Cannot modify m_ByOwnerId during iteration, so keys collected in m_TempKeys.
+        // Copy to m_GhostKeys because DestroyOwnerLines() also uses m_TempKeys.
         if (m_TempKeys.Count() > 0)
         {
-            ref array<string> ghostKeys = new array<string>;
+            m_GhostKeys.Clear();
             int gc;
             for (gc = 0; gc < m_TempKeys.Count(); gc = gc + 1)
             {
-                ghostKeys.Insert(m_TempKeys[gc]);
+                m_GhostKeys.Insert(m_TempKeys[gc]);
             }
 
             int gk;
-            for (gk = 0; gk < ghostKeys.Count(); gk = gk + 1)
+            for (gk = 0; gk < m_GhostKeys.Count(); gk = gk + 1)
             {
-                string ghostId = ghostKeys[gk];
+                string ghostId = m_GhostKeys[gk];
                 string ghostMsg = "[CableRenderer] CullTick: removing ghost owner=" + ghostId + " (entity null for 30+s)";
                 LFPG_Util.Info(ghostMsg);
                 DestroyOwnerLines(ghostId);
@@ -1875,6 +1902,10 @@ class LFPG_CableRenderer
         // instead of calling GetScreenSize again per frame.
         float swF = hud.GetScreenW();
         float shF = hud.GetScreenH();
+
+        // v0.7.38 (H3): Proportional ultra-LOD margin.
+        // Fixed 200px was too large at 720p and too small at 4K.
+        float ulMargin = shF * LFPG_ULTRA_LOD_MARGIN_RATIO;
 
         // v0.7.38 (C1): Painter's algorithm — sort wires far-to-near
         // so nearer cables draw ON TOP of farther ones.
@@ -2118,14 +2149,14 @@ class LFPG_CableRenderer
                 float uly2 = ulB[1];
 
                 // Screen clipping (fast-path + Cohen-Sutherland)
-                bool ulOutA = (ulx1 < -LFPG_ULTRA_LOD_MARGIN_PX || ulx1 > swF + LFPG_ULTRA_LOD_MARGIN_PX || uly1 < -LFPG_ULTRA_LOD_MARGIN_PX || uly1 > shF + LFPG_ULTRA_LOD_MARGIN_PX);
-                bool ulOutB = (ulx2 < -LFPG_ULTRA_LOD_MARGIN_PX || ulx2 > swF + LFPG_ULTRA_LOD_MARGIN_PX || uly2 < -LFPG_ULTRA_LOD_MARGIN_PX || uly2 > shF + LFPG_ULTRA_LOD_MARGIN_PX);
+                bool ulOutA = (ulx1 < -ulMargin || ulx1 > swF + ulMargin || uly1 < -ulMargin || uly1 > shF + ulMargin);
+                bool ulOutB = (ulx2 < -ulMargin || ulx2 > swF + ulMargin || uly2 < -ulMargin || uly2 > shF + ulMargin);
                 if (ulOutA || ulOutB)
                 {
-                    float ulMinX = -LFPG_ULTRA_LOD_MARGIN_PX;
-                    float ulMinY = -LFPG_ULTRA_LOD_MARGIN_PX;
-                    float ulMaxX = swF + LFPG_ULTRA_LOD_MARGIN_PX;
-                    float ulMaxY = shF + LFPG_ULTRA_LOD_MARGIN_PX;
+                    float ulMinX = -ulMargin;
+                    float ulMinY = -ulMargin;
+                    float ulMaxX = swF + ulMargin;
+                    float ulMaxY = shF + ulMargin;
                     bool ulVis = LFPG_WorldUtil.ClipSegToScreen(ulx1, uly1, ulx2, uly2, ulMinX, ulMinY, ulMaxX, ulMaxY, m_ClipA, m_ClipB);
                     if (!ulVis)
                     {
@@ -2158,7 +2189,7 @@ class LFPG_CableRenderer
             m_ScreenPts.Clear();
 
             // Wind sway: unique phase per wire from position hash
-            float swayPhase = wsi.cachedPosA[0] * 17.3 + wsi.cachedPosA[2] * 31.7;
+            float swayPhase = wsi.cachedPosA[0] * LFPG_SWAY_HASH_X + wsi.cachedPosA[2] * LFPG_SWAY_HASH_Z;
             float swayOff = Math.Sin(nowMs * LFPG_SWAY_SPEED + swayPhase) * LFPG_SWAY_AMPLITUDE;
 
             // Guard: verify first segment exists (should always be true)
@@ -2319,6 +2350,17 @@ class LFPG_CableRenderer
                 }
                 float decScale = LFPG_DEPTH_WIDTH_REF / decZ;
 
+                // v0.7.38 (L6): Compute endcap size once (same for both ends).
+                float ecSize = LFPG_ENDCAP_SIZE * decScale;
+                if (ecSize < LFPG_ENDCAP_SIZE_MIN)
+                {
+                    ecSize = LFPG_ENDCAP_SIZE_MIN;
+                }
+                if (ecSize > LFPG_ENDCAP_SIZE_MAX)
+                {
+                    ecSize = LFPG_ENDCAP_SIZE_MAX;
+                }
+
                 // Endcap at port A (first point in m_ScreenPts)
                 if (m_ScreenPts.Count() >= 2)
                 {
@@ -2336,15 +2378,6 @@ class LFPG_CableRenderer
                             float einv = 1.0 / elen;
                             epx = -edy * einv;
                             epy = edx * einv;
-                        }
-                        float ecSize = LFPG_ENDCAP_SIZE * decScale;
-                        if (ecSize < LFPG_ENDCAP_SIZE_MIN)
-                        {
-                            ecSize = LFPG_ENDCAP_SIZE_MIN;
-                        }
-                        if (ecSize > LFPG_ENDCAP_SIZE_MAX)
-                        {
-                            ecSize = LFPG_ENDCAP_SIZE_MAX;
                         }
                         hud.DrawEndcapScreen(ecA[0], ecA[1], epx, epy, ecSize, LFPG_ENDCAP_WIDTH, drawColor);
                     }
@@ -2369,16 +2402,7 @@ class LFPG_CableRenderer
                             epxB = -edyB * einvB;
                             epyB = edxB * einvB;
                         }
-                        float ecSizeB = LFPG_ENDCAP_SIZE * decScale;
-                        if (ecSizeB < LFPG_ENDCAP_SIZE_MIN)
-                        {
-                            ecSizeB = LFPG_ENDCAP_SIZE_MIN;
-                        }
-                        if (ecSizeB > LFPG_ENDCAP_SIZE_MAX)
-                        {
-                            ecSizeB = LFPG_ENDCAP_SIZE_MAX;
-                        }
-                        hud.DrawEndcapScreen(ecB[0], ecB[1], epxB, epyB, ecSizeB, LFPG_ENDCAP_WIDTH, drawColor);
+                        hud.DrawEndcapScreen(ecB[0], ecB[1], epxB, epyB, ecSize, LFPG_ENDCAP_WIDTH, drawColor);
                     }
                 }
 

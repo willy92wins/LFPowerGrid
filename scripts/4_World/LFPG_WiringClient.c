@@ -772,7 +772,7 @@ class LFPG_WiringClient
                     sy2 = m_ClipB[1];
                 }
 
-                hud.DrawLineScreen(sx1, sy1, sx2, sy2, 3.0, color);
+                hud.DrawLineScreen(sx1, sy1, sx2, sy2, LFPG_PREVIEW_LINE_WIDTH, color);
                 tPrv.m_Drawn = tPrv.m_Drawn + 1;
             }
         }

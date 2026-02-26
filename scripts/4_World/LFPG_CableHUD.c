@@ -1,9 +1,10 @@
 // =========================================================
 // LF_PowerGrid - Cable HUD (2D line overlay) (v0.7.38)
 //
-// v0.7.38 (Audit Phase 1) changes:
+// v0.7.38 (Audit) changes:
 //   H2 — Removed DrawSegment dead code (113 lines, zero callers).
-//        Updated stale comments referencing DrawSegment.
+//   M6 — EndFrame diagnostic guarded with LFPG_DIAG_ENABLED.
+//   M12 — Canvas.Clear before early return in BeginFrame (alt-tab fix).
 //
 // Uses CanvasWidget to draw cable lines on screen.
 // Works on RETAIL client (Shape.CreateLines only works in Diag EXE).
@@ -217,8 +218,9 @@ class LFPG_CableHUD
 
     void EndFrame()
     {
-        // Periodic diagnostic
-        if (m_FrameNum % 300 == 0)
+        // v0.7.38 (M6): Guard diagnostic log. Counters are redundant with
+        // LFPG_Telemetry.m_SegmentsDrawn but kept for HUD-level debugging.
+        if (LFPG_DIAG_ENABLED && m_FrameNum % 300 == 0)
         {
             string msg = "[CableHUD] frame=" + m_FrameNum.ToString();
             msg = msg + " drawn=" + m_SegmentsDrawn.ToString();

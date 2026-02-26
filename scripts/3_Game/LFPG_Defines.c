@@ -28,6 +28,11 @@ static const float LFPG_SAG_QUAD_REF_M    = 10.0;
 // do NOT sway — only the sag interpolation points between them.
 static const float LFPG_SWAY_AMPLITUDE     = 0.025;  // metres (vertical)
 static const float LFPG_SWAY_SPEED         = 0.0008; // radians per millisecond (~0.8 Hz)
+// v0.7.38 (L2): Spatial hash primes for sway phase differentiation.
+// Adjacent cables get distinct phases so they don't sway in lockstep.
+// Values chosen to be non-integer, co-prime, and visually verified.
+static const float LFPG_SWAY_HASH_X        = 17.3;
+static const float LFPG_SWAY_HASH_Z        = 31.7;
 
 // ---- Cable state system (v0.7.8) ----
 // Each committed wire has a visual state that determines color,
@@ -120,6 +125,7 @@ static const int LFPG_PREVIEW_COLOR_WARN        = 0xFFFFDD00;  // yellow
 static const int LFPG_PREVIEW_COLOR_OVER        = 0xFFD39B00;  // amber (total exceeded)
 static const int LFPG_PREVIEW_COLOR_INVALID     = 0xFFFF3333;  // red
 static const int LFPG_PREVIEW_COLOR_NO_TARGET   = 0xFF888888;  // grey
+static const float LFPG_PREVIEW_LINE_WIDTH     = 3.0;    // v0.7.38 (L1): preview cable width (px)
 
 // ---- Load calculation (v0.7.8, Sprint 4.3: active in graph propagation) ----
 // LoadRatio = totalDemand / sourceCapacity.
@@ -362,7 +368,7 @@ static const float LFPG_OCC_ALPHA_MIN        = 0.15;   // v0.7.38 (M1): min alph
 // ---- Screen margins (v0.7.38 M1) ----
 static const float LFPG_SCREEN_MARGIN_RATIO  = 0.25;   // margin as fraction of screen height
 static const float LFPG_SCREEN_MARGIN_MIN_PX = 200.0;  // minimum margin in pixels
-static const float LFPG_ULTRA_LOD_MARGIN_PX  = 200.0;  // ultra-LOD fast-path margin
+static const float LFPG_ULTRA_LOD_MARGIN_RATIO = 0.15;  // ultra-LOD margin as fraction of screen height
 
 // ---- Surface clamp ----
 static const float LFPG_SURFACE_CLAMP_M      = 0.02;   // v0.7.38 (M1): waypoint min offset above terrain
