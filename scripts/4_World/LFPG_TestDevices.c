@@ -518,6 +518,12 @@ class LF_TestGenerator : PowerGenerator
         return LFPG_DEFAULT_SOURCE_CAPACITY;  // 50.0 units/s
     }
 
+    // v0.7.38 (BugFix): Expose powered state for status display.
+    bool LFPG_IsPowered()
+    {
+        return LFPG_GetSourceOn();
+    }
+
     // v0.7.8: Current load ratio (synced to clients for cable state visuals)
     float LFPG_GetLoadRatio()
     {
@@ -1100,6 +1106,13 @@ class LF_TestLamp : Spotlight
     float LFPG_GetConsumption()
     {
         return LFPG_DEFAULT_CONSUMER_CONSUMPTION;  // 10.0 units/s
+    }
+
+    // v0.7.38 (BugFix): Expose powered state for status display.
+    // m_PoweredNet is SyncVar so available on both client and server.
+    bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
     }
 
     // ============================================

@@ -997,6 +997,41 @@ class LFPG_ElecGraph
         if (obj)
         {
             node.m_DeviceType = LFPG_DeviceAPI.GetDeviceType(obj);
+
+            // v0.7.38 (BugFix): Populate electrical properties on creation.
+            // Previously only set by PopulateAllNodeElecStates (bulk rebuild).
+            // Without this, runtime wire-adds created nodes with consumption=0
+            // and maxOutput=0 — causing no-overload and always-powered bugs.
+            if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+            {
+                node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
+                bool sourceOn = false;
+                if (LFPG_DeviceAPI.IsSource(obj))
+                {
+                    sourceOn = LFPG_DeviceAPI.GetSourceOn(obj);
+                }
+                else
+                {
+                    ComponentEnergyManager emSrc = obj.GetCompEM();
+                    if (emSrc)
+                    {
+                        sourceOn = emSrc.IsWorking();
+                    }
+                }
+                node.m_Powered = sourceOn;
+            }
+            else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
+                if (node.m_MaxOutput < LFPG_PROPAGATION_EPSILON)
+                {
+                    node.m_MaxOutput = LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
+                }
+            }
+            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
+            {
+                node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
+            }
         }
 
         m_Nodes.Set(deviceId, node);

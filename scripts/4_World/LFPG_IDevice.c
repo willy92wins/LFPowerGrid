@@ -340,14 +340,15 @@ class LFPG_DeviceAPI
         if (devId != "")
             return false;
 
-        ComponentEnergyManager em = e.GetCompEM();
-        if (!em)
-            return false;
+        // v0.7.38 (BugFix): Restrict to known vanilla consumer types.
+        // Previously any entity with CompEM was accepted, which included
+        // flashlights, stoves, barrels, radios, etc. Now only accepts
+        // Spotlight (tripod-mounted lights) — the only vanilla consumer
+        // type that makes sense for LFPG wiring.
+        if (e.IsKindOf("Spotlight"))
+            return true;
 
-        if (IsVanillaSource(e))
-            return false;
-
-        return true;
+        return false;
     }
 
     // ----- Low-level dynamic calls -----
@@ -432,6 +433,14 @@ class LFPG_DeviceAPI
     static bool GetSourceOn(Object obj)
     {
         return CallBool(obj, "LFPG_GetSourceOn", null, false);
+    }
+
+    // v0.7.38 (BugFix): Generic powered-state getter.
+    // Reads LFPG_IsPowered from LFPG-native devices (SyncVar m_PoweredNet).
+    // Used by status display to show correct state instead of CompEM.
+    static bool GetPowered(Object obj)
+    {
+        return CallBool(obj, "LFPG_IsPowered", null, false);
     }
 
     static bool CanConnectTo(Object obj, Object other, string myPort, string otherPort)

@@ -612,9 +612,7 @@ class ActionLFPG_CutWires : ActionSingleUseBase
         rpc.Write((int)LFPG_RPC_SubId.CUT_WIRES);
         rpc.Write(low);
         rpc.Write(high);
-        bool bRpcGuaranteed = true;
-        PlayerIdentity noExclude = null;
-        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
 };
 
@@ -787,9 +785,7 @@ class ActionLFPG_CutPortBase : ActionSingleUseBase
         rpc.Write(high);
         rpc.Write(portName);
         rpc.Write(portDir);
-        bool bRpcGuaranteed = true;
-        PlayerIdentity noExclude = null;
-        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
 };
 
@@ -901,14 +897,14 @@ class ActionLFPG_ToggleSource : ActionInteractBase
             m_Text = newText;
             s_LastTargetLow = tLow;
             s_LastTargetHigh = tHigh;
-            s_LastChangeMs = GetGame().GetTime();
+            s_LastChangeMs = GetGame().GetTickCount();
             return true;
         }
 
         // Same generator: only allow text change if debounce window expired.
         if (newText != m_Text)
         {
-            int nowMs = GetGame().GetTime();
+            int nowMs = GetGame().GetTickCount();
             if (s_LastChangeMs >= 0)
             {
                 int elapsed = nowMs - s_LastChangeMs;
@@ -1054,36 +1050,58 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         }
         player.MessageStatus("[LFPG] === " + dev.GetType() + " (" + role + ") ===");
 
-        // CompEM info
-        ComponentEnergyManager em = dev.GetCompEM();
-        if (em)
+        // v0.7.38 (BugFix): LFPG-native devices use LFPG_IsPowered.
+        // CompEM shows "Off / 0.0/0.0" for LFPG devices because they
+        // manage power via m_PoweredNet, not vanilla's energy system.
+        string devIdForStatus = LFPG_DeviceAPI.GetDeviceId(dev);
+        if (devIdForStatus != "")
         {
-            string state = "Off";
-            if (em.IsWorking())
+            // LFPG-native device: read powered state from LFPG API
+            bool lfpgPowered = LFPG_DeviceAPI.GetPowered(dev);
+            string lfpgState = "Off";
+            if (lfpgPowered)
             {
-                state = "Working";
+                lfpgState = "Powered";
             }
-            else if (em.IsSwitchedOn())
+            if (isSrc)
             {
-                state = "On (no power)";
+                // Sources: show capacity
+                float srcCap = LFPG_DeviceAPI.GetCapacity(dev);
+                string srcCapStr = LFPG_FormatFloat(srcCap);
+                player.MessageStatus("[LFPG] State: " + lfpgState + " | Capacity: " + srcCapStr + " W");
             }
-
-            float energy = em.GetEnergy();
-            float energyMax = em.GetEnergyMax();
-            string energyStr = LFPG_FormatFloat(energy) + " / " + LFPG_FormatFloat(energyMax);
-            player.MessageStatus("[LFPG] State: " + state + " | Energy: " + energyStr);
+            else if (isCon)
+            {
+                // Consumers: show consumption
+                float conDemand = LFPG_DeviceAPI.GetConsumption(dev);
+                string conDemStr = LFPG_FormatFloat(conDemand);
+                player.MessageStatus("[LFPG] State: " + lfpgState + " | Consumption: " + conDemStr + " W");
+            }
+            else
+            {
+                player.MessageStatus("[LFPG] State: " + lfpgState);
+            }
         }
         else
         {
-            if (isSrc)
+            // Vanilla device: fall back to CompEM
+            ComponentEnergyManager em = dev.GetCompEM();
+            if (em)
             {
-                bool srcOn = LFPG_DeviceAPI.GetSourceOn(dev);
-                string lfpgState = "Off";
-                if (srcOn)
+                string state = "Off";
+                if (em.IsWorking())
                 {
-                    lfpgState = "On";
+                    state = "Working";
                 }
-                player.MessageStatus("[LFPG] State: " + lfpgState);
+                else if (em.IsSwitchedOn())
+                {
+                    state = "On (no power)";
+                }
+
+                float energy = em.GetEnergy();
+                float energyMax = em.GetEnergyMax();
+                string energyStr = LFPG_FormatFloat(energy) + " / " + LFPG_FormatFloat(energyMax);
+                player.MessageStatus("[LFPG] State: " + state + " | Energy: " + energyStr);
             }
         }
 
@@ -1150,8 +1168,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         // v0.7.14: Guard empty device ID (device not yet registered)
         if (devId == "")
         {
-            string warnMsg = "[DebugStatus] OnExecuteServer: devId empty for " + dev.GetType();
-            LFPG_Util.Warn(warnMsg);
+            LFPG_Util.Warn("[DebugStatus] OnExecuteServer: devId empty for " + dev.GetType());
             return;
         }
 

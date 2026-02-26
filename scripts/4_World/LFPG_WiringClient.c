@@ -70,6 +70,12 @@ class LFPG_WiringClient
     // Prevents stuck sessions from disconnect, alt-tab, or unresponsive server.
     protected float m_SessionStartMs;
 
+    // v0.7.38 (BugFix): Post-finish cooldown to prevent auto-restart.
+    // After Finish() sends the RPC and Cancel()s, the port action can
+    // immediately re-trigger Start() because cursor is still on device.
+    // The orphan session times out after 2min → confusing message.
+    protected float m_LastFinishMs;
+
     // v0.7.36 (H1): Cohen-Sutherland clip output buffers.
     // Reused per-segment to avoid allocation (mirrors CableRenderer approach).
     protected vector m_ClipA;
@@ -88,6 +94,7 @@ class LFPG_WiringClient
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
         m_SessionStartMs = 0.0;
+        m_LastFinishMs = 0.0;
         m_ClipA = "0 0 0";
         m_ClipB = "0 0 0";
         m_PreConnectParams = new LFPG_PreConnectParams();
@@ -173,6 +180,21 @@ class LFPG_WiringClient
         if (m_Active)
         {
             Cancel();
+        }
+
+        // v0.7.38 (BugFix): Post-finish cooldown.
+        // After Finish() sends RPC and Cancel()s, port action immediately
+        // sees !IsActive() and re-triggers Start() — creating an orphan
+        // session that times out 2min later with confusing message.
+        // Block Start() for 1s after Finish to let the action cycle settle.
+        float nowStart = GetGame().GetTime();
+        if (m_LastFinishMs > 0.0)
+        {
+            float sinceFin = nowStart - m_LastFinishMs;
+            if (sinceFin < 1000.0)
+            {
+                return;
+            }
         }
 
         m_Active      = true;
@@ -320,6 +342,10 @@ class LFPG_WiringClient
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
 
         LFPG_Util.Info("[WiringClient] RPC FINISH_WIRING sent");
+
+        // v0.7.38 (BugFix): Record finish time BEFORE Cancel clears state.
+        // Prevents immediate re-Start from port action on same frame/next tick.
+        m_LastFinishMs = GetGame().GetTime();
 
         Cancel();
     }
