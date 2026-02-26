@@ -380,6 +380,19 @@ static const float LFPG_ULTRA_LOD_MARGIN_RATIO = 0.15;  // ultra-LOD margin as f
 // ---- Surface clamp ----
 static const float LFPG_SURFACE_CLAMP_M      = 0.02;   // v0.7.38 (M1): waypoint min offset above terrain
 
+// ---- Player screen-space occlusion (v0.7.38) ----
+// Segments behind the player model are alpha-faded so cables don't
+// draw on top of the character in 3rd-person view.
+// Per-frame cost: 2 GetScreenPos + a few float ops.
+// Per-segment cost: 1 line-vs-rect test (~6 float ops) for segments behind player.
+static const float LFPG_PLOCC_ALPHA          = 0.08;   // alpha for segments behind player (near-invisible)
+static const float LFPG_PLOCC_3P_MIN_DIST    = 0.5;    // cam-to-player dist threshold for 3P detection (m)
+static const float LFPG_PLOCC_3P_MIN_DIST_SQ = 0.25;   // squared (avoid per-frame multiply)
+static const float LFPG_PLOCC_HEAD_OFFSET_Y  = 1.75;   // Y offset from feet to head (m)
+static const float LFPG_PLOCC_WIDTH_RATIO    = 0.38;   // player screen width as fraction of screen height
+static const float LFPG_PLOCC_PAD_RATIO      = 0.08;   // vertical padding as fraction of projected height
+static const float LFPG_PLOCC_DEPTH_MARGIN   = 0.3;    // Z margin to avoid fading cables at same depth (m)
+
 // ---- LOD alias ----
 // v0.7.38 (M2): LOD_MID_M alias removed. Use LFPG_LOD_MEDIUM_M directly.
 
