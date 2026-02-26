@@ -87,13 +87,9 @@ class LF_TestGenerator : PowerGenerator
         RemoveAction(ActionPlugIn);
         RemoveAction(ActionUnplugThisByCord);
 
-        // v0.7.28 (Bug 2): Block vanilla take/carry actions.
-        // CanPutIntoHands/CanPutInCargo return false, but some vanilla
-        // code paths (heavy item carry, inventory drag) can bypass those
-        // checks depending on DayZ version. Explicit removal ensures
-        // the scroll-menu actions never appear.
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
+        // v0.7.38: Vanilla take/carry actions restored.
+        // Picking up a wired generator breaks its connections (position-based
+        // IDs change). This is by design — data integrity over convenience.
 
         AddAction(ActionLFPG_ToggleSource);
     }
@@ -804,25 +800,8 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.23 (Bug 5): Prevent picking up / moving placed generators.
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanPutIntoHands(EntityAI parent)
-    {
-        return false;
-    }
-
-    // v0.7.36 (M4): Block heavy carry system.
-    // NOTE: CanBePickedUp does NOT exist in PowerGeneratorBase/ItemBase hierarchy —
-    // removed to fix compile error. Protection is via CanPutInCargo,
-    // CanPutIntoHands (above), and IsHeavyBehaviour (below).
-
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
+    // v0.7.38: Vanilla carry/cargo restored.
+    // Picking up breaks wire connections (position-based IDs).
 
     // v0.7.27: Delegates to DeviceLifecycle for movement detection.
     override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
@@ -887,6 +866,12 @@ class LF_TestLamp : Spotlight
         RemoveAction(ActionTurnOnSpotlight);
         RemoveAction(ActionTurnOffSpotlight);
 
+        // v0.7.38: Defensive removal of other vanilla turn-on actions
+        // that may be inherited from Spotlight's parent class chain.
+        // Prevents "Turn On" appearing when lamp is held in hands.
+        RemoveAction(ActionTurnOnWhileInHands);
+        RemoveAction(ActionTurnOffWhileInHands);
+
         // v0.7.26 (Bug 3): Remove vanilla electrical connection actions.
         // Spotlight inherits these from its base class hierarchy.
         // Without explicit removal, players with vanilla CableReel near
@@ -894,12 +879,9 @@ class LF_TestLamp : Spotlight
         RemoveAction(ActionPlugIn);
         RemoveAction(ActionUnplugThisByCord);
 
-        // v0.7.28 (Bug 2): Block vanilla take/carry actions.
-        // CanPutIntoHands/CanPutInCargo return false, but some vanilla
-        // code paths (heavy item carry, inventory drag) bypass those
-        // checks. Explicit removal ensures the actions never appear.
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
+        // v0.7.38: Vanilla take/carry actions restored.
+        // Picking up a wired lamp breaks its connections (position-based
+        // IDs change). This is by design — data integrity over convenience.
     }
 
     // v0.7.26 (Bug 3): Prevent vanilla electrical system from treating
@@ -1202,27 +1184,8 @@ class LF_TestLamp : Spotlight
     }
 
     // v0.7.23 (Bug 5): Prevent picking up / moving placed lamps.
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanPutIntoHands(EntityAI parent)
-    {
-        return false;
-    }
-
-    // v0.7.29 (Audit fix): Block heavy carry system.
-    // DayZ Spotlight can be a "heavy item" that uses a separate C++ carry
-    // path which may bypass CanPutIntoHands entirely.
-    // NOTE: CanBePickedUp does NOT exist in the Spotlight/ItemBase hierarchy —
-    // removed to fix compile error. Protection is via CanPutInCargo,
-    // CanPutIntoHands (above), and IsHeavyBehaviour (below).
-
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
+    // v0.7.38: Vanilla carry/cargo restored.
+    // Picking up breaks wire connections (position-based IDs).
 
     // v0.7.27: Delegates to DeviceLifecycle for movement detection.
     override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)

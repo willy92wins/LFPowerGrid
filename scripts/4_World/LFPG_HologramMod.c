@@ -66,15 +66,19 @@ modded class Hologram
         vector hitNormal;
         int contactComponent;  // required out param for RaycastRV, unused
 
-        // v0.7.36: Pre-assign literal to local var — Enforce rejects
-        // bare literals like 0.0 inside function parameter lists.
+        // v0.7.38: Exclude projection entity (not player) from raycast.
+        // The hologram sits between camera and wall — excluding the player
+        // let the ray hit the hologram itself instead of the wall behind it,
+        // causing the hologram to snap to itself, jitter, and prevent placement.
+        // Also: ObjIntersectFire matches vanilla placement raycasts and has
+        // better coverage of building walls than ObjIntersectGeom.
         float rayRadius = 0.0;
         set<Object> rayResults = null;
         Object rayWith = null;
         bool bSorted = false;
         bool bGroundOnly = false;
 
-        bool hit = DayZPhysics.RaycastRV(camPos, rayEnd, hitPos, hitNormal, contactComponent, rayResults, rayWith, player, bSorted, bGroundOnly, ObjIntersectGeom, rayRadius);
+        bool hit = DayZPhysics.RaycastRV(camPos, rayEnd, hitPos, hitNormal, contactComponent, rayResults, rayWith, projection, bSorted, bGroundOnly, ObjIntersectFire, rayRadius);
 
         if (!hit)
         {
@@ -128,6 +132,22 @@ modded class Hologram
             return false; // Wall raycast already validated the surface
         }
         return super.IsColliding();
+    }
+
+    // ---- Server-side collision evaluation: skip all checks in wall mode ----
+    // v0.7.38: ActionPlaceObject/ActionDeployObject may call EvaluateCollision
+    // on the server hologram. Vanilla checks (IsBaseViable, HeightPlacement,
+    // IsInTerrain) all fail for wall placement. Skip entirely when wall mode
+    // was detected by UpdateHologram's raycast.
+    override void EvaluateCollision(ItemBase action_item)
+    {
+        if (m_LFPG_IsSplitterKit && m_LFPG_IsWallMode)
+        {
+            bool bNoCollide = false;
+            SetIsColliding(bNoCollide);
+            return;
+        }
+        super.EvaluateCollision(action_item);
     }
 
     // ---- Angle check: always pass for splitter kit on wall ----

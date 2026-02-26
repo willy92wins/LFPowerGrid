@@ -35,6 +35,10 @@ class LF_CableReel : CableReel
     {
         // DO NOT call super.SetActions() (CableReel adds plug + placement actions).
 
+        // v0.7.38: Restore vanilla take actions so player can pick up the reel.
+        AddAction(ActionTakeItem);
+        AddAction(ActionTakeItemToHands);
+
         // Per-port actions (max 6 ports per device)
         AddAction(ActionLFPG_Port0);
         AddAction(ActionLFPG_Port1);
@@ -53,7 +57,7 @@ class LF_CableReel : CableReel
         if (!s_SetActionsLogged)
         {
             s_SetActionsLogged = true;
-            LFPG_Util.Info("[Items] LF_CableReel.SetActions v" + LFPG_VERSION_STR + " (9 actions)");
+            LFPG_Util.Info("[Items] LF_CableReel.SetActions v" + LFPG_VERSION_STR + " (11 actions)");
         }
     }
 
