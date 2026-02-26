@@ -2128,6 +2128,17 @@ class LFPG_CableRenderer
                 lodTier = 1;
             }
 
+            // v0.7.38: LOD transition blend for anti-popping.
+            // In the last TRANSITION_M metres before tier 0→1 boundary,
+            // fade highlight and endcaps/joints to 0 so the switch is seamless.
+            // Only computed for tier 0 (close-up detail features).
+            // lodTier==0 guarantees wireDist < LOD_CLOSE_M, so lodBlend > 0 always.
+            float lodBlend = 1.0;
+            if (lodTier == 0 && wireDist > LFPG_LOD_FADE_START_M)
+            {
+                lodBlend = (LFPG_LOD_CLOSE_M - wireDist) * LFPG_LOD_TRANSITION_INV;
+            }
+
             // ---- Alpha fade ----
             float alphaFactor = 1.0;
             if (doAlphaFade && wireDist > LFPG_ALPHA_FADE_START_M)
@@ -2193,9 +2204,11 @@ class LFPG_CableRenderer
             if (lodTier == 0)
             {
                 highlightColor = MakeHighlightColor(baseColor, LFPG_HIGHLIGHT_ALPHA);
-                if (alphaFactor < 0.99)
+                // v0.7.38: Combine alphaFactor and lodBlend into single ApplyAlpha.
+                float hlAlpha = alphaFactor * lodBlend;
+                if (hlAlpha < 0.99)
                 {
-                    highlightColor = ApplyAlpha(highlightColor, alphaFactor);
+                    highlightColor = ApplyAlpha(highlightColor, hlAlpha);
                 }
             }
 
@@ -2320,9 +2333,23 @@ class LFPG_CableRenderer
             // ================================================
             m_ScreenPts.Clear();
 
-            // Wind sway: unique phase per wire from position hash
-            float swayPhase = wsi.cachedPosA[0] * LFPG_SWAY_HASH_X + wsi.cachedPosA[2] * LFPG_SWAY_HASH_Z;
-            float swayOff = Math.Sin(nowMs * LFPG_SWAY_SPEED + swayPhase) * LFPG_SWAY_AMPLITUDE;
+            // Wind sway: unique phase per wire from position hash.
+            // v0.7.38: Distance attenuation — at 50m sway is <1px, skip.
+            // v0.7.38: Horizontal sway — second Sin with different speed/phase
+            // gives organic 2D Lissajous-like motion. Both share swayScale.
+            float swayOff = 0.0;
+            float swayOffX = 0.0;
+            float swayScale = 1.0 - (wireDist * LFPG_SWAY_ATTEN_INV);
+            if (swayScale > 0.0)
+            {
+                float swayPhase = wsi.cachedPosA[0] * LFPG_SWAY_HASH_X + wsi.cachedPosA[2] * LFPG_SWAY_HASH_Z;
+                swayOff = Math.Sin(nowMs * LFPG_SWAY_SPEED + swayPhase) * LFPG_SWAY_AMPLITUDE * swayScale;
+                swayOffX = Math.Sin(nowMs * LFPG_SWAY_X_SPEED + swayPhase + LFPG_SWAY_X_PHASE_OFS) * LFPG_SWAY_X_AMPLITUDE * swayScale;
+            }
+            // v0.7.38: Precompute parabolic denominator for sway profile.
+            // swayT = (s+1)/(segCount+1), swayW = 4*swayT*(1-swayT).
+            // Points at cable center sway most, endpoints don't sway.
+            float swayDenom = segCount + 1.0;
 
             // Guard: verify first segment exists (should always be true)
             LFPG_CableParticle firstSeg = wsi.segments[0];
@@ -2349,10 +2376,17 @@ class LFPG_CableRenderer
                 // Apply sway to intermediate points only.
                 // Port endpoints (first .m_From and last .m_To) do NOT sway —
                 // they are anchored to the device. Only sag interpolation points move.
+                // v0.7.38: Parabolic profile — cable center sways most,
+                // near-anchor points barely move (like a real hanging cable).
+                // Both vertical (Y) and horizontal (X) share the same profile.
+                // Skip if both sway components are negligible.
                 bool isLastPoint = (s == segCount - 1);
-                if (!isLastPoint)
+                if (!isLastPoint && swayScale > 0.0)
                 {
-                    wp[1] = wp[1] + swayOff;
+                    float swayT = (s + 1.0) / swayDenom;
+                    float swayW = 4.0 * swayT * (1.0 - swayT);
+                    wp[1] = wp[1] + swayOff * swayW;
+                    wp[0] = wp[0] + swayOffX * swayW;
                 }
 
                 m_ScreenPts.Insert(GetGame().GetScreenPos(wp));
@@ -2475,13 +2509,15 @@ class LFPG_CableRenderer
                     }
                 }
 
-                // Compute pass widths once (used by both normal and split paths)
-                float shadowWidth = depthWidth + LFPG_SHADOW_WIDTH_ADD;
+                // v0.7.38: Depth-proportional shadow offset (down-right).
+                // Scales with depthWidth so shadow hugs cable at all distances.
                 float hlWidth = depthWidth - LFPG_HIGHLIGHT_WIDTH_SUB;
                 if (hlWidth < 1.0)
                 {
                     hlWidth = 1.0;
                 }
+                float shOfsX = depthWidth * LFPG_SHADOW_OFS_X_RATIO;
+                float shOfsY = depthWidth * LFPG_SHADOW_OFS_Y_RATIO;
 
                 // ---- Multi-pass drawing (LOD-dependent) ----
                 if (segPlOcc)
@@ -2496,7 +2532,7 @@ class LFPG_CableRenderer
                     {
                         if (lodTier <= 1)
                         {
-                            hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, shadowWidth, shadowColor);
+                            hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, plClX1 + shOfsX, plClY1 + shOfsY, depthWidth, shadowColor);
                         }
                         hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, depthWidth, drawColor);
                         if (lodTier == 0)
@@ -2508,7 +2544,7 @@ class LFPG_CableRenderer
                     // Tramo 2: Pin → Pout (faded behind player)
                     if (lodTier <= 1)
                     {
-                        hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, shadowWidth, plOccShadowColor);
+                        hud.DrawLineScreen(plClX1 + shOfsX, plClY1 + shOfsY, plClX2 + shOfsX, plClY2 + shOfsY, depthWidth, plOccShadowColor);
                     }
                     hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, depthWidth, plOccDrawColor);
                     if (lodTier == 0)
@@ -2521,7 +2557,7 @@ class LFPG_CableRenderer
                     {
                         if (lodTier <= 1)
                         {
-                            hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, shadowWidth, shadowColor);
+                            hud.DrawLineScreen(plClX2 + shOfsX, plClY2 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, shadowColor);
                         }
                         hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, depthWidth, drawColor);
                         if (lodTier == 0)
@@ -2535,7 +2571,7 @@ class LFPG_CableRenderer
                     // Normal draw (no player intersection)
                     if (lodTier <= 1)
                     {
-                        hud.DrawLineScreen(sx1, sy1, sx2, sy2, shadowWidth, shadowColor);
+                        hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, shadowColor);
                     }
                     hud.DrawLineScreen(sx1, sy1, sx2, sy2, depthWidth, drawColor);
                     if (lodTier == 0)
@@ -2551,6 +2587,13 @@ class LFPG_CableRenderer
             // ================================================
             if (lodTier == 0)
             {
+                // v0.7.38: Fade decorators with lodBlend for smooth LOD transition.
+                int decColor = drawColor;
+                if (lodBlend < 0.99)
+                {
+                    decColor = ApplyAlpha(drawColor, lodBlend);
+                }
+
                 // Depth scale factor for decorators
                 float decZ = wsi.cachedMinDist;
                 if (decZ < 1.0)
@@ -2588,7 +2631,7 @@ class LFPG_CableRenderer
                             epx = -edy * einv;
                             epy = edx * einv;
                         }
-                        hud.DrawEndcapScreen(ecA[0], ecA[1], epx, epy, ecSize, LFPG_ENDCAP_WIDTH, drawColor);
+                        hud.DrawEndcapScreen(ecA[0], ecA[1], epx, epy, ecSize, LFPG_ENDCAP_WIDTH, decColor);
                     }
                 }
 
@@ -2611,7 +2654,7 @@ class LFPG_CableRenderer
                             epxB = -edyB * einvB;
                             epyB = edxB * einvB;
                         }
-                        hud.DrawEndcapScreen(ecB[0], ecB[1], epxB, epyB, ecSize, LFPG_ENDCAP_WIDTH, drawColor);
+                        hud.DrawEndcapScreen(ecB[0], ecB[1], epxB, epyB, ecSize, LFPG_ENDCAP_WIDTH, decColor);
                     }
                 }
 
@@ -2646,7 +2689,7 @@ class LFPG_CableRenderer
                             vector jScreen = m_JointScreenPts[ji];
                             if (jScreen[2] > LFPG_BEHIND_CAM_Z)
                             {
-                                hud.DrawJointScreen(jScreen[0], jScreen[1], jSize, drawColor);
+                                hud.DrawJointScreen(jScreen[0], jScreen[1], jSize, decColor);
                             }
                         }
                     }

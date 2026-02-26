@@ -33,11 +33,22 @@ static const float LFPG_SWAY_SPEED         = 0.0008; // radians per millisecond 
 // Values chosen to be non-integer, co-prime, and visually verified.
 static const float LFPG_SWAY_HASH_X        = 17.3;
 static const float LFPG_SWAY_HASH_Z        = 31.7;
+// v0.7.38: Distance-based sway attenuation.
+// At 50m, 0.025m sway projects to <1px — invisible but costs Math.Sin.
+// Attenuate to zero over SWAY_ATTEN_DIST_M.
+static const float LFPG_SWAY_ATTEN_INV     = 0.02;    // 1.0 / 50.0m (avoid per-wire divide)
+// v0.7.38: Horizontal sway — perpendicular wind component.
+// Lower amplitude + different speed gives organic 2D motion.
+static const float LFPG_SWAY_X_AMPLITUDE   = 0.008;   // metres (horizontal, ~30% of vertical)
+static const float LFPG_SWAY_X_SPEED       = 0.00056; // radians/ms (~0.7× vertical speed)
+static const float LFPG_SWAY_X_PHASE_OFS   = 1.5;     // radians offset from vertical phase
 
 // v0.7.38 (L8): Z-depth threshold for behind-camera detection.
 // GetScreenPos returns z < threshold when the point is at or behind
-// the camera plane. 0.1 is conservative to avoid near-plane distortion.
-static const float LFPG_BEHIND_CAM_Z       = 0.1;
+// the camera plane. At Z=0.3m the perspective projection is ~3x
+// distorted — enough to produce ±30000px screen coords that cause
+// edge artifacts after clipping. 0.3m is well within the near plane.
+static const float LFPG_BEHIND_CAM_Z       = 0.3;
 
 // ---- Cable state system (v0.7.8) ----
 // Each committed wire has a visual state that determines color,
@@ -85,6 +96,12 @@ static const int LFPG_STATE_COLOR_SELECTED      = 0xFF00B4D8;  // cyan
 // Close/Medium/Far LOD boundaries in metres.
 static const float LFPG_LOD_CLOSE_M  = 15.0;
 static const float LFPG_LOD_MEDIUM_M = 40.0;
+// v0.7.38: Transition band for LOD anti-popping.
+// Highlight and endcaps/joints fade out over this distance before
+// the LOD tier boundary, preventing hard on/off popping.
+static const float LFPG_LOD_TRANSITION_M = 2.0;      // fade band width in metres
+static const float LFPG_LOD_FADE_START_M = 13.0;     // LOD_CLOSE_M - TRANSITION_M (precomputed)
+static const float LFPG_LOD_TRANSITION_INV = 0.5;    // 1.0 / TRANSITION_M (avoid per-wire divide)
 static const float LFPG_LOD_FAR_M    = 80.0;
 
 // Line widths per LOD band.
@@ -373,9 +390,14 @@ static const float LFPG_ALPHA_MIN_THRESHOLD  = 0.02;   // v0.7.38 (M1): skip wir
 static const float LFPG_OCC_ALPHA_MIN        = 0.15;   // v0.7.38 (M1): min alpha for occluded wires (ghost)
 
 // ---- Screen margins (v0.7.38 M1) ----
-static const float LFPG_SCREEN_MARGIN_RATIO  = 0.25;   // margin as fraction of screen height
-static const float LFPG_SCREEN_MARGIN_MIN_PX = 200.0;  // minimum margin in pixels
-static const float LFPG_ULTRA_LOD_MARGIN_RATIO = 0.15;  // ultra-LOD margin as fraction of screen height
+// Margin around screen bounds for Cohen-Sutherland clipping.
+// Only needs to cover half the max line width + shadow offset
+// (DEPTH_WIDTH_MAX/2 + max shadow offset ≈ 4px) to prevent popping.
+// 30px is generous. Previous values (0.25 / 200px) caused visible
+// edge artifacts when extreme projections clipped to the margin boundary.
+static const float LFPG_SCREEN_MARGIN_RATIO  = 0.03;   // margin as fraction of screen height
+static const float LFPG_SCREEN_MARGIN_MIN_PX = 30.0;   // minimum margin in pixels
+static const float LFPG_ULTRA_LOD_MARGIN_RATIO = 0.03;  // ultra-LOD margin as fraction of screen height
 
 // ---- Surface clamp ----
 static const float LFPG_SURFACE_CLAMP_M      = 0.02;   // v0.7.38 (M1): waypoint min offset above terrain
@@ -404,7 +426,13 @@ static const float LFPG_DEPTH_WIDTH_REF      = 20.0;   // reference distance for
 
 // ---- Cable shadow ----
 static const int   LFPG_SHADOW_COLOR         = 0x40000000;  // semi-transparent black
-static const float LFPG_SHADOW_WIDTH_ADD     = 1.5;    // extra width for shadow pass
+// v0.7.38: Directional shadow offset (simulates light from upper-left).
+// Shadow is drawn at cable width (not wider) but displaced down-right.
+// Ratios are multiplied by depthWidth per-segment so the shadow
+// stays proportional at all distances (0.25 × 4px = 1px close,
+// 0.25 × 1px = 0.25px far — shadow hugs the cable).
+static const float LFPG_SHADOW_OFS_X_RATIO  = 0.25;   // horizontal offset as fraction of depthWidth
+static const float LFPG_SHADOW_OFS_Y_RATIO  = 0.5;    // vertical offset as fraction of depthWidth
 
 // ---- Highlight / hover ----
 static const int   LFPG_HIGHLIGHT_ALPHA      = 0x60;   // alpha for highlight overlay

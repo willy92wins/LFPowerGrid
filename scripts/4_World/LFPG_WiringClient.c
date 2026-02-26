@@ -606,10 +606,10 @@ class LFPG_WiringClient
         vector camDir = GetGame().GetCurrentCameraDirection();
 
         // Screen margin for off-screen culling (proportional, same as committed cables)
-        float margin = shF * 0.25;
-        if (margin < 200.0)
+        float margin = shF * LFPG_SCREEN_MARGIN_RATIO;
+        if (margin < LFPG_SCREEN_MARGIN_MIN_PX)
         {
-            margin = 200.0;
+            margin = LFPG_SCREEN_MARGIN_MIN_PX;
         }
 
         // v0.7.13 (G1): Preview metrics — grab reference once per frame
