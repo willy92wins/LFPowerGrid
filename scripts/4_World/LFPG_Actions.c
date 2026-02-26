@@ -612,7 +612,9 @@ class ActionLFPG_CutWires : ActionSingleUseBase
         rpc.Write((int)LFPG_RPC_SubId.CUT_WIRES);
         rpc.Write(low);
         rpc.Write(high);
-        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
+        bool bRpcGuaranteed = true;
+        PlayerIdentity noExclude = null;
+        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
     }
 };
 
@@ -785,7 +787,9 @@ class ActionLFPG_CutPortBase : ActionSingleUseBase
         rpc.Write(high);
         rpc.Write(portName);
         rpc.Write(portDir);
-        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
+        bool bRpcGuaranteed = true;
+        PlayerIdentity noExclude = null;
+        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
     }
 };
 
@@ -897,14 +901,14 @@ class ActionLFPG_ToggleSource : ActionInteractBase
             m_Text = newText;
             s_LastTargetLow = tLow;
             s_LastTargetHigh = tHigh;
-            s_LastChangeMs = GetGame().GetTickCount();
+            s_LastChangeMs = GetGame().GetTime();
             return true;
         }
 
         // Same generator: only allow text change if debounce window expired.
         if (newText != m_Text)
         {
-            int nowMs = GetGame().GetTickCount();
+            int nowMs = GetGame().GetTime();
             if (s_LastChangeMs >= 0)
             {
                 int elapsed = nowMs - s_LastChangeMs;
@@ -1146,7 +1150,8 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         // v0.7.14: Guard empty device ID (device not yet registered)
         if (devId == "")
         {
-            LFPG_Util.Warn("[DebugStatus] OnExecuteServer: devId empty for " + dev.GetType());
+            string warnMsg = "[DebugStatus] OnExecuteServer: devId empty for " + dev.GetType();
+            LFPG_Util.Warn(warnMsg);
             return;
         }
 

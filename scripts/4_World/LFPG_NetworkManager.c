@@ -1017,9 +1017,9 @@ class LFPG_NetworkManager
             for (tw = 0; tw < ownerWires.Count(); tw = tw + 1)
             {
                 if (!ownerWires[tw]) continue;
-                if (ownerWires[tw].targetDeviceId == "") continue;
+                if (ownerWires[tw].m_TargetDeviceId == "") continue;
 
-                EntityAI targetObj = reg.FindById(ownerWires[tw].targetDeviceId);
+                EntityAI targetObj = reg.FindById(ownerWires[tw].m_TargetDeviceId);
                 if (targetObj)
                 {
                     targetPositions.Insert(targetObj.GetPosition());
@@ -1115,9 +1115,9 @@ class LFPG_NetworkManager
             for (tw = 0; tw < wires.Count(); tw = tw + 1)
             {
                 if (!wires[tw]) continue;
-                if (wires[tw].targetDeviceId == "") continue;
+                if (wires[tw].m_TargetDeviceId == "") continue;
 
-                EntityAI targetObj = reg.FindById(wires[tw].targetDeviceId);
+                EntityAI targetObj = reg.FindById(wires[tw].m_TargetDeviceId);
                 if (targetObj)
                 {
                     vTargetPositions.Insert(targetObj.GetPosition());
@@ -1321,7 +1321,7 @@ class LFPG_NetworkManager
             int w;
             for (w = 0; w < wires.Count(); w = w + 1)
             {
-                if (wires[w] && wires[w].targetDeviceId == deviceId)
+                if (wires[w] && wires[w].m_TargetDeviceId == deviceId)
                 {
                     targetsDevice = true;
                     break;
@@ -1353,7 +1353,7 @@ class LFPG_NetworkManager
                     int vw;
                     for (vw = 0; vw < vWires.Count(); vw = vw + 1)
                     {
-                        if (vWires[vw] && vWires[vw].targetDeviceId == deviceId)
+                        if (vWires[vw] && vWires[vw].m_TargetDeviceId == deviceId)
                         {
                             shouldSend = true;
                             break;
@@ -1496,7 +1496,7 @@ class LFPG_NetworkManager
         }
 
         // Periodic telemetry dump
-        float nowMs = GetGame().GetTickCount();
+        float nowMs = GetGame().GetTime();
         float elapsed = nowMs - m_TelemLastDumpMs;
         if (m_TelemLastDumpMs < 0.0)
         {
@@ -1514,16 +1514,16 @@ class LFPG_NetworkManager
             }
             int overloadCount = m_Graph.GetOverloadedSourceCount();
 
-            string tLog = "[Telemetry-Propagation]"
-                + " ticks=" + m_TelemTickCount.ToString()
-                + " avgMs=" + avgMs.ToString()
-                + " peakMs=" + m_TelemPeakProcessMs.ToString()
-                + " avgEdges=" + avgEdges.ToString()
-                + " nodes=" + m_Graph.GetNodeCount().ToString()
-                + " edges=" + m_Graph.GetEdgeCount().ToString()
-                + " queueRemain=" + remaining.ToString()
-                + " overloadedSources=" + overloadCount.ToString()
-                + " epoch=" + m_Graph.GetCurrentEpoch().ToString();
+            string tLog = "[Telemetry-Propagation]";
+            tLog = tLog + " ticks=" + m_TelemTickCount.ToString();
+            tLog = tLog + " avgMs=" + avgMs.ToString();
+            tLog = tLog + " peakMs=" + m_TelemPeakProcessMs.ToString();
+            tLog = tLog + " avgEdges=" + avgEdges.ToString();
+            tLog = tLog + " nodes=" + m_Graph.GetNodeCount().ToString();
+            tLog = tLog + " edges=" + m_Graph.GetEdgeCount().ToString();
+            tLog = tLog + " queueRemain=" + remaining.ToString();
+            tLog = tLog + " overloadedSources=" + overloadCount.ToString();
+            tLog = tLog + " epoch=" + m_Graph.GetCurrentEpoch().ToString();
             LFPG_Util.Info(tLog);
 
             // Reset accumulators
@@ -2248,11 +2248,11 @@ class LFPG_NetworkManager
                 if (!wd) continue;
 
                 LFPG_VanillaWireEntry entry = new LFPG_VanillaWireEntry();
-                entry.ownerDeviceId = ownerId;
-                entry.targetDeviceId = wd.m_TargetDeviceId;
-                entry.targetPort = wd.m_TargetPort;
-                entry.sourcePort = wd.m_SourcePort;
-                entry.creatorId = wd.m_CreatorId;
+                entry.m_OwnerDeviceId = ownerId;
+                entry.m_TargetDeviceId = wd.m_TargetDeviceId;
+                entry.m_TargetPort = wd.m_TargetPort;
+                entry.m_SourcePort = wd.m_SourcePort;
+                entry.m_CreatorId = wd.m_CreatorId;
 
                 // Persist waypoints (v0.7.3)
                 if (wd.m_Waypoints && wd.m_Waypoints.Count() > 0)
@@ -2260,7 +2260,7 @@ class LFPG_NetworkManager
                     int wp;
                     for (wp = 0; wp < wd.m_Waypoints.Count(); wp = wp + 1)
                     {
-                        entry.waypoints.Insert(wd.m_Waypoints[wp]);
+                        entry.m_Waypoints.Insert(wd.m_Waypoints[wp]);
                     }
                 }
 
@@ -2332,25 +2332,25 @@ class LFPG_NetworkManager
         {
             LFPG_VanillaWireEntry entry = store.entries[i];
             if (!entry) continue;
-            if (entry.ownerDeviceId == "" || entry.targetDeviceId == "")
+            if (entry.m_OwnerDeviceId == "" || entry.m_TargetDeviceId == "")
             {
                 discarded = discarded + 1;
                 continue;
             }
 
             LFPG_WireData wd = new LFPG_WireData();
-            wd.m_TargetDeviceId = entry.targetDeviceId;
-            wd.m_TargetPort = entry.targetPort;
-            wd.m_SourcePort = entry.sourcePort;
-            wd.m_CreatorId = entry.creatorId;
+            wd.m_TargetDeviceId = entry.m_TargetDeviceId;
+            wd.m_TargetPort = entry.m_TargetPort;
+            wd.m_SourcePort = entry.m_SourcePort;
+            wd.m_CreatorId = entry.m_CreatorId;
 
             // Restore waypoints (v0.7.3)
-            if (entry.waypoints && entry.waypoints.Count() > 0)
+            if (entry.m_Waypoints && entry.m_Waypoints.Count() > 0)
             {
                 int wp;
-                for (wp = 0; wp < entry.waypoints.Count(); wp = wp + 1)
+                for (wp = 0; wp < entry.m_Waypoints.Count(); wp = wp + 1)
                 {
-                    wd.m_Waypoints.Insert(entry.waypoints[wp]);
+                    wd.m_Waypoints.Insert(entry.m_Waypoints[wp]);
                 }
             }
 
@@ -2363,10 +2363,10 @@ class LFPG_NetworkManager
 
             // v0.7.16 H3: O(1) dedup via map per owner
             ref map<string, bool> ownerDedup;
-            if (!dedupByOwner.Find(entry.ownerDeviceId, ownerDedup) || !ownerDedup)
+            if (!dedupByOwner.Find(entry.m_OwnerDeviceId, ownerDedup) || !ownerDedup)
             {
                 ownerDedup = new map<string, bool>;
-                dedupByOwner.Set(entry.ownerDeviceId, ownerDedup);
+                dedupByOwner.Set(entry.m_OwnerDeviceId, ownerDedup);
             }
 
             string dedupKey = wd.m_TargetDeviceId + "|" + wd.m_TargetPort + "|" + wd.m_SourcePort;
@@ -2382,10 +2382,10 @@ class LFPG_NetworkManager
 
             // Insert into wire map
             ref array<ref LFPG_WireData> wires;
-            if (!m_VanillaWires.Find(entry.ownerDeviceId, wires) || !wires)
+            if (!m_VanillaWires.Find(entry.m_OwnerDeviceId, wires) || !wires)
             {
                 wires = new array<ref LFPG_WireData>;
-                m_VanillaWires[entry.ownerDeviceId] = wires;
+                m_VanillaWires[entry.m_OwnerDeviceId] = wires;
             }
 
             wires.Insert(wd);
@@ -2579,6 +2579,7 @@ class LFPG_NetworkManager
         // Must happen BEFORE graph removal (section 6). Once the graph
         // removes the node, orphaned neighbors never get a propagation
         // update and their m_PoweredNet stays stale.
+        EntityAI neighborDev;
         if (anyChanged)
         {
             // Force self off (covers consumers and passthroughs)
@@ -2590,7 +2591,7 @@ class LFPG_NetworkManager
             int nbi;
             for (nbi = 0; nbi < neighborIds.Count(); nbi = nbi + 1)
             {
-                EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborIds[nbi]);
+                neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborIds[nbi]);
                 if (neighborDev)
                 {
                     LFPG_DeviceAPI.SetPowered(neighborDev, bPwrOff);
@@ -2639,7 +2640,7 @@ class LFPG_NetworkManager
         for (nui = 0; nui < neighborIds.Count(); nui = nui + 1)
         {
             string neighborId = neighborIds[nui];
-            EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborId);
+            neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborId);
             if (neighborDev)
             {
                 if (!DeviceHasAnyWires(neighborDev, neighborId))

@@ -198,7 +198,7 @@ class LFPG_ElecGraph
         if (!mgr)
             return;
 
-        int startMs = GetGame().GetTickCount();
+        int startMs = GetGame().GetTime();
 
         // Clear everything
         m_Nodes.Clear();
@@ -323,7 +323,7 @@ class LFPG_ElecGraph
         m_ComponentsDirty = true;
         RebuildComponents();
 
-        int elapsed = GetGame().GetTickCount() - startMs;
+        int elapsed = GetGame().GetTime() - startMs;
         m_LastRebuildMs = elapsed;
 
         string rbMsg = "[ElecGraph] Rebuilt: " + m_NodeCount.ToString() + " nodes, ";
@@ -449,6 +449,11 @@ class LFPG_ElecGraph
         bool hasB = m_Nodes.Find(targetId, nodeB);
 
         // Fast-paths: only when components are clean (already rebuilt)
+        int limit = LFPG_MAX_NODES_PER_COMPONENT;
+        int sizeA = 0;
+        int sizeB = 0;
+        int remaining = 0;
+        int totalSize = 0;
         if (!m_ComponentsDirty)
         {
             int compA = -1;
@@ -466,8 +471,8 @@ class LFPG_ElecGraph
             // 2b: Different known components — O(1) size lookup
             else if (compA >= 0 && compB >= 0)
             {
-                int sizeA = 0;
-                int sizeB = 0;
+                sizeA = 0;
+                sizeB = 0;
                 m_ComponentSizes.Find(compA, sizeA);
                 m_ComponentSizes.Find(compB, sizeB);
 
@@ -483,7 +488,7 @@ class LFPG_ElecGraph
             // 2c: One or both nodes are new (compId == -1) — BFS fallback
             else
             {
-                int limit = LFPG_MAX_NODES_PER_COMPONENT;
+                limit = LFPG_MAX_NODES_PER_COMPONENT;
                 int bfsSizeA = 1;
                 int bfsSizeB = 1;
 
@@ -506,7 +511,7 @@ class LFPG_ElecGraph
                     return false;
                 }
 
-                int remaining = limit - bfsSizeA;
+                remaining = limit - bfsSizeA;
                 if (remaining <= 0)
                 {
                     string wMsg2 = "[ElecGraph] OnWireAdded REJECTED: no budget for target";
@@ -526,7 +531,7 @@ class LFPG_ElecGraph
                     }
                 }
 
-                int totalSize = bfsSizeA + bfsSizeB;
+                totalSize = bfsSizeA + bfsSizeB;
                 if (totalSize > limit)
                 {
                     string szMsg = "[ElecGraph] OnWireAdded REJECTED: merged size (" + totalSize.ToString() + "/" + limit.ToString() + ")";
@@ -540,8 +545,8 @@ class LFPG_ElecGraph
             // ==========================================
             // PASO 3: Components dirty — BFS fallback
             // ==========================================
-            int limit = LFPG_MAX_NODES_PER_COMPONENT;
-            int sizeA = 1;
+            limit = LFPG_MAX_NODES_PER_COMPONENT;
+            sizeA = 1;
             bool ranBfsA = false;
 
             if (hasA && nodeA)
@@ -569,7 +574,7 @@ class LFPG_ElecGraph
             if (!bInA)
             {
                 // Different components (or A was new) — count B with remaining budget
-                int remaining = limit - sizeA;
+                remaining = limit - sizeA;
                 if (remaining <= 0)
                 {
                     string wMsgD2 = "[ElecGraph] OnWireAdded REJECTED: no budget for target (dirty)";
@@ -577,13 +582,13 @@ class LFPG_ElecGraph
                     return false;
                 }
 
-                int sizeB = 1;
+                sizeB = 1;
                 if (hasB && nodeB)
                 {
                     sizeB = CountComponentLimited(targetId, remaining);
                 }
 
-                int totalSize = sizeA + sizeB;
+                totalSize = sizeA + sizeB;
                 if (totalSize > limit)
                 {
                     string szMsgD = "[ElecGraph] OnWireAdded REJECTED: merged size (" + totalSize.ToString() + "/" + limit.ToString() + ") (dirty)";
@@ -1510,7 +1515,7 @@ class LFPG_ElecGraph
             return 0;
         }
 
-        int startMs = GetGame().GetTickCount();
+        int startMs = GetGame().GetTime();
 
         if (m_ComponentsDirty)
             RebuildComponents();
@@ -1775,7 +1780,7 @@ class LFPG_ElecGraph
             remaining = m_DirtyQueue.Count();
         }
 
-        int elapsed = GetGame().GetTickCount() - startMs;
+        int elapsed = GetGame().GetTime() - startMs;
         m_LastProcessMs = elapsed;
 
         if (processed > 0)
@@ -2172,6 +2177,7 @@ class LFPG_ElecGraph
         array<int> prioArr = m_AllocPrioArr;
 
         float totalDemand = 0.0;
+        float edgeDemand = 0.0;
         int ei;
         for (ei = 0; ei < edgeCount; ei = ei + 1)
         {
@@ -2181,7 +2187,7 @@ class LFPG_ElecGraph
             if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
                 continue;
 
-            float edgeDemand = 0.0;
+            edgeDemand = 0.0;
             ref LFPG_ElecNode targetNode;
             if (m_Nodes.Find(edge.m_TargetNodeId, targetNode) && targetNode)
             {
@@ -2299,7 +2305,7 @@ class LFPG_ElecGraph
             if (!allocEdge)
                 continue;
 
-            float edgeDemand = demandArr[ai];
+            edgeDemand = demandArr[ai];
             float allocated = 0.0;
 
             if (remaining > LFPG_PROPAGATION_EPSILON)

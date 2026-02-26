@@ -85,7 +85,7 @@ class LF_TestGenerator : PowerGenerator
         // Without explicit removal, players with vanilla CableReel near
         // an LF_TestGenerator see "Plug in" / "Unplug" vanilla actions.
         RemoveAction(ActionPlugIn);
-        RemoveAction(ActionUnplugThisByCombination);
+        RemoveAction(ActionUnplugThisByCord);
 
         // v0.7.28 (Bug 2): Block vanilla take/carry actions.
         // CanPutIntoHands/CanPutInCargo return false, but some vanilla
@@ -886,7 +886,7 @@ class LF_TestLamp : Spotlight
         // Without explicit removal, players with vanilla CableReel near
         // an LF_TestLamp see "Plug in" / "Unplug" vanilla actions.
         RemoveAction(ActionPlugIn);
-        RemoveAction(ActionUnplugThisByCombination);
+        RemoveAction(ActionUnplugThisByCord);
 
         // v0.7.28 (Bug 2): Block vanilla take/carry actions.
         // CanPutIntoHands/CanPutInCargo return false, but some vanilla
