@@ -645,6 +645,26 @@ class LFPG_ElecGraph
         }
         else
         {
+            // v0.7.37 (Audit 6, H3): Force target powered=false BEFORE orphan cleanup.
+            // CleanupOrphanNode may remove the target from the graph if it has
+            // no remaining edges. Once removed, MarkNodeDirty below is a no-op
+            // and the entity's m_PoweredNet stays stale (true). Forcing false
+            // here ensures it goes dark. Propagation re-enables it next tick
+            // if an alternate power path exists.
+            // Only needed outside mutations: during atomic ops, cleanup is
+            // deferred so the node survives and MarkNodeDirty works normally.
+            // Skipping here also avoids an unnecessary entity resolve + RPC
+            // and prevents visible powered→unpowered→powered flicker during
+            // replace wire sequences.
+            EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
+            if (!tgtObj)
+            {
+                tgtObj = LFPG_DeviceAPI.ResolveVanillaDevice(targetId);
+            }
+            if (tgtObj)
+            {
+                LFPG_DeviceAPI.SetPowered(tgtObj, false);
+            }
             CleanupOrphanNode(sourceId);
             CleanupOrphanNode(targetId);
         }
@@ -1495,7 +1515,11 @@ class LFPG_ElecGraph
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
             if (node && node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
-                MarkNodeDirty(m_Nodes.GetKey(ni), LFPG_DIRTY_INPUT);
+                // v0.7.37 (Audit 6, M4): Use DIRTY_INTERNAL, not DIRTY_INPUT.
+                // Sources manage their own powered state — they don't need input
+                // re-evaluation on startup. DIRTY_INTERNAL skips the incoming edge
+                // loop and directly computes output from m_Powered + m_MaxOutput.
+                MarkNodeDirty(m_Nodes.GetKey(ni), LFPG_DIRTY_INTERNAL);
             }
         }
 
@@ -2457,6 +2481,13 @@ class LFPG_ElecGraph
     {
         #ifdef SERVER
         if (!inEdge)
+            return 0.0;
+
+        // v0.7.37 (Audit 6, R1): Respect brownout flag before any fallback.
+        // An edge in brownout was explicitly denied power by AllocateOutputByPriority.
+        // Without this check, the equal-split fallback below would incorrectly
+        // deliver positive power to a brownout edge during the first warmup pass.
+        if ((inEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
             return 0.0;
 
         if (inEdge.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
