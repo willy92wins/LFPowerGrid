@@ -1203,7 +1203,7 @@ modded class PlayerBase
 
         ref array<ref LFPG_InspectWireEntry> entries = new array<ref LFPG_InspectWireEntry>;
 
-        LFPG_ElecGraph graph = LFPG_ElecGraph.Get();
+        LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
         if (graph)
         {
             // Outgoing edges: this device is SOURCE, remote is TARGET
