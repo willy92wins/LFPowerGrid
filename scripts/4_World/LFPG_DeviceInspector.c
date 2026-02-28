@@ -72,6 +72,8 @@ class LFPG_DeviceInspector
     protected float m_SmoothX;
     protected float m_SmoothY;
     protected bool m_SmoothInit;
+    // ---- Flip hysteresis (P2-B anti-oscillation) ----
+    protected bool m_FlippedLeft;
 
     // ---- Current panel height (for accurate screen clamping) ----
     protected float m_CurrentPanelH;
@@ -127,6 +129,7 @@ class LFPG_DeviceInspector
         m_SmoothX = 0.0;
         m_SmoothY = 0.0;
         m_SmoothInit = false;
+        m_FlippedLeft = false;
         m_CurrentPanelH = 0.0;
     }
 
@@ -344,6 +347,7 @@ class LFPG_DeviceInspector
             inst.m_HasServerData = false;
             inst.m_RespWires.Clear();
             inst.m_SmoothInit = false;
+            inst.m_FlippedLeft = false;
             inst.PopulateClientData(target, deviceId);
             inst.RequestServerData(player, deviceId);
             inst.m_LastClientRefreshMs = nowMs;
@@ -526,6 +530,14 @@ class LFPG_DeviceInspector
             capText = capText + " u/s";
         }
         m_wCapLine.SetText(capText);
+        if (capText != "")
+        {
+            m_wCapLine.Show(true);
+        }
+        else
+        {
+            m_wCapLine.Show(false);
+        }
 
         // ---- Wire section: re-display cached data or show loading ----
         if (m_HasServerData)
@@ -763,8 +775,27 @@ class LFPG_DeviceInspector
         float fScreenW = screenW;
         float fScreenH = screenH;
 
-        // Flip to left side if too close to right edge
-        if (px + panelW > fScreenW - LFPG_INSPECT_SCREEN_MARGIN)
+        // Flip to left side if too close to right edge (P2-B: with hysteresis)
+        // rightEdge = where the panel's right side WOULD be if placed on the right.
+        float rightEdge = screenPos[0] + LFPG_INSPECT_OFFSET_X + panelW;
+        if (!m_FlippedLeft)
+        {
+            // Not flipped yet: flip when panel overflows right margin
+            if (rightEdge > fScreenW - LFPG_INSPECT_SCREEN_MARGIN)
+            {
+                m_FlippedLeft = true;
+            }
+        }
+        else
+        {
+            // Currently flipped: only un-flip when panel clears right margin + hysteresis
+            if (rightEdge < fScreenW - LFPG_INSPECT_SCREEN_MARGIN - LFPG_INSPECT_FLIP_HYSTERESIS)
+            {
+                m_FlippedLeft = false;
+            }
+        }
+
+        if (m_FlippedLeft)
         {
             px = screenPos[0] - panelW - LFPG_INSPECT_OFFSET_X;
         }
