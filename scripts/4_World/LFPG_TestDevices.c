@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.38)
+// LF_PowerGrid - Example devices (v0.7.42)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
@@ -23,6 +23,11 @@
 //          re-registration via OnVariablesSynchronized. Blocks stale refs
 //          in DeviceRegistry when engine delivers final SyncVar updates
 //          for devices leaving the network bubble after deletion starts.
+// v0.7.42 (BugFix): Ghost lamp — removed m_PoweredNet from persistence.
+//          m_PoweredNet is a derived state from the electrical graph;
+//          persisting it caused lamps to appear lit after restart when
+//          their source no longer exists. Now starts false (field default)
+//          and only propagation sets it true. REQUIRES SAVE WIPE.
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -1133,7 +1138,9 @@ class LF_TestLamp : Spotlight
         super.OnStoreSave(ctx);
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        ctx.Write(m_PoweredNet);
+        // v0.7.42: m_PoweredNet removed from persistence.
+        // It is a derived state from the electrical graph — only
+        // propagation should set it. Field default (false) is correct.
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -1157,12 +1164,8 @@ class LF_TestLamp : Spotlight
 
         LFPG_UpdateDeviceIdString();
 
-        if (!ctx.Read(m_PoweredNet))
-        {
-            string tlErrPwr = "LF_TestLamp.OnStoreLoad: failed to read m_PoweredNet for " + m_DeviceId;
-            LFPG_Util.Error(tlErrPwr);
-            return false;
-        }
+        // v0.7.42: m_PoweredNet no longer persisted.
+        // Field default (false) is correct; propagation re-derives it.
 
         return true;
     }

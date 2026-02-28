@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Splitter device (v0.7.26)
+// LF_PowerGrid - Splitter device (v0.7.42)
 //
 // LF_Splitter_Kit:  Holdable item (wooden crate model).
 //                   Player places it via hologram -> spawns LF_Splitter.
@@ -20,6 +20,12 @@
 // v0.7.41 (BugFix): OnPlacementComplete used GetPosition() which returns
 //   the kit's physical pos (near player), not hologram pos. Fixed to use
 //   the position parameter from ActionPlaceObject→ActionDeployObject pipeline.
+// v0.7.42 (BugFix): Ghost lamp — removed m_PoweredNet from persistence.
+//   m_PoweredNet is a derived state; only propagation should set it true.
+//   Removed stale EEInit propagation that depended on persisted value.
+//   Added m_LFPG_Deleting guard (RC-04 parity with Generator/Lamp) to
+//   prevent post-mortem re-registration via OnVariablesSynchronized.
+//   REQUIRES SAVE WIPE.
 // =========================================================
 
 // ---------------------------------------------------------
@@ -137,6 +143,11 @@ class LF_Splitter : Inventory_Base
     // True when upstream source is providing power via input port
     protected bool m_PoweredNet = false;
 
+    // v0.7.42 (RC-04 parity): Deletion guard.
+    // Prevents OnVariablesSynchronized from re-registering a dying device.
+    // Same fix as Generator/Lamp from v0.7.38 RC-04.
+    protected bool m_LFPG_Deleting = false;
+
     // v0.7.8: Bitmask of overloaded output wires.
     protected int m_OverloadMask = 0;
 
@@ -218,14 +229,11 @@ class LF_Splitter : Inventory_Base
 
         #ifdef SERVER
         LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
-
-        // FIX: if Splitter was saved as powered (e.g. server restart),
-        // propagate immediately so downstream consumers receive power
-        // without waiting for the 5s ValidateAllWiresAndPropagate timer.
-        if (m_PoweredNet && m_DeviceId != "")
-        {
-            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
-        }
+        // v0.7.42: Removed stale propagation block that depended on
+        // persisted m_PoweredNet. Splitter is PASSTHROUGH — it does
+        // not initiate propagation. Its upstream source will propagate
+        // down and set m_PoweredNet=true via LFPG_SetPowered if
+        // the splitter is still connected and powered.
         #endif
     }
 
@@ -248,6 +256,10 @@ class LF_Splitter : Inventory_Base
     // v0.7.28 (Refactor): Delegates to DeviceLifecycle helper.
     override void EEDelete(EntityAI parent)
     {
+        // v0.7.42 (RC-04 parity): Set deletion flag BEFORE unregistration.
+        // Prevents OnVariablesSynchronized from re-registering a dying device.
+        m_LFPG_Deleting = true;
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
@@ -287,6 +299,10 @@ class LF_Splitter : Inventory_Base
 
     protected void LFPG_TryRegister()
     {
+        // v0.7.42 (RC-04 parity): Don't register if device is being deleted.
+        if (m_LFPG_Deleting)
+            return;
+
         LFPG_UpdateDeviceIdString();
         if (m_DeviceId != "")
         {
@@ -604,7 +620,8 @@ class LF_Splitter : Inventory_Base
 
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        ctx.Write(m_PoweredNet);
+        // v0.7.42: m_PoweredNet removed from persistence.
+        // Derived state — only propagation should set it true.
 
         string json;
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
@@ -630,11 +647,8 @@ class LF_Splitter : Inventory_Base
 
         LFPG_UpdateDeviceIdString();
 
-        if (!ctx.Read(m_PoweredNet))
-        {
-            LFPG_Util.Error("[LF_Splitter] OnStoreLoad: failed to read m_PoweredNet for " + m_DeviceId);
-            return false;
-        }
+        // v0.7.42: m_PoweredNet no longer persisted.
+        // Field default (false) is correct; propagation re-derives it.
 
         string json;
         if (!ctx.Read(json))
