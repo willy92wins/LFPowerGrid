@@ -494,9 +494,13 @@ static const int LFPG_INSPECT_MAX_SCAN = 512;
 
 // Inspector panel dimensions (pixels).
 static const float LFPG_INSPECT_PANEL_W = 300.0;
-static const float LFPG_INSPECT_PANEL_BASE_H = 115.0;     // WiresHeader bottom(113) + 2px before wire zone
+static const float LFPG_INSPECT_PANEL_BASE_H = 115.0;     // WiresHeader bottom(115) = Y(99)+H(16)
 static const float LFPG_INSPECT_WIRE_ROW_H = 16.0;        // height per wire entry
 static const float LFPG_INSPECT_PANEL_PAD = 12.0;          // bottom padding
+static const float LFPG_INSPECT_HEADER_H = 48.0;           // header bar height
+static const float LFPG_INSPECT_SCREEN_MARGIN = 10.0;      // min distance from screen edges
+static const float LFPG_INSPECT_WORLD_Y_OFFSET = 1.0;      // vertical offset above device feet (m)
+static const float LFPG_INSPECT_REFRESH_MS = 500.0;        // client SyncVar refresh interval (ms)
 
 // Screen-space offset from device projection point (pixels).
 static const float LFPG_INSPECT_OFFSET_X = 45.0;

@@ -49,6 +49,8 @@ class LFPG_DeviceInspector
     // ---- Widget references ----
     protected Widget m_Root;
     protected Widget m_Panel;
+    protected ImageWidget m_wPanelBg;
+    protected ImageWidget m_wAccentBar;
     protected TextWidget m_wDeviceName;
     protected TextWidget m_wDeviceType;
     protected TextWidget m_wStatusLine;
@@ -137,59 +139,101 @@ class LFPG_DeviceInspector
         m_wCapLine = TextWidget.Cast(m_Root.FindAnyWidget("CapLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
 
-        // Set static text colors (layout has no color attrs — uses engine default white).
-        // Dynamic colors (DeviceType, StatusLine, Wire slots) are set in Populate methods.
-        if (m_wDeviceName)
+        // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
+        // Compute max panel height for initial sizing (will be adjusted by ResizePanelHeight)
+        float maxH = ComputePanelHeight(LFPG_INSPECT_MAX_WIRES);
+
+        // Panel container
+        if (m_Panel)
         {
-            m_wDeviceName.SetColor(ARGB(255, 242, 242, 242));
-        }
-        if (m_wWiresHeader)
-        {
-            m_wWiresHeader.SetColor(ARGB(255, 180, 180, 180));
-        }
-        if (m_wCapLine)
-        {
-            m_wCapLine.SetColor(ARGB(255, 140, 140, 140));
+            m_Panel.SetPos(0, 0);
+            m_Panel.SetSize(LFPG_INSPECT_PANEL_W, maxH);
         }
 
-        // Load procedural textures on background ImageWidgets.
-        // Layout may or may not support src="#(argb...)", so we force-load
-        // from code as a safety net. White 1x1 texture tinted by SetColor().
+        // Background images: position + size + texture + color
         string procTex = "#(argb,1,1,3)color(1,1,1,1,ca)";
+
         ImageWidget imgBg = ImageWidget.Cast(m_Root.FindAnyWidget("PanelBg"));
+        m_wPanelBg = imgBg;
         if (imgBg)
         {
+            imgBg.SetPos(0, 0);
+            imgBg.SetSize(LFPG_INSPECT_PANEL_W, maxH);
             imgBg.LoadImageFile(0, procTex);
             imgBg.SetColor(ARGB(235, 9, 14, 23));
         }
+
         ImageWidget imgHeader = ImageWidget.Cast(m_Root.FindAnyWidget("HeaderBar"));
         if (imgHeader)
         {
+            imgHeader.SetPos(0, 0);
+            imgHeader.SetSize(LFPG_INSPECT_PANEL_W, LFPG_INSPECT_HEADER_H);
             imgHeader.LoadImageFile(0, procTex);
             imgHeader.SetColor(ARGB(242, 13, 19, 31));
         }
+
         ImageWidget imgAccent = ImageWidget.Cast(m_Root.FindAnyWidget("AccentBar"));
+        m_wAccentBar = imgAccent;
         if (imgAccent)
         {
+            imgAccent.SetPos(0, 0);
+            imgAccent.SetSize(3, maxH);
             imgAccent.LoadImageFile(0, procTex);
             imgAccent.SetColor(ARGB(217, 46, 140, 191));
         }
+
         ImageWidget imgSep = ImageWidget.Cast(m_Root.FindAnyWidget("Separator"));
         if (imgSep)
         {
+            imgSep.SetPos(12, 93);
+            imgSep.SetSize(276, 1);
             imgSep.LoadImageFile(0, procTex);
             imgSep.SetColor(ARGB(153, 51, 64, 89));
         }
 
-        // Collect wire slot widgets
+        // Text widgets: position + size + color
+        if (m_wDeviceName)
+        {
+            m_wDeviceName.SetPos(14, 7);
+            m_wDeviceName.SetSize(274, 22);
+            m_wDeviceName.SetColor(ARGB(255, 242, 242, 242));
+        }
+        if (m_wDeviceType)
+        {
+            m_wDeviceType.SetPos(14, 30);
+            m_wDeviceType.SetSize(274, 16);
+        }
+        if (m_wStatusLine)
+        {
+            m_wStatusLine.SetPos(14, 54);
+            m_wStatusLine.SetSize(274, 16);
+        }
+        if (m_wCapLine)
+        {
+            m_wCapLine.SetPos(14, 74);
+            m_wCapLine.SetSize(274, 16);
+            m_wCapLine.SetColor(ARGB(255, 140, 140, 140));
+        }
+        if (m_wWiresHeader)
+        {
+            m_wWiresHeader.SetPos(14, 99);
+            m_wWiresHeader.SetSize(274, 16);
+            m_wWiresHeader.SetColor(ARGB(255, 180, 180, 180));
+        }
+
+        // Wire slot widgets: position + size
         m_wWireSlots.Clear();
         int wi;
         for (wi = 0; wi < LFPG_INSPECT_MAX_WIRES; wi = wi + 1)
         {
-            string slotName = "Wire" + wi.ToString();
+            string slotName = "Wire";
+            slotName = slotName + wi.ToString();
             TextWidget tw = TextWidget.Cast(m_Root.FindAnyWidget(slotName));
             if (tw)
             {
+                float wireY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + (wi * LFPG_INSPECT_WIRE_ROW_H);
+                tw.SetPos(14, wireY);
+                tw.SetSize(274, 14);
                 m_wWireSlots.Insert(tw);
             }
             else
@@ -213,12 +257,15 @@ class LFPG_DeviceInspector
             m_Root = null;
         }
         m_Panel = null;
+        m_wPanelBg = null;
+        m_wAccentBar = null;
         m_wDeviceName = null;
         m_wDeviceType = null;
         m_wStatusLine = null;
         m_wCapLine = null;
         m_wWiresHeader = null;
         m_wWireSlots.Clear();
+        m_RespWires.Clear();
     }
 
     // =========================================================
@@ -226,11 +273,11 @@ class LFPG_DeviceInspector
     // =========================================================
     static void Tick()
     {
-        LFPG_DeviceInspector inst = Get();
-        if (!inst.m_Root)
+        if (GetGame().IsDedicatedServer())
             return;
 
-        if (GetGame().IsDedicatedServer())
+        LFPG_DeviceInspector inst = Get();
+        if (!inst.m_Root)
             return;
 
         // ---- Condition 1: Player exists ----
@@ -291,7 +338,7 @@ class LFPG_DeviceInspector
             // requiring the player to look away and back.
             // 500ms = 2Hz refresh, negligible cost (DeviceAPI calls are cached SyncVars).
             float sinceLast = nowMs - inst.m_LastClientRefreshMs;
-            if (sinceLast >= 500.0)
+            if (sinceLast >= LFPG_INSPECT_REFRESH_MS)
             {
                 inst.PopulateClientData(target, deviceId);
                 inst.m_LastClientRefreshMs = nowMs;
@@ -349,7 +396,7 @@ class LFPG_DeviceInspector
     // =========================================================
     protected void PopulateClientData(EntityAI device, string deviceId)
     {
-        if (!m_wDeviceName)
+        if (!m_wDeviceName || !m_wDeviceType || !m_wStatusLine || !m_wCapLine || !m_wWiresHeader)
             return;
 
         // ---- Device name (entity type, cleaned up) ----
@@ -392,25 +439,27 @@ class LFPG_DeviceInspector
                 float loadRatio = LFPG_DeviceAPI.GetLoadRatio(device);
                 int loadPct = Math.Round(loadRatio * 100.0);
 
-                statusText = "ACTIVE  ";
+                if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
+                {
+                    statusText = "OVERLOAD  ";
+                    statusColor = ARGB(255, 220, 50, 50);
+                }
+                else if (loadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
+                {
+                    statusText = "WARNING  ";
+                    statusColor = ARGB(255, 211, 155, 0);
+                }
+                else
+                {
+                    statusText = "ACTIVE  ";
+                    statusColor = ARGB(255, 46, 155, 89);
+                }
+
                 string barStr = BuildLoadBar(loadRatio);
                 statusText = statusText + barStr;
                 statusText = statusText + " ";
                 statusText = statusText + loadPct.ToString();
                 statusText = statusText + "%";
-
-                if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
-                {
-                    statusColor = ARGB(255, 230, 126, 34);
-                }
-                else if (loadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
-                {
-                    statusColor = ARGB(255, 211, 155, 0);
-                }
-                else
-                {
-                    statusColor = ARGB(255, 46, 155, 89);
-                }
             }
             else
             {
@@ -460,6 +509,7 @@ class LFPG_DeviceInspector
             capText = capText + " u/s";
         }
         m_wCapLine.SetText(capText);
+
         // ---- Wire section: re-display cached data or show loading ----
         if (m_HasServerData)
         {
@@ -469,6 +519,7 @@ class LFPG_DeviceInspector
         {
             m_wWiresHeader.SetText("Connections ...");
             HideAllWireSlots();
+            ResizePanelHeight(0);
         }
     }
 
@@ -518,16 +569,22 @@ class LFPG_DeviceInspector
             return;
         }
 
-        string hdrText = "Connections (";
-        hdrText = hdrText + wireCount.ToString();
-        hdrText = hdrText + ")";
-        m_wWiresHeader.SetText(hdrText);
-
         int maxShow = m_wWireSlots.Count();
         if (wireCount < maxShow)
         {
             maxShow = wireCount;
         }
+
+        // Header text with overflow indicator
+        string hdrText = "Connections (";
+        hdrText = hdrText + wireCount.ToString();
+        if (wireCount > maxShow)
+        {
+            hdrText = hdrText + " | showing ";
+            hdrText = hdrText + maxShow.ToString();
+        }
+        hdrText = hdrText + ")";
+        m_wWiresHeader.SetText(hdrText);
 
         int si;
         for (si = 0; si < maxShow; si = si + 1)
@@ -556,14 +613,10 @@ class LFPG_DeviceInspector
             slot.SetText(line);
 
             // Color based on direction
-            int wireColor = ARGB(255, 150, 150, 150);
+            int wireColor = ARGB(255, 100, 160, 210);
             if (entry.m_Direction == LFPG_PortDir.OUT)
             {
                 wireColor = ARGB(255, 100, 180, 100);
-            }
-            else
-            {
-                wireColor = ARGB(255, 100, 160, 210);
             }
             slot.SetColor(wireColor);
             slot.Show(true);
@@ -587,16 +640,30 @@ class LFPG_DeviceInspector
     // =========================================================
     // Panel sizing and positioning
     // =========================================================
+    protected static float ComputePanelHeight(int wireCount)
+    {
+        float h = LFPG_INSPECT_PANEL_BASE_H;
+        h = h + (wireCount * LFPG_INSPECT_WIRE_ROW_H);
+        h = h + LFPG_INSPECT_PANEL_PAD;
+        return h;
+    }
+
     protected void ResizePanelHeight(int wireCount)
     {
         if (!m_Panel)
             return;
 
-        float h = LFPG_INSPECT_PANEL_BASE_H;
-        h = h + (wireCount * LFPG_INSPECT_WIRE_ROW_H);
-        h = h + LFPG_INSPECT_PANEL_PAD;
+        float h = ComputePanelHeight(wireCount);
 
         m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
+        if (m_wPanelBg)
+        {
+            m_wPanelBg.SetSize(LFPG_INSPECT_PANEL_W, h);
+        }
+        if (m_wAccentBar)
+        {
+            m_wAccentBar.SetSize(3, h);
+        }
     }
 
     protected bool UpdatePanelPosition(EntityAI device)
@@ -606,7 +673,7 @@ class LFPG_DeviceInspector
 
         // Project device world position to screen
         vector worldPos = device.GetPosition();
-        worldPos[1] = worldPos[1] + 1.0;   // offset up from feet
+        worldPos[1] = worldPos[1] + LFPG_INSPECT_WORLD_Y_OFFSET;
 
         vector screenPos = GetGame().GetScreenPos(worldPos);
 
@@ -626,33 +693,31 @@ class LFPG_DeviceInspector
 
         // Clamp to screen bounds
         float panelW = LFPG_INSPECT_PANEL_W;
-        float panelH = LFPG_INSPECT_PANEL_BASE_H;
-        panelH = panelH + (m_VisibleWireCount * LFPG_INSPECT_WIRE_ROW_H);
-        panelH = panelH + LFPG_INSPECT_PANEL_PAD;
+        float panelH = ComputePanelHeight(m_VisibleWireCount);
 
         float fScreenW = screenW;
         float fScreenH = screenH;
 
         // Flip to left side if too close to right edge
-        if (px + panelW > fScreenW - 10.0)
+        if (px + panelW > fScreenW - LFPG_INSPECT_SCREEN_MARGIN)
         {
             px = screenPos[0] - panelW - LFPG_INSPECT_OFFSET_X;
         }
 
         // Clamp vertical
-        if (py < 10.0)
+        if (py < LFPG_INSPECT_SCREEN_MARGIN)
         {
-            py = 10.0;
+            py = LFPG_INSPECT_SCREEN_MARGIN;
         }
-        if (py + panelH > fScreenH - 10.0)
+        if (py + panelH > fScreenH - LFPG_INSPECT_SCREEN_MARGIN)
         {
-            py = fScreenH - panelH - 10.0;
+            py = fScreenH - panelH - LFPG_INSPECT_SCREEN_MARGIN;
         }
 
         // Clamp horizontal minimum
-        if (px < 10.0)
+        if (px < LFPG_INSPECT_SCREEN_MARGIN)
         {
-            px = 10.0;
+            px = LFPG_INSPECT_SCREEN_MARGIN;
         }
 
         m_Panel.SetPos(px, py);
