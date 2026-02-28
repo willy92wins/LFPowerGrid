@@ -551,10 +551,7 @@ class LFPG_DeviceInspector
             {
                 m_wSeparator.Show(true);
             }
-            if (m_wWiresHeader)
-            {
-                m_wWiresHeader.Show(true);
-            }
+            m_wWiresHeader.Show(true);
             m_wWiresHeader.SetText("Connections ...");
             HideAllWireSlots();
             ResizePanelHeight(0);
@@ -604,10 +601,7 @@ class LFPG_DeviceInspector
         if (wireCount == 0)
         {
             // P2-A: Collapse wire section entirely — cleaner look
-            if (m_wWiresHeader)
-            {
-                m_wWiresHeader.Show(false);
-            }
+            m_wWiresHeader.Show(false);
             if (m_wSeparator)
             {
                 m_wSeparator.Show(false);
@@ -623,10 +617,7 @@ class LFPG_DeviceInspector
         {
             m_wSeparator.Show(true);
         }
-        if (m_wWiresHeader)
-        {
-            m_wWiresHeader.Show(true);
-        }
+        m_wWiresHeader.Show(true);
 
         int maxShow = m_wWireSlots.Count();
         if (wireCount < maxShow)
@@ -777,7 +768,7 @@ class LFPG_DeviceInspector
 
         // Flip to left side if too close to right edge (P2-B: with hysteresis)
         // rightEdge = where the panel's right side WOULD be if placed on the right.
-        float rightEdge = screenPos[0] + LFPG_INSPECT_OFFSET_X + panelW;
+        float rightEdge = px + panelW;
         if (!m_FlippedLeft)
         {
             // Not flipped yet: flip when panel overflows right margin
