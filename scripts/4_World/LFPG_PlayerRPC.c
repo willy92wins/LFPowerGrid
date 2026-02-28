@@ -4,6 +4,10 @@
 // v0.7.34: Bloque E — Atomic graph mutations in FinishWiring replace phase.
 //   Graph notified on wire removal (was missing → stale edges).
 //   Begin/EndGraphMutation wraps remove+add for same-target safety.
+// v0.7.38 (Race Condition fixes):
+//   RC-01: Port locking prevents concurrent FinishWiring on same dest port.
+//   RC-06: Pre-check capacity before replacement phase (transactional safety).
+//   RC-07: Reject wiring RPCs during first ~5s startup validation window.
 // =========================================================
 
 modded class PlayerBase
@@ -97,6 +101,16 @@ modded class PlayerBase
         {
             LFPG_Util.Warn("[FinishWiring-Server] denied (rate limited)");
             LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        // v0.7.38 (RC-07): Reject during startup validation window.
+        // ValidateAllWiresAndPropagate runs at T+5s and does a full rebuild.
+        // Wires created before that would be overwritten, causing flicker.
+        if (!LFPG_NetworkManager.Get().IsStartupValidationDone())
+        {
+            LFPG_Util.Info("[FinishWiring-Server] denied (startup validation pending)");
+            LFPG_SendClientMsg(this, "Server starting, please wait...");
             return;
         }
 
@@ -420,6 +434,23 @@ modded class PlayerBase
         }
 
         // ============================================================
+        // v0.7.38 (RC-01): Lock destination port to prevent concurrent
+        // FinishWiring RPCs from both passing occupancy check on the same
+        // port in the same tick. Two RPCs arriving simultaneously could
+        // both read count=0, both proceed to AddWire, creating duplicate
+        // edges and corrupted reverse index. The lock is released at all
+        // exit points below.
+        // ============================================================
+        string portLockKey = dstRealId + "|" + dstPort;
+        if (LFPG_NetworkManager.Get().IsPortLocked(portLockKey))
+        {
+            LFPG_Util.Info("[FinishWiring-Server] denied (port locked) " + portLockKey);
+            LFPG_SendClientMsg(this, "Port busy, try again.");
+            return;
+        }
+        LFPG_NetworkManager.Get().LockPort(portLockKey);
+
+        // ============================================================
         // REPLACEMENT PHASE: remove ALL conflicting wires BEFORE adding
         // v0.7.34 (Bloque E): Atomic mutation — prevents premature node
         // deletion between remove + add (same-target replace bug).
@@ -538,12 +569,24 @@ modded class PlayerBase
             // v0.7.34 (Bloque E): Close mutation batch on early exit
             LFPG_NetworkManager.Get().EndGraphMutation();
 
+            // v0.7.38 (RC-01): Release port lock
+            LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+
             // v0.7.33 (Fix #18b): If vanilla wires were removed during replacement phase
             // but the new wire failed to store, we must still persist the removal.
             // Without this, server restart would resurrect the removed wire.
             if (anyRemoved && !isLfpgOwner)
             {
                 LFPG_NetworkManager.Get().MarkVanillaDirty();
+            }
+
+            // v0.7.38 (RC-06): If replacement removed wires but AddWire failed,
+            // the graph and reverse index are inconsistent. Force a full rebuild
+            // to restore data integrity from the authoritative wire arrays.
+            if (anyRemoved)
+            {
+                LFPG_Util.Warn("[FinishWiring-Server] RC-06: store failed after replacement — forcing rebuild");
+                LFPG_NetworkManager.Get().PostBulkRebuildAndPropagate();
             }
 
             LFPG_Util.Warn("[FinishWiring-Server] wire storage failed (duplicate or cap)");
@@ -581,6 +624,9 @@ modded class PlayerBase
         // during remove but gained new ones during add are preserved.
         LFPG_NetworkManager.Get().EndGraphMutation();
 
+        // v0.7.38 (RC-01): Release port lock
+        LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+
         if (!edgeAdded)
         {
             // Edge not inserted (node cap or missing node). Wire data is stored
@@ -608,6 +654,13 @@ modded class PlayerBase
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        // v0.7.38 (RC-07): Reject during startup validation window.
+        if (!LFPG_NetworkManager.Get().IsStartupValidationDone())
+        {
+            LFPG_SendClientMsg(this, "Server starting, please wait...");
             return;
         }
 
@@ -865,6 +918,13 @@ modded class PlayerBase
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        // v0.7.38 (RC-07): Reject during startup validation window.
+        if (!LFPG_NetworkManager.Get().IsStartupValidationDone())
+        {
+            LFPG_SendClientMsg(this, "Server starting, please wait...");
             return;
         }
 

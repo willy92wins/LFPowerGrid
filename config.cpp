@@ -105,6 +105,9 @@ class CfgVehicles
 		// 0.0 allows walls/ceilings. For walls only (no ceiling): ~0.05
 		slopeTolerance  = 0.0;
 		yawPitchRollLimit[] = {90, 90, 90};
+		hiddenSelections[] = {"zbytek"};
+		hiddenSelectionsTextures[] = {""};
+		hiddenSelectionsMaterials[] = {""};
 		// placementOffset removed: causes oscillation loop with vanilla hologram.
 		// Wall offset handled by custom hologram (LFPG_SplitterHologram).
     };

@@ -49,6 +49,8 @@
 // v0.7.32 (Bloque C): Consumer Zombie Validation
 //   - ValidateConsumerStates: periodic check for consumers claiming powered
 //     without sufficient incoming power (zombie lights)
+//   - v0.7.38: Bidirectional — also detects "dark consumers" (unpowered
+//     despite sufficient incoming power, caused by topology race conditions)
 //   - Runs in steady-state (queue empty) using tick-based gating
 //   - Budgeted: LFPG_VALIDATE_BATCH_SIZE consumers per invocation
 //   - Round-robin via m_ValidateNodeIdx to spread cost across ticks
@@ -70,6 +72,56 @@
 //   - Auto-close safety in ProcessDirtyQueue if caller forgot End
 //   - Reusable deferred cleanup buffer (m_DeferredOrphanCleanup)
 //   - Zero overhead when not in mutation (single bool check)
+//
+// v0.7.38 (BugFix B1): Topology-aware downstream propagation
+//   - Wire add/replace on a running source doesn't change total output,
+//     so outputDelta=0 and Step 3 never re-queues consumers.
+//     Consumers that process before the source read stale per-edge
+//     allocations (equal-split fallback) → false power-off.
+//   - Fix: forceDownstream=true when DIRTY_TOPOLOGY on SOURCE/PASSTHROUGH.
+//   - Optimization: reset m_LastEpoch on consumers already processed this
+//     epoch, allowing same-epoch reprocessing with correct allocations.
+//     Both SetPowered calls (stale + correct) land in the same frame,
+//     DayZ SyncVar batching sends only the final value → zero flicker.
+//     Safe: m_RequeueCount bounds reprocessing per epoch.
+//
+// v0.7.38 (RC-09): Carryover requeue count reset
+//   - ResetRequeueCounts now also resets m_RequeueCount for nodes still
+//     pending in the dirty queue from previous epochs (budget exhaustion).
+//     Prevents premature discard via LFPG_MAX_REQUEUE_PER_EPOCH in
+//     networks with cross-epoch carryover.
+//
+// v0.7.38 (RC-09 safety): Bidirectional consumer validation
+//   - ValidateConsumerStates now detects both zombie (powered but shouldn't)
+//     and dark consumer (unpowered but should be). Dark consumers are the
+//     fallback safety net for B1-class race conditions.
+//
+// v0.7.40 (BugFix): PASSTHROUGH inflated demand → false cable warning
+//   Root cause: PASSTHROUGH newOutput = inputSum (everything received),
+//   so m_LastStableOutput reflected throughput, not real downstream demand.
+//   When upstream SOURCE re-evaluated, it read m_LastStableOutput as the
+//   passthrough's "demand", causing inflated loadRatio and false
+//   WARNING/CRITICAL cable colors on the SOURCE→PASSTHROUGH wire.
+//   Fix A: Cap PASSTHROUGH output to downstream demand returned by
+//          AllocateOutputByPriority (Step 2b). m_LastStableOutput now
+//          reflects actual need, not throughput.
+//   Fix B: Phase 4 in AllocateOutputByPriority now sets overloadMask,
+//          warningMask, and loadRatio for PASSTHROUGH nodes (was SOURCE-only).
+//   Fix C: SyncNodeToEntity syncs masks for PASSTHROUGH to entity.
+//   Fix D: Clear path (newOutput=0) resets masks for PASSTHROUGH too.
+//   Fix E: Upstream demand propagation — when PASSTHROUGH caps output,
+//          re-dirties upstream sources (B1 pattern: reset m_LastEpoch for
+//          same-epoch reprocessing). Guarantees single-epoch convergence.
+//   Fix F: Epoch-skip zombie prevention — m_InQueue cleared on skip so
+//          future MarkNodeDirty can re-enqueue (pre-existing bug).
+//
+// v0.7.41 (BugFix): Orphan powered-state cleanup in PostBulkRebuild
+//   After graph rebuild, devices that were in the old graph but not the
+//   new one (disconnected by wire cuts) never receive a propagation visit
+//   because propagation is additive (source→downstream only). Their entity
+//   m_PoweredNet / CompEM stays stale. Fix: snapshot old node IDs before
+//   rebuild, then SetPowered(false) on any that dropped out. Centralized
+//   in PostBulkRebuild so all callers (CutWires, CutPort, self-heal) benefit.
 // =========================================================
 
 class LFPG_ElecGraph
@@ -1448,11 +1500,51 @@ class LFPG_ElecGraph
         if (!mgr)
             return;
 
+        // v0.7.41: Snapshot old node IDs BEFORE rebuild for orphan detection.
+        // After RebuildFromWires, disconnected devices are pruned from graph.
+        // Propagation is additive (source→down) so orphans never get visited
+        // and their entity m_PoweredNet stays stale. We detect them here.
+        ref array<string> oldNodeIds = new array<string>;
+        int sni;
+        for (sni = 0; sni < m_Nodes.Count(); sni = sni + 1)
+        {
+            oldNodeIds.Insert(m_Nodes.GetKey(sni));
+        }
+
         RebuildFromWires(mgr);
         PopulateAllNodeElecStates();
         MarkSourcesDirty();
 
+        // v0.7.41: Force SetPowered(false) on orphaned devices.
+        // An orphan is a node that existed in the old graph but not the new one.
+        // CutAllWiresFromDevice already handles this via §5b, so for that path
+        // this is a harmless no-op (SetPowered checks m_PoweredNet == powered).
+        int orphanCount = 0;
+        int oni;
+        for (oni = 0; oni < oldNodeIds.Count(); oni = oni + 1)
+        {
+            string orphanId = oldNodeIds[oni];
+            ref LFPG_ElecNode testNode;
+            if (!m_Nodes.Find(orphanId, testNode))
+            {
+                EntityAI orphanDev = LFPG_DeviceRegistry.Get().FindById(orphanId);
+                if (!orphanDev)
+                {
+                    orphanDev = LFPG_DeviceAPI.ResolveVanillaDevice(orphanId);
+                }
+                if (orphanDev)
+                {
+                    LFPG_DeviceAPI.SetPowered(orphanDev, false);
+                    orphanCount = orphanCount + 1;
+                }
+            }
+        }
+
         string infoRebuild = "[ElecGraph] PostBulkRebuild: rebuilt + populated + sources dirty";
+        if (orphanCount > 0)
+        {
+            infoRebuild = infoRebuild + " orphans=" + orphanCount.ToString();
+        }
         LFPG_Util.Info(infoRebuild);
         #endif
     }
@@ -1606,7 +1698,14 @@ class LFPG_ElecGraph
 
             // Skip if already processed this epoch (dedup)
             if (node.m_LastEpoch == m_CurrentEpoch)
+            {
+                // v0.7.40: Clear m_InQueue so future MarkNodeDirty can re-enqueue.
+                // Without this, nodes consumed by epoch-skip retain m_InQueue=true
+                // even though they are no longer in the queue, permanently blocking
+                // re-enqueue and leaving stale dirty state (zombie node).
+                node.m_InQueue = false;
                 continue;  // Sprint 4.3 fix: processed NOT incremented here
+            }
 
             // NOW increment processed (after dedup check)
             processed = processed + 1;
@@ -1734,7 +1833,25 @@ class LFPG_ElecGraph
                     {
                         edgeBudgetLeft = 0;
                     }
-                    AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
+                    float downstreamDemand = AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
+
+                    // v0.7.40 (BugFix): Cap PASSTHROUGH output to actual downstream demand.
+                    // Without this, newOutput = inputSum (everything received from upstream),
+                    // so m_LastStableOutput reflects throughput, not real demand.
+                    // When the upstream source re-evaluates, it reads m_LastStableOutput
+                    // as the passthrough's "demand", causing inflated loadRatio and
+                    // false WARNING/CRITICAL cable colors on the upstream wire.
+                    // Fix: set newOutput = min(inputSum, downstreamDemand) so upstream
+                    // only sees the power actually needed by downstream consumers.
+                    // Guard: only cap when downstreamDemand > epsilon to preserve
+                    // cold-start bootstrap (demand=0 when downstream hasn't evaluated).
+                    if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                    {
+                        if (downstreamDemand > LFPG_PROPAGATION_EPSILON && downstreamDemand < newOutput)
+                        {
+                            newOutput = downstreamDemand;
+                        }
+                    }
                 }
             }
             else
@@ -1756,7 +1873,7 @@ class LFPG_ElecGraph
                         }
                     }
                 }
-                if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+                if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
                     node.m_LoadRatio = 0.0;
                     node.m_OverloadMask = 0;
@@ -1769,7 +1886,31 @@ class LFPG_ElecGraph
             if (outputDelta < 0.0)
                 outputDelta = -outputDelta;
 
-            if (outputDelta > LFPG_PROPAGATION_EPSILON)
+            // v0.7.38 (BugFix B1): Force downstream re-evaluation when topology
+            // changed on a source/passthrough, even if total output is unchanged.
+            // Wire replace creates fresh edges with m_AllocatedPower=0.
+            // If a consumer processes BEFORE the source in the same epoch,
+            // it reads stale allocation via equal-split fallback (e.g. 50/2=25
+            // for a 50W consumer → incorrectly powers off).
+            // AllocateOutputByPriority on the source DOES set correct per-edge
+            // allocations, but outputDelta=0 means Step 3 never re-queues
+            // consumers to read them.
+            // Fix: always re-queue downstream when DIRTY_TOPOLOGY on a producer.
+            // Additionally, reset m_LastEpoch on consumers that already processed
+            // this epoch so they can re-evaluate in the SAME epoch with correct
+            // allocations. Both SetPowered calls (stale→correct) land in the same
+            // frame, so DayZ SyncVar batching sends only the final value to clients
+            // — zero visible flicker. Safe: m_RequeueCount prevents infinite loops.
+            bool forceDownstream = false;
+            if ((dirtyMask & LFPG_DIRTY_TOPOLOGY) != 0)
+            {
+                if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                {
+                    forceDownstream = true;
+                }
+            }
+
+            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream)
             {
                 node.m_OutputPower = newOutput;
                 node.m_LastStableOutput = newOutput;
@@ -1789,8 +1930,63 @@ class LFPG_ElecGraph
                             if (m_Nodes.Find(outEdge.m_TargetNodeId, tgtNode) && tgtNode)
                             {
                                 tgtNode.m_RequeueCount = tgtNode.m_RequeueCount + 1;
+
+                                // B1: Allow same-epoch reprocessing for consumers
+                                // that already ran this epoch with stale allocations.
+                                // Only reset if they were actually processed this epoch
+                                // (m_LastEpoch == current); otherwise they haven't run
+                                // yet and don't need the reset.
+                                if (forceDownstream && tgtNode.m_LastEpoch == m_CurrentEpoch)
+                                {
+                                    int prevEpoch = m_CurrentEpoch - 1;
+                                    tgtNode.m_LastEpoch = prevEpoch;
+                                }
                             }
                             MarkNodeDirty(outEdge.m_TargetNodeId, LFPG_DIRTY_INPUT);
+                        }
+                    }
+                }
+
+                // v0.7.40: Upstream demand propagation for PASSTHROUGH nodes.
+                // When a PASSTHROUGH output changes, upstream sources must
+                // re-evaluate because they use m_LastStableOutput as demand.
+                // Without this, the source processes first during warmup with
+                // cold-start fallback demand (inflated), the passthrough caps
+                // to real demand, but the source never re-evaluates — its
+                // loadRatio stays permanently inflated, causing false
+                // WARNING/CRITICAL cable colors on the upstream wire.
+                // Mirrors the B1 pattern: reset m_LastEpoch so upstream can
+                // re-process in the SAME epoch with corrected demand values.
+                // Safe: bounded by m_RequeueCount (LFPG_MAX_REQUEUE_PER_EPOCH).
+                // Convergence: SOURCE output is fixed (m_MaxOutput), so re-processing
+                // only updates loadRatio/masks — no cascading downstream changes.
+                if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                {
+                    ref array<ref LFPG_ElecEdge> upEdges;
+                    if (m_Incoming.Find(nodeId, upEdges) && upEdges)
+                    {
+                        int ui;
+                        for (ui = 0; ui < upEdges.Count(); ui = ui + 1)
+                        {
+                            ref LFPG_ElecEdge upEdge = upEdges[ui];
+                            if (upEdge && upEdge.m_SourceNodeId != "")
+                            {
+                                ref LFPG_ElecNode upNode;
+                                if (m_Nodes.Find(upEdge.m_SourceNodeId, upNode) && upNode)
+                                {
+                                    upNode.m_RequeueCount = upNode.m_RequeueCount + 1;
+                                    // Allow same-epoch reprocessing (B1 pattern).
+                                    // Without this reset, epoch-skip (line ~1647)
+                                    // consumes the node without clearing m_InQueue,
+                                    // leaving a zombie that blocks future re-enqueue.
+                                    if (upNode.m_LastEpoch == m_CurrentEpoch)
+                                    {
+                                        int prevUp = m_CurrentEpoch - 1;
+                                        upNode.m_LastEpoch = prevUp;
+                                    }
+                                }
+                                MarkNodeDirty(upEdge.m_SourceNodeId, LFPG_DIRTY_INPUT);
+                            }
                         }
                     }
                 }
@@ -1911,6 +2107,17 @@ class LFPG_ElecGraph
             return;
         }
 
+        // v0.7.40: PASSTHROUGH nodes need powered state AND overload/warning masks.
+        // Without masks, cables from splitter to downstream devices can never show
+        // WARNING or CRITICAL colors even when the splitter is overloaded.
+        if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+        {
+            LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
+            LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
+            LFPG_DeviceAPI.SetWarningMask(entObj, node.m_WarningMask);
+            return;
+        }
+
         LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
         #endif
     }
@@ -1982,11 +2189,8 @@ class LFPG_ElecGraph
             if (!node)
                 continue;
 
-            // Only validate powered consumers
+            // Only validate consumers
             if (node.m_DeviceType != LFPG_DeviceType.CONSUMER)
-                continue;
-
-            if (!node.m_Powered)
                 continue;
 
             // Skip nodes currently in the dirty queue — they have pending updates
@@ -2051,13 +2255,17 @@ class LFPG_ElecGraph
                 }
             }
 
-            // Zombie detected: node thinks it's powered but shouldn't be
-            if (!shouldBePowered)
+            // v0.7.38 (RC-09 safety net): Bidirectional zombie detection.
+            // Original: only caught powered=true when shouldBePowered=false (zombie).
+            // Added: also catch powered=false when shouldBePowered=true (dark consumer).
+            // Dark consumers arise from race conditions like B1 (topology change
+            // with stale per-edge allocations during same-epoch processing).
+            if (node.m_Powered && !shouldBePowered)
             {
+                // Classic zombie: powered but shouldn't be
                 node.m_Powered = false;
                 node.m_InputPower = incomingPower;
 
-                // Sync corrected state to entity
                 SyncNodeToEntity(nodeId, node);
 
                 fixed = fixed + 1;
@@ -2068,6 +2276,24 @@ class LFPG_ElecGraph
                 zombMsg = zombMsg + " consumption=" + node.m_Consumption.ToString();
                 zombMsg = zombMsg + " totalFixes=" + m_ValidateFixCount.ToString();
                 LFPG_Util.Warn(zombMsg);
+            }
+            else if (!node.m_Powered && shouldBePowered)
+            {
+                // Inverse zombie (dark consumer): should be powered but isn't.
+                // Caused by topology race conditions (B1) or stale allocation reads.
+                node.m_Powered = true;
+                node.m_InputPower = incomingPower;
+
+                SyncNodeToEntity(nodeId, node);
+
+                fixed = fixed + 1;
+                m_ValidateFixCount = m_ValidateFixCount + 1;
+
+                string darkMsg = "[ElecGraph] Dark consumer fixed: " + nodeId;
+                darkMsg = darkMsg + " inPower=" + incomingPower.ToString();
+                darkMsg = darkMsg + " consumption=" + node.m_Consumption.ToString();
+                darkMsg = darkMsg + " totalFixes=" + m_ValidateFixCount.ToString();
+                LFPG_Util.Warn(darkMsg);
             }
         }
 
@@ -2468,6 +2694,38 @@ class LFPG_ElecGraph
                 srcNode.m_OverloadMask = overloadMask;
                 srcNode.m_WarningMask = warningMask;  // v0.7.33 (Bloque D)
             }
+            else if (srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                // v0.7.40: PASSTHROUGH nodes also need masks so cables FROM the
+                // splitter to downstream devices can show WARNING/CRITICAL colors.
+                // LoadRatio: demand vs available throughput (input power).
+                if (availableOutput > LFPG_PROPAGATION_EPSILON)
+                {
+                    float ptRatio = totalDemand / availableOutput;
+                    if (ptRatio < 0.0)
+                    {
+                        ptRatio = 0.0;
+                    }
+                    if (ptRatio > 100.0)
+                    {
+                        ptRatio = 100.0;
+                    }
+                    srcNode.m_LoadRatio = ptRatio;
+                }
+                else
+                {
+                    if (totalDemand > LFPG_PROPAGATION_EPSILON)
+                    {
+                        srcNode.m_LoadRatio = 100.0;
+                    }
+                    else
+                    {
+                        srcNode.m_LoadRatio = 0.0;
+                    }
+                }
+                srcNode.m_OverloadMask = overloadMask;
+                srcNode.m_WarningMask = warningMask;
+            }
         }
 
         return totalDemand;
@@ -2514,9 +2772,14 @@ class LFPG_ElecGraph
 
     // Sprint 4.3: Targeted reset — only resets nodes that were actually enqueued.
     // v0.7.33 (Fix #15): m_EnqueuedThisEpoch is now a map — no duplicates to iterate.
+    // v0.7.38 (RC-09): Also reset carryover nodes still pending in the dirty queue
+    // from previous epochs. Without this, nodes that span multiple epochs (budget
+    // exhaustion) accumulate m_RequeueCount across epochs and can hit
+    // LFPG_MAX_REQUEUE_PER_EPOCH prematurely, causing permanent stuck state.
     protected void ResetRequeueCounts()
     {
         #ifdef SERVER
+        // Phase 1: Reset nodes enqueued this epoch (existing behavior)
         int ri;
         for (ri = 0; ri < m_EnqueuedThisEpoch.Count(); ri = ri + 1)
         {
@@ -2528,6 +2791,21 @@ class LFPG_ElecGraph
             }
         }
         m_EnqueuedThisEpoch.Clear();
+
+        // Phase 2 (RC-09): Reset carryover nodes still in queue from prior epochs.
+        // These were not in m_EnqueuedThisEpoch (they were enqueued in epoch N-1)
+        // but still sit in m_DirtyQueue waiting to be processed. Without this reset,
+        // any re-enqueue during the current epoch adds to their stale count.
+        int qi;
+        for (qi = m_DirtyQueueHead; qi < m_DirtyQueue.Count(); qi = qi + 1)
+        {
+            string qNodeId = m_DirtyQueue[qi];
+            ref LFPG_ElecNode qNode;
+            if (m_Nodes.Find(qNodeId, qNode) && qNode)
+            {
+                qNode.m_RequeueCount = 0;
+            }
+        }
         #endif
     }
 };

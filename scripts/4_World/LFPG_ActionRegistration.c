@@ -32,7 +32,14 @@ modded class ActionConstructor
         actions.Insert(ActionLFPG_ToggleSource);
         actions.Insert(ActionLFPG_DebugStatus);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (17)");
+        // --- LF_PowerGrid placement ---
+        // v0.7.38 (Fix): Was missing. Without registration, AddAction()
+        // on LF_Splitter_Kit silently fails and the custom placement
+        // action is never available. Vanilla ActionPlaceObject fallback
+        // may show a "Place" action but cannot execute properly.
+        actions.Insert(LFPG_ActionPlaceSplitter);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (18)");
     }
 };
 

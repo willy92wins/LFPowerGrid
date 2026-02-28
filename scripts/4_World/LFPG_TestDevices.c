@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.36)
+// LF_PowerGrid - Example devices (v0.7.38)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
@@ -19,6 +19,10 @@
 // v0.7.30: Removed per-device position polling timers (Audit 1+2 closure).
 //          Movement detection is now centralized in NetworkManager with
 //          round-robin batching. See LFPG_MOVE_DETECT_* constants.
+// v0.7.38 (RC-04): m_LFPG_Deleting flag in EEDelete prevents post-mortem
+//          re-registration via OnVariablesSynchronized. Blocks stale refs
+//          in DeviceRegistry when engine delivers final SyncVar updates
+//          for devices leaving the network bubble after deletion starts.
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -50,6 +54,12 @@ class LF_TestGenerator : PowerGenerator
     // Bit N = 1 means wire at index N is getting power but less than demanded.
     // Synced to clients for per-wire WARNING_LOAD cable state.
     protected int m_WarningMask = 0;
+
+    // v0.7.38 (RC-04): Deletion guard.
+    // Set true at the start of EEDelete to prevent post-mortem re-registration
+    // via OnVariablesSynchronized. Engine may deliver a final SyncVar update
+    // for a device leaving the network bubble after EEDelete has started.
+    protected bool m_LFPG_Deleting = false;
 
     // v0.7.30: Per-device position polling removed.
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
@@ -165,6 +175,10 @@ class LF_TestGenerator : PowerGenerator
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
+        // v0.7.38 (RC-04): Set deletion flag BEFORE unregistration.
+        // Prevents OnVariablesSynchronized from re-registering a dying device.
+        m_LFPG_Deleting = true;
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
@@ -408,6 +422,10 @@ class LF_TestGenerator : PowerGenerator
 
     protected void LFPG_TryRegister()
     {
+        // v0.7.38 (RC-04): Don't register if device is being deleted.
+        if (m_LFPG_Deleting)
+            return;
+
         LFPG_UpdateDeviceIdString();
         if (m_DeviceId != "")
         {
@@ -842,6 +860,9 @@ class LF_TestLamp : Spotlight
 
     protected bool m_PoweredNet = false;
 
+    // v0.7.38 (RC-04): Deletion guard (same as Generator).
+    protected bool m_LFPG_Deleting = false;
+
     // NOTE: Spotlight base class already defines `SpotlightLight m_Light;`
     // so we must not redeclare it here.
     // ScriptedLightBase is an engine object (not Managed). Do NOT store as `ref`.
@@ -928,6 +949,9 @@ class LF_TestLamp : Spotlight
     // v0.7.27: Delegates to DeviceLifecycle helper
     override void EEDelete(EntityAI parent)
     {
+        // v0.7.38 (RC-04): Set deletion flag BEFORE unregistration.
+        m_LFPG_Deleting = true;
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
@@ -997,6 +1021,10 @@ class LF_TestLamp : Spotlight
 
     protected void LFPG_TryRegister()
     {
+        // v0.7.38 (RC-04): Don't register if device is being deleted.
+        if (m_LFPG_Deleting)
+            return;
+
         LFPG_UpdateDeviceIdString();
         if (m_DeviceId != "")
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);

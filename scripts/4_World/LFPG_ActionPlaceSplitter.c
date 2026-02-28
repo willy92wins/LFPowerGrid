@@ -2,6 +2,21 @@
 // LF_PowerGrid - Custom placement action for Splitter Kit
 //
 // v0.7.26: Based on ActionPlaceObjectGemaLF (proven pattern).
+// v0.7.38: Registered in ActionConstructor (was missing).
+// v0.7.39: Restored m_FullBody = true and SetupAnimation.
+//   The v0.7.38 removal was incorrect — the real bug was only
+//   the missing ActionConstructor registration. Without m_FullBody
+//   the modifier pipeline runs a wrong animation (drinking) and
+//   does NOT move the kit to hologram position before the callback.
+//
+// Why m_FullBody = true?
+//   ActionPlaceObject's full-body pipeline moves the item to the
+//   hologram position BEFORE OnPlacementComplete fires. Without
+//   m_FullBody = true, the modifier pipeline skips this step and
+//   the kit stays at the player position -> splitter spawns wrong.
+//   The CMD_ACTIONFB_PLACING_* commands also give the correct
+//   placing animation (kneel + place) instead of generic modifier
+//   animations (drinking, etc).
 //
 // Why not ActionDeployObject?
 //   ActionDeployObject passes position/orientation as "0 0 0"
@@ -9,12 +24,12 @@
 //   hologram position before the callback. This caused the
 //   splitter to spawn at the player instead of the hologram.
 //
-// ActionPlaceObject (this parent) moves the item to the hologram
-// position BEFORE calling OnPlacementComplete, so GetPosition()
-// and GetOrientation() return the correct hologram transform.
-//
 // ActionTogglePlaceObject enters placement mode (shows hologram).
 // This action confirms the placement (fires animation + callback).
+//
+// IMPORTANT: Must be registered in ActionConstructor.RegisterActions()
+//   via actions.Insert(LFPG_ActionPlaceSplitter) or AddAction() will
+//   silently fail and the custom action will never be available.
 // =========================================================
 
 class LFPG_ActionPlaceSplitter : ActionPlaceObject
@@ -23,11 +38,15 @@ class LFPG_ActionPlaceSplitter : ActionPlaceObject
     {
         // Allow placement while standing or crouching
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ERECT | DayZPlayerConstants.STANCEMASK_CROUCH;
+
+        // Full-body action: required for the engine to move the kit
+        // to hologram position before OnPlacementComplete fires.
         m_FullBody = true;
     }
 
     // Force PLACING animation regardless of item.IsDeployable() result.
-    // Without this override, the engine may pick wrong animation or skip it.
+    // Without this override, the engine may pick a wrong animation
+    // (drinking, eating, etc.) or skip it entirely.
     override void SetupAnimation(ItemBase item)
     {
         if (!item)
@@ -47,7 +66,8 @@ class LFPG_ActionPlaceSplitter : ActionPlaceObject
         }
         else
         {
-            m_CommandUID = DayZPlayerConstants.CMD_ACTIONFB_PLACING_2HD; // splitter is a medium item
+            // LF_Splitter_Kit is a medium-sized item
+            m_CommandUID = DayZPlayerConstants.CMD_ACTIONFB_PLACING_2HD;
         }
     }
 

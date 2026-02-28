@@ -1,7 +1,14 @@
 // =========================================================
-// LF_PowerGrid - NetworkManager (v0.7.34, Sprint 4.3+Bloque E)
+// LF_PowerGrid - NetworkManager (v0.7.38, Sprint 4.3+Bloque E+RC fixes)
 //
 // Server singleton: validation, wire storage, propagation.
+//
+// v0.7.38 (Race Condition fixes):
+//   RC-01: Port locking for concurrent FinishWiring (IsPortLocked/LockPort/UnlockPort)
+//   RC-02: Immediate ProcessDirtyQueue flush after PostBulkRebuild (zero-flicker)
+//   RC-03: CheckDeviceMovement safety invariant (documented, no code change)
+//   RC-05: FullSync mutex — defers BroadcastOwnerWires/VanillaWires during SendFullSyncTo
+//   RC-07: m_StartupValidationDone flag — RPCs rejected until initial validation completes
 //
 // Wire storage:
 //   - LFPG sources (LF_TestGenerator): wires stored ON the object
@@ -63,6 +70,27 @@ class LFPG_NetworkManager
 
     // Coalesced self-heal scheduling
     protected bool m_SelfHealQueued = false;
+
+    // v0.7.38 (RC-01): Port locking for concurrent FinishWiring protection.
+    // Key: "targetDeviceId|targetPort" → true while a FinishWiring is in-flight
+    // for that destination port. Prevents two RPCs from both passing the
+    // occupancy check on the same port in the same tick.
+    protected ref map<string, bool> m_PortLocks;
+
+    // v0.7.38 (RC-07): Startup validation flag.
+    // False until ValidateAllWiresAndPropagate completes (5s after init).
+    // RPC handlers reject wiring requests during this window to prevent
+    // transient flicker from rebuild overwriting incremental state.
+    protected bool m_StartupValidationDone = false;
+
+    // v0.7.38 (RC-05): FullSync mutex.
+    // True while SendFullSyncTo is iterating devices. BroadcastOwnerWires
+    // and BroadcastVanillaWires enqueue instead of sending immediately,
+    // preventing reorder between FullSync RPCs and mutation Broadcasts.
+    protected bool m_FullSyncInProgress = false;
+    protected ref array<EntityAI> m_DeferredBroadcastLFPG;
+    protected ref array<string>   m_DeferredBroadcastVanillaIds;
+    protected ref array<EntityAI> m_DeferredBroadcastVanillaObjs;
 
     // v0.7.4: deferred vanilla wire persistence.
     // MarkVanillaDirty() sets flag; FlushVanillaIfDirty() writes to disk.
@@ -127,6 +155,10 @@ class LFPG_NetworkManager
         m_PendingBroadcastLFPG = new map<string, EntityAI>;
         m_PendingBroadcastVanilla = new map<string, EntityAI>;
         m_LastKnownPos = new map<string, vector>;
+        m_PortLocks = new map<string, bool>;
+        m_DeferredBroadcastLFPG = new array<EntityAI>;
+        m_DeferredBroadcastVanillaIds = new array<string>;
+        m_DeferredBroadcastVanillaObjs = new array<EntityAI>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -237,6 +269,38 @@ class LFPG_NetworkManager
     // ===========================
     // Vanilla wire storage
     // ===========================
+
+    // v0.7.38 (RC-01): Port locking for concurrent FinishWiring.
+    // Prevents two RPCs from simultaneously modifying the same destination port.
+    // Lock key format: "targetDeviceId|targetPort".
+    bool IsPortLocked(string lockKey)
+    {
+        bool locked = false;
+        if (m_PortLocks.Find(lockKey, locked))
+        {
+            return locked;
+        }
+        return false;
+    }
+
+    void LockPort(string lockKey)
+    {
+        m_PortLocks.Set(lockKey, true);
+    }
+
+    void UnlockPort(string lockKey)
+    {
+        m_PortLocks.Remove(lockKey);
+    }
+
+    // v0.7.38 (RC-07): Startup validation check.
+    // Returns false during the first ~5 seconds while the server
+    // runs ValidateAllWiresAndPropagate. RPC handlers should reject
+    // wiring requests during this window.
+    bool IsStartupValidationDone()
+    {
+        return m_StartupValidationDone;
+    }
     bool AddVanillaWire(string ownerDeviceId, LFPG_WireData wd)
     {
         if (ownerDeviceId == "" || !wd)
@@ -428,6 +492,16 @@ class LFPG_NetworkManager
             return;
         m_Graph.PostBulkRebuild(this);
         m_WarmupActive = true;
+
+        // v0.7.38 (RC-02): Immediate flush after rebuild.
+        // If TickPropagation ran earlier in this frame with budget exhaustion,
+        // it may have sync'd transient states to entities. The rebuild just
+        // reconstructed the graph with correct states. Flush immediately
+        // so correct SyncNodeToEntity calls land in the SAME frame.
+        // DayZ SyncVar batching sends only the final value to clients → no flicker.
+        int flushBudget = LFPG_PROPAGATE_WARMUP_BUDGET;
+        int flushEdge = LFPG_PROPAGATE_EDGE_WARMUP_BUDGET;
+        m_Graph.ProcessDirtyQueue(flushBudget, flushEdge);
         #endif
     }
 
@@ -981,6 +1055,15 @@ class LFPG_NetworkManager
     {
         if (!owner) return;
 
+        // v0.7.38 (RC-05): Defer broadcast if FullSync is in progress.
+        // Prevents reordering where a Broadcast arrives at client BEFORE
+        // the FullSync RPC for the same owner, leaving stale state.
+        if (m_FullSyncInProgress)
+        {
+            m_DeferredBroadcastLFPG.Insert(owner);
+            return;
+        }
+
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
 
@@ -1072,6 +1155,14 @@ class LFPG_NetworkManager
     void BroadcastVanillaWires(string ownerDeviceId, EntityAI ownerObj)
     {
         if (ownerDeviceId == "" || !ownerObj) return;
+
+        // v0.7.38 (RC-05): Defer broadcast if FullSync is in progress.
+        if (m_FullSyncInProgress)
+        {
+            m_DeferredBroadcastVanillaIds.Insert(ownerDeviceId);
+            m_DeferredBroadcastVanillaObjs.Insert(ownerObj);
+            return;
+        }
 
         ref array<ref LFPG_WireData> wires = GetVanillaWires(ownerDeviceId);
 
@@ -1213,6 +1304,12 @@ class LFPG_NetworkManager
     {
         if (!player) return;
 
+        // v0.7.38 (RC-05): Set FullSync mutex.
+        // While true, BroadcastOwnerWires/BroadcastVanillaWires defer instead
+        // of sending immediately. Prevents reordering where a Broadcast arrives
+        // at client BEFORE the FullSync RPC for the same owner.
+        m_FullSyncInProgress = true;
+
         vector pp = player.GetPosition();
         float maxDist = LFPG_CULL_DISTANCE_M + 20.0;
         // v0.7.11 (A3): Precompute squared threshold for distance culling.
@@ -1278,6 +1375,46 @@ class LFPG_NetworkManager
 
             SendVanillaWiresTo(player, vId, vObj);
         }
+
+        // v0.7.38 (RC-05): Release mutex and flush deferred broadcasts.
+        // Any mutation that happened during the FullSync iteration is now
+        // sent with the latest state, ensuring the client receives it AFTER
+        // all FullSync RPCs for ordered consistency.
+        m_FullSyncInProgress = false;
+        FlushDeferredBroadcasts();
+    }
+
+    // v0.7.38 (RC-05): Flush broadcasts that were deferred during FullSync.
+    // Called immediately after m_FullSyncInProgress is cleared.
+    // Re-broadcasts the LATEST state for each deferred owner, not the state
+    // at deferral time, ensuring clients always receive current data.
+    protected void FlushDeferredBroadcasts()
+    {
+        // Flush LFPG deferred broadcasts
+        int li;
+        for (li = 0; li < m_DeferredBroadcastLFPG.Count(); li = li + 1)
+        {
+            EntityAI lfpgOwner = m_DeferredBroadcastLFPG[li];
+            if (lfpgOwner)
+            {
+                BroadcastOwnerWires(lfpgOwner);
+            }
+        }
+        m_DeferredBroadcastLFPG.Clear();
+
+        // Flush vanilla deferred broadcasts
+        int vi;
+        for (vi = 0; vi < m_DeferredBroadcastVanillaIds.Count(); vi = vi + 1)
+        {
+            string vId = m_DeferredBroadcastVanillaIds[vi];
+            EntityAI vObj = m_DeferredBroadcastVanillaObjs[vi];
+            if (vId != "" && vObj)
+            {
+                BroadcastVanillaWires(vId, vObj);
+            }
+        }
+        m_DeferredBroadcastVanillaIds.Clear();
+        m_DeferredBroadcastVanillaObjs.Clear();
     }
 
     // ===========================
@@ -1546,6 +1683,15 @@ class LFPG_NetworkManager
     // Replaces: (a) full-scan CheckDeviceMovement every 3s (v0.7.23-0.7.29)
     //           (b) N per-device timers in generator/lamp (v0.7.29)
     // Uses DistSq to avoid sqrt per check.
+    //
+    // v0.7.38 (RC-03): Safety invariant — concurrent CutAllWiresFromDevice.
+    // If an RPC calls CutAllWiresFromDevice (→ UntrackDeviceFromPolling with
+    // swap-and-pop) between the batch read and process phases, some devices
+    // may be skipped in the current batch. This is harmless:
+    //   - Skipped devices are checked in the next round-robin cycle
+    //   - UntrackDeviceFromPolling is idempotent (m_TrackedDeviceIndex guard)
+    //   - Cursor is advanced AFTER all untracking, with post-mutation clamp
+    // No fix needed; invariant holds by design.
 
     // ---- Track / Untrack ----
     // Called when wires are added or removed. Maintains the set of devices
@@ -2031,6 +2177,11 @@ class LFPG_NetworkManager
         // Must happen after graph rebuild + prune so the tracked set matches
         // the authoritative wire topology.
         RebuildTrackedDevices();
+
+        // v0.7.38 (RC-07): Mark startup validation complete.
+        // RPC handlers can now accept wiring requests.
+        m_StartupValidationDone = true;
+        LFPG_Util.Info("[SelfHeal] Startup validation done — RPCs enabled");
         #endif
     }
 

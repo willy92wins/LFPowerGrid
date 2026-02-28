@@ -16,6 +16,10 @@
 //   port_output_3  - downstream cable 3
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
+//
+// v0.7.41 (BugFix): OnPlacementComplete used GetPosition() which returns
+//   the kit's physical pos (near player), not hologram pos. Fixed to use
+//   the position parameter from ActionPlaceObject→ActionDeployObject pipeline.
 // =========================================================
 
 // ---------------------------------------------------------
@@ -63,25 +67,30 @@ class LF_Splitter_Kit : Inventory_Base
         super.SetActions();
         // v0.7.26: ActionTogglePlaceObject enters hologram mode.
         // LFPG_ActionPlaceSplitter confirms placement (extends ActionPlaceObject).
-        // This combo is proven to move the kit to hologram position BEFORE
-        // OnPlacementComplete fires, unlike ActionDeployObject which doesn't.
+        // ActionPlaceObject→ActionDeployObject pipeline passes hologram pos as
+        // parameter to OnPlacementComplete. Use parameter, NOT GetPosition().
         AddAction(ActionTogglePlaceObject);
         AddAction(LFPG_ActionPlaceSplitter);
     }
 
-    // v0.7.26: With ActionPlaceObject (not ActionDeployObject), the engine
-    // moves the kit to the hologram position BEFORE this callback fires.
-    // GetPosition()/GetOrientation() now return the hologram transform directly.
-    // No DeferredDeploy hack needed.
+    // v0.7.26: ActionPlaceObject inherits ActionDeployObject pipeline.
+    //   OnFinishProgressClient passes GetLocalProjectionPosition() (hologram
+    //   pos) as the position parameter. Use it directly.
+    // v0.7.41 (BugFix): Use position/orientation PARAMETERS, not GetPosition().
+    //   GetPosition() returns the kit's physical position (near the player).
+    //   The position parameter carries the hologram position from the action
+    //   system — same pattern used by rag_baseitems and vanilla kits.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
 
         #ifdef SERVER
-        vector finalPos = GetPosition();
-        vector finalOri = GetOrientation();
+        vector finalPos = position;
+        vector finalOri = orientation;
 
-        LFPG_Util.Info("[Splitter_Kit] OnPlacementComplete: pos=" + finalPos.ToString() + " ori=" + finalOri.ToString());
+        string tLog = "[Splitter_Kit] OnPlacementComplete: param=" + position.ToString();
+        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        LFPG_Util.Info(tLog);
 
         // Do NOT use ECE_PLACE_ON_SURFACE — it forces ground snap, killing wall placement.
         // Do NOT zero pitch/roll — the hologram orientation already includes wall alignment.
