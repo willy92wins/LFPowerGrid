@@ -1202,6 +1202,7 @@ modded class PlayerBase
             return;
 
         ref array<ref LFPG_InspectWireEntry> entries = new array<ref LFPG_InspectWireEntry>;
+        LFPG_InspectWireEntry entry;
 
         LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
         if (graph)
@@ -1217,7 +1218,7 @@ modded class PlayerBase
                     if (!oEdge)
                         continue;
 
-                    LFPG_InspectWireEntry entry = new LFPG_InspectWireEntry();
+                    entry = new LFPG_InspectWireEntry();
                     entry.m_Direction = LFPG_PortDir.OUT;
                     entry.m_LocalPort = oEdge.m_SourcePort;
                     entry.m_RemoteDeviceId = oEdge.m_TargetNodeId;
@@ -1238,7 +1239,7 @@ modded class PlayerBase
                     if (!iEdge)
                         continue;
 
-                    LFPG_InspectWireEntry entry = new LFPG_InspectWireEntry();
+                    entry = new LFPG_InspectWireEntry();
                     entry.m_Direction = LFPG_PortDir.IN;
                     entry.m_LocalPort = iEdge.m_TargetPort;
                     entry.m_RemoteDeviceId = iEdge.m_SourceNodeId;
