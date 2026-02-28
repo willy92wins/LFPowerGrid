@@ -148,6 +148,11 @@ class LFPG_DeviceInspector
             return;
         }
 
+        // v0.7.42 (BugFix): Inspector must render above CableHUD canvas
+        // (which uses SetSort(10000)). Without this, cable lines are
+        // drawn on top of the inspector panel.
+        m_Root.SetSort(10001);
+
         m_Panel = m_Root.FindAnyWidget("InspectorPanel");
         m_wDeviceName = TextWidget.Cast(m_Root.FindAnyWidget("DeviceName"));
         m_wDeviceType = TextWidget.Cast(m_Root.FindAnyWidget("DeviceType"));
@@ -426,22 +431,22 @@ class LFPG_DeviceInspector
 
         // ---- Device type badge ----
         int devType = LFPG_DeviceAPI.GetDeviceType(device);
-        string typeStr = "UNKNOWN";
+        string typeStr = Loc("#STR_LFPG_INSPECT_UNKNOWN");
         int typeColor = ARGB(255, 140, 140, 140);
 
         if (devType == LFPG_DeviceType.SOURCE)
         {
-            typeStr = "SOURCE";
+            typeStr = Loc("#STR_LFPG_INSPECT_SOURCE");
             typeColor = ARGB(255, 230, 180, 50);
         }
         else if (devType == LFPG_DeviceType.CONSUMER)
         {
-            typeStr = "CONSUMER";
+            typeStr = Loc("#STR_LFPG_INSPECT_CONSUMER");
             typeColor = ARGB(255, 100, 180, 220);
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
-            typeStr = "PASSTHROUGH";
+            typeStr = Loc("#STR_LFPG_INSPECT_PASSTHROUGH");
             typeColor = ARGB(255, 160, 120, 220);
         }
 
@@ -462,17 +467,20 @@ class LFPG_DeviceInspector
 
                 if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
                 {
-                    statusText = "OVERLOAD  ";
+                    statusText = Loc("#STR_LFPG_INSPECT_OVERLOAD");
+                    statusText = statusText + "  ";
                     statusColor = ARGB(255, 220, 50, 50);
                 }
                 else if (loadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
                 {
-                    statusText = "WARNING  ";
+                    statusText = Loc("#STR_LFPG_INSPECT_WARNING");
+                    statusText = statusText + "  ";
                     statusColor = ARGB(255, 211, 155, 0);
                 }
                 else
                 {
-                    statusText = "ACTIVE  ";
+                    statusText = Loc("#STR_LFPG_INSPECT_ACTIVE");
+                    statusText = statusText + "  ";
                     statusColor = ARGB(255, 46, 155, 89);
                 }
 
@@ -484,7 +492,7 @@ class LFPG_DeviceInspector
             }
             else
             {
-                statusText = "INACTIVE";
+                statusText = Loc("#STR_LFPG_INSPECT_INACTIVE");
                 statusColor = ARGB(255, 120, 120, 120);
             }
         }
@@ -493,12 +501,12 @@ class LFPG_DeviceInspector
             bool powered = LFPG_DeviceAPI.GetPowered(device);
             if (powered)
             {
-                statusText = "POWERED";
+                statusText = Loc("#STR_LFPG_INSPECT_POWERED");
                 statusColor = ARGB(255, 46, 155, 89);
             }
             else
             {
-                statusText = "UNPOWERED";
+                statusText = Loc("#STR_LFPG_INSPECT_UNPOWERED");
                 statusColor = ARGB(255, 120, 120, 120);
             }
         }
@@ -511,21 +519,21 @@ class LFPG_DeviceInspector
         if (devType == LFPG_DeviceType.SOURCE)
         {
             float cap = LFPG_DeviceAPI.GetCapacity(device);
-            capText = "Capacity: ";
+            capText = Loc("#STR_LFPG_INSPECT_CAPACITY");
             capText = capText + FormatFloat1(cap);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.CONSUMER)
         {
             float cons = LFPG_DeviceAPI.GetConsumption(device);
-            capText = "Consumption: ";
+            capText = Loc("#STR_LFPG_INSPECT_CONSUMPTION");
             capText = capText + FormatFloat1(cons);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
             float ptCap = LFPG_DeviceAPI.GetCapacity(device);
-            capText = "Throughput: ";
+            capText = Loc("#STR_LFPG_INSPECT_THROUGHPUT");
             capText = capText + FormatFloat1(ptCap);
             capText = capText + " u/s";
         }
@@ -552,7 +560,7 @@ class LFPG_DeviceInspector
                 m_wSeparator.Show(true);
             }
             m_wWiresHeader.Show(true);
-            m_wWiresHeader.SetText("Connections ...");
+            m_wWiresHeader.SetText(Loc("#STR_LFPG_INSPECT_CONN_LOADING"));
             HideAllWireSlots();
             ResizePanelHeight(0);
         }
@@ -626,11 +634,14 @@ class LFPG_DeviceInspector
         }
 
         // Header text with overflow indicator
-        string hdrText = "Connections (";
+        string hdrText = Loc("#STR_LFPG_INSPECT_CONNECTIONS");
+        hdrText = hdrText + " (";
         hdrText = hdrText + wireCount.ToString();
         if (wireCount > maxShow)
         {
-            hdrText = hdrText + " | showing ";
+            hdrText = hdrText + " | ";
+            hdrText = hdrText + Loc("#STR_LFPG_INSPECT_SHOWING");
+            hdrText = hdrText + " ";
             hdrText = hdrText + maxShow.ToString();
         }
         hdrText = hdrText + ")";
@@ -648,15 +659,17 @@ class LFPG_DeviceInspector
             string arrow = "";
             if (entry.m_Direction == LFPG_PortDir.OUT)
             {
-                arrow = "OUT ";
+                arrow = Loc("#STR_LFPG_INSPECT_DIR_OUT");
+                arrow = arrow + " ";
             }
             else
             {
-                arrow = "IN  ";
+                arrow = Loc("#STR_LFPG_INSPECT_DIR_IN");
+                arrow = arrow + "  ";
             }
 
             string line = arrow;
-            line = line + entry.m_LocalPort;
+            line = line + FormatPortName(entry.m_LocalPort);
             line = line + "  >  ";
             line = line + FormatDeviceName(entry.m_RemoteTypeName);
 
@@ -936,6 +949,56 @@ class LFPG_DeviceInspector
         }
 
         return result;
+    }
+
+    // Resolve a stringtable key (e.g. "#STR_LFPG_INSPECT_SOURCE") to the
+    // player's current language. Thin wrapper so there is a single place
+    // to change if the engine API ever differs.
+    protected static string Loc(string key)
+    {
+        return Widget.TranslateString(key);
+    }
+
+    // Clean up port internal name for display.
+    // "input_main" → "Main Input"
+    // "input_1"    → "Input 1"
+    // "output_1"   → "Output 1"
+    // "output_2"   → "Output 2"
+    // Unknown patterns → returned as-is
+    protected static string FormatPortName(string portName)
+    {
+        if (portName == "")
+            return "—";
+
+        // Known special names
+        if (portName == "input_main")
+            return Loc("#STR_LFPG_INSPECT_PORT_MAIN_IN");
+
+        // Check "input_N" pattern
+        int portLen = portName.Length();
+        if (portLen > 6)
+        {
+            string pfxIn = portName.Substring(0, 6);
+            if (pfxIn == "input_")
+            {
+                string inSuffix = portName.Substring(6, portLen - 6);
+                return Loc("#STR_LFPG_INSPECT_PORT_INPUT") + " " + inSuffix;
+            }
+        }
+
+        // Check "output_N" pattern
+        if (portLen > 7)
+        {
+            string pfxOut = portName.Substring(0, 7);
+            if (pfxOut == "output_")
+            {
+                string outSuffix = portName.Substring(7, portLen - 7);
+                return Loc("#STR_LFPG_INSPECT_PORT_OUTPUT") + " " + outSuffix;
+            }
+        }
+
+        // Fallback: return as-is
+        return portName;
     }
 
     // Format float to 1 decimal place.

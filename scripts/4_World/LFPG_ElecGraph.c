@@ -668,6 +668,42 @@ class LFPG_ElecGraph
             return false;
         }
 
+        // [DIAG PT-CHAIN] Punto 1: Post-edge insert verification
+        if (LFPG_DIAG_PT_CHAIN)
+        {
+            ref LFPG_ElecNode diagSrc;
+            ref LFPG_ElecNode diagTgt;
+            string dSrcType = "?";
+            string dTgtType = "?";
+            string dSrcOut = "0";
+            string dSrcPow = "0";
+            string dTgtOut = "0";
+            string dTgtPow = "0";
+            if (m_Nodes.Find(sourceId, diagSrc) && diagSrc)
+            {
+                dSrcType = diagSrc.m_DeviceType.ToString();
+                dSrcOut = diagSrc.m_OutputPower.ToString();
+                dSrcPow = diagSrc.m_Powered.ToString();
+            }
+            if (m_Nodes.Find(targetId, diagTgt) && diagTgt)
+            {
+                dTgtType = diagTgt.m_DeviceType.ToString();
+                dTgtOut = diagTgt.m_OutputPower.ToString();
+                dTgtPow = diagTgt.m_Powered.ToString();
+            }
+            string ptLog1 = "[PT-CHAIN] OnWireAdded OK: ";
+            ptLog1 = ptLog1 + sourceId;
+            ptLog1 = ptLog1 + "(type=" + dSrcType;
+            ptLog1 = ptLog1 + " out=" + dSrcOut;
+            ptLog1 = ptLog1 + " pow=" + dSrcPow + ")";
+            ptLog1 = ptLog1 + " -> " + targetId;
+            ptLog1 = ptLog1 + "(type=" + dTgtType;
+            ptLog1 = ptLog1 + " out=" + dTgtOut;
+            ptLog1 = ptLog1 + " pow=" + dTgtPow + ")";
+            ptLog1 = ptLog1 + " port=" + sourcePort + "->" + targetPort;
+            LFPG_Util.Info(ptLog1);
+        }
+
         m_ComponentsDirty = true;
 
         MarkNodeDirty(sourceId, LFPG_DIRTY_TOPOLOGY);
@@ -1172,6 +1208,16 @@ class LFPG_ElecGraph
         edge.m_SourcePort = srcPort;
         edge.m_TargetPort = tgtPort;
         edge.m_WireRef = wireRef;
+        // v0.7.42 (BugFix): Edges must start ENABLED. Without this,
+        // m_Flags defaults to 0 and every check that filters by
+        // LFPG_EDGE_ENABLED (input evaluation, AllocateOutputByPriority,
+        // CountEnabledOutgoing, GetEdgeAllocatedPower fallback) skips
+        // the edge entirely. This caused PASSTHROUGH chains (splitter→
+        // splitter) to never propagate power downstream because the
+        // source's AllocateOutputByPriority skipped disabled edges,
+        // setting m_AllocatedPower=0, and the equal-split fallback in
+        // GetEdgeAllocatedPower also returned 0 (CountEnabledOutgoing=0).
+        edge.m_Flags = LFPG_EDGE_ENABLED;
 
         // Insert into outgoing
         ref array<ref LFPG_ElecEdge> outArr;
@@ -1754,6 +1800,17 @@ class LFPG_ElecGraph
                         {
                             edgePower = 0.0;
                         }
+                        // [DIAG PT-CHAIN] Point 3: Per input edge detail (PASSTHROUGH only)
+                        if (LFPG_DIAG_PT_CHAIN && node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                        {
+                            string ptLog3 = "[PT-CHAIN] InputEdge: tgt=";
+                            ptLog3 = ptLog3 + nodeId;
+                            ptLog3 = ptLog3 + " src=" + inEdge.m_SourceNodeId;
+                            ptLog3 = ptLog3 + " alloc=" + inEdge.m_AllocatedPower.ToString();
+                            ptLog3 = ptLog3 + " resolved=" + edgePower.ToString();
+                            ptLog3 = ptLog3 + " flags=" + inEdge.m_Flags.ToString();
+                            LFPG_Util.Info(ptLog3);
+                        }
                         inputSum = inputSum + edgePower;
                     }
                 }
@@ -1795,6 +1852,21 @@ class LFPG_ElecGraph
                     {
                         newOutput = node.m_MaxOutput;
                     }
+                }
+                // [DIAG PT-CHAIN] Punto 2: PASSTHROUGH evaluation result
+                if (LFPG_DIAG_PT_CHAIN)
+                {
+                    string ptLog2 = "[PT-CHAIN] PDQ PASSTHROUGH: ";
+                    ptLog2 = ptLog2 + nodeId;
+                    ptLog2 = ptLog2 + " mask=" + dirtyMask.ToString();
+                    ptLog2 = ptLog2 + " inSum=" + inputSum.ToString();
+                    ptLog2 = ptLog2 + " newOut=" + newOutput.ToString();
+                    ptLog2 = ptLog2 + " powered=" + newPowered.ToString();
+                    ptLog2 = ptLog2 + " lastStable=" + node.m_LastStableOutput.ToString();
+                    ptLog2 = ptLog2 + " maxOut=" + node.m_MaxOutput.ToString();
+                    ptLog2 = ptLog2 + " epoch=" + m_CurrentEpoch.ToString();
+                    ptLog2 = ptLog2 + " requeue=" + node.m_RequeueCount.ToString();
+                    LFPG_Util.Info(ptLog2);
                 }
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
@@ -2066,7 +2138,20 @@ class LFPG_ElecGraph
             entObj = LFPG_DeviceAPI.ResolveVanillaDevice(nodeId);
         }
         if (!entObj)
+        {
+            // [DIAG PT-CHAIN] Punto 5a: Entity resolution failed
+            if (LFPG_DIAG_PT_CHAIN && node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                string ptLog5a = "[PT-CHAIN] SyncToEntity FAILED: entity NULL for ";
+                ptLog5a = ptLog5a + nodeId;
+                ptLog5a = ptLog5a + " type=PASSTHROUGH";
+                ptLog5a = ptLog5a + " powered=" + node.m_Powered.ToString();
+                ptLog5a = ptLog5a + " input=" + node.m_InputPower.ToString();
+                ptLog5a = ptLog5a + " output=" + node.m_OutputPower.ToString();
+                LFPG_Util.Warn(ptLog5a);
+            }
             return;
+        }
 
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
@@ -2112,6 +2197,17 @@ class LFPG_ElecGraph
         // WARNING or CRITICAL colors even when the splitter is overloaded.
         if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
         {
+            // [DIAG PT-CHAIN] Punto 5b: PASSTHROUGH entity sync
+            if (LFPG_DIAG_PT_CHAIN)
+            {
+                string ptLog5b = "[PT-CHAIN] SyncToEntity: ";
+                ptLog5b = ptLog5b + nodeId;
+                ptLog5b = ptLog5b + " powered=" + node.m_Powered.ToString();
+                ptLog5b = ptLog5b + " input=" + node.m_InputPower.ToString();
+                ptLog5b = ptLog5b + " output=" + node.m_OutputPower.ToString();
+                ptLog5b = ptLog5b + " entity=" + entObj.GetType();
+                LFPG_Util.Info(ptLog5b);
+            }
             LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
             LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
             LFPG_DeviceAPI.SetWarningMask(entObj, node.m_WarningMask);
@@ -2505,6 +2601,20 @@ class LFPG_ElecGraph
                 }
             }
 
+            // [DIAG PT-CHAIN] Punto 4a: Per-edge demand for PASSTHROUGH targets
+            if (LFPG_DIAG_PT_CHAIN && targetNode && targetNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                string ptLog4a = "[PT-CHAIN] AllocDemand: src=";
+                ptLog4a = ptLog4a + nodeId;
+                ptLog4a = ptLog4a + " -> tgt=" + edge.m_TargetNodeId;
+                ptLog4a = ptLog4a + " tgtType=PASSTHROUGH";
+                ptLog4a = ptLog4a + " lastStable=" + targetNode.m_LastStableOutput.ToString();
+                ptLog4a = ptLog4a + " maxOut=" + targetNode.m_MaxOutput.ToString();
+                ptLog4a = ptLog4a + " demand=" + edgeDemand.ToString();
+                ptLog4a = ptLog4a + " flags=" + edge.m_Flags.ToString();
+                LFPG_Util.Info(ptLog4a);
+            }
+
             idxArr.Insert(ei);
             demandArr.Insert(edgeDemand);
             prioArr.Insert(edge.m_Priority);
@@ -2570,6 +2680,23 @@ class LFPG_ElecGraph
                     totalDemand = totalDemand + shareForZero;
                 }
             }
+        }
+
+        // [DIAG PT-CHAIN] Punto 4b: Allocation summary
+        if (LFPG_DIAG_PT_CHAIN)
+        {
+            string ptLog4b = "[PT-CHAIN] AllocSummary: node=";
+            ptLog4b = ptLog4b + nodeId;
+            ptLog4b = ptLog4b + " avail=" + availableOutput.ToString();
+            ptLog4b = ptLog4b + " totalDem=" + totalDemand.ToString();
+            ptLog4b = ptLog4b + " enabled=" + enabledCount.ToString();
+            bool willOverload = false;
+            if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
+            {
+                willOverload = true;
+            }
+            ptLog4b = ptLog4b + " overload=" + willOverload.ToString();
+            LFPG_Util.Info(ptLog4b);
         }
 
         // Phase 3: Allocate power in priority order

@@ -488,10 +488,20 @@ static const float LFPG_INSPECT_HEADER_H          = 48.0;    // header bar heigh
 static const float LFPG_INSPECT_COMPACT_H         = 102.0;   // collapsed height (0 wires confirmed)
 static const float LFPG_INSPECT_ACCENT_W          = 3.0;     // left accent bar width
 static const float LFPG_INSPECT_OFFSET_X          = 45.0;    // px right of device screen pos
-static const float LFPG_INSPECT_OFFSET_Y          = -30.0;   // px above device screen pos
+static const float LFPG_INSPECT_OFFSET_Y          = -60.0;   // px above device screen pos
 static const float LFPG_INSPECT_SCREEN_MARGIN     = 10.0;    // min px from screen edge
 static const float LFPG_INSPECT_WORLD_Y_OFFSET    = 1.2;     // metres above device origin
 static const float LFPG_INSPECT_REFRESH_MS        = 500.0;   // SyncVar refresh (2Hz)
 static const float LFPG_INSPECT_RPC_COOLDOWN_MS   = 1000.0;  // min ms between RPCs
 static const float LFPG_INSPECT_POS_LERP          = 0.18;    // position smoothing factor
 static const float LFPG_INSPECT_FLIP_HYSTERESIS   = 20.0;    // px deadband for L/R flip
+
+// ---- Sprint 5: Z-order constants (Bug 2 fix) ----
+// Centralized sort order for UI layers. CableHUD must be below Inspector.
+static const int LFPG_SORT_CABLE_HUD  = 10000;
+static const int LFPG_SORT_INSPECTOR  = 10001;
+
+// ---- Sprint 5: PT-Chain diagnostic flag (Bug 1 investigation) ----
+// When true, enables detailed logging for PASSTHROUGH chain propagation.
+// Search RPT for "[PT-CHAIN]" lines. Set false for production.
+static const bool LFPG_DIAG_PT_CHAIN = true;
