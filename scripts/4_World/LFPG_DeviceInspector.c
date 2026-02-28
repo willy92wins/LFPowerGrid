@@ -67,7 +67,6 @@ class LFPG_DeviceInspector
     protected float m_LastClientRefreshMs;
 
     // ---- Server response cache ----
-    protected string m_RespDeviceId;
     protected ref array<ref LFPG_InspectWireEntry> m_RespWires;
 
     // ---- Layout path (adjust to match your PBO structure) ----
@@ -114,7 +113,6 @@ class LFPG_DeviceInspector
         m_LastRPCSendMs = 0.0;
         m_HasServerData = false;
         m_VisibleWireCount = 0;
-        m_RespDeviceId = "";
         m_LastClientRefreshMs = 0.0;
     }
 
@@ -268,8 +266,22 @@ class LFPG_DeviceInspector
         }
 
         // ---- Update floating position every frame ----
-        inst.UpdatePanelPosition(target);
-        inst.ShowPanel();
+        bool posValid = inst.UpdatePanelPosition(target);
+        if (posValid)
+        {
+            inst.ShowPanel();
+        }
+        else
+        {
+            // Behind camera or invalid — hide widget but KEEP state.
+            // When device returns to view, same deviceId is recognized
+            // and no fresh RPC is needed.
+            if (inst.m_Visible && inst.m_Root)
+            {
+                inst.m_Root.Show(false);
+                inst.m_Visible = false;
+            }
+        }
     }
 
     // =========================================================
@@ -280,7 +292,11 @@ class LFPG_DeviceInspector
         if (!player)
             return false;
 
-        EntityAI item = player.GetHumanInventory().GetEntityInHands();
+        HumanInventory hinv = player.GetHumanInventory();
+        if (!hinv)
+            return false;
+
+        EntityAI item = hinv.GetEntityInHands();
         if (!item)
             return false;
 
@@ -395,9 +411,16 @@ class LFPG_DeviceInspector
         }
         m_wCapLine.SetText(capText);
 
-        // ---- Wire section: show "loading..." until server data ----
-        m_wWiresHeader.SetText("Connections ...");
-        HideAllWireSlots();
+        // ---- Wire section: re-display cached data or show loading ----
+        if (m_HasServerData)
+        {
+            PopulateWireData();
+        }
+        else
+        {
+            m_wWiresHeader.SetText("Connections ...");
+            HideAllWireSlots();
+        }
     }
 
     // =========================================================
@@ -519,10 +542,10 @@ class LFPG_DeviceInspector
         m_PanelBg.SetSize(LFPG_INSPECT_PANEL_W, h);
     }
 
-    protected void UpdatePanelPosition(EntityAI device)
+    protected bool UpdatePanelPosition(EntityAI device)
     {
         if (!m_Panel || !device)
-            return;
+            return false;
 
         // Project device world position to screen
         vector worldPos = device.GetPosition();
@@ -530,11 +553,10 @@ class LFPG_DeviceInspector
 
         vector screenPos = GetGame().GetScreenPos(worldPos);
 
-        // Behind camera check
+        // Behind camera check — return false, caller hides without clearing state
         if (screenPos[2] < LFPG_BEHIND_CAM_Z)
         {
-            HidePanel();
-            return;
+            return false;
         }
 
         // Screen dimensions
@@ -577,6 +599,7 @@ class LFPG_DeviceInspector
         }
 
         m_Panel.SetPos(px, py);
+        return true;
     }
 
     // =========================================================
@@ -651,8 +674,8 @@ class LFPG_DeviceInspector
     // =========================================================
 
     // Clean up entity type name for display.
-    // "LF_TestLamp" → "Test Lamp"
-    // "LF_TestGenerator" → "Test Generator"
+    // "LF_TestLamp" → "Lamp"
+    // "LF_TestGenerator" → "Generator"
     // "LF_Splitter" → "Splitter"
     protected static string FormatDeviceName(string typeName)
     {
