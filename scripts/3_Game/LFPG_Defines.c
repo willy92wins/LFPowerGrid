@@ -501,6 +501,8 @@ static const float LFPG_INSPECT_HEADER_H = 48.0;           // header bar height
 static const float LFPG_INSPECT_SCREEN_MARGIN = 10.0;      // min distance from screen edges
 static const float LFPG_INSPECT_WORLD_Y_OFFSET = 1.0;      // vertical offset above device feet (m)
 static const float LFPG_INSPECT_REFRESH_MS = 500.0;        // client SyncVar refresh interval (ms)
+static const float LFPG_INSPECT_POS_LERP = 0.18;           // position smoothing factor (0..1, per frame)
+static const float LFPG_INSPECT_COMPACT_H = 102.0;         // panel height with no wire section (CapLine bottom 90 + pad 12)
 
 // Screen-space offset from device projection point (pixels).
 static const float LFPG_INSPECT_OFFSET_X = 45.0;

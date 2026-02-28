@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Device Inspector (v0.8.0, Sprint 5 S1)
+// LF_PowerGrid - Device Inspector (v0.8.0, Sprint 5 S3)
 //
 // Client-side floating panel that shows device info when the
 // player holds a cable reel and looks at an electrical device
@@ -51,6 +51,7 @@ class LFPG_DeviceInspector
     protected Widget m_Panel;
     protected ImageWidget m_wPanelBg;
     protected ImageWidget m_wAccentBar;
+    protected ImageWidget m_wSeparator;
     protected TextWidget m_wDeviceName;
     protected TextWidget m_wDeviceType;
     protected TextWidget m_wStatusLine;
@@ -66,6 +67,14 @@ class LFPG_DeviceInspector
     protected int m_VisibleWireCount;
     // H1 fix: periodic client-side SyncVar refresh
     protected float m_LastClientRefreshMs;
+
+    // ---- Position smoothing (P1-A anti-jitter) ----
+    protected float m_SmoothX;
+    protected float m_SmoothY;
+    protected bool m_SmoothInit;
+
+    // ---- Current panel height (for accurate screen clamping) ----
+    protected float m_CurrentPanelH;
 
     // ---- Server response cache ----
     protected ref array<ref LFPG_InspectWireEntry> m_RespWires;
@@ -115,6 +124,10 @@ class LFPG_DeviceInspector
         m_HasServerData = false;
         m_VisibleWireCount = 0;
         m_LastClientRefreshMs = 0.0;
+        m_SmoothX = 0.0;
+        m_SmoothY = 0.0;
+        m_SmoothInit = false;
+        m_CurrentPanelH = 0.0;
     }
 
     // =========================================================
@@ -142,6 +155,7 @@ class LFPG_DeviceInspector
         // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
         // Compute max panel height for initial sizing (will be adjusted by ResizePanelHeight)
         float maxH = ComputePanelHeight(LFPG_INSPECT_MAX_WIRES);
+        m_CurrentPanelH = maxH;
 
         // Panel container
         if (m_Panel)
@@ -183,6 +197,7 @@ class LFPG_DeviceInspector
         }
 
         ImageWidget imgSep = ImageWidget.Cast(m_Root.FindAnyWidget("Separator"));
+        m_wSeparator = imgSep;
         if (imgSep)
         {
             imgSep.SetPos(12, 93);
@@ -259,6 +274,7 @@ class LFPG_DeviceInspector
         m_Panel = null;
         m_wPanelBg = null;
         m_wAccentBar = null;
+        m_wSeparator = null;
         m_wDeviceName = null;
         m_wDeviceType = null;
         m_wStatusLine = null;
@@ -327,6 +343,7 @@ class LFPG_DeviceInspector
             inst.m_CurrentDeviceId = deviceId;
             inst.m_HasServerData = false;
             inst.m_RespWires.Clear();
+            inst.m_SmoothInit = false;
             inst.PopulateClientData(target, deviceId);
             inst.RequestServerData(player, deviceId);
             inst.m_LastClientRefreshMs = nowMs;
@@ -517,6 +534,15 @@ class LFPG_DeviceInspector
         }
         else
         {
+            // Ensure separator + header visible (P2-A may have collapsed them)
+            if (m_wSeparator)
+            {
+                m_wSeparator.Show(true);
+            }
+            if (m_wWiresHeader)
+            {
+                m_wWiresHeader.Show(true);
+            }
             m_wWiresHeader.SetText("Connections ...");
             HideAllWireSlots();
             ResizePanelHeight(0);
@@ -562,11 +588,29 @@ class LFPG_DeviceInspector
 
         if (wireCount == 0)
         {
-            m_wWiresHeader.SetText("No connections");
+            // P2-A: Collapse wire section entirely — cleaner look
+            if (m_wWiresHeader)
+            {
+                m_wWiresHeader.Show(false);
+            }
+            if (m_wSeparator)
+            {
+                m_wSeparator.Show(false);
+            }
             HideAllWireSlots();
             m_VisibleWireCount = 0;
-            ResizePanelHeight(0);
+            ResizePanelCompact();
             return;
+        }
+
+        // Ensure separator + header are visible (may have been hidden by 0-wire collapse)
+        if (m_wSeparator)
+        {
+            m_wSeparator.Show(true);
+        }
+        if (m_wWiresHeader)
+        {
+            m_wWiresHeader.Show(true);
         }
 
         int maxShow = m_wWireSlots.Count();
@@ -654,6 +698,28 @@ class LFPG_DeviceInspector
             return;
 
         float h = ComputePanelHeight(wireCount);
+        m_CurrentPanelH = h;
+
+        m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
+        if (m_wPanelBg)
+        {
+            m_wPanelBg.SetSize(LFPG_INSPECT_PANEL_W, h);
+        }
+        if (m_wAccentBar)
+        {
+            m_wAccentBar.SetSize(3, h);
+        }
+    }
+
+    // P2-A: Compact panel height when wire section is collapsed (0 confirmed wires).
+    // Separator and WiresHeader are hidden, so panel stops after CapLine + padding.
+    protected void ResizePanelCompact()
+    {
+        if (!m_Panel)
+            return;
+
+        float h = LFPG_INSPECT_COMPACT_H;
+        m_CurrentPanelH = h;
 
         m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
         if (m_wPanelBg)
@@ -693,7 +759,11 @@ class LFPG_DeviceInspector
 
         // Clamp to screen bounds
         float panelW = LFPG_INSPECT_PANEL_W;
-        float panelH = ComputePanelHeight(m_VisibleWireCount);
+        float panelH = m_CurrentPanelH;
+        if (panelH < 1.0)
+        {
+            panelH = ComputePanelHeight(m_VisibleWireCount);
+        }
 
         float fScreenW = screenW;
         float fScreenH = screenH;
@@ -720,7 +790,24 @@ class LFPG_DeviceInspector
             px = LFPG_INSPECT_SCREEN_MARGIN;
         }
 
-        m_Panel.SetPos(px, py);
+        // ---- Position smoothing (P1-A anti-jitter) ----
+        // First frame after device switch: snap directly (no lag).
+        // Subsequent frames: lerp towards target to absorb camera jitter.
+        if (!m_SmoothInit)
+        {
+            m_SmoothX = px;
+            m_SmoothY = py;
+            m_SmoothInit = true;
+        }
+        else
+        {
+            float dx = px - m_SmoothX;
+            float dy = py - m_SmoothY;
+            m_SmoothX = m_SmoothX + (dx * LFPG_INSPECT_POS_LERP);
+            m_SmoothY = m_SmoothY + (dy * LFPG_INSPECT_POS_LERP);
+        }
+
+        m_Panel.SetPos(m_SmoothX, m_SmoothY);
         return true;
     }
 
