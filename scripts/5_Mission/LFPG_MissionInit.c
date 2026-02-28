@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - mission hooks (v0.8.0)
+// LF_PowerGrid - mission hooks (v0.7.13)
 //
 // ALL wiring input handled via scroll actions (LFPG_Actions.c).
 // MissionGameplay handles:
@@ -7,9 +7,7 @@
 //  - Committed cable rendering via Canvas 2D every frame
 //  - Wiring preview HUD (only during active wiring session)
 //  - Auto-cancel when cable reel is removed from hands
-//  - Device Inspector panel (Sprint 5): widget tick outside canvas pass
 //
-// v0.8.0: Sprint 5 — DeviceInspector Init/Tick/Cleanup integration.
 // v0.7.7: Canvas 2D for both preview AND committed cables.
 //   Shape.LINE (debug API) does not render on retail client.
 //   BeginFrame/DrawFrame/EndFrame runs every frame for cables.
@@ -90,9 +88,6 @@ modded class MissionGameplay
             m_LFPG_WasActive = false;
         }
 
-        // ---- Device Inspector (Sprint 5): widget-based, outside canvas pass ----
-        LFPG_DeviceInspector.Tick();
-
         // ---- Every frame: render committed cables + preview ----
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame();
@@ -116,6 +111,9 @@ modded class MissionGameplay
         // counters filled by DrawFrame and TickPreview above, accumulates into
         // interval window, dumps summary to RPT every LFPG_TELEM_INTERVAL_MS.
         LFPG_Telemetry.Tick(GetGame().GetTime());
+
+        // Sprint 5: Device inspector tick (runs when NOT wiring — has own guards)
+        LFPG_DeviceInspector.Tick();
 
         // ---- Auto-cancel: cable reel removed from hands ----
         if (!isActive)
