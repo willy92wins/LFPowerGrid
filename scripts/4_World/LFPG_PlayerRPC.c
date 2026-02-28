@@ -8,6 +8,9 @@
 //   RC-01: Port locking prevents concurrent FinishWiring on same dest port.
 //   RC-06: Pre-check capacity before replacement phase (transactional safety).
 //   RC-07: Reject wiring RPCs during first ~5s startup validation window.
+// v0.8.0 (Sprint 5 — UI Foundation):
+//   INSPECT_DEVICE: server collects device info + bidirectional wire topology.
+//   INSPECT_RESPONSE: client receives inspection data for floating panel.
 // =========================================================
 
 modded class PlayerBase
@@ -48,6 +51,10 @@ modded class PlayerBase
         {
             HandleLFPG_RequestDeviceSync(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.INSPECT_DEVICE)
+        {
+            HandleLFPG_InspectDevice(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -56,6 +63,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.CLIENT_MSG)
         {
             HandleLFPG_ClientMsg(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.INSPECT_RESPONSE)
+        {
+            HandleLFPG_InspectResponse(ctx);
         }
         #endif
     }
@@ -1170,5 +1181,268 @@ modded class PlayerBase
             pid = sender.GetPlainId();
 
         LFPG_Util.Info("[CLI-ECHO:" + pid + "] " + msg);
+    }
+
+    // =====================================
+    // SERVER: handle device inspection request (Sprint 5)
+    //
+    // Collects device info + wire topology and sends back
+    // to the requesting client via INSPECT_RESPONSE RPC.
+    //
+    // Wire collection is bidirectional:
+    //   - Outgoing: wires owned by this device (source/splitter)
+    //   - Incoming: wires from other devices targeting this one
+    // Scan is bounded by LFPG_INSPECT_MAX_SCAN.
+    // =====================================
+    protected void HandleLFPG_InspectDevice(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
+        string deviceId;
+        if (!ctx.Read(deviceId))
+        {
+            LFPG_Util.Warn("[SERVER] InspectDevice: read deviceId FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+
+        if (deviceId == "")
+            return;
+
+        // Look up entity via registry.
+        // Build ID→Entity map once for O(1) lookups throughout handler.
+        // Avoids O(N) per-wire scans — critical when splitter has 3+ wires
+        // and registry has 200+ devices (600+ GetDeviceId calls eliminated).
+        array<EntityAI> regDevices = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(regDevices);
+
+        ref map<string, EntityAI> idMap = new map<string, EntityAI>;
+        // Parallel array of IDs (same index as regDevices) for Phase 2 scan.
+        // Avoids re-calling GetDeviceId (dynamic dispatch) per device.
+        ref array<string> regIds = new array<string>;
+        int mi;
+        for (mi = 0; mi < regDevices.Count(); mi = mi + 1)
+        {
+            EntityAI mapDev = regDevices[mi];
+            if (!mapDev)
+            {
+                regIds.Insert("");
+                continue;
+            }
+            string mapId = LFPG_DeviceAPI.GetDeviceId(mapDev);
+            regIds.Insert(mapId);
+            if (mapId != "")
+            {
+                idMap.Set(mapId, mapDev);
+            }
+        }
+
+        EntityAI device = null;
+        idMap.Find(deviceId, device);
+
+        if (!device)
+        {
+            LFPG_Util.Debug("[SERVER] InspectDevice: device not found id=" + deviceId);
+            return;
+        }
+
+        LFPG_Util.Debug("[SERVER] InspectDevice id=" + deviceId + " type=" + device.GetType() + " pid=" + sender.GetPlainId());
+
+        // ---- Collect wire entries (outgoing + incoming) ----
+        ref array<ref LFPG_InspectWireEntry> wireEntries = new array<ref LFPG_InspectWireEntry>;
+
+        // Phase 1: Outgoing wires (this device owns them)
+        if (LFPG_DeviceAPI.HasWireStore(device))
+        {
+            array<ref LFPG_WireData> ownedWires = LFPG_DeviceAPI.GetDeviceWires(device);
+            if (ownedWires)
+            {
+                int oi;
+                for (oi = 0; oi < ownedWires.Count(); oi = oi + 1)
+                {
+                    if (wireEntries.Count() >= LFPG_INSPECT_MAX_WIRES)
+                        break;
+
+                    LFPG_WireData wd = ownedWires[oi];
+                    if (!wd)
+                        continue;
+
+                    LFPG_InspectWireEntry entry = new LFPG_InspectWireEntry();
+                    entry.m_Direction = LFPG_PortDir.OUT;
+                    entry.m_LocalPort = wd.m_SourcePort;
+                    entry.m_RemoteDeviceId = wd.m_TargetDeviceId;
+                    entry.m_RemotePort = wd.m_TargetPort;
+
+                    // O(1) target entity lookup via pre-built map
+                    EntityAI targetEnt = null;
+                    idMap.Find(wd.m_TargetDeviceId, targetEnt);
+                    if (targetEnt)
+                    {
+                        entry.m_RemoteTypeName = targetEnt.GetType();
+                    }
+                    else
+                    {
+                        entry.m_RemoteTypeName = "?";
+                    }
+
+                    wireEntries.Insert(entry);
+                }
+            }
+        }
+
+        // Phase 2: Incoming wires (other devices have wires targeting us)
+        // Reuse regDevices from the lookup above — already populated.
+        if (wireEntries.Count() < LFPG_INSPECT_MAX_WIRES)
+        {
+            int scanned = 0;
+            int di;
+            for (di = 0; di < regDevices.Count(); di = di + 1)
+            {
+                if (scanned >= LFPG_INSPECT_MAX_SCAN)
+                    break;
+                if (wireEntries.Count() >= LFPG_INSPECT_MAX_WIRES)
+                    break;
+
+                EntityAI otherDev = regDevices[di];
+                if (!otherDev)
+                    continue;
+
+                // Use pre-built ID array — avoids dynamic dispatch per device
+                string otherId = regIds[di];
+                if (otherId == "" || otherId == deviceId)
+                    continue;
+
+                // Only check wire owners
+                if (!LFPG_DeviceAPI.HasWireStore(otherDev))
+                    continue;
+
+                scanned = scanned + 1;
+
+                array<ref LFPG_WireData> otherWires = LFPG_DeviceAPI.GetDeviceWires(otherDev);
+                if (!otherWires)
+                    continue;
+
+                int ii;
+                for (ii = 0; ii < otherWires.Count(); ii = ii + 1)
+                {
+                    if (wireEntries.Count() >= LFPG_INSPECT_MAX_WIRES)
+                        break;
+
+                    LFPG_WireData iwd = otherWires[ii];
+                    if (!iwd)
+                        continue;
+
+                    if (iwd.m_TargetDeviceId != deviceId)
+                        continue;
+
+                    LFPG_InspectWireEntry inEntry = new LFPG_InspectWireEntry();
+                    inEntry.m_Direction = LFPG_PortDir.IN;
+                    inEntry.m_LocalPort = iwd.m_TargetPort;
+                    inEntry.m_RemoteDeviceId = otherId;
+                    inEntry.m_RemotePort = iwd.m_SourcePort;
+                    inEntry.m_RemoteTypeName = otherDev.GetType();
+
+                    wireEntries.Insert(inEntry);
+                }
+            }
+        }
+
+        // ---- Send response to requesting player ----
+        PlayerBase reqPlayer = this;
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write(LFPG_RPC_SubId.INSPECT_RESPONSE);
+        rpc.Write(deviceId);
+
+        int wireCount = wireEntries.Count();
+        rpc.Write(wireCount);
+
+        int wi;
+        for (wi = 0; wi < wireCount; wi = wi + 1)
+        {
+            LFPG_InspectWireEntry we = wireEntries[wi];
+            rpc.Write(we.m_Direction);
+            rpc.Write(we.m_LocalPort);
+            rpc.Write(we.m_RemoteDeviceId);
+            rpc.Write(we.m_RemotePort);
+            rpc.Write(we.m_RemoteTypeName);
+        }
+
+        rpc.Send(reqPlayer, LFPG_RPC_CHANNEL, true, sender);
+
+        LFPG_Util.Debug("[SERVER] InspectDevice RESPONSE sent id=" + deviceId + " wires=" + wireCount.ToString());
+    }
+
+    // =====================================
+    // CLIENT: handle device inspection response (Sprint 5)
+    // =====================================
+    protected void HandleLFPG_InspectResponse(ParamsReadContext ctx)
+    {
+        string deviceId;
+        if (!ctx.Read(deviceId))
+        {
+            LFPG_Util.Warn("[CLIENT] InspectResponse: read deviceId FAIL");
+            return;
+        }
+
+        int wireCount;
+        if (!ctx.Read(wireCount))
+        {
+            LFPG_Util.Warn("[CLIENT] InspectResponse: read wireCount FAIL");
+            return;
+        }
+
+        // Sanity cap
+        if (wireCount < 0)
+        {
+            wireCount = 0;
+        }
+        if (wireCount > LFPG_INSPECT_MAX_WIRES)
+        {
+            wireCount = LFPG_INSPECT_MAX_WIRES;
+        }
+
+        ref array<ref LFPG_InspectWireEntry> wires = new array<ref LFPG_InspectWireEntry>;
+
+        int wi;
+        for (wi = 0; wi < wireCount; wi = wi + 1)
+        {
+            LFPG_InspectWireEntry entry = new LFPG_InspectWireEntry();
+
+            if (!ctx.Read(entry.m_Direction))
+            {
+                LFPG_Util.Warn("[CLIENT] InspectResponse: read direction FAIL at wire " + wi.ToString());
+                break;
+            }
+            if (!ctx.Read(entry.m_LocalPort))
+            {
+                LFPG_Util.Warn("[CLIENT] InspectResponse: read localPort FAIL at wire " + wi.ToString());
+                break;
+            }
+            if (!ctx.Read(entry.m_RemoteDeviceId))
+            {
+                LFPG_Util.Warn("[CLIENT] InspectResponse: read remoteId FAIL at wire " + wi.ToString());
+                break;
+            }
+            if (!ctx.Read(entry.m_RemotePort))
+            {
+                LFPG_Util.Warn("[CLIENT] InspectResponse: read remotePort FAIL at wire " + wi.ToString());
+                break;
+            }
+            if (!ctx.Read(entry.m_RemoteTypeName))
+            {
+                LFPG_Util.Warn("[CLIENT] InspectResponse: read remoteType FAIL at wire " + wi.ToString());
+                break;
+            }
+
+            wires.Insert(entry);
+        }
+
+        LFPG_Util.Debug("[CLIENT] InspectResponse id=" + deviceId + " wires=" + wires.Count().ToString());
+
+        // Forward to inspector controller
+        LFPG_DeviceInspector.OnInspectResponse(deviceId, wires);
     }
 };

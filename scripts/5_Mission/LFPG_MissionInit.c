@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - mission hooks (v0.7.13)
+// LF_PowerGrid - mission hooks (v0.8.0)
 //
 // ALL wiring input handled via scroll actions (LFPG_Actions.c).
 // MissionGameplay handles:
@@ -7,7 +7,9 @@
 //  - Committed cable rendering via Canvas 2D every frame
 //  - Wiring preview HUD (only during active wiring session)
 //  - Auto-cancel when cable reel is removed from hands
+//  - Device Inspector panel (Sprint 5): widget tick outside canvas pass
 //
+// v0.8.0: Sprint 5 — DeviceInspector Init/Tick/Cleanup integration.
 // v0.7.7: Canvas 2D for both preview AND committed cables.
 //   Shape.LINE (debug API) does not render on retail client.
 //   BeginFrame/DrawFrame/EndFrame runs every frame for cables.
@@ -47,6 +49,7 @@ modded class MissionGameplay
         LFPG_CableHUD.Reset();
         LFPG_CableRenderer.Reset();
         LFPG_WiringClient.Reset();
+        LFPG_DeviceInspector.Init();
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
 
@@ -87,6 +90,9 @@ modded class MissionGameplay
             m_LFPG_WasActive = false;
         }
 
+        // ---- Device Inspector (Sprint 5): widget-based, outside canvas pass ----
+        LFPG_DeviceInspector.Tick();
+
         // ---- Every frame: render committed cables + preview ----
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame();
@@ -124,11 +130,17 @@ modded class MissionGameplay
             return;
 
         EntityAI inHands = hinv.GetEntityInHands();
-        if (!inHands || !inHands.IsKindOf("LF_CableReel"))
+        if (!inHands || !inHands.IsKindOf(LFPG_CABLE_REEL_TYPE))
         {
             LFPG_ShowMsg("Wiring cancelled.");
             wc.Cancel();
         }
+    }
+
+    override void OnMissionFinish()
+    {
+        LFPG_DeviceInspector.Cleanup();
+        super.OnMissionFinish();
     }
 
     protected void LFPG_ShowMsg(string text)

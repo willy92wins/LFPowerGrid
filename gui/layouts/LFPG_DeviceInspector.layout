@@ -1,0 +1,207 @@
+FrameWidgetClass LFPG_InspectorRoot {
+	size 1 1
+	hexactpos 0
+	vexactpos 0
+	hexactsize 0
+	vexactsize 0
+	visible 0
+	{
+		FrameWidgetClass InspectorPanel {
+			hexactpos 1
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			pos 0 0
+			size 300 255
+			{
+				PanelWidgetClass PanelBg {
+					pos 0 0
+					size 300 255
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					color 0.035 0.055 0.09 0.92
+				}
+				PanelWidgetClass AccentBar {
+					pos 0 0
+					size 3 1
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 0
+					color 0.18 0.55 0.75 0.85
+				}
+				PanelWidgetClass HeaderBar {
+					pos 0 0
+					size 300 48
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					color 0.05 0.075 0.12 0.95
+				}
+				TextWidgetClass DeviceName {
+					pos 14 7
+					size 274 18
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/Metron"
+					text ""
+					color 0.95 0.95 0.95 1
+				}
+				TextWidgetClass DeviceType {
+					pos 14 27
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.45 0.72 0.85 1
+				}
+				TextWidgetClass StatusLine {
+					pos 14 54
+					size 274 16
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.7 0.7 0.7 1
+				}
+				TextWidgetClass CapLine {
+					pos 14 74
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.55 0.55 0.55 1
+				}
+				PanelWidgetClass Separator {
+					pos 12 93
+					size 276 1
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					color 0.2 0.25 0.35 0.6
+				}
+				TextWidgetClass WiresHeader {
+					pos 14 99
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/Metron"
+					text "Connections"
+					color 0.7 0.7 0.7 1
+				}
+				TextWidgetClass Wire0 {
+					pos 14 117
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire1 {
+					pos 14 133
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire2 {
+					pos 14 149
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire3 {
+					pos 14 165
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire4 {
+					pos 14 181
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire5 {
+					pos 14 197
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire6 {
+					pos 14 213
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+				TextWidgetClass Wire7 {
+					pos 14 229
+					size 274 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					text ""
+					color 0.6 0.6 0.6 1
+					visible 0
+				}
+			}
+		}
+	}
+}

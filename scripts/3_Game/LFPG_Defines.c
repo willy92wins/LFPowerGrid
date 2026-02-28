@@ -1,5 +1,10 @@
 // =========================================================
-// LF_PowerGrid - constants, enums, budgets (v0.7.33, Sprint 4.3+audit4)
+// LF_PowerGrid - constants, enums, budgets (v0.8.0, Sprint 5)
+//
+// v0.8.0 changes (Sprint 5 — UI Foundation):
+//   - INSPECT_DEVICE / INSPECT_RESPONSE RPC sub-IDs
+//   - Device Inspector constants (cooldowns, panel dims, scan caps)
+//   - LFPG_CABLE_REEL_TYPE constant for item detection
 //
 // v0.7.33 changes:
 //   - A4-2/3: LFPG_DIAG_ENABLED default false (production)
@@ -230,7 +235,9 @@ enum LFPG_RPC_SubId
     DIAG_CLIENT_LOG = 7,
     CLIENT_MSG = 8,
     CUT_PORT = 9,
-    REQUEST_DEVICE_SYNC = 10    // v0.7.35 D1: client requests wire sync for a specific device
+    REQUEST_DEVICE_SYNC = 10,   // v0.7.35 D1: client requests wire sync for a specific device
+    INSPECT_DEVICE = 11,        // Sprint 5: client requests device inspection data
+    INSPECT_RESPONSE = 12       // Sprint 5: server responds with device inspection data
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
@@ -362,7 +369,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.37";
+static const string LFPG_VERSION_STR = "0.8.0";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -471,3 +478,30 @@ static const int   LFPG_MOVE_DETECT_TICK_MS      = 500;    // tick frequency (ms
 static const int   LFPG_MOVE_DETECT_BATCH_SIZE   = 32;     // devices per tick
 static const float LFPG_MOVE_DETECT_THRESHOLD_M  = 0.3;    // drift threshold (meters)
 static const float LFPG_MOVE_DETECT_THRESHOLD_SQ = 0.09;   // 0.3² pre-computed (avoids sqrt)
+
+// ---- Device Inspector (Sprint 5) ----
+// Cooldown between INSPECT_DEVICE RPCs (ms).
+// Prevents spamming server when player sweeps cursor across devices.
+static const float LFPG_INSPECT_RPC_COOLDOWN_MS = 600.0;
+
+// Max wire entries in INSPECT_RESPONSE payload.
+// 8 covers splitter (4 ports) + headroom for bidirectional view.
+static const int LFPG_INSPECT_MAX_WIRES = 8;
+
+// Max devices scanned when searching incoming wires on server.
+// Bounds the O(N) scan to prevent frame spikes on large servers.
+static const int LFPG_INSPECT_MAX_SCAN = 512;
+
+// Inspector panel dimensions (pixels).
+static const float LFPG_INSPECT_PANEL_W = 300.0;
+static const float LFPG_INSPECT_PANEL_BASE_H = 115.0;     // WiresHeader bottom(113) + 2px before wire zone
+static const float LFPG_INSPECT_WIRE_ROW_H = 16.0;        // height per wire entry
+static const float LFPG_INSPECT_PANEL_PAD = 12.0;          // bottom padding
+
+// Screen-space offset from device projection point (pixels).
+static const float LFPG_INSPECT_OFFSET_X = 28.0;
+static const float LFPG_INSPECT_OFFSET_Y = -16.0;
+
+// Inspector cable reel type name.
+// Must match the actual cable reel item class used by the mod.
+static const string LFPG_CABLE_REEL_TYPE = "LF_CableReel";
