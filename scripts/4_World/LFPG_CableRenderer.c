@@ -533,6 +533,9 @@ class LFPG_CableRenderer
     // Avoids re-scanning for unresolvable entities on every RetryTick.
     protected ref map<string, float> m_NegCache;
     protected static const float NEG_CACHE_TTL_MS = 5000.0; // 5 seconds
+    // v0.7.45 (P0 fix): Set by ResolveDeviceEntityEx when NegCache blocked
+    // the resolution attempt. RetryTick uses this to avoid wasting retries.
+    protected bool m_LastResolveWasNegCached;
 
     // Periodic neg cache purge interval (ms)
     protected static const int NEG_CACHE_PURGE_INTERVAL_MS = 60000; // 60 seconds
@@ -577,6 +580,7 @@ class LFPG_CableRenderer
         m_JointScreenPts  = new array<vector>;
         m_ConnCache       = new map<string, string>;
         m_NegCache        = new map<string, float>;
+        m_LastResolveWasNegCached = false;
         m_DrawOrder       = new array<int>;
         m_DrawDist        = new array<float>;
         m_ClipA           = "0 0 0";
@@ -745,6 +749,78 @@ class LFPG_CableRenderer
         return null;
     }
 
+    // v0.7.45 (Patch 3C): Extended resolver with NetworkID fallback.
+    // Tries DeviceRegistry first, then NetworkID (bypasses NegCache),
+    // then vanilla spatial, then NegCache check as last resort.
+    // This eliminates invisible cables during SyncVar lag post-kit-placement.
+    protected EntityAI ResolveDeviceEntityEx(string deviceId, int netLow, int netHigh)
+    {
+        // v0.7.45 (P0 fix): Track whether NegCache blocked this attempt.
+        // RetryTick checks this flag to avoid wasting retries.
+        m_LastResolveWasNegCached = false;
+
+        if (deviceId == "")
+            return null;
+
+        // 1. DeviceRegistry (fastest path)
+        EntityAI found = LFPG_DeviceRegistry.Get().FindById(deviceId);
+        if (found)
+        {
+            return found;
+        }
+
+        // 2. NetworkID fallback: bypasses NegCache entirely.
+        // If netLow/netHigh are available, the entity exists even if
+        // DeviceRegistry hasn't registered it yet (SyncVar lag window).
+        if (netLow != 0 || netHigh != 0)
+        {
+            EntityAI netObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            if (netObj)
+            {
+                if (LFPG_DIAG_ENABLED)
+                {
+                    LFPG_Diag.ServerEcho("[ResolveEx] HIT NetworkID low=" + netLow.ToString() + " high=" + netHigh.ToString() + " type=" + netObj.GetType());
+                }
+                // Clear any stale NegCache entry for this deviceId
+                m_NegCache.Remove(deviceId);
+                return netObj;
+            }
+        }
+
+        // 3. Check negative cache (only reached if NetworkID also failed)
+        float failTime = 0.0;
+        float nowMs = GetGame().GetTime();
+        if (m_NegCache.Find(deviceId, failTime))
+        {
+            float age = nowMs - failTime;
+            if (age < NEG_CACHE_TTL_MS)
+            {
+                // v0.7.45 (P0 fix): Signal that NegCache blocked this attempt
+                m_LastResolveWasNegCached = true;
+                return null;
+            }
+            m_NegCache.Remove(deviceId);
+        }
+
+        // 4. Vanilla position-based ID fallback
+        if (deviceId.IndexOf("vp:") == 0)
+        {
+            EntityAI vObj = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
+            if (vObj)
+            {
+                return vObj;
+            }
+        }
+
+        // 5. All failed: add to NegCache
+        m_NegCache[deviceId] = nowMs;
+        if (LFPG_DIAG_ENABLED)
+        {
+            LFPG_Diag.ServerEcho("[ResolveEx] MISS id=" + deviceId + " net=" + netLow.ToString() + ":" + netHigh.ToString() + " -> NegCache");
+        }
+        return null;
+    }
+
     // Periodic purge of expired negative cache entries.
     protected void PurgeNegCache()
     {
@@ -858,6 +934,23 @@ class LFPG_CableRenderer
             // Decode succeeded: now safe to destroy old geometry and rebuild
             st.lastJson = json;
 
+            // v0.7.45 (U6): Clear NegCache for ALL target deviceIds in decoded wires.
+            // Without this, when a second blob arrives via RequestDeviceSync,
+            // UpsertOwnerBlob only clears NegCache for the OWNER, but targets
+            // may still be blocked (age < 5s from first failed BuildOwnerWires).
+            // This adds 5-6s of unnecessary latency to cable appearance.
+            if (st.wires)
+            {
+                int nci;
+                for (nci = 0; nci < st.wires.Count(); nci = nci + 1)
+                {
+                    if (st.wires[nci] && st.wires[nci].m_TargetDeviceId != "")
+                    {
+                        m_NegCache.Remove(st.wires[nci].m_TargetDeviceId);
+                    }
+                }
+            }
+
             // v0.7.35 D2: Reset visual state masks on topology change.
             // Old mask bits may map to different wires after add/remove.
             // CullTick or NotifyOwnerVisualChanged will repopulate from SyncVars.
@@ -942,7 +1035,11 @@ class LFPG_CableRenderer
     // Cooldown per deviceId prevents spam when entering large bases.
     // Server responds with owner wire blobs relevant to this device.
     // ==========================================================
-    void RequestDeviceSync(string deviceId)
+    // v0.7.45 (H7): Added device parameter for NetworkID-first resolution.
+    // All callers are device classes calling from OnVariablesSynchronized
+    // where `this` is the entity. NetworkID is written to the RPC so the
+    // server can resolve authoritatively even during SyncVar lag.
+    void RequestDeviceSync(string deviceId, EntityAI device)
     {
         if (deviceId == "") return;
 
@@ -976,14 +1073,27 @@ class LFPG_CableRenderer
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (!player) return;
 
+        // v0.7.45 (H7): Extract NetworkID from entity for server-side
+        // resolution. Consistent with InspectDevice (v0.7.43 fix).
+        int netLow = 0;
+        int netHigh = 0;
+        if (device)
+        {
+            netLow = device.GetNetworkIDLow();
+            netHigh = device.GetNetworkIDHigh();
+        }
+
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.REQUEST_DEVICE_SYNC);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
         rpc.Write(deviceId);
         bool bRpcGuaranteed = true;
         PlayerIdentity noExclude = null;
         rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
 
         string rdsMsg = "[CableRenderer] RequestDeviceSync sent deviceId=" + deviceId;
+        rdsMsg = rdsMsg + " net=" + netLow.ToString() + ":" + netHigh.ToString();
         LFPG_Util.Info(rdsMsg);
     }
 
@@ -1120,7 +1230,7 @@ class LFPG_CableRenderer
                 }
 
                 string targetType = "";
-                EntityAI tgtObj = ResolveDeviceEntity(wd.m_TargetDeviceId);
+                EntityAI tgtObj = ResolveDeviceEntityEx(wd.m_TargetDeviceId, wd.m_TargetNetLow, wd.m_TargetNetHigh);
                 if (tgtObj)
                 {
                     targetType = tgtObj.GetType();
@@ -1220,7 +1330,8 @@ class LFPG_CableRenderer
             LFPG_WireData wd = st.wires[w];
             if (!wd) continue;
 
-            EntityAI targetObj = ResolveDeviceEntity(wd.m_TargetDeviceId);
+            // v0.7.45 (Patch 3C): Use extended resolver with NetworkID fallback
+            EntityAI targetObj = ResolveDeviceEntityEx(wd.m_TargetDeviceId, wd.m_TargetNetLow, wd.m_TargetNetHigh);
             if (!targetObj)
             {
                 string tgtNullMsg = "[CableRenderer] BuildOwnerWires: target NULL id=" + wd.m_TargetDeviceId + " -> RETRY";
@@ -2915,12 +3026,17 @@ class LFPG_CableRenderer
                 continue;
             }
 
-            EntityAI targetObj = ResolveDeviceEntity(wd.m_TargetDeviceId);
+            // v0.7.45 (Patch 3C): Use extended resolver with NetworkID fallback
+            EntityAI targetObj = ResolveDeviceEntityEx(wd.m_TargetDeviceId, wd.m_TargetNetLow, wd.m_TargetNetHigh);
             if (!targetObj)
             {
                 // Target still not loaded.
                 // Only count as failure for TARGET_MISSING entries.
-                if (entry.reason == LFPG_RetryReason.TARGET_MISSING)
+                // v0.7.45 (P0 fix): Do NOT count if NegCache blocked the attempt.
+                // Without this guard, NegCache-blocked retries consume the retry
+                // budget without actually attempting resolution, causing permanent
+                // cable loss after ~12s even though the entity may be loadable.
+                if (entry.reason == LFPG_RetryReason.TARGET_MISSING && !m_LastResolveWasNegCached)
                 {
                     entry.retryCount = entry.retryCount + 1;
                     if (entry.retryCount > LFPG_RETRY_MAX)

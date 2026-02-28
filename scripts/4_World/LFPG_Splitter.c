@@ -279,7 +279,8 @@ class LF_Splitter : Inventory_Base
             if (r)
             {
                 // D1: Request sync for any missing wire data (cooldown-throttled)
-                r.RequestDeviceSync(m_DeviceId);
+                // v0.7.45 (H7): Pass entity for NetworkID-first resolution.
+                r.RequestDeviceSync(m_DeviceId, this);
 
                 // D4: If we already have our own owner data, immediately refresh
                 // visual state (OverloadMask, WarningMask) to eliminate CullTick delay.
@@ -303,7 +304,18 @@ class LF_Splitter : Inventory_Base
         if (m_LFPG_Deleting)
             return;
 
+        // v0.7.45 (Patch 4A): Capture old ID before recalculating.
+        // If OnVarSync brings a different DeviceIdLow/High (partial SyncVar,
+        // engine recycling), the old ID must be unregistered to prevent
+        // ghost entries in DeviceRegistry.
+        string oldId = m_DeviceId;
         LFPG_UpdateDeviceIdString();
+
+        if (oldId != "" && oldId != m_DeviceId)
+        {
+            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
+        }
+
         if (m_DeviceId != "")
         {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);

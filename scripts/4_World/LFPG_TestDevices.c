@@ -407,7 +407,8 @@ class LF_TestGenerator : PowerGenerator
                 {
                     // D1: Device just entered bubble — renderer lacks wire data.
                     // Request sync from server (cooldown-throttled).
-                    r.RequestDeviceSync(m_DeviceId);
+                    // v0.7.45 (H7): Pass entity for NetworkID-first resolution.
+                    r.RequestDeviceSync(m_DeviceId, this);
                 }
                 else
                 {
@@ -431,7 +432,15 @@ class LF_TestGenerator : PowerGenerator
         if (m_LFPG_Deleting)
             return;
 
+        // v0.7.45 (Patch 4B): Capture old ID before recalculating.
+        string oldId = m_DeviceId;
         LFPG_UpdateDeviceIdString();
+
+        if (oldId != "" && oldId != m_DeviceId)
+        {
+            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
+        }
+
         if (m_DeviceId != "")
         {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
@@ -832,6 +841,11 @@ class LF_TestGenerator : PowerGenerator
         super.EEItemLocationChanged(oldLoc, newLoc);
 
         #ifdef SERVER
+        // v0.7.45 (H9): Guard consistent with Splitter. OnDeviceMoved has
+        // its own empty-check, but defense-in-depth prevents entering
+        // lifecycle logic before DeviceId is assigned.
+        if (m_DeviceId == "")
+            return;
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {
@@ -1013,7 +1027,8 @@ class LF_TestLamp : Spotlight
             LFPG_CableRenderer r = LFPG_CableRenderer.Get();
             if (r)
             {
-                r.RequestDeviceSync(m_DeviceId);
+                // v0.7.45 (H7): Pass entity for NetworkID-first resolution.
+                r.RequestDeviceSync(m_DeviceId, this);
             }
         }
         #endif
@@ -1030,9 +1045,19 @@ class LF_TestLamp : Spotlight
         if (m_LFPG_Deleting)
             return;
 
+        // v0.7.45 (Patch 4C): Capture old ID before recalculating.
+        string oldId = m_DeviceId;
         LFPG_UpdateDeviceIdString();
+
+        if (oldId != "" && oldId != m_DeviceId)
+        {
+            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
+        }
+
         if (m_DeviceId != "")
+        {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
+        }
     }
 
     // ============================================
@@ -1224,6 +1249,11 @@ class LF_TestLamp : Spotlight
         super.EEItemLocationChanged(oldLoc, newLoc);
 
         #ifdef SERVER
+        // v0.7.45 (H9): Guard consistent with Splitter. OnDeviceMoved has
+        // its own empty-check, but defense-in-depth prevents entering
+        // lifecycle logic before DeviceId is assigned.
+        if (m_DeviceId == "")
+            return;
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {

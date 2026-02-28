@@ -406,6 +406,11 @@ modded class PlayerBase
         wd.m_TargetPort = dstPort;
         wd.m_SourcePort = srcPort;
         wd.m_CreatorId = sender.GetPlainId();
+        // v0.7.45 (Patch 3B): Populate target NetworkID for CableRenderer fallback.
+        // Without this, wires created after startup have m_TargetNetLow/High = 0
+        // and CableRenderer cannot use NetworkID fallback during SyncVar lag.
+        wd.m_TargetNetLow = dstLow;
+        wd.m_TargetNetHigh = dstHigh;
         wd.m_Waypoints = new array<vector>;
         int i;
         for (i = 0; i < wpCount; i = i + 1)
@@ -1119,20 +1124,56 @@ modded class PlayerBase
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
             return;
 
-        string deviceId;
-        if (!ctx.Read(deviceId))
+        // v0.7.45 (H7): Read NetworkID first, then clientDeviceId.
+        // Same pattern as InspectDevice (v0.7.43 fix). This ensures
+        // authoritative resolution even during SyncVar lag window.
+        int netLow = 0;
+        if (!ctx.Read(netLow))
         {
-            LFPG_Util.Warn("[SERVER] RequestDeviceSync: read deviceId FAIL pid=" + sender.GetPlainId());
+            LFPG_Util.Warn("[SERVER] RequestDeviceSync: read netLow FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+        int netHigh = 0;
+        if (!ctx.Read(netHigh))
+        {
+            LFPG_Util.Warn("[SERVER] RequestDeviceSync: read netHigh FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+        string clientDeviceId = "";
+        if (!ctx.Read(clientDeviceId))
+        {
+            LFPG_Util.Warn("[SERVER] RequestDeviceSync: read clientDeviceId FAIL pid=" + sender.GetPlainId());
             return;
         }
 
-        if (deviceId == "")
+        if (clientDeviceId == "")
             return;
 
-        LFPG_Util.Info("[SERVER] RequestDeviceSync deviceId=" + deviceId + " pid=" + sender.GetPlainId());
+        // Resolve entity authoritatively via NetworkID (same as InspectDevice)
+        string serverDeviceId = clientDeviceId;
+        if (netLow != 0 || netHigh != 0)
+        {
+            EntityAI resolvedObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            if (resolvedObj)
+            {
+                string resolvedId = LFPG_DeviceAPI.GetOrCreateDeviceId(resolvedObj);
+                if (resolvedId != "")
+                {
+                    serverDeviceId = resolvedId;
+                    // Re-register to heal stale DeviceRegistry refs
+                    LFPG_DeviceRegistry.Get().Register(resolvedObj, resolvedId);
+                }
+            }
+        }
+
+        string rdsLog = "[SERVER] RequestDeviceSync serverDeviceId=" + serverDeviceId;
+        rdsLog = rdsLog + " clientDeviceId=" + clientDeviceId;
+        rdsLog = rdsLog + " net=" + netLow.ToString() + ":" + netHigh.ToString();
+        rdsLog = rdsLog + " pid=" + sender.GetPlainId();
+        LFPG_Util.Info(rdsLog);
 
         PlayerBase player = this;
-        LFPG_NetworkManager.Get().SendDeviceSyncTo(player, deviceId);
+        LFPG_NetworkManager.Get().SendDeviceSyncTo(player, serverDeviceId);
     }
 
     // =====================================

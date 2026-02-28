@@ -382,6 +382,9 @@ class LFPG_ElecGraph
             m_Nodes.Remove(emptyNodes[ei]);
             m_Outgoing.Remove(emptyNodes[ei]);
             m_Incoming.Remove(emptyNodes[ei]);
+            // v0.7.45 (H5): Consistent with OnDeviceRemoved and CleanupOrphanNode.
+            m_NodeNetLow.Remove(emptyNodes[ei]);
+            m_NodeNetHigh.Remove(emptyNodes[ei]);
         }
         m_NodeCount = m_Nodes.Count();
 
@@ -823,6 +826,12 @@ class LFPG_ElecGraph
         m_Nodes.Remove(deviceId);
         m_Outgoing.Remove(deviceId);
         m_Incoming.Remove(deviceId);
+        // v0.7.45 (H5): Clean up cached NetworkIDs for the removed node.
+        // Without this, m_NodeNetLow/High grow unbounded on servers with
+        // device turnover. CleanupOrphanNode handles neighbors, but the
+        // primary removed node never passes through that path.
+        m_NodeNetLow.Remove(deviceId);
+        m_NodeNetHigh.Remove(deviceId);
         m_NodeCount = m_Nodes.Count();
 
         int ai;
