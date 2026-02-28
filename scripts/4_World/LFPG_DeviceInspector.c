@@ -191,7 +191,7 @@ class LFPG_DeviceInspector
         if (imgAccent)
         {
             imgAccent.SetPos(0, 0);
-            imgAccent.SetSize(3, maxH);
+            imgAccent.SetSize(LFPG_INSPECT_ACCENT_W, maxH);
             imgAccent.LoadImageFile(0, procTex);
             imgAccent.SetColor(ARGB(217, 46, 140, 191));
         }
@@ -584,6 +584,9 @@ class LFPG_DeviceInspector
 
     protected void PopulateWireData()
     {
+        if (!m_wWiresHeader)
+            return;
+
         int wireCount = m_RespWires.Count();
 
         if (wireCount == 0)
@@ -694,31 +697,23 @@ class LFPG_DeviceInspector
 
     protected void ResizePanelHeight(int wireCount)
     {
-        if (!m_Panel)
-            return;
-
         float h = ComputePanelHeight(wireCount);
-        m_CurrentPanelH = h;
-
-        m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
-        if (m_wPanelBg)
-        {
-            m_wPanelBg.SetSize(LFPG_INSPECT_PANEL_W, h);
-        }
-        if (m_wAccentBar)
-        {
-            m_wAccentBar.SetSize(3, h);
-        }
+        ApplyPanelSize(h);
     }
 
     // P2-A: Compact panel height when wire section is collapsed (0 confirmed wires).
     // Separator and WiresHeader are hidden, so panel stops after CapLine + padding.
     protected void ResizePanelCompact()
     {
+        ApplyPanelSize(LFPG_INSPECT_COMPACT_H);
+    }
+
+    // Shared resize implementation: sets panel, background, and accent bar heights.
+    protected void ApplyPanelSize(float h)
+    {
         if (!m_Panel)
             return;
 
-        float h = LFPG_INSPECT_COMPACT_H;
         m_CurrentPanelH = h;
 
         m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
@@ -728,7 +723,7 @@ class LFPG_DeviceInspector
         }
         if (m_wAccentBar)
         {
-            m_wAccentBar.SetSize(3, h);
+            m_wAccentBar.SetSize(LFPG_INSPECT_ACCENT_W, h);
         }
     }
 

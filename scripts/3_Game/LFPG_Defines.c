@@ -494,6 +494,7 @@ static const int LFPG_INSPECT_MAX_SCAN = 512;
 
 // Inspector panel dimensions (pixels).
 static const float LFPG_INSPECT_PANEL_W = 300.0;
+static const float LFPG_INSPECT_ACCENT_W = 3.0;            // accent bar width (left edge highlight)
 static const float LFPG_INSPECT_PANEL_BASE_H = 115.0;     // WiresHeader bottom(115) = Y(99)+H(16)
 static const float LFPG_INSPECT_WIRE_ROW_H = 16.0;        // height per wire entry
 static const float LFPG_INSPECT_PANEL_PAD = 12.0;          // bottom padding
