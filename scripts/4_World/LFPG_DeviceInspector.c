@@ -49,7 +49,6 @@ class LFPG_DeviceInspector
     // ---- Widget references ----
     protected Widget m_Root;
     protected Widget m_Panel;
-    protected Widget m_PanelBg;
     protected TextWidget m_wDeviceName;
     protected TextWidget m_wDeviceType;
     protected TextWidget m_wStatusLine;
@@ -132,12 +131,55 @@ class LFPG_DeviceInspector
         }
 
         m_Panel = m_Root.FindAnyWidget("InspectorPanel");
-        m_PanelBg = m_Root.FindAnyWidget("PanelBg");
         m_wDeviceName = TextWidget.Cast(m_Root.FindAnyWidget("DeviceName"));
         m_wDeviceType = TextWidget.Cast(m_Root.FindAnyWidget("DeviceType"));
         m_wStatusLine = TextWidget.Cast(m_Root.FindAnyWidget("StatusLine"));
         m_wCapLine = TextWidget.Cast(m_Root.FindAnyWidget("CapLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
+
+        // Set static text colors (layout has no color attrs — uses engine default white).
+        // Dynamic colors (DeviceType, StatusLine, Wire slots) are set in Populate methods.
+        if (m_wDeviceName)
+        {
+            m_wDeviceName.SetColor(ARGB(255, 242, 242, 242));
+        }
+        if (m_wWiresHeader)
+        {
+            m_wWiresHeader.SetColor(ARGB(255, 180, 180, 180));
+        }
+        if (m_wCapLine)
+        {
+            m_wCapLine.SetColor(ARGB(255, 140, 140, 140));
+        }
+
+        // Load procedural textures on background ImageWidgets.
+        // Layout may or may not support src="#(argb...)", so we force-load
+        // from code as a safety net. White 1x1 texture tinted by SetColor().
+        string procTex = "#(argb,1,1,3)color(1,1,1,1,ca)";
+        ImageWidget imgBg = ImageWidget.Cast(m_Root.FindAnyWidget("PanelBg"));
+        if (imgBg)
+        {
+            imgBg.LoadImageFile(0, procTex);
+            imgBg.SetColor(ARGB(235, 9, 14, 23));
+        }
+        ImageWidget imgHeader = ImageWidget.Cast(m_Root.FindAnyWidget("HeaderBar"));
+        if (imgHeader)
+        {
+            imgHeader.LoadImageFile(0, procTex);
+            imgHeader.SetColor(ARGB(242, 13, 19, 31));
+        }
+        ImageWidget imgAccent = ImageWidget.Cast(m_Root.FindAnyWidget("AccentBar"));
+        if (imgAccent)
+        {
+            imgAccent.LoadImageFile(0, procTex);
+            imgAccent.SetColor(ARGB(217, 46, 140, 191));
+        }
+        ImageWidget imgSep = ImageWidget.Cast(m_Root.FindAnyWidget("Separator"));
+        if (imgSep)
+        {
+            imgSep.LoadImageFile(0, procTex);
+            imgSep.SetColor(ARGB(153, 51, 64, 89));
+        }
 
         // Collect wire slot widgets
         m_wWireSlots.Clear();
@@ -171,7 +213,6 @@ class LFPG_DeviceInspector
             m_Root = null;
         }
         m_Panel = null;
-        m_PanelBg = null;
         m_wDeviceName = null;
         m_wDeviceType = null;
         m_wStatusLine = null;
@@ -351,9 +392,12 @@ class LFPG_DeviceInspector
                 float loadRatio = LFPG_DeviceAPI.GetLoadRatio(device);
                 int loadPct = Math.Round(loadRatio * 100.0);
 
-                statusText = "ACTIVE";
+                statusText = "ACTIVE  ";
                 string barStr = BuildLoadBar(loadRatio);
-                statusText = statusText + "  " + barStr + " " + loadPct.ToString() + "%";
+                statusText = statusText + barStr;
+                statusText = statusText + " ";
+                statusText = statusText + loadPct.ToString();
+                statusText = statusText + "%";
 
                 if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
                 {
@@ -397,20 +441,25 @@ class LFPG_DeviceInspector
         if (devType == LFPG_DeviceType.SOURCE)
         {
             float cap = LFPG_DeviceAPI.GetCapacity(device);
-            capText = "Capacity: " + FormatFloat1(cap) + " u/s";
+            capText = "Capacity: ";
+            capText = capText + FormatFloat1(cap);
+            capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.CONSUMER)
         {
             float cons = LFPG_DeviceAPI.GetConsumption(device);
-            capText = "Consumption: " + FormatFloat1(cons) + " u/s";
+            capText = "Consumption: ";
+            capText = capText + FormatFloat1(cons);
+            capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
             float ptCap = LFPG_DeviceAPI.GetCapacity(device);
-            capText = "Throughput: " + FormatFloat1(ptCap) + " u/s";
+            capText = "Throughput: ";
+            capText = capText + FormatFloat1(ptCap);
+            capText = capText + " u/s";
         }
         m_wCapLine.SetText(capText);
-
         // ---- Wire section: re-display cached data or show loading ----
         if (m_HasServerData)
         {
@@ -435,7 +484,12 @@ class LFPG_DeviceInspector
         // Stale response — player already looking at different device
         if (deviceId != inst.m_CurrentDeviceId)
         {
-            LFPG_Util.Debug("[DeviceInspector] Stale response for " + deviceId + " (current=" + inst.m_CurrentDeviceId + ")");
+            string dbgMsg = "[DeviceInspector] Stale response for ";
+            dbgMsg = dbgMsg + deviceId;
+            dbgMsg = dbgMsg + " (current=";
+            dbgMsg = dbgMsg + inst.m_CurrentDeviceId;
+            dbgMsg = dbgMsg + ")";
+            LFPG_Util.Debug(dbgMsg);
             return;
         }
 
@@ -464,7 +518,9 @@ class LFPG_DeviceInspector
             return;
         }
 
-        string hdrText = "Connections (" + wireCount.ToString() + ")";
+        string hdrText = "Connections (";
+        hdrText = hdrText + wireCount.ToString();
+        hdrText = hdrText + ")";
         m_wWiresHeader.SetText(hdrText);
 
         int maxShow = m_wWireSlots.Count();
@@ -492,8 +548,10 @@ class LFPG_DeviceInspector
                 arrow = "IN  ";
             }
 
-            string line = arrow + entry.m_LocalPort;
-            line = line + "  >  " + FormatDeviceName(entry.m_RemoteTypeName);
+            string line = arrow;
+            line = line + entry.m_LocalPort;
+            line = line + "  >  ";
+            line = line + FormatDeviceName(entry.m_RemoteTypeName);
 
             slot.SetText(line);
 
@@ -531,7 +589,7 @@ class LFPG_DeviceInspector
     // =========================================================
     protected void ResizePanelHeight(int wireCount)
     {
-        if (!m_Panel || !m_PanelBg)
+        if (!m_Panel)
             return;
 
         float h = LFPG_INSPECT_PANEL_BASE_H;
@@ -539,7 +597,6 @@ class LFPG_DeviceInspector
         h = h + LFPG_INSPECT_PANEL_PAD;
 
         m_Panel.SetSize(LFPG_INSPECT_PANEL_W, h);
-        m_PanelBg.SetSize(LFPG_INSPECT_PANEL_W, h);
     }
 
     protected bool UpdatePanelPosition(EntityAI device)
@@ -733,7 +790,11 @@ class LFPG_DeviceInspector
             whole = whole + 1;
             tenths = 0;
         }
-        return sign + whole.ToString() + "." + tenths.ToString();
+        string result = sign;
+        result = result + whole.ToString();
+        result = result + ".";
+        result = result + tenths.ToString();
+        return result;
     }
 
     // Build ASCII load bar: [========--] style

@@ -499,8 +499,8 @@ static const float LFPG_INSPECT_WIRE_ROW_H = 16.0;        // height per wire ent
 static const float LFPG_INSPECT_PANEL_PAD = 12.0;          // bottom padding
 
 // Screen-space offset from device projection point (pixels).
-static const float LFPG_INSPECT_OFFSET_X = 28.0;
-static const float LFPG_INSPECT_OFFSET_Y = -16.0;
+static const float LFPG_INSPECT_OFFSET_X = 45.0;
+static const float LFPG_INSPECT_OFFSET_Y = -70.0;
 
 // Inspector cable reel type name.
 // Must match the actual cable reel item class used by the mod.
