@@ -1182,6 +1182,10 @@ modded class PlayerBase
 
     // =====================================
     // SERVER: handle INSPECT_DEVICE request
+    // v0.7.43 (Fix 2): Resolve device via NetworkID instead of trusting
+    // the client's deviceId string. Client deviceId may not match server's
+    // due to SyncVar race during kit placement. NetworkID is the engine's
+    // authoritative identity and always matches. Same pattern as FinishWiring.
     // =====================================
     protected void HandleLFPG_InspectDevice(PlayerIdentity sender, ParamsReadContext ctx)
     {
@@ -1191,15 +1195,46 @@ modded class PlayerBase
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
             return;
 
-        string deviceId;
-        if (!ctx.Read(deviceId))
+        // v0.7.43: Read NetworkID + client deviceId (correlation)
+        int netLow = 0;
+        if (!ctx.Read(netLow))
         {
-            LFPG_Util.Warn("[SERVER] InspectDevice: read deviceId FAIL pid=" + sender.GetPlainId());
+            LFPG_Util.Warn("[SERVER] InspectDevice: read netLow FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+        int netHigh = 0;
+        if (!ctx.Read(netHigh))
+        {
+            LFPG_Util.Warn("[SERVER] InspectDevice: read netHigh FAIL pid=" + sender.GetPlainId());
+            return;
+        }
+        string clientDeviceId = "";
+        if (!ctx.Read(clientDeviceId))
+        {
+            LFPG_Util.Warn("[SERVER] InspectDevice: read clientDeviceId FAIL pid=" + sender.GetPlainId());
             return;
         }
 
-        if (deviceId == "")
+        if (clientDeviceId == "")
             return;
+
+        // Resolve entity authoritatively via NetworkID
+        string serverDeviceId = clientDeviceId;
+        if (netLow != 0 || netHigh != 0)
+        {
+            EntityAI resolvedObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            if (resolvedObj)
+            {
+                string resolvedId = LFPG_DeviceAPI.GetDeviceId(resolvedObj);
+                if (resolvedId != "")
+                {
+                    serverDeviceId = resolvedId;
+                    // Re-register to heal stale DeviceRegistry refs.
+                    // Only when we have the confirmed server-side ID.
+                    LFPG_DeviceRegistry.Get().Register(resolvedObj, resolvedId);
+                }
+            }
+        }
 
         ref array<ref LFPG_InspectWireEntry> entries = new array<ref LFPG_InspectWireEntry>;
         LFPG_InspectWireEntry entry;
@@ -1207,8 +1242,8 @@ modded class PlayerBase
         LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
         if (graph)
         {
-            // Outgoing edges: this device is SOURCE, remote is TARGET
-            array<ref LFPG_ElecEdge> outEdges = graph.GetOutgoing(deviceId);
+            // Query graph with SERVER's authoritative deviceId
+            array<ref LFPG_ElecEdge> outEdges = graph.GetOutgoing(serverDeviceId);
             if (outEdges)
             {
                 int oi;
@@ -1229,7 +1264,7 @@ modded class PlayerBase
             }
 
             // Incoming edges: this device is TARGET, remote is SOURCE
-            array<ref LFPG_ElecEdge> inEdges = graph.GetIncoming(deviceId);
+            array<ref LFPG_ElecEdge> inEdges = graph.GetIncoming(serverDeviceId);
             if (inEdges)
             {
                 int ii;
@@ -1250,10 +1285,11 @@ modded class PlayerBase
             }
         }
 
-        // Send response back to requesting player
+        // Send response with CLIENT's deviceId as correlation key
+        // (client uses this to detect stale responses)
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write(LFPG_RPC_SubId.INSPECT_RESPONSE);
-        rpc.Write(deviceId);
+        rpc.Write(clientDeviceId);
 
         int wireCount = entries.Count();
         rpc.Write(wireCount);
@@ -1274,7 +1310,11 @@ modded class PlayerBase
         string dbgSent = "[SERVER] InspectDevice: sent ";
         dbgSent = dbgSent + wireCount.ToString();
         dbgSent = dbgSent + " wires for ";
-        dbgSent = dbgSent + deviceId;
+        dbgSent = dbgSent + clientDeviceId;
+        if (serverDeviceId != clientDeviceId)
+        {
+            dbgSent = dbgSent + " (resolved=" + serverDeviceId + ")";
+        }
         LFPG_Util.Debug(dbgSent);
     }
 

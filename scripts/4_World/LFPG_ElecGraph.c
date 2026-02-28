@@ -198,6 +198,14 @@ class LFPG_ElecGraph
     protected int  m_MutationDepth;
     protected ref array<string> m_DeferredOrphanCleanup;
 
+    // --- v0.7.43 (Fix 3): NetworkID backup for entity re-resolution ---
+    // When DeviceRegistry ref goes stale (entity streamed/recreated),
+    // SyncNodeToEntity can re-resolve via GetObjectByNetworkId.
+    // Populated in EnsureNode when entity is available. Session-local
+    // (NetworkIDs change on restart, graph is rebuilt anyway).
+    protected ref map<string, int> m_NodeNetLow;
+    protected ref map<string, int> m_NodeNetHigh;
+
     void LFPG_ElecGraph()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -235,6 +243,10 @@ class LFPG_ElecGraph
         m_MutationActive = false;
         m_MutationDepth = 0;
         m_DeferredOrphanCleanup = new array<string>;
+
+        // v0.7.43 (Fix 3): NetworkID backup maps
+        m_NodeNetLow = new map<string, int>;
+        m_NodeNetHigh = new map<string, int>;
     }
 
     // ===========================
@@ -260,6 +272,8 @@ class LFPG_ElecGraph
         m_DirtyQueueHead = 0;
         m_NodeCount = 0;
         m_EdgeCount = 0;
+        m_NodeNetLow.Clear();
+        m_NodeNetHigh.Clear();
 
         // v0.7.34 (Bloque E): Full rebuild invalidates any active mutation
         if (m_MutationActive)
@@ -1106,6 +1120,17 @@ class LFPG_ElecGraph
         {
             node.m_DeviceType = LFPG_DeviceAPI.GetDeviceType(obj);
 
+            // v0.7.43 (Fix 3): Cache NetworkID for fallback resolution.
+            // If DeviceRegistry ref goes stale, SyncNodeToEntity can
+            // re-resolve via GetObjectByNetworkId.
+            int nLow = obj.GetNetworkIDLow();
+            int nHigh = obj.GetNetworkIDHigh();
+            if (nLow != 0 || nHigh != 0)
+            {
+                m_NodeNetLow.Set(deviceId, nLow);
+                m_NodeNetHigh.Set(deviceId, nHigh);
+            }
+
             // v0.7.38 (BugFix): Populate electrical properties on creation.
             // Previously only set by PopulateAllNodeElecStates (bulk rebuild).
             // Without this, runtime wire-adds created nodes with consumption=0
@@ -1345,6 +1370,8 @@ class LFPG_ElecGraph
             m_Nodes.Remove(deviceId);
             m_Outgoing.Remove(deviceId);
             m_Incoming.Remove(deviceId);
+            m_NodeNetLow.Remove(deviceId);
+            m_NodeNetHigh.Remove(deviceId);
             m_NodeCount = m_Nodes.Count();
         }
         #endif
@@ -2137,6 +2164,32 @@ class LFPG_ElecGraph
         {
             entObj = LFPG_DeviceAPI.ResolveVanillaDevice(nodeId);
         }
+
+        // v0.7.43 (Fix 3): NetworkID fallback when registry ref is stale.
+        // DeviceRegistry may lose valid refs when DayZ recreates the C++
+        // backing of an entity (streaming, initialization race).
+        // NetworkID (engine identity) survives this. If re-resolved,
+        // auto-register to prevent future misses.
+        if (!entObj)
+        {
+            int cachedNetLow = 0;
+            int cachedNetHigh = 0;
+            bool hasNetLow = m_NodeNetLow.Find(nodeId, cachedNetLow);
+            bool hasNetHigh = m_NodeNetHigh.Find(nodeId, cachedNetHigh);
+            if (hasNetLow && hasNetHigh)
+            {
+                if (cachedNetLow != 0 || cachedNetHigh != 0)
+                {
+                    Object rawObj = GetGame().GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
+                    entObj = EntityAI.Cast(rawObj);
+                    if (entObj)
+                    {
+                        LFPG_DeviceRegistry.Get().Register(entObj, nodeId);
+                    }
+                }
+            }
+        }
+
         if (!entObj)
         {
             // [DIAG PT-CHAIN] Punto 5a: Entity resolution failed

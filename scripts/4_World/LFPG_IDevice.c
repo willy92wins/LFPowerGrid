@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Device API (v0.7.11)
+// LF_PowerGrid - Device API (v0.7.44)
 //
 // Universal device detection:
 //   - LFPG-native devices: via LFPG_* script methods
@@ -8,6 +8,10 @@
 // Vanilla devices get deterministic IDs ("vp:TYPE:QX:QY:QZ")
 // based on position + type. These survive server restarts.
 // If a device is moved, the ID changes and wires are orphaned.
+//
+// v0.7.44 (Level 2): Added ResolveByNetworkId / ResolveAndIdentify
+//   helpers for centralized NetworkID-first entity resolution.
+//   All client->server RPCs MUST use these instead of FindById.
 // =========================================================
 
 class LFPG_DeviceAPI
@@ -699,5 +703,56 @@ class LFPG_DeviceAPI
         if (IsVanillaSource(e)) return "Output 1";
         if (IsVanillaConsumer(e)) return "Input 1";
         return "";
+    }
+
+    // =========================================================
+    // v0.7.44 (Level 2): Centralized NetworkID-first resolution.
+    //
+    // ARCHITECTURE RULE: In ALL client->server RPC flows, entity
+    // resolution MUST use NetworkID as primary key. DeviceId from
+    // the client is informational/correlational, never authoritative.
+    //
+    // Reason: DeviceId is replicated via SyncVars with eventual
+    // consistency. There is a window after Kit placement where the
+    // client's DeviceId differs from the server's. NetworkID is
+    // assigned atomically by the engine and is immediately coherent.
+    //
+    // Usage in RPC handlers:
+    //   EntityAI obj = LFPG_DeviceAPI.ResolveByNetworkId(low, high);
+    //   if (!obj) { /* reject RPC */ return; }
+    //   string realId = LFPG_DeviceAPI.GetOrCreateDeviceId(obj);
+    //
+    // See docs/ARCHITECTURE_NetworkID.md for full documentation.
+    // =========================================================
+
+    // Resolve entity by engine NetworkID. Returns null if not found.
+    // This is the ONLY correct way to resolve entities from client RPCs.
+    static EntityAI ResolveByNetworkId(int netLow, int netHigh)
+    {
+        if (netLow == 0 && netHigh == 0)
+            return null;
+
+        Object rawObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        if (!rawObj)
+            return null;
+
+        EntityAI ent = EntityAI.Cast(rawObj);
+        return ent;
+    }
+
+    // Resolve by NetworkID, then obtain the authoritative DeviceId.
+    // Returns the entity and populates realDeviceId (out parameter).
+    // If entity is found but has no DeviceId, generates one (vanilla).
+    // Convenience wrapper for the common RPC handler pattern.
+    static EntityAI ResolveAndIdentify(int netLow, int netHigh, out string realDeviceId)
+    {
+        realDeviceId = "";
+
+        EntityAI ent = ResolveByNetworkId(netLow, netHigh);
+        if (!ent)
+            return null;
+
+        realDeviceId = GetOrCreateDeviceId(ent);
+        return ent;
     }
 };

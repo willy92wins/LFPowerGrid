@@ -354,7 +354,7 @@ class LFPG_DeviceInspector
             inst.m_SmoothInit = false;
             inst.m_FlippedLeft = false;
             inst.PopulateClientData(target, deviceId);
-            inst.RequestServerData(player, deviceId);
+            inst.RequestServerData(player, deviceId, target);
             inst.m_LastClientRefreshMs = nowMs;
         }
         else
@@ -375,7 +375,7 @@ class LFPG_DeviceInspector
             // "Connections ..." because the cooldown guard returns early.
             if (!inst.m_HasServerData)
             {
-                inst.RequestServerData(player, deviceId);
+                inst.RequestServerData(player, deviceId, target);
             }
         }
 
@@ -885,8 +885,13 @@ class LFPG_DeviceInspector
 
     // =========================================================
     // RPC request (client → server)
+    // v0.7.43 (Fix 2): Send NetworkID for authoritative resolution.
+    // The client's deviceId may not match the server's (SyncVar race
+    // during kit placement). Server resolves via NetworkID (engine
+    // identity, always matches). Client deviceId echoed as correlation.
+    // Same proven pattern as FinishWiring.
     // =========================================================
-    protected void RequestServerData(PlayerBase player, string deviceId)
+    protected void RequestServerData(PlayerBase player, string deviceId, EntityAI targetEntity)
     {
         if (!player)
             return;
@@ -899,9 +904,20 @@ class LFPG_DeviceInspector
 
         m_LastRPCSendMs = nowMs;
 
+        // Get NetworkID directly from the raycast entity (authoritative)
+        int netLow = 0;
+        int netHigh = 0;
+        if (targetEntity)
+        {
+            netLow = targetEntity.GetNetworkIDLow();
+            netHigh = targetEntity.GetNetworkIDHigh();
+        }
+
         // Build and send RPC
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write(LFPG_RPC_SubId.INSPECT_DEVICE);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
         rpc.Write(deviceId);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
 

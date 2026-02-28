@@ -1,7 +1,11 @@
 // =========================================================
-// LF_PowerGrid - NetworkManager (v0.7.38, Sprint 4.3+Bloque E+RC fixes)
+// LF_PowerGrid - NetworkManager (v0.7.44, Sprint 4.3+Bloque E+RC fixes)
 //
 // Server singleton: validation, wire storage, propagation.
+//
+// v0.7.44 (Level 3): Re-populate target NetworkIDs on wire data during
+//   self-heal. Ensures BroadcastOwnerWires sends valid session-specific
+//   NetworkIDs to clients for CableRenderer fallback resolution.
 //
 // v0.7.38 (Race Condition fixes):
 //   RC-01: Port locking for concurrent FinishWiring (IsPortLocked/LockPort/UnlockPort)
@@ -2091,6 +2095,45 @@ class LFPG_NetworkManager
             if (did != "")
             {
                 m_CachedValidIds[did] = true;
+            }
+        }
+
+        // Step 3b (v0.7.44 Level 3): Re-populate target NetworkIDs on wire data.
+        // NetworkIDs are session-only (change every server restart).
+        // After restart, deserialized WireData contains STALE NetworkIDs
+        // from the previous session — these MUST be overwritten unconditionally.
+        // If target entity is not in registry yet, zero out the fields so
+        // BroadcastOwnerWires does not send stale IDs to clients.
+        // Cost: GetNetworkID is a field read, trivial even for 200+ wires.
+        int rn;
+        for (rn = 0; rn < all.Count(); rn = rn + 1)
+        {
+            ref array<ref LFPG_WireData> rnWires = LFPG_DeviceAPI.GetDeviceWires(all[rn]);
+            if (!rnWires) continue;
+            int rw;
+            int rnLow;
+            int rnHigh;
+            for (rw = 0; rw < rnWires.Count(); rw = rw + 1)
+            {
+                LFPG_WireData rnWd = rnWires[rw];
+                if (!rnWd) continue;
+                EntityAI rnTgt = LFPG_DeviceRegistry.Get().FindById(rnWd.m_TargetDeviceId);
+                if (rnTgt)
+                {
+                    rnLow = 0;
+                    rnHigh = 0;
+                    rnTgt.GetNetworkID(rnLow, rnHigh);
+                    rnWd.m_TargetNetLow = rnLow;
+                    rnWd.m_TargetNetHigh = rnHigh;
+                }
+                else
+                {
+                    // Target not in registry — zero out stale values so
+                    // BroadcastOwnerWires does not send garbage to clients.
+                    // Next self-heal tick will re-populate when resolved.
+                    rnWd.m_TargetNetLow = 0;
+                    rnWd.m_TargetNetHigh = 0;
+                }
             }
         }
 

@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - data structures (v0.7.28, Sprint 4.3+refactor)
+// LF_PowerGrid - data structures (v0.7.44, Sprint 4.3+refactor)
 //
 // Pure data classes. No logic. No entity references.
 // Instantiated by LFPG_ElecGraph (4_World) or persistence (3_Game).
@@ -15,6 +15,12 @@
 //   - LFPG_PersistBlob: persistence envelope for per-device wires
 //   - LFPG_VanillaWireEntry: single vanilla wire endpoint
 //   - LFPG_VanillaWireStore: persistence envelope for vanilla wires
+//
+// v0.7.44 (Level 3): Added m_TargetNetLow/m_TargetNetHigh to WireData.
+//   Enables client-side CableRenderer to resolve target entities via
+//   NetworkID when DeviceId has not yet stabilized (SyncVar lag).
+//   Session-only: persisted as 0, re-populated at runtime by server.
+//   Forward/backward compatible (no schema bump needed).
 // =========================================================
 
 // ---- Wire data (per-wire, serialized to JSON via PersistBlob) ----
@@ -37,6 +43,16 @@ class LFPG_WireData
     // Sprint 4.3: bitfield for future states (0 = default)
     int m_Flags;
 
+    // v0.7.44 (Level 3): NetworkID of target device.
+    // Session-only (NetworkIDs change across server restarts).
+    // 0,0 means "not available" (e.g. just loaded from disk).
+    // Populated by server when wire is created or re-populated
+    // during ValidateAllWiresAndPropagate self-heal.
+    // Used by CableRenderer as fallback when FindById(m_TargetDeviceId)
+    // fails due to client-side SyncVar lag after Kit placement.
+    int m_TargetNetLow;
+    int m_TargetNetHigh;
+
     void LFPG_WireData()
     {
         m_TargetDeviceId = "";
@@ -46,6 +62,8 @@ class LFPG_WireData
         m_Waypoints = new array<vector>;
         m_Priority = 0;
         m_Flags = 0;
+        m_TargetNetLow = 0;
+        m_TargetNetHigh = 0;
     }
 };
 
