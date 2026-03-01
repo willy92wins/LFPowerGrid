@@ -1306,6 +1306,22 @@ modded class PlayerBase
                     entry.m_RemoteDeviceId = oEdge.m_TargetNodeId;
                     entry.m_RemotePort = oEdge.m_TargetPort;
                     entry.m_RemoteTypeName = LFPG_ResolveTypeName(oEdge.m_TargetNodeId);
+
+                    // v0.7.47: Per-wire power data for inspector
+                    entry.m_AllocatedPower = oEdge.m_AllocatedPower;
+                    if ((oEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
+                    {
+                        entry.m_EdgeState = 2;
+                    }
+                    else if (oEdge.m_Demand > oEdge.m_AllocatedPower + LFPG_PROPAGATION_EPSILON)
+                    {
+                        entry.m_EdgeState = 1;
+                    }
+                    else
+                    {
+                        entry.m_EdgeState = 0;
+                    }
+
                     entries.Insert(entry);
                 }
             }
@@ -1327,6 +1343,22 @@ modded class PlayerBase
                     entry.m_RemoteDeviceId = iEdge.m_SourceNodeId;
                     entry.m_RemotePort = iEdge.m_SourcePort;
                     entry.m_RemoteTypeName = LFPG_ResolveTypeName(iEdge.m_SourceNodeId);
+
+                    // v0.7.47: Per-wire power data for inspector
+                    entry.m_AllocatedPower = iEdge.m_AllocatedPower;
+                    if ((iEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
+                    {
+                        entry.m_EdgeState = 2;
+                    }
+                    else if (iEdge.m_Demand > iEdge.m_AllocatedPower + LFPG_PROPAGATION_EPSILON)
+                    {
+                        entry.m_EdgeState = 1;
+                    }
+                    else
+                    {
+                        entry.m_EdgeState = 0;
+                    }
+
                     entries.Insert(entry);
                 }
             }
@@ -1350,6 +1382,8 @@ modded class PlayerBase
             rpc.Write(we.m_RemoteDeviceId);
             rpc.Write(we.m_RemotePort);
             rpc.Write(we.m_RemoteTypeName);
+            rpc.Write(we.m_AllocatedPower);
+            rpc.Write(we.m_EdgeState);
         }
 
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
@@ -1415,12 +1449,16 @@ modded class PlayerBase
             string remoteId;
             string remotePort;
             string remoteType;
+            float allocPower;
+            int edgeState;
 
             if (!ctx.Read(dir)) break;
             if (!ctx.Read(localPort)) break;
             if (!ctx.Read(remoteId)) break;
             if (!ctx.Read(remotePort)) break;
             if (!ctx.Read(remoteType)) break;
+            if (!ctx.Read(allocPower)) break;
+            if (!ctx.Read(edgeState)) break;
 
             LFPG_InspectWireEntry entry = new LFPG_InspectWireEntry();
             entry.m_Direction = dir;
@@ -1428,6 +1466,8 @@ modded class PlayerBase
             entry.m_RemoteDeviceId = remoteId;
             entry.m_RemotePort = remotePort;
             entry.m_RemoteTypeName = remoteType;
+            entry.m_AllocatedPower = allocPower;
+            entry.m_EdgeState = edgeState;
 
             wires.Insert(entry);
         }

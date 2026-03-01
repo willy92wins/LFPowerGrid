@@ -25,3 +25,5 @@
 "STR_LFPG_INSPECT_PORT_MAIN_IN","Main Input","Main Input","Entrada principal","Haupteingang","Гл. вход"
 "STR_LFPG_INSPECT_PORT_INPUT","Input","Input","Entrada","Eingang","Вход"
 "STR_LFPG_INSPECT_PORT_OUTPUT","Output","Output","Salida","Ausgang","Выход"
+"STR_LFPG_INSPECT_TRANSMITTING","TRANSMITTING","TRANSMITTING","TRANSMITIENDO","ÜBERTRAGEND","ПЕРЕДАЁТ"
+"STR_LFPG_INSPECT_NOT_TRANSMITTING","NOT TRANSMITTING","NOT TRANSMITTING","SIN TRANSMITIR","NICHT ÜBERTRAGEND","НЕ ПЕРЕДАЁТ"

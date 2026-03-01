@@ -31,6 +31,10 @@ class LFPG_InspectWireEntry
     string m_RemotePort;       // port name on remote device
     string m_RemoteTypeName;   // entity type name for display
 
+    // v0.7.47: Per-wire power data for inspector display
+    float m_AllocatedPower;    // Power flowing through this edge (u/s)
+    int m_EdgeState;           // 0=OK, 1=WARNING (partial), 2=BROWNOUT (zero)
+
     void LFPG_InspectWireEntry()
     {
         m_Direction = -1;
@@ -38,6 +42,8 @@ class LFPG_InspectWireEntry
         m_RemoteDeviceId = "";
         m_RemotePort = "";
         m_RemoteTypeName = "";
+        m_AllocatedPower = 0.0;
+        m_EdgeState = 0;
     }
 };
 
@@ -496,6 +502,21 @@ class LFPG_DeviceInspector
                 statusColor = ARGB(255, 120, 120, 120);
             }
         }
+        else if (devType == LFPG_DeviceType.PASSTHROUGH)
+        {
+            // v0.7.47: PASSTHROUGH shows Transmitting / Not Transmitting
+            bool ptPowered = LFPG_DeviceAPI.GetPowered(device);
+            if (ptPowered)
+            {
+                statusText = Loc("#STR_LFPG_INSPECT_TRANSMITTING");
+                statusColor = ARGB(255, 46, 155, 89);
+            }
+            else
+            {
+                statusText = Loc("#STR_LFPG_INSPECT_NOT_TRANSMITTING");
+                statusColor = ARGB(255, 120, 120, 120);
+            }
+        }
         else
         {
             bool powered = LFPG_DeviceAPI.GetPowered(device);
@@ -536,6 +557,16 @@ class LFPG_DeviceInspector
             capText = Loc("#STR_LFPG_INSPECT_THROUGHPUT");
             capText = capText + FormatFloat1(ptCap);
             capText = capText + " u/s";
+
+            // v0.7.47: Show own consumption if PASSTHROUGH has self-draw
+            float ptCons = LFPG_DeviceAPI.GetConsumption(device);
+            if (ptCons > LFPG_PROPAGATION_EPSILON)
+            {
+                capText = capText + "  |  ";
+                capText = capText + Loc("#STR_LFPG_INSPECT_CONSUMPTION");
+                capText = capText + FormatFloat1(ptCons);
+                capText = capText + " u/s";
+            }
         }
         m_wCapLine.SetText(capText);
         if (capText != "")
@@ -673,11 +704,29 @@ class LFPG_DeviceInspector
             line = line + "  >  ";
             line = line + FormatDeviceName(entry.m_RemoteTypeName);
 
+            // v0.7.47: Append allocated power to the right
+            if (entry.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
+            {
+                line = line + "  · ";
+                line = line + FormatFloat1(entry.m_AllocatedPower);
+                line = line + " u/s";
+            }
+
             slot.SetText(line);
 
-            // Color based on direction
+            // v0.7.47: Color based on edge state (overrides direction color)
             int wireColor = ARGB(255, 100, 160, 210);
-            if (entry.m_Direction == LFPG_PortDir.OUT)
+            if (entry.m_EdgeState == 2)
+            {
+                // BROWNOUT: orange-red
+                wireColor = ARGB(255, 220, 80, 50);
+            }
+            else if (entry.m_EdgeState == 1)
+            {
+                // WARNING: amber
+                wireColor = ARGB(255, 211, 170, 50);
+            }
+            else if (entry.m_Direction == LFPG_PortDir.OUT)
             {
                 wireColor = ARGB(255, 100, 180, 100);
             }

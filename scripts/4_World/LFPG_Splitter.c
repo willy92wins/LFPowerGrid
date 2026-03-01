@@ -447,6 +447,15 @@ class LF_Splitter : Inventory_Base
         return m_PoweredNet;
     }
 
+    // v0.7.47: Expose powered state for inspector display.
+    // m_PoweredNet is SyncVar so available on both client and server.
+    // Without this, GetPowered() via dynamic dispatch returns false (default)
+    // causing the inspector to always show "APAGADO" for splitters.
+    bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
+    }
+
     // ---- Consumer behavior ----
     // Called by graph propagation when upstream power state changes.
     // NOTE: No RequestPropagate here. The graph handles propagation
