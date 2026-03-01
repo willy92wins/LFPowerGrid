@@ -1079,8 +1079,7 @@ class LFPG_CableRenderer
         int netHigh = 0;
         if (device)
         {
-            netLow = device.GetNetworkIDLow();
-            netHigh = device.GetNetworkIDHigh();
+            device.GetNetworkID(netLow, netHigh);
         }
 
         ScriptRPC rpc = new ScriptRPC();

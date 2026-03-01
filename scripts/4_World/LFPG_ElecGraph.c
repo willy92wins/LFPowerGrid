@@ -1132,8 +1132,9 @@ class LFPG_ElecGraph
             // v0.7.43 (Fix 3): Cache NetworkID for fallback resolution.
             // If DeviceRegistry ref goes stale, SyncNodeToEntity can
             // re-resolve via GetObjectByNetworkId.
-            int nLow = obj.GetNetworkIDLow();
-            int nHigh = obj.GetNetworkIDHigh();
+            int nLow = 0;
+            int nHigh = 0;
+            obj.GetNetworkID(nLow, nHigh);
             if (nLow != 0 || nHigh != 0)
             {
                 m_NodeNetLow.Set(deviceId, nLow);
@@ -1943,21 +1944,30 @@ class LFPG_ElecGraph
                     }
                     float downstreamDemand = AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
 
-                    // v0.7.40 (BugFix): Cap PASSTHROUGH output to actual downstream demand.
-                    // Without this, newOutput = inputSum (everything received from upstream),
-                    // so m_LastStableOutput reflects throughput, not real demand.
-                    // When the upstream source re-evaluates, it reads m_LastStableOutput
-                    // as the passthrough's "demand", causing inflated loadRatio and
-                    // false WARNING/CRITICAL cable colors on the upstream wire.
-                    // Fix: set newOutput = min(inputSum, downstreamDemand) so upstream
-                    // only sees the power actually needed by downstream consumers.
-                    // Guard: only cap when downstreamDemand > epsilon to preserve
-                    // cold-start bootstrap (demand=0 when downstream hasn't evaluated).
+                    // v0.7.40 + v0.7.46: PASSTHROUGH demand signaling to upstream.
+                    // v0.7.40 originally capped output to downstream demand (over-report fix).
+                    // v0.7.46 generalizes: set newOutput = downstreamDemand in ALL cases.
+                    // v0.7.46: Also RAISE output to downstream demand when demand > input.
+                    // Without this, the passthrough only reports its constrained throughput
+                    // (inputSum) via m_LastStableOutput, and upstream never learns the real
+                    // downstream need — creating a circular deadlock where the generator
+                    // perpetually under-allocates. Example: Gen(50)→Splitter→2×Lamp(10):
+                    //   Splitter receives 10 (prev alloc for 1 lamp), reports 10,
+                    //   generator allocates 10 again → second lamp starved forever.
+                    // Fix: newOutput = downstreamDemand (capped at MaxOutput).
+                    // AllocateOutputByPriority already ran with real available power
+                    // (inputSum), so per-edge allocations are correct. This only changes
+                    // what m_LastStableOutput reports to upstream for demand signaling.
+                    // Guard: downstreamDemand=0 preserves cold-start bootstrap.
                     if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                     {
-                        if (downstreamDemand > LFPG_PROPAGATION_EPSILON && downstreamDemand < newOutput)
+                        if (downstreamDemand > LFPG_PROPAGATION_EPSILON)
                         {
                             newOutput = downstreamDemand;
+                            if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
+                            {
+                                newOutput = node.m_MaxOutput;
+                            }
                         }
                     }
                 }

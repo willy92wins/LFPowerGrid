@@ -909,8 +909,7 @@ class LFPG_DeviceInspector
         int netHigh = 0;
         if (targetEntity)
         {
-            netLow = targetEntity.GetNetworkIDLow();
-            netHigh = targetEntity.GetNetworkIDHigh();
+            targetEntity.GetNetworkID(netLow, netHigh);
         }
 
         // Build and send RPC
