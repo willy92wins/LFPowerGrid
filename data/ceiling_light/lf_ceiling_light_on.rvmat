@@ -13,7 +13,7 @@ PixelShaderID="Super";
 VertexShaderID="Super";
 class Stage1
 {
-	texture="\LF_PowerGrid\data\ceiling_light\lf_ceiling_light.paa";
+	texture="\LFPowerGrid\data\ceiling_light\lf_ceiling_light.paa";
 	uvSource="tex";
 };
 class Stage2
@@ -43,6 +43,6 @@ class Stage6
 };
 class Stage7
 {
-	texture="\LF_PowerGrid\data\ceiling_light\lf_ceiling_light.paa";
+	texture="\LFPowerGrid\data\ceiling_light\lf_ceiling_light.paa";
 	uvSource="tex";
 };
