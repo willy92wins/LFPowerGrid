@@ -32,8 +32,8 @@
 // ---------------------------------------------------------
 // RVMAT paths (must match hiddenSelectionsMaterials in config.cpp)
 // ---------------------------------------------------------
-static const string LFPG_CEILING_RVMAT_OFF = "\\LF_PowerGrid\\data\\ceiling_light\\lf_ceiling_light.rvmat";
-static const string LFPG_CEILING_RVMAT_ON  = "\\LF_PowerGrid\\data\\ceiling_light\\lf_ceiling_light_on.rvmat";
+static const string LFPG_CEILING_RVMAT_OFF = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light.rvmat";
+static const string LFPG_CEILING_RVMAT_ON  = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light_on.rvmat";
 
 // ---------------------------------------------------------
 // KIT: deployable item that spawns the actual CeilingLight
