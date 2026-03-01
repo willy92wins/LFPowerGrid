@@ -2,7 +2,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter" };
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight" };
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping" };
@@ -128,5 +128,46 @@ class CfgVehicles
 		carveNavmesh    = 1;
 		physLayer       = "item_large";
 		isDeployable    = 0;
+    };
+
+    // ---- CeilingLight Kit (holdable, deployable) ----
+    // On placement, spawns LF_CeilingLight and deletes the kit.
+    // slopeTolerance=0.0 allows ceiling/wall placement.
+    // Pitch=180 for ceiling set by HologramMod, not player input.
+    class LF_CeilingLight_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Ceiling Light Kit";
+        descriptionShort = "An overhead light. Place on ceiling, wall, or floor.";
+        model = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light.p3d";
+        weight = 2000;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh    = 1;
+        physLayer       = "item_large";
+        slopeTolerance  = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+    };
+
+    // ---- CeilingLight (placed device) ----
+    // PASSTHROUGH: 1 input, 1 output. Consumes 10 u/s for light, passes rest downstream.
+    // Memory points (LOD Memory): light, port_input_1, port_output_1
+    // Named selection: light_emit (hiddenSelections[0] for rvmat swap on power toggle)
+    class LF_CeilingLight : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Ceiling Light";
+        descriptionShort = "Overhead light. Consumes 10 u/s, passes power downstream.";
+        model = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light.p3d";
+        weight = 3000;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        carveNavmesh    = 1;
+        physLayer       = "item_large";
+        isDeployable    = 0;
+        hiddenSelections[] = {"light_emit"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\ceiling_light\lf_ceiling_light.rvmat"};
     };
 };

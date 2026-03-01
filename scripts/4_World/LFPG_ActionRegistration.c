@@ -38,7 +38,7 @@ modded class ActionConstructor
         // action is never available. Vanilla ActionPlaceObject fallback
         // may show a "Place" action but cannot execute properly.
         actions.Insert(LFPG_ActionPlaceSplitter);
-
+		actions.Insert(LFPG_ActionPlaceCeilingLight);
         LFPG_Util.Debug("[Actions] LFPG actions registered (18)");
     }
 };

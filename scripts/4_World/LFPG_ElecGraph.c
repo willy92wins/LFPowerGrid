@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.7.26)
+// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.7.47)
 //
 // In-memory directed graph of the electrical network.
 // Nodes = devices, edges = wires. Rebuilt from wire data at
@@ -122,6 +122,25 @@
 //   m_PoweredNet / CompEM stays stale. Fix: snapshot old node IDs before
 //   rebuild, then SetPowered(false) on any that dropped out. Centralized
 //   in PostBulkRebuild so all callers (CutWires, CutPort, self-heal) benefit.
+//
+// v0.7.47: PASSTHROUGH self-consumption support (CeilingLight pattern)
+//   - PopulateAllNodeElecStates + EnsureNodeExists: populate m_Consumption
+//     for PASSTHROUGH nodes (was CONSUMER-only). Splitter returns 0 → no-op.
+//   - ProcessDirtyQueue Step 2: PASSTHROUGH subtracts m_Consumption from
+//     inputSum before computing downstream output. If input < self-consumption,
+//     device is unpowered (light off, nothing downstream). Matches CONSUMER
+//     logic: must receive at least m_Consumption to be powered.
+//   - Step 2b demand signal: newOutput = downstreamDemand + m_Consumption,
+//     so upstream allocates enough for both self and downstream needs.
+//     Handles leaf PASSTHROUGH (no downstream wires) via selfCons-only path.
+//   - Step 2c demand stabilizer: when PASSTHROUGH is powered but afterSelf=0
+//     (receives exactly selfCons), newOutput=0 would skip Step 2b's demand
+//     signaling entirely → m_LastStableOutput oscillates 0↔selfCons forever.
+//     Fix: post-Step-2b, if powered + output<epsilon + selfCons>0 → report
+//     selfCons as demand. Prevents oscillation and cold-start demand inflation.
+//   - AllocateOutputByPriority: NO change needed — m_LastStableOutput already
+//     includes self-consumption from Step 2b, avoiding double-count.
+//   - Regression: Splitter m_Consumption=0 → all arithmetic is identity.
 // =========================================================
 
 class LFPG_ElecGraph
@@ -1176,6 +1195,9 @@ class LFPG_ElecGraph
                 {
                     node.m_MaxOutput = LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
                 }
+                // v0.7.47: PASSTHROUGH self-consumption (CeilingLight pattern).
+                // Splitter returns 0.0 explicitly → no regression.
+                node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
             {
@@ -1891,8 +1913,39 @@ class LFPG_ElecGraph
             {
                 if (inputSum > LFPG_PROPAGATION_EPSILON)
                 {
-                    newPowered = true;
-                    newOutput = inputSum;
+                    // v0.7.47: Subtract self-consumption before passing downstream.
+                    // CeilingLight consumes 10 u/s for its own light, rest goes out.
+                    // Splitter has consumption=0 → afterSelf = inputSum (no regression).
+                    float selfCons = node.m_Consumption;
+                    if (selfCons > LFPG_PROPAGATION_EPSILON)
+                    {
+                        // Has self-consumption: check if input covers it
+                        if (inputSum + LFPG_PROPAGATION_EPSILON >= selfCons)
+                        {
+                            // Enough for self → powered, pass remainder downstream
+                            newPowered = true;
+                            float afterSelf = inputSum - selfCons;
+                            if (afterSelf < 0.0)
+                            {
+                                afterSelf = 0.0;
+                            }
+                            newOutput = afterSelf;
+                        }
+                        else
+                        {
+                            // Insufficient for self → unpowered, nothing downstream
+                            // Matches CONSUMER logic: input must cover consumption.
+                            newPowered = false;
+                            newOutput = 0.0;
+                        }
+                    }
+                    else
+                    {
+                        // Zero self-consumption (Splitter pattern) → pass everything
+                        newPowered = true;
+                        newOutput = inputSum;
+                    }
+
                     // v0.7.33 (Fix #22): Cap output to max throughput capacity.
                     // Without this, passthrough relayed infinite power.
                     if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
@@ -1907,6 +1960,7 @@ class LFPG_ElecGraph
                     ptLog2 = ptLog2 + nodeId;
                     ptLog2 = ptLog2 + " mask=" + dirtyMask.ToString();
                     ptLog2 = ptLog2 + " inSum=" + inputSum.ToString();
+                    ptLog2 = ptLog2 + " selfCons=" + node.m_Consumption.ToString();
                     ptLog2 = ptLog2 + " newOut=" + newOutput.ToString();
                     ptLog2 = ptLog2 + " powered=" + newPowered.ToString();
                     ptLog2 = ptLog2 + " lastStable=" + node.m_LastStableOutput.ToString();
@@ -1973,11 +2027,22 @@ class LFPG_ElecGraph
                     {
                         if (downstreamDemand > LFPG_PROPAGATION_EPSILON)
                         {
-                            newOutput = downstreamDemand;
+                            // v0.7.47: Include self-consumption in upstream demand signal.
+                            // Without this, upstream only allocates for downstream need,
+                            // starving the passthrough's own light.
+                            // Splitter: m_Consumption=0 → no change.
+                            newOutput = downstreamDemand + node.m_Consumption;
                             if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
                             {
                                 newOutput = node.m_MaxOutput;
                             }
+                        }
+                        else if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+                        {
+                            // v0.7.47: No downstream demand but passthrough has own
+                            // consumption (e.g. CeilingLight with no output wires).
+                            // Report self-consumption so upstream allocates for it.
+                            newOutput = node.m_Consumption;
                         }
                     }
                 }
@@ -2006,6 +2071,24 @@ class LFPG_ElecGraph
                     node.m_LoadRatio = 0.0;
                     node.m_OverloadMask = 0;
                     node.m_WarningMask = 0;  // v0.7.33 (Bloque D)
+                }
+            }
+
+            // --- Step 2c (v0.7.47): PASSTHROUGH self-consumption demand stabilizer ---
+            // When a PASSTHROUGH with self-consumption has zero downstream output
+            // (afterSelf=0, e.g. receives exactly selfCons or has no downstream wires),
+            // newOutput=0 and Step 2b's demand signaling code is unreachable (it's inside
+            // the newOutput > EPSILON branch). Without this fixup, m_LastStableOutput
+            // oscillates between 0 (triggers cold-start fallback demand = m_MaxOutput)
+            // and selfCons, causing infinite re-queues and demand inflation that can
+            // starve co-consumer devices via false brownout.
+            // Fix: signal selfCons as demand so upstream allocates the correct amount.
+            // Splitter (selfCons=0): condition is false → no-op.
+            if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH && newPowered)
+            {
+                if (newOutput < LFPG_PROPAGATION_EPSILON && node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+                {
+                    newOutput = node.m_Consumption;
                 }
             }
 
@@ -2551,6 +2634,9 @@ class LFPG_ElecGraph
                 {
                     node.m_MaxOutput = LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
                 }
+                // v0.7.47: PASSTHROUGH self-consumption (CeilingLight pattern).
+                // Splitter returns 0.0 explicitly → no regression.
+                node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
 
             if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
