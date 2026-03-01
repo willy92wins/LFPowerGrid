@@ -1811,6 +1811,10 @@ class LFPG_ElecGraph
 
             int dirtyMask = node.m_DirtyMask;
 
+            // v0.7.46: Reset per-node (not per-branch) to prevent stale flag
+            // from a previous SOURCE/PASSTHROUGH leaking into a CONSUMER iteration.
+            m_AllocChanged = false;
+
             // --- Step 1: Evaluate inputs ---
             bool skipInputEval = false;
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE && dirtyMask == LFPG_DIRTY_INTERNAL)
@@ -1948,8 +1952,6 @@ class LFPG_ElecGraph
                     {
                         edgeBudgetLeft = 0;
                     }
-                    // v0.7.46: Reset allocation-change flag before allocation pass.
-                    m_AllocChanged = false;
                     float downstreamDemand = AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
 
                     // v0.7.40 + v0.7.46: PASSTHROUGH demand signaling to upstream.
