@@ -1150,17 +1150,23 @@ modded class PlayerBase
             return;
 
         // Resolve entity authoritatively via NetworkID (same as InspectDevice)
+        // v0.7.45 review fix: use GetDeviceId (read-only), NOT GetOrCreateDeviceId.
+        // If NetworkID resolves to a non-LFPG entity (edge case: ID reuse post-restart),
+        // GetOrCreateDeviceId would generate a garbage "vp:Type:X:Y:Z" ID and
+        // SendDeviceSyncTo would find 0 wires for that ID. GetDeviceId returns ""
+        // which falls through to clientDeviceId fallback — correct behavior.
         string serverDeviceId = clientDeviceId;
         if (netLow != 0 || netHigh != 0)
         {
             EntityAI resolvedObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
             if (resolvedObj)
             {
-                string resolvedId = LFPG_DeviceAPI.GetOrCreateDeviceId(resolvedObj);
+                string resolvedId = LFPG_DeviceAPI.GetDeviceId(resolvedObj);
                 if (resolvedId != "")
                 {
                     serverDeviceId = resolvedId;
-                    // Re-register to heal stale DeviceRegistry refs
+                    // Re-register to heal stale DeviceRegistry refs.
+                    // Only when we have the confirmed server-side ID.
                     LFPG_DeviceRegistry.Get().Register(resolvedObj, resolvedId);
                 }
             }

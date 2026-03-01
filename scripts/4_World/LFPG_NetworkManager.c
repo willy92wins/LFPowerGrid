@@ -2137,6 +2137,41 @@ class LFPG_NetworkManager
             }
         }
 
+        // Step 3c (v0.7.45 H8): Same repopulation for vanilla wires.
+        // Step 3b only covers LFPG device wires (stored ON the entity).
+        // Vanilla wires are stored centrally in m_VanillaWires and also
+        // need their target NetworkIDs refreshed after server restart.
+        // Without this, CableRenderer client-side fallback resolution
+        // for vanilla-sourced wires has no NetworkID to work with.
+        int vnri;
+        for (vnri = 0; vnri < m_VanillaWires.Count(); vnri = vnri + 1)
+        {
+            ref array<ref LFPG_WireData> vnrWires = m_VanillaWires.GetElement(vnri);
+            if (!vnrWires) continue;
+            int vnrw;
+            int vnrLow;
+            int vnrHigh;
+            for (vnrw = 0; vnrw < vnrWires.Count(); vnrw = vnrw + 1)
+            {
+                LFPG_WireData vnrWd = vnrWires[vnrw];
+                if (!vnrWd) continue;
+                EntityAI vnrTgt = LFPG_DeviceRegistry.Get().FindById(vnrWd.m_TargetDeviceId);
+                if (vnrTgt)
+                {
+                    vnrLow = 0;
+                    vnrHigh = 0;
+                    vnrTgt.GetNetworkID(vnrLow, vnrHigh);
+                    vnrWd.m_TargetNetLow = vnrLow;
+                    vnrWd.m_TargetNetHigh = vnrHigh;
+                }
+                else
+                {
+                    vnrWd.m_TargetNetLow = 0;
+                    vnrWd.m_TargetNetHigh = 0;
+                }
+            }
+        }
+
         // Step 4: Prune and propagate LFPG devices
         int i;
         for (i = 0; i < all.Count(); i = i + 1)
