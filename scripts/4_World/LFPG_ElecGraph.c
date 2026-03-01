@@ -168,6 +168,11 @@ class LFPG_ElecGraph
     protected ref array<float> m_AllocDemandArr;
     protected ref array<int> m_AllocPrioArr;
 
+    // v0.7.46: Flag set by AllocateOutputByPriority when any edge's
+    // m_AllocatedPower changed. ProcessDirtyQueue Step 3 uses this to
+    // re-enqueue downstream even when total output is unchanged.
+    protected bool m_AllocChanged;
+
     // --- v0.7.31 (Bloque B): Component Watchdog ---
     // m_ComponentSizes: populated in RebuildComponents(), keyed by componentId.
     // m_WdgQueue/m_WdgVisited: reusable BFS buffers for CountComponentLimited().
@@ -227,6 +232,7 @@ class LFPG_ElecGraph
         m_AllocIdxArr = new array<int>;
         m_AllocDemandArr = new array<float>;
         m_AllocPrioArr = new array<int>;
+        m_AllocChanged = false;
 
         // v0.7.31 (Bloque B): Component Watchdog buffers
         m_ComponentSizes = new map<int, int>;
@@ -1942,6 +1948,8 @@ class LFPG_ElecGraph
                     {
                         edgeBudgetLeft = 0;
                     }
+                    // v0.7.46: Reset allocation-change flag before allocation pass.
+                    m_AllocChanged = false;
                     float downstreamDemand = AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
 
                     // v0.7.40 + v0.7.46: PASSTHROUGH demand signaling to upstream.
@@ -2028,7 +2036,11 @@ class LFPG_ElecGraph
                 }
             }
 
-            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream)
+            // v0.7.46: m_AllocChanged — per-edge allocation changed even if
+            // total output (outputDelta) is unchanged. Example: SOURCE always
+            // outputs 50, but splits 10→20 for a splitter after demand increase.
+            // Without this, downstream never re-reads the new allocation.
+            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream || m_AllocChanged)
             {
                 node.m_OutputPower = newOutput;
                 node.m_LastStableOutput = newOutput;
@@ -2054,7 +2066,10 @@ class LFPG_ElecGraph
                                 // Only reset if they were actually processed this epoch
                                 // (m_LastEpoch == current); otherwise they haven't run
                                 // yet and don't need the reset.
-                                if (forceDownstream && tgtNode.m_LastEpoch == m_CurrentEpoch)
+                                // v0.7.46: Also reset when m_AllocChanged — per-edge
+                                // allocations changed but outputDelta=0, downstream
+                                // already processed with old allocations this epoch.
+                                if ((forceDownstream || m_AllocChanged) && tgtNode.m_LastEpoch == m_CurrentEpoch)
                                 {
                                     int prevEpoch = m_CurrentEpoch - 1;
                                     tgtNode.m_LastEpoch = prevEpoch;
@@ -2809,8 +2824,25 @@ class LFPG_ElecGraph
                 }
             }
 
+            // v0.7.46: Detect per-edge allocation change for downstream propagation.
+            float oldAllocPower = allocEdge.m_AllocatedPower;
             allocEdge.m_AllocatedPower = allocated;
             allocEdge.m_Demand = edgeDemand;
+
+            // Flag significant change so ProcessDirtyQueue Step 3 re-enqueues
+            // downstream even when total output (outputDelta) is unchanged.
+            if (!m_AllocChanged)
+            {
+                float allocDelta = allocated - oldAllocPower;
+                if (allocDelta < 0.0)
+                {
+                    allocDelta = -allocDelta;
+                }
+                if (allocDelta > LFPG_PROPAGATION_EPSILON)
+                {
+                    m_AllocChanged = true;
+                }
+            }
 
             // v0.7.33 (Bloque D): Three-tier edge state classification.
             //   Tier 1 (BROWNOUT): zero allocation with positive demand → CRITICAL_LOAD
