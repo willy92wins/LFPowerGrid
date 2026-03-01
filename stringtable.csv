@@ -17,6 +17,7 @@
 "STR_LFPG_INSPECT_CAPACITY","Capacity: ","Capacity: ","Capacidad: ","Kapazität: ","Мощность: "
 "STR_LFPG_INSPECT_CONSUMPTION","Consumption: ","Consumption: ","Consumo: ","Verbrauch: ","Потребление: "
 "STR_LFPG_INSPECT_THROUGHPUT","Throughput: ","Throughput: ","Rendimiento: ","Durchsatz: ","Пропускная: "
+"STR_LFPG_INSPECT_TOTAL_LOAD","Total Load: ","Total Load: ","Carga total: ","Gesamtlast: ","Общая нагр.: "
 "STR_LFPG_INSPECT_CONNECTIONS","Connections","Connections","Conexiones","Verbindungen","Подключения"
 "STR_LFPG_INSPECT_CONN_LOADING","Connections ...","Connections ...","Conexiones ...","Verbindungen ...","Подключения ..."
 "STR_LFPG_INSPECT_SHOWING","showing","showing","mostrando","zeige","показано"

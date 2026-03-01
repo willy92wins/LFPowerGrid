@@ -558,15 +558,32 @@ class LFPG_DeviceInspector
             capText = capText + FormatFloat1(ptCap);
             capText = capText + " u/s";
 
-            // v0.7.47: Show own consumption if PASSTHROUGH has self-draw
-            float ptCons = LFPG_DeviceAPI.GetConsumption(device);
-            if (ptCons > LFPG_PROPAGATION_EPSILON)
+            // v0.8.1: Show "Total Load" = own consumption + sum of outgoing wire demands.
+            // Own consumption is 0 for splitter, but future passthroughs (motorized switch)
+            // may have self-draw. Outgoing wire data comes from RPC (m_RespWires).
+            float ptOwnCons = LFPG_DeviceAPI.GetConsumption(device);
+            float ptDownstream = 0.0;
+            if (m_HasServerData && m_RespWires)
             {
-                capText = capText + "  |  ";
-                capText = capText + Loc("#STR_LFPG_INSPECT_CONSUMPTION");
-                capText = capText + FormatFloat1(ptCons);
-                capText = capText + " u/s";
+                int wdi;
+                for (wdi = 0; wdi < m_RespWires.Count(); wdi = wdi + 1)
+                {
+                    LFPG_InspectWireEntry wde = m_RespWires[wdi];
+                    if (!wde)
+                        continue;
+                    // Only sum outgoing (OUT) wires — those are the downstream demands
+                    if (wde.m_Direction == LFPG_PortDir.OUT)
+                    {
+                        ptDownstream = ptDownstream + wde.m_AllocatedPower;
+                    }
+                }
             }
+            float ptTotalLoad = ptOwnCons + ptDownstream;
+
+            capText = capText + "  |  ";
+            capText = capText + Loc("#STR_LFPG_INSPECT_TOTAL_LOAD");
+            capText = capText + FormatFloat1(ptTotalLoad);
+            capText = capText + " u/s";
         }
         m_wCapLine.SetText(capText);
         if (capText != "")
@@ -627,7 +644,22 @@ class LFPG_DeviceInspector
             inst.m_RespWires.Insert(wires[wi]);
         }
 
-        inst.PopulateWireData();
+        // v0.8.1: Resolve entity and run full PopulateClientData so capLine
+        // "Total Load" updates in the same pass as wire data.
+        // PopulateClientData calls PopulateWireData internally (m_HasServerData
+        // is now true), so everything updates in one shot — no double call,
+        // no frame delay, no m_LastClientRefreshMs hack needed.
+        EntityAI respTarget = LFPG_DeviceRegistry.Get().FindById(deviceId);
+        if (respTarget)
+        {
+            inst.PopulateClientData(respTarget, deviceId);
+        }
+        else
+        {
+            // Entity gone (destroyed/despawned) — just update wires section.
+            // Next Tick() will detect missing entity and hide panel.
+            inst.PopulateWireData();
+        }
     }
 
     protected void PopulateWireData()

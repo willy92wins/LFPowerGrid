@@ -441,6 +441,16 @@ class LF_Splitter : Inventory_Base
         return LFPG_DeviceType.PASSTHROUGH;
     }
 
+    // v0.8.1: Explicit zero self-consumption. Splitter retransmits power,
+    // it does not consume it. Without this, LFPG_DeviceAPI.GetConsumption()
+    // falls through to IsEnergyConsumer() (true — has IN port) and returns
+    // LFPG_DEFAULT_CONSUMER_CONSUMPTION (10.0), causing the inspector to
+    // display an incorrect "Consumo: 10.0 u/s" for passive splitters.
+    float LFPG_GetConsumption()
+    {
+        return 0.0;
+    }
+
     // Source is "on" when receiving power from upstream.
     bool LFPG_GetSourceOn()
     {

@@ -563,6 +563,16 @@ class LFPG_DeviceAPI
                 return usage;
         }
 
+        // v0.7.47: PASSTHROUGH devices default to zero self-consumption.
+        // Protects future passthrough types that forget to declare
+        // LFPG_GetConsumption() — without this, IsEnergyConsumer below
+        // returns true (they have an IN port) and assigns 10.0 erroneously.
+        // A PASSTHROUGH with real self-draw declares LFPG_GetConsumption()
+        // explicitly, which is caught by CallFloat above (step 1).
+        int devTypeGuard = GetDeviceType(e);
+        if (devTypeGuard == LFPG_DeviceType.PASSTHROUGH)
+            return 0.0;
+
         // Unknown consumer: use default
         if (IsEnergyConsumer(e))
             return LFPG_DEFAULT_CONSUMER_CONSUMPTION;

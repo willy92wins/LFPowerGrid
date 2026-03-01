@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.42)
+// LF_PowerGrid - Example devices (v0.7.47)
 // - LF_TestGenerator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
@@ -28,6 +28,15 @@
 //          persisting it caused lamps to appear lit after restart when
 //          their source no longer exists. Now starts false (field default)
 //          and only propagation sets it true. REQUIRES SAVE WIPE.
+// v0.7.47 (Desync Fix): Generator CompEM client-server desynchronization.
+//          - P0: OnVariablesSynchronized now reconciles CompEM with
+//            m_SourceOn on client (analogous to lamp's light sync).
+//          - P1: OnSwitchOn/OnWorkStart/OnWork sparkplug validation
+//            restricted to server-only. Client attachment sync can lag
+//            behind CompEM replication, causing permanent false-negative.
+//            Server is authority; client reconciles via OnVarSync.
+//          - P2: Auto-correction is implicit via P0 fix — any future
+//            desync self-heals on next SyncVar update.
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
@@ -215,8 +224,11 @@ class LF_TestGenerator : PowerGenerator
     // Vanilla CompEM hooks: sync m_SourceOn with vanilla state.
     // v0.7.27: Uses LFPG_DeviceLifecycle.IsSparkPlugValid (includes health check)
     // v0.7.29 (Audit fix): SwitchOff on BOTH client+server to kill effects.
+    // v0.7.47 (Desync Fix P1): Sparkplug validation SERVER-ONLY.
+    // Same rationale as OnSwitchOn — client attachment sync may lag.
     override void OnWorkStart()
     {
+        #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             string wsBlkMsg = "[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId;
@@ -228,6 +240,7 @@ class LF_TestGenerator : PowerGenerator
             }
             return;
         }
+        #endif
 
         super.OnWorkStart();
 
@@ -325,19 +338,20 @@ class LF_TestGenerator : PowerGenerator
 
     // v0.7.27: Block vanilla periodic work tick without valid sparkplug.
     // v0.7.29 (Audit fix): SwitchOff on BOTH sides; m_SourceOn logic server-only.
+    // v0.7.47 (Desync Fix P1): Sparkplug validation SERVER-ONLY.
+    // Client CompEM state is reconciled by OnVariablesSynchronized.
     override void OnWork(float consumed_energy)
     {
+        #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             string owBlkMsg = "[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId;
             LFPG_Util.Info(owBlkMsg);
-            // Kill CompEM on BOTH client+server to stop visual effects
             ComponentEnergyManager emKill = GetCompEM();
             if (emKill)
             {
                 emKill.SwitchOff();
             }
-            #ifdef SERVER
             if (m_SourceOn)
             {
                 m_SourceOn = false;
@@ -347,17 +361,23 @@ class LF_TestGenerator : PowerGenerator
                     LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
                 }
             }
-            #endif
             return;
         }
+        #endif
         super.OnWork(consumed_energy);
     }
 
     // v0.7.27: Block vanilla SwitchOn without valid sparkplug.
     // v0.7.29 (Audit fix): SwitchOff on BOTH client+server to kill
     // visual effects (smoke, noise) that CompEM triggers on client.
+    // v0.7.47 (Desync Fix P1): Sparkplug validation SERVER-ONLY.
+    // On client, sparkplug attachment may not have synced yet when
+    // CompEM replication triggers OnSwitchOn. False-negative kills
+    // CompEM permanently with no retry. Server is the authority;
+    // client reconciles via OnVariablesSynchronized.
     override void OnSwitchOn()
     {
+        #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             string soBlkMsg = "[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId;
@@ -369,6 +389,7 @@ class LF_TestGenerator : PowerGenerator
             }
             return;
         }
+        #endif
         super.OnSwitchOn();
     }
 
@@ -397,6 +418,28 @@ class LF_TestGenerator : PowerGenerator
         LFPG_TryRegister();
 
         #ifndef SERVER
+        // v0.7.47 (Desync Fix P0+P5): Reconcile CompEM with m_SourceOn on client.
+        // Analogous to LF_TestLamp reconciling light with m_PoweredNet.
+        // Without this, CompEM stays dead after EEInit kills it (EEInit does
+        // SwitchOff on both sides but SwitchOn only on server). This is the
+        // single recovery path for all client-side CompEM desync scenarios.
+        if (!m_LFPG_Deleting)
+        {
+            ComponentEnergyManager emSync = GetCompEM();
+            if (emSync)
+            {
+                bool emWorking = emSync.IsWorking();
+                if (m_SourceOn && !emWorking)
+                {
+                    emSync.SwitchOn();
+                }
+                else if (!m_SourceOn && emWorking)
+                {
+                    emSync.SwitchOff();
+                }
+            }
+        }
+
         // v0.7.35 D1+D4: Ensure renderer has wire data + immediate visual refresh
         if (m_DeviceId != "")
         {
