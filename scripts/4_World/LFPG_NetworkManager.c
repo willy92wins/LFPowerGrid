@@ -1850,6 +1850,198 @@ class LFPG_NetworkManager
         #endif
     }
 
+    // v0.7.48 (Bug 2): Clean wires for a vanilla device that disappeared.
+    // Entity is gone — works by deviceId only. Handles:
+    //   1. Collect neighbors from graph (before edges are removed)
+    //   2. Owned wires in m_VanillaWires: reverse index + player quota
+    //   3. Incoming wires via reverse index scan
+    //   4. Graph cleanup via OnDeviceRemoved (single call, all edges + node)
+    //   5. SetPowered(false) on neighbor devices
+    //   6. Flush broadcasts + schedule self-heal for client ConnCache resync
+    //   7. Untrack neighbors that lost all wires
+    //
+    // Cannot broadcast the disappeared device's wires directly (entity is gone,
+    // no NetworkID for RPC). Client-side cleanup happens via:
+    //   - CableRenderer.CullTick: nullOwnerTicks destroys visual cables (~5s)
+    //   - Self-heal: full broadcast refreshes ConnCache (500ms deferred)
+    protected void CleanDisappearedVanillaDevice(string deviceId)
+    {
+        #ifdef SERVER
+        if (deviceId == "" || deviceId.IndexOf("vp:") != 0)
+            return;
+
+        bool anyChanged = false;
+
+        // --- 1. Collect neighbor IDs from graph BEFORE removing edges ---
+        // Graph has the authoritative topology. Using graph edges is more
+        // reliable than scanning m_VanillaWires alone (catches both directions).
+        ref array<string> neighborIds = new array<string>;
+
+        if (m_Graph)
+        {
+            ref array<ref LFPG_ElecEdge> outEdges = m_Graph.GetOutgoing(deviceId);
+            if (outEdges)
+            {
+                int oe;
+                for (oe = 0; oe < outEdges.Count(); oe = oe + 1)
+                {
+                    ref LFPG_ElecEdge oEdge = outEdges[oe];
+                    if (oEdge && oEdge.m_TargetNodeId != "")
+                    {
+                        neighborIds.Insert(oEdge.m_TargetNodeId);
+                    }
+                }
+            }
+
+            ref array<ref LFPG_ElecEdge> inEdges = m_Graph.GetIncoming(deviceId);
+            if (inEdges)
+            {
+                int ie;
+                for (ie = 0; ie < inEdges.Count(); ie = ie + 1)
+                {
+                    ref LFPG_ElecEdge iEdge = inEdges[ie];
+                    if (iEdge && iEdge.m_SourceNodeId != "")
+                    {
+                        neighborIds.Insert(iEdge.m_SourceNodeId);
+                    }
+                }
+            }
+        }
+
+        // --- 2. Clear owned wires: reverse index + player quota ---
+        // Do NOT call OnWireRemoved per wire — OnDeviceRemoved in step 4
+        // handles all graph edges in a single pass (avoids double removal).
+        ref array<ref LFPG_WireData> vWires;
+        if (m_VanillaWires.Find(deviceId, vWires) && vWires)
+        {
+            int vw = vWires.Count() - 1;
+            while (vw >= 0)
+            {
+                LFPG_WireData vwd = vWires[vw];
+                if (vwd)
+                {
+                    ReverseIdxRemove(vwd.m_TargetDeviceId, vwd.m_TargetPort, deviceId);
+                    PlayerWireCountAdd(vwd.m_CreatorId, -1);
+                }
+                vw = vw - 1;
+            }
+            vWires.Clear();
+            anyChanged = true;
+        }
+        m_VanillaWires.Remove(deviceId);
+
+        // --- 3. Remove incoming wires targeting this device ---
+        // Entity is gone so we cannot iterate ports. Scan reverse index
+        // for any key starting with "deviceId|" to find affected ports.
+        string keyPrefix = deviceId + "|";
+        ref array<string> keysToClean = new array<string>;
+        int rk;
+        for (rk = 0; rk < m_ReverseIdx.Count(); rk = rk + 1)
+        {
+            string rKey = m_ReverseIdx.GetKey(rk);
+            if (rKey.IndexOf(keyPrefix) == 0)
+            {
+                keysToClean.Insert(rKey);
+            }
+        }
+
+        int ik;
+        for (ik = 0; ik < keysToClean.Count(); ik = ik + 1)
+        {
+            string fullKey = keysToClean[ik];
+            int pipePos = fullKey.IndexOf("|");
+            string portName = "input_main";
+            if (pipePos >= 0)
+            {
+                int afterPipe = pipePos + 1;
+                int portLen = fullKey.Length() - afterPipe;
+                if (portLen > 0)
+                {
+                    portName = fullKey.Substring(afterPipe, portLen);
+                }
+            }
+
+            int removed = RemoveWiresTargeting(deviceId, portName);
+            if (removed > 0)
+            {
+                anyChanged = true;
+            }
+        }
+
+        // --- 4. Graph: single OnDeviceRemoved call ---
+        // Removes ALL edges (in+out) and the node in one pass.
+        // Individual OnWireRemoved calls are NOT needed — OnDeviceRemoved
+        // handles the full topology cleanup more efficiently.
+        if (anyChanged && m_Graph)
+        {
+            m_Graph.OnDeviceRemoved(deviceId);
+        }
+
+        // --- 5. SetPowered(false) on neighbor devices ---
+        int ni;
+        for (ni = 0; ni < neighborIds.Count(); ni = ni + 1)
+        {
+            EntityAI neighborDev = LFPG_DeviceRegistry.Get().FindById(neighborIds[ni]);
+            if (!neighborDev)
+            {
+                neighborDev = LFPG_DeviceAPI.ResolveVanillaDevice(neighborIds[ni]);
+            }
+            if (neighborDev)
+            {
+                LFPG_DeviceAPI.SetPowered(neighborDev, false);
+            }
+        }
+
+        // --- 6. Persistence, propagation, broadcasts, self-heal ---
+        if (anyChanged)
+        {
+            MarkVanillaDirty();
+            PostBulkRebuildAndPropagate();
+            FlushBroadcasts();
+
+            // v0.7.48: Immediate vanilla flush for crash safety.
+            // Same pattern as CutAllWiresFromDevice (v0.7.32 Audit P2).
+            // MarkVanillaDirty defers write to 30s timer. If server crashes
+            // before that timer fires, deleted wires reappear on restart —
+            // re-creating the phantom port this fix is meant to solve.
+            // Device disappearance is infrequent; synchronous I/O is negligible.
+            if (m_VanillaDirty)
+            {
+                FlushVanillaIfDirty();
+            }
+
+            LFPG_Util.Warn("[VanillaGone] Cleaned wires for disappeared device " + deviceId);
+        }
+
+        // Clean position tracking
+        m_LastKnownPos.Remove(deviceId);
+
+        // Schedule self-heal for client ConnCache resync.
+        // Cannot send targeted RPC without entity's NetworkID.
+        // Self-heal broadcasts fresh wire data to all clients (500ms deferred).
+        RequestGlobalSelfHeal();
+
+        // --- 7. Untrack neighbors that lost all wires ---
+        int nui;
+        for (nui = 0; nui < neighborIds.Count(); nui = nui + 1)
+        {
+            string nId = neighborIds[nui];
+            EntityAI nDev = LFPG_DeviceRegistry.Get().FindById(nId);
+            if (nDev)
+            {
+                if (!DeviceHasAnyWires(nDev, nId))
+                {
+                    UntrackDeviceFromPolling(nId);
+                }
+            }
+            else
+            {
+                UntrackDeviceFromPolling(nId);
+            }
+        }
+        #endif
+    }
+
     // ---- CheckDeviceMovement (round-robin batched) ----
     // Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
     // Uses LFPG_WorldUtil.DistSq to avoid sqrt per check.
@@ -1933,11 +2125,23 @@ class LFPG_NetworkManager
         // Now we advance once at the end after all array mutations are done.
         int newCursor = batchEnd;
 
-        // Process disappeared devices (just untrack, no wire cut needed)
+        // v0.7.48 (Bug 2): Process disappeared devices.
+        // LFPG devices have EEDelete/EEItemLocationChanged hooks that call
+        // CutAllWiresFromDevice. Vanilla devices (vp: prefix) do NOT have
+        // these hooks, so their wires become orphans when they disappear.
+        // Clean vanilla wires immediately instead of waiting for self-heal.
         int di;
         for (di = 0; di < disappearedIds.Count(); di = di + 1)
         {
-            UntrackDeviceFromPolling(disappearedIds[di]);
+            string goneId = disappearedIds[di];
+
+            if (goneId.IndexOf("vp:") == 0)
+            {
+                LFPG_Util.Warn("[Movement] Vanilla device disappeared id=" + goneId + " — cleaning orphan wires");
+                CleanDisappearedVanillaDevice(goneId);
+            }
+
+            UntrackDeviceFromPolling(goneId);
         }
 
         // Process moved devices

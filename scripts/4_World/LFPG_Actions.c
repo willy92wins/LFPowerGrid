@@ -13,6 +13,10 @@
 //   - OnExecuteServer: server-side gate before LFPG_ToggleSource
 //   Both client and server now enforce sparkplug requirement.
 //
+// v0.7.48 (Bug 1): GetCursorWorldPosSkipDevices fallback to first
+//   device hit position when ALL raycast results are electrical
+//   devices. Fixes waypoint placement failure in building interiors.
+//
 // Per-port scroll actions:
 //   Port0..Port5: aim at device with CableReel -> shows each
 //                 port with label + connection status.
@@ -207,9 +211,11 @@ class LFPG_ActionRaycast
     }
 
     // ---- GetCursorWorldPosSkipDevices ----
-    // v0.7.10: Returns first non-device hit from cached results.
-    // Used by waypoint placement to avoid snapping to device meshes.
-    // Cost: zero extra raycasts (reads from shared cache).
+    // v0.7.48 (Bug 1): Fallback to first device hit position when ALL
+    // raycast results are electrical devices. Common in building interiors
+    // where ceiling lamp mesh is the only object under cursor.
+    // The world position is valid for waypoints; we only skip the device
+    // to avoid mesh-snap, not to reject the position entirely.
     static bool GetCursorWorldPosSkipDevices(PlayerBase player, out vector hitPos)
     {
         hitPos = "0 0 0";
@@ -221,28 +227,48 @@ class LFPG_ActionRaycast
         if (!s_RayCacheResults || s_RayCacheResults.Count() == 0)
             return false;
 
+        // v0.7.48: Track first device hit as fallback for interior placement
+        vector firstDevicePos = "0 0 0";
+        bool hasDeviceFallback = false;
+
         int i;
         for (i = 0; i < s_RayCacheResults.Count(); i = i + 1)
         {
-            Object hitObj = s_RayCacheResults.Get(i).obj;
+            ref RaycastRVResult rr = s_RayCacheResults.Get(i);
+            Object hitObj = rr.obj;
 
             // Accept hits with no object (terrain)
             if (!hitObj)
             {
-                hitPos = s_RayCacheResults.Get(i).pos;
+                hitPos = rr.pos;
                 return true;
             }
 
-            // Skip electrical devices
+            // Skip electrical devices but remember first device position
             EntityAI e = EntityAI.Cast(hitObj);
             if (e && LFPG_DeviceAPI.IsElectricDevice(e))
+            {
+                if (!hasDeviceFallback)
+                {
+                    firstDevicePos = rr.pos;
+                    hasDeviceFallback = true;
+                }
                 continue;
+            }
 
-            hitPos = s_RayCacheResults.Get(i).pos;
+            hitPos = rr.pos;
             return true;
         }
 
-        // All hits were devices: no valid position
+        // v0.7.48: All hits were devices — use first device hit position.
+        // Raycast world pos is on the surface behind the device mesh,
+        // perfectly valid for waypoint placement.
+        if (hasDeviceFallback)
+        {
+            hitPos = firstDevicePos;
+            return true;
+        }
+
         return false;
     }
 };

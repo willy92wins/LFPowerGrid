@@ -63,9 +63,12 @@ class LF_Splitter_Kit : Inventory_Base
         return "placeBarbedWire_SoundSet";
     }
 
+    // v0.7.48 (Bug 5): Same orphan loop sound fix as CeilingLight_Kit.
+    // Less perceptible here because floor placement timing is faster,
+    // but the same ObjectDelete-during-callback race condition exists.
     override string GetLoopDeploySoundset()
     {
-        return "barbedwire_deploy_SoundSet";
+        return "";
     }
 
     override void SetActions()

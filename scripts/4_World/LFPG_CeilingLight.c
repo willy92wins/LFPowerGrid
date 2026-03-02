@@ -65,9 +65,17 @@ class LF_CeilingLight_Kit : Inventory_Base
         return "placeBarbedWire_SoundSet";
     }
 
+    // v0.7.48 (Bug 4): Disabled loop sound during placement.
+    // ObjectDelete(this) in OnPlacementComplete destroys the kit
+    // server-side during the action callback. The loop sound is
+    // client-side and bound to the action lifecycle — the entity
+    // deletion aborts the action cleanup cycle before the sound
+    // stop/fadeout runs, leaving an orphaned loop with no owner.
+    // The one-shot from GetDeploySoundset() provides sufficient
+    // auditory feedback for the placement action.
     override string GetLoopDeploySoundset()
     {
-        return "barbedwire_deploy_SoundSet";
+        return "";
     }
 
     override void SetActions()
@@ -100,13 +108,20 @@ class LF_CeilingLight_Kit : Inventory_Base
             light.SetOrientation(light.GetOrientation());
             light.Update();
             LFPG_Util.Info("[CeilingLight_Kit] Deployed LF_CeilingLight at " + finalPos.ToString() + " ori=" + finalOri.ToString());
+
+            // v0.7.48: Only delete kit on successful spawn (Splitter parity).
+            // If CreateObjectEx fails, the player keeps the kit.
+            GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[CeilingLight_Kit] Failed to create LF_CeilingLight!");
+            LFPG_Util.Error("[CeilingLight_Kit] Failed to create LF_CeilingLight! Kit preserved.");
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                pb.MessageStatus("[LFPG] Ceiling light placement failed. Kit preserved.");
+            }
         }
-
-        GetGame().ObjectDelete(this);
         #endif
     }
 };

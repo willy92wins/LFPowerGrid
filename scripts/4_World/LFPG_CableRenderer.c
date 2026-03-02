@@ -38,6 +38,11 @@
 //   L8 — All z-depth behind-camera thresholds use LFPG_BEHIND_CAM_Z.
 //   Remaining M1 — OCC_DIST_SCALE_MAX, OCC_SAMPLE_LIFT_M extracted.
 //
+// v0.7.48 (Bug 3): Cables visible through building floors.
+//   - Occlusion hit margin reduced 0.3→0.10m (LFPG_OCC_HIT_MARGIN_M).
+//   - Algebraic optimisation: eliminates one Math.Sqrt per sample
+//     via (hitDist + M)^2 < targetDistSq instead of hitDist < targetDist - M.
+//
 // v0.7.38 Player occlusion:
 //   Screen-space player model occlusion. Segments behind the player
 //   character are alpha-faded so cables don't overdraw the model.
@@ -495,6 +500,13 @@ class LFPG_RetryEntry
     // BUDGET entries without TTL accumulate indefinitely in long sessions.
     float createdMs;
 };
+
+// v0.7.48 (Bug 3): Occlusion hit margin — minimum distance gap between
+// camera→hitSurface and camera→cableSample to consider the cable occluded.
+// 0.10m is tight enough for thin building floors (~0.15m) while still
+// tolerating minor raycast imprecision on uneven terrain.
+// TODO(M1): consolidate into LFPG_Defines.c alongside LFPG_OCC_SAMPLE_LIFT_M.
+const float LFPG_OCC_HIT_MARGIN_M = 0.10;
 
 class LFPG_CableRenderer
 {
@@ -2891,17 +2903,27 @@ class LFPG_CableRenderer
             {
                 // v0.7.11 (A3): Early-out in squared domain.
                 // If hitDistSq >= targetDistSq, hit is at or beyond target → NOT occluded.
-                // Only compute sqrt when hit is closer (need precision for 0.3m margin).
+                // v0.7.48 (Bug 3): Only ONE sqrt needed — see algebraic reduction below.
                 float hitDistSq = LFPG_WorldUtil.DistSq(camPos, hitPos);
                 float targetDistSq = LFPG_WorldUtil.DistSq(camPos, target);
 
                 if (hitDistSq < targetDistSq)
                 {
-                    // Hit closer than target: verify with margin using real distances
+                    // v0.7.48 (Bug 3): Margin reduced from 0.3 to 0.10.
+                    // 0.3m was too generous — thin building floors (~0.15m)
+                    // passed margin, letting cables bleed through.
+                    //
+                    // Algebraic optimisation (saves one sqrt per sample):
+                    //   hitDist < targetDist - M
+                    //   hitDist + M < targetDist          (rearrange)
+                    //   (hitDist + M)^2 < targetDist^2    (both sides > 0)
+                    // So: compute ONE sqrt(hitDistSq), square the offset sum,
+                    //     compare against targetDistSq which we already have.
                     float hitDist = Math.Sqrt(hitDistSq);
-                    float targetDist = Math.Sqrt(targetDistSq);
+                    float offsetDist = hitDist + LFPG_OCC_HIT_MARGIN_M;
+                    float offsetDistSq = offsetDist * offsetDist;
 
-                    if (hitDist < targetDist - 0.3)
+                    if (offsetDistSq < targetDistSq)
                     {
                         blockedCount = blockedCount + 1;
                     }
