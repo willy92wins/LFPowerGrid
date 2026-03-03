@@ -53,9 +53,15 @@ class LF_SolarPanel_Kit : Inventory_Base
         return "placeBarbedWire_SoundSet";
     }
 
+    // v0.7.48: Disabled loop sound during placement.
+    // ObjectDelete(this) in OnPlacementComplete destroys the kit
+    // server-side during the action callback. The loop sound is
+    // client-side and bound to the action lifecycle — the entity
+    // deletion aborts the cleanup cycle before sound stop runs,
+    // leaving an orphaned loop with no owner.
     override string GetLoopDeploySoundset()
     {
-        return "barbedwire_deploy_SoundSet";
+        return "";
     }
 
     // Returns the classname that the hologram should project.
@@ -82,15 +88,17 @@ class LF_SolarPanel_Kit : Inventory_Base
         AddAction(LFPG_ActionPlaceSolarPanel);
     }
 
-    // Engine moves kit to hologram position BEFORE this fires.
-    // GetPosition()/GetOrientation() return hologram transform.
+    // v0.7.48: Use PARAMETERS, not GetPosition().
+    // GetPosition() returns kit physical pos (near player), not hologram.
+    // Same fix as Splitter v0.7.41 and CeilingLight.
+    // Only delete kit on successful spawn (Splitter v0.7.32 pattern).
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
 
         #ifdef SERVER
-        vector finalPos = GetPosition();
-        vector finalOri = GetOrientation();
+        vector finalPos = position;
+        vector finalOri = orientation;
 
         LFPG_Util.Info("[SolarPanel_Kit] OnPlacementComplete: pos=" + finalPos.ToString() + " ori=" + finalOri.ToString());
 
@@ -101,13 +109,20 @@ class LF_SolarPanel_Kit : Inventory_Base
             panel.SetOrientation(finalOri);
             panel.Update();
             LFPG_Util.Info("[SolarPanel_Kit] Deployed LF_SolarPanel at " + finalPos.ToString());
+
+            // Only delete kit on successful spawn (v0.7.32 parity).
+            // If CreateObjectEx fails, player keeps the kit.
+            GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[SolarPanel_Kit] Failed to create LF_SolarPanel!");
+            LFPG_Util.Error("[SolarPanel_Kit] Failed to create LF_SolarPanel! Kit preserved.");
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                pb.MessageStatus("[LFPG] Solar panel placement failed. Kit preserved.");
+            }
         }
-
-        GetGame().ObjectDelete(this);
         #endif
     }
 };
@@ -127,6 +142,10 @@ class LF_SolarPanel : Inventory_Base
 
     // ---- Source state (replicated) ----
     protected bool m_SourceOn = false;
+
+    // ---- Anti-ghost guard (RC-04 parity) ----
+    // Prevents OnVariablesSynchronized from re-registering after EEDelete.
+    protected bool m_LFPG_Deleting = false;
 
     // ---- Load telemetry (replicated to clients) ----
     protected float m_LoadRatio = 0.0;
@@ -278,6 +297,7 @@ class LF_SolarPanel : Inventory_Base
 
     override void EEDelete(EntityAI parent)
     {
+        m_LFPG_Deleting = true;
         StopSolarTimer();
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -335,6 +355,10 @@ class LF_SolarPanel : Inventory_Base
 
     protected void LFPG_TryRegister()
     {
+        // v0.7.48 (RC-04 parity): Don't register if device is being deleted.
+        if (m_LFPG_Deleting)
+            return;
+
         LFPG_UpdateDeviceIdString();
         if (m_DeviceId != "")
         {

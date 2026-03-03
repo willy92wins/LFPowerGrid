@@ -40,7 +40,11 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPlaceSolarPanel);
         actions.Insert(LFPG_ActionUpgradeSolarPanel);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (19)");
+        // --- v0.7.48: Placement actions (parity registration) ---
+        actions.Insert(LFPG_ActionPlaceSplitter);
+        actions.Insert(LFPG_ActionPlaceCeilingLight);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (23)");
     }
 };
 
