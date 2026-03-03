@@ -1,5 +1,9 @@
 // =========================================================
 // LF_PowerGrid - action registration + tool attachments
+//
+// v0.7.47: Added LFPG_ActionUpgradeSolarPanel + LFPG_ActionPlaceSolarPanel
+//          + modded Hammer for upgrade action.
+//
 // IMPORTANT:
 //  - Actions MUST be registered in ActionConstructor::RegisterActions()
 //    otherwise AddAction(...) on items will not create an instance.
@@ -32,14 +36,11 @@ modded class ActionConstructor
         actions.Insert(ActionLFPG_ToggleSource);
         actions.Insert(ActionLFPG_DebugStatus);
 
-        // --- LF_PowerGrid placement ---
-        // v0.7.38 (Fix): Was missing. Without registration, AddAction()
-        // on LF_Splitter_Kit silently fails and the custom placement
-        // action is never available. Vanilla ActionPlaceObject fallback
-        // may show a "Place" action but cannot execute properly.
-        actions.Insert(LFPG_ActionPlaceSplitter);
-		actions.Insert(LFPG_ActionPlaceCeilingLight);
-        LFPG_Util.Debug("[Actions] LFPG actions registered (18)");
+        // --- v0.7.47: Solar Panel placement + upgrade ---
+        actions.Insert(LFPG_ActionPlaceSolarPanel);
+        actions.Insert(LFPG_ActionUpgradeSolarPanel);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (19)");
     }
 };
 
@@ -55,5 +56,15 @@ modded class Pliers
         AddAction(ActionLFPG_CutPort3);
         AddAction(ActionLFPG_CutPort4);
         AddAction(ActionLFPG_CutPort5);
+    }
+};
+
+// v0.7.47: Hammer can upgrade solar panels
+modded class Hammer
+{
+    override void SetActions()
+    {
+        super.SetActions();
+        AddAction(LFPG_ActionUpgradeSolarPanel);
     }
 };
