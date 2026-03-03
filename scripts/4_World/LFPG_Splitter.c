@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Splitter device (v0.7.42)
+// LF_PowerGrid - Splitter device (v0.8.3)
 //
 // LF_Splitter_Kit:  Holdable item (wooden crate model).
 //                   Player places it via hologram -> spawns LF_Splitter.
@@ -26,6 +26,10 @@
 //   Added m_LFPG_Deleting guard (RC-04 parity with Generator/Lamp) to
 //   prevent post-mortem re-registration via OnVariablesSynchronized.
 //   REQUIRES SAVE WIPE.
+// v0.8.3 (Audit Parity): Added CanBePickedUp()->false and
+//   IsHeavyBehaviour()->false to LF_Splitter. Prevents F-key
+//   pick-up and shoulder carry that silently break wire connections.
+//   Parity with Combiner (v0.8.2) and TestLamp (v0.7.29).
 // =========================================================
 
 // ---------------------------------------------------------
@@ -189,6 +193,22 @@ class LF_Splitter : Inventory_Base
     }
 
     override bool CanBePlaced(Man player, vector position)
+    {
+        return false;
+    }
+
+    // v0.8.3 (Audit Fix 2): Prevent pick-up via F-key.
+    // Without this, player can grab the device, silently breaking all
+    // wire connections and causing orphaned wires in the graph.
+    // Parity with Combiner and TestLamp (v0.7.29+).
+    override bool CanBePickedUp()
+    {
+        return false;
+    }
+
+    // v0.8.3 (Audit Fix 2): Prevent heavy-item carry behavior.
+    // Same parity fix — blocks shoulder-carry interaction.
+    override bool IsHeavyBehaviour()
     {
         return false;
     }

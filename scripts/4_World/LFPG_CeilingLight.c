@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - CeilingLight device (v0.7.47)
+// LF_PowerGrid - CeilingLight device (v0.8.3)
 //
 // LF_CeilingLight_Kit:  Holdable item (deployable).
 //                       Player places via hologram -> spawns LF_CeilingLight.
@@ -27,6 +27,9 @@
 // Persistence: DeviceIdLow, DeviceIdHigh, wiresJSON.
 //   m_PoweredNet is NOT persisted — derived from graph propagation
 //   on server load. Avoids "ghost lamp" bug (Hallazgo 6).
+// v0.8.3 (Audit Parity): Added CanBePickedUp()->false and
+//   IsHeavyBehaviour()->false. Prevents F-key pick-up and shoulder
+//   carry that silently break wire connections.
 // =========================================================
 
 // ---------------------------------------------------------
@@ -191,6 +194,20 @@ class LF_CeilingLight : Inventory_Base
     }
 
     override bool CanBePlaced(Man player, vector position)
+    {
+        return false;
+    }
+
+    // v0.8.3 (Audit Fix 2): Prevent pick-up via F-key.
+    // Without this, player can grab the device, silently breaking all
+    // wire connections and causing orphaned wires in the graph.
+    override bool CanBePickedUp()
+    {
+        return false;
+    }
+
+    // v0.8.3 (Audit Fix 2): Prevent heavy-item carry behavior.
+    override bool IsHeavyBehaviour()
     {
         return false;
     }
