@@ -198,14 +198,6 @@ class LF_CeilingLight : Inventory_Base
         return false;
     }
 
-    // v0.8.3 (Audit Fix 2): Prevent pick-up via F-key.
-    // Without this, player can grab the device, silently breaking all
-    // wire connections and causing orphaned wires in the graph.
-    override bool CanBePickedUp()
-    {
-        return false;
-    }
-
     // v0.8.3 (Audit Fix 2): Prevent heavy-item carry behavior.
     override bool IsHeavyBehaviour()
     {

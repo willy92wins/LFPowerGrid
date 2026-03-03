@@ -201,10 +201,6 @@ class LF_Splitter : Inventory_Base
     // Without this, player can grab the device, silently breaking all
     // wire connections and causing orphaned wires in the graph.
     // Parity with Combiner and TestLamp (v0.7.29+).
-    override bool CanBePickedUp()
-    {
-        return false;
-    }
 
     // v0.8.3 (Audit Fix 2): Prevent heavy-item carry behavior.
     // Same parity fix — blocks shoulder-carry interaction.

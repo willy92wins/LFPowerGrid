@@ -181,12 +181,6 @@ class LF_Combiner : Inventory_Base
         return false;
     }
 
-    // Audit fix: prevent pick-up via F-key
-    override bool CanBePickedUp()
-    {
-        return false;
-    }
-
     // Audit fix: prevent heavy-item carry behavior
     override bool IsHeavyBehaviour()
     {
