@@ -1383,7 +1383,7 @@ class LFPG_ElecGraph
         #endif
     }
 
-    protected void CleanupOrphanNode(string deviceId)
+     protected void CleanupOrphanNode(string deviceId)
     {
         #ifdef SERVER
         if (deviceId == "")
@@ -1405,6 +1405,18 @@ class LFPG_ElecGraph
 
         if (!hasOut && !hasIn)
         {
+            // v0.7.49: Reset entity SyncVars BEFORE deleting node.
+            // After removal, ProcessDirtyQueue skips the missing nodeId
+            // so SyncNodeToEntity never fires. The entity retains stale
+            // m_LoadRatio / m_PoweredNet / mask SyncVars forever.
+            // Node still in m_Nodes here, so m_DeviceType is available.
+            int orphanType = LFPG_DeviceType.CONSUMER;
+            if (node)
+            {
+                orphanType = node.m_DeviceType;
+            }
+            ResetOrphanSyncVars(deviceId, orphanType);
+
             m_Nodes.Remove(deviceId);
             m_Outgoing.Remove(deviceId);
             m_Incoming.Remove(deviceId);
@@ -1415,6 +1427,86 @@ class LFPG_ElecGraph
         #endif
     }
 
+	// v0.7.49: Shared helper for resetting entity SyncVars when a graph
+    // node becomes orphaned (zero edges). Called from:
+    //   - CleanupOrphanNode (incremental path, type from live node)
+    //   - PostBulkRebuild   (bulk path, type from pre-rebuild snapshot)
+    //
+    // Entity resolution: 3-tier (Registry -> Vanilla -> NetworkID).
+    // NOTE: NetworkID fallback only effective in CleanupOrphanNode path.
+    // PostBulkRebuild clears m_NodeNetLow/High during RebuildFromWires
+    // (line ~300), so the map lookups return false in that context.
+    // This is harmless (2 map misses) and correct: all devices are
+    // resolved via Registry or Vanilla after a full rebuild.
+    //
+    // Returns true if entity was resolved and SyncVars were reset.
+    protected bool ResetOrphanSyncVars(string deviceId, int deviceType)
+    {
+        #ifdef SERVER
+        EntityAI orphanObj = LFPG_DeviceRegistry.Get().FindById(deviceId);
+        if (!orphanObj)
+        {
+            orphanObj = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
+        }
+        if (!orphanObj)
+        {
+            // NetworkID fallback (same pattern as SyncNodeToEntity).
+            // Only effective in CleanupOrphanNode path where
+            // m_NodeNetLow/High still exist pre-deletion.
+            int cachedNetLow = 0;
+            int cachedNetHigh = 0;
+            bool hasNetLow = m_NodeNetLow.Find(deviceId, cachedNetLow);
+            bool hasNetHigh = m_NodeNetHigh.Find(deviceId, cachedNetHigh);
+            if (hasNetLow && hasNetHigh)
+            {
+                if (cachedNetLow != 0 || cachedNetHigh != 0)
+                {
+                    Object rawObj = GetGame().GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
+                    orphanObj = EntityAI.Cast(rawObj);
+                }
+            }
+        }
+        if (!orphanObj)
+        {
+            string missMsg = "[CleanupOrphan] Entity not found for " + deviceId;
+            LFPG_Util.Debug(missMsg);
+            return false;
+        }
+
+        if (deviceType == LFPG_DeviceType.SOURCE)
+        {
+            // Reset load state. m_SourceOn NOT reset (sun/fuel independent).
+            // SetWarningMask is a no-op via CallVoid on entities without
+            // LFPG_SetWarningMask (e.g. SolarPanel), but correct for
+            // entities that have it (e.g. TestGenerator).
+            LFPG_DeviceAPI.SetLoadRatio(orphanObj, 0.0);
+            LFPG_DeviceAPI.SetOverloadMask(orphanObj, 0);
+            LFPG_DeviceAPI.SetWarningMask(orphanObj, 0);
+        }
+        else if (deviceType == LFPG_DeviceType.CONSUMER)
+        {
+            LFPG_DeviceAPI.SetPowered(orphanObj, false);
+        }
+        else if (deviceType == LFPG_DeviceType.PASSTHROUGH)
+        {
+            LFPG_DeviceAPI.SetPowered(orphanObj, false);
+            LFPG_DeviceAPI.SetOverloadMask(orphanObj, 0);
+            LFPG_DeviceAPI.SetWarningMask(orphanObj, 0);
+        }
+
+        string resetMsg = "[CleanupOrphan] Reset SyncVars type=" + deviceType.ToString() + " id=" + deviceId;
+        LFPG_Util.Info(resetMsg);
+        return true;
+        #else
+        return false;
+        #endif
+    }
+
+	
+	
+	
+	
+	
     // ===========================
     // Public accessors
     // ===========================
@@ -1611,25 +1703,36 @@ class LFPG_ElecGraph
         if (!mgr)
             return;
 
-        // v0.7.41: Snapshot old node IDs BEFORE rebuild for orphan detection.
+        // v0.7.49: Snapshot old node IDs AND types BEFORE rebuild.
         // After RebuildFromWires, disconnected devices are pruned from graph.
-        // Propagation is additive (source→down) so orphans never get visited
-        // and their entity m_PoweredNet stays stale. We detect them here.
+        // Propagation is additive (source->down) so orphans never get visited
+        // and their entity SyncVars stay stale. We detect them here.
+        // Types are snapshotted in parallel array so the orphan loop can do
+        // type-aware reset (SOURCE needs LoadRatio+masks, CONSUMER needs
+        // powered, PASSTHROUGH needs powered+masks).
         ref array<string> oldNodeIds = new array<string>;
+        ref array<int> oldNodeTypes = new array<int>;
         int sni;
         for (sni = 0; sni < m_Nodes.Count(); sni = sni + 1)
         {
             oldNodeIds.Insert(m_Nodes.GetKey(sni));
+            ref LFPG_ElecNode snapNode = m_Nodes.GetElement(sni);
+            int snapType = LFPG_DeviceType.CONSUMER;
+            if (snapNode)
+            {
+                snapType = snapNode.m_DeviceType;
+            }
+            oldNodeTypes.Insert(snapType);
         }
 
         RebuildFromWires(mgr);
         PopulateAllNodeElecStates();
         MarkSourcesDirty();
 
-        // v0.7.41: Force SetPowered(false) on orphaned devices.
-        // An orphan is a node that existed in the old graph but not the new one.
-        // CutAllWiresFromDevice already handles this via §5b, so for that path
-        // this is a harmless no-op (SetPowered checks m_PoweredNet == powered).
+        // v0.7.49: Full SyncVar reset on orphaned devices.
+        // v0.7.41 only called SetPowered(false), which is a no-op for SOURCE
+        // (LFPG_SetPowered is empty on sources). Left SOURCE m_LoadRatio and
+        // masks stale. Now uses type-aware ResetOrphanSyncVars.
         int orphanCount = 0;
         int oni;
         for (oni = 0; oni < oldNodeIds.Count(); oni = oni + 1)
@@ -1638,18 +1741,15 @@ class LFPG_ElecGraph
             ref LFPG_ElecNode testNode;
             if (!m_Nodes.Find(orphanId, testNode))
             {
-                EntityAI orphanDev = LFPG_DeviceRegistry.Get().FindById(orphanId);
-                if (!orphanDev)
+                int orphanType = oldNodeTypes[oni];
+                bool resolved = ResetOrphanSyncVars(orphanId, orphanType);
+                if (resolved)
                 {
-                    orphanDev = LFPG_DeviceAPI.ResolveVanillaDevice(orphanId);
-                }
-                if (orphanDev)
-                {
-                    LFPG_DeviceAPI.SetPowered(orphanDev, false);
                     orphanCount = orphanCount + 1;
                 }
             }
         }
+
 
         string infoRebuild = "[ElecGraph] PostBulkRebuild: rebuilt + populated + sources dirty";
         if (orphanCount > 0)
