@@ -37,3 +37,7 @@
 "STR_LFPG_SOLAR_T2","Solar Panel (Upgraded)","Panel Solar (Mejorado)"
 "STR_LFPG_SOLAR_T2_DESC","Generates 50 u/s during daylight.","Genera 50 u/s durante el día."
 "STR_LFPG_ACTION_UPGRADE_SOLAR","Upgrade Solar Panel","Mejorar Panel Solar"
+"STR_LFPG_CombinerKit","Electrical Combiner Kit","Kit de Combinador Electrico"
+"STR_LFPG_CombinerKit_Desc","A kit to build an electrical combiner","Un kit para construir un combinador electrico"
+"STR_LFPG_Combiner","Electrical Combiner","Combinador Electrico"
+"STR_LFPG_Combiner_Desc","Combines two electrical inputs into a single output","Combina dos entradas electricas en una sola salida"

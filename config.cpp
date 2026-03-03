@@ -19,7 +19,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2" };
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner" };
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping" };
@@ -40,7 +40,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.8.1";
+        version = "0.8.2";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
@@ -250,7 +250,7 @@ class CfgVehicles
     };
 
     // ---- Solar Panel T2 (upgraded device, SOURCE 50 u/s) ----
-    // No attachment slots — already upgraded.
+    // No attachment slots â already upgraded.
     // Memory points required in p3d: port_output_1
     class LF_SolarPanel_T2 : Inventory_Base
     {
@@ -264,6 +264,47 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+    };
+
+
+    // =========================================================
+    // v0.8.2: COMBINER (same-model deployment, floor + wall)
+    // =========================================================
+
+    // ---- Combiner Kit (holdable, deployable) ----
+    class LF_Combiner_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_CombinerKit";
+        descriptionShort = "$STR_LFPG_CombinerKit_Desc";
+        model = "\LFPowerGrid\data\combiner\CombinerLF.p3d";
+        weight = 800;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Combiner (placed device) ----
+    // 2 inputs, 1 output. output = min(input_1 + input_2, 500 u/s)
+    // Memory points: port_input_1, port_input_2, port_output_1
+    class LF_Combiner : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Combiner";
+        descriptionShort = "$STR_LFPG_Combiner_Desc";
+        model = "\LFPowerGrid\data\combiner\CombinerLF.p3d";
+        weight = 1200;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {};
     };
 
     // =========================================================

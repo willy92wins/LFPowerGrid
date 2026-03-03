@@ -6,6 +6,7 @@
 // v0.8.1:  Removed LFPG_ActionPlaceSolarPanel — solar kit now uses
 //          DeployableContainer_Base pattern with vanilla ActionPlaceObject.
 //          LFPG_ActionPlaceSolarPanel.c can be deleted from the project.
+// v0.8.2:  Added LFPG_ActionPlaceCombiner for Combiner Kit deployment.
 //
 // IMPORTANT:
 //  - Actions MUST be registered in ActionConstructor::RegisterActions()
@@ -46,7 +47,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPlaceSplitter);
         actions.Insert(LFPG_ActionPlaceCeilingLight);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (22)");
+        // --- v0.8.2: Combiner Kit placement ---
+        actions.Insert(LFPG_ActionPlaceCombiner);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (23)");
     }
 };
 

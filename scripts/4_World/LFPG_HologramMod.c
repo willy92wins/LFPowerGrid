@@ -16,12 +16,13 @@
 //   - Ceiling mode: pitch=180 inverts model, yaw from camera direction.
 //   - Only CeilingLight_Kit supports ceiling; Splitter uses vanilla reject.
 // v0.8.0: Solar Panel Kit support (different-model kit).
-//   - ProjectionBasedOnParent() swaps kit box model → panel model.
+//   - ProjectionBasedOnParent() swaps kit box model â panel model.
 //   - Solar panel uses floor-only placement (vanilla super).
 //   - Collision bypass needed because projection model != kit model.
 // v0.8.1: DeployableContainer_Base refactor for Solar Panel Kit.
+// v0.8.2: Combiner Kit support (same-model, floor + wall placement).
 //   - Added GetProjectionName(): returns deployed class for solar kit.
-//   - Added PlaceEntity(): CRITICAL — prevents ghost entity creation.
+//   - Added PlaceEntity(): CRITICAL â prevents ghost entity creation.
 //     Without this, ProjectionBasedOnParent causes engine to spawn
 //     a REAL LF_SolarPanel as the preview (runs EEInit, registers,
 //     replicates). PlaceEntity override returns entity_for_placing
@@ -159,8 +160,8 @@ modded class Hologram
     // --- GetDefaultOrientation ---
     // v0.8.1: Applies kit-defined orientation offset to hologram.
     // Useful if the P3D model has a different default facing than expected.
-    // Currently offset is "0 0 0" — adjust in kit script if model appears
-    // rotated (e.g. "0 -90 0" for 90° correction).
+    // Currently offset is "0 0 0" â adjust in kit script if model appears
+    // rotated (e.g. "0 -90 0" for 90Â° correction).
     override vector GetDefaultOrientation()
     {
         if (m_Parent)
@@ -203,6 +204,9 @@ modded class Hologram
         if (proj.IsKindOf("LF_CeilingLight_Kit"))
             return true;
 
+        if (proj.IsKindOf("LF_Combiner_Kit"))
+            return true;
+
         // Different-model kits: projection is deployed type,
         // check m_Parent to identify kit origin
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
@@ -231,8 +235,9 @@ modded class Hologram
 
         bool isSplitterKit = projection.IsKindOf("LF_Splitter_Kit");
         bool isCeilingKit  = projection.IsKindOf("LF_CeilingLight_Kit");
+        bool isCombinerKit = projection.IsKindOf("LF_Combiner_Kit");
 
-        // v0.8.0: Solar Panel Kit — different-model kit, check m_Parent.
+        // v0.8.0: Solar Panel Kit â different-model kit, check m_Parent.
         // Floor-only placement: set flag for collision bypass, then vanilla super.
         bool isSolarKit = false;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
@@ -240,7 +245,7 @@ modded class Hologram
             isSolarKit = true;
         }
 
-        if (!isSplitterKit && !isCeilingKit && !isSolarKit)
+        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit)
         {
             super.UpdateHologram(timeslice);
             return;
@@ -275,7 +280,7 @@ modded class Hologram
         int contactComponent;
 
         // v0.7.38: Exclude projection entity (not player) from raycast.
-        // The hologram sits between camera and wall — excluding the player
+        // The hologram sits between camera and wall â excluding the player
         // let the ray hit the hologram itself instead of the wall behind it,
         // causing the hologram to snap to itself, jitter, and prevent placement.
         // ObjIntersectFire matches vanilla placement raycasts and has
@@ -316,7 +321,7 @@ modded class Hologram
             // ================================================================
             // ---- CEILING ---- (normal points DOWN)
             // Only CeilingLight_Kit supports ceiling placement.
-            // Splitter falls through to vanilla (which will reject — correct).
+            // Splitter falls through to vanilla (which will reject â correct).
             // ================================================================
             if (!isCeilingKit)
             {
@@ -364,7 +369,7 @@ modded class Hologram
         projection.SetPosition(finalPos);
         projection.SetOrientation(finalOri);
 
-        // v0.7.36: Force green hologram — since we skip super.UpdateHologram()
+        // v0.7.36: Force green hologram â since we skip super.UpdateHologram()
         // vanilla never calls EvaluateCollision(), leaving the holo color stale.
         // SetIsColliding(false) forces the green (valid) material.
         bool bNoCollide = false;
@@ -398,7 +403,7 @@ modded class Hologram
     // ---- Server-side collision evaluation: skip all checks for LFPG kits ----
     // v0.7.38 (Fix): Checks entity type directly instead of m_LFPG_IsWallMode.
     // Server hologram never runs UpdateHologram, so state flags are unset.
-    // For LFPG kits, always allow — client hologram already validated visually.
+    // For LFPG kits, always allow â client hologram already validated visually.
     // v0.7.47: Generalized to all LFPG kits.
     // v0.8.1: Includes Solar Panel Kit.
     override void EvaluateCollision(ItemBase action_item)
