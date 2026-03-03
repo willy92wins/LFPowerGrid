@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.7.47)
+// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.8.3)
 //
 // In-memory directed graph of the electrical network.
 // Nodes = devices, edges = wires. Rebuilt from wire data at
@@ -141,6 +141,30 @@
 //   - AllocateOutputByPriority: NO change needed — m_LastStableOutput already
 //     includes self-consumption from Step 2b, avoiding double-count.
 //   - Regression: Splitter m_Consumption=0 → all arithmetic is identity.
+//
+// v0.8.3 (BugFix): Requeue-limit orphan recovery + multi-source LoadRatio
+//   Bug 1 — 3rd CeilingLight in chain permanently at zero consumption:
+//     Root cause: LFPG_MAX_REQUEUE_PER_EPOCH=5 caused the Splitter to be
+//     skipped after 5+ re-dirties from converging chains. The skip path
+//     cleared m_Dirty+m_DirtyMask, permanently orphaning the node because
+//     all downstream chains had converged and stopped sending re-dirty signals.
+//     Fix: preserve dirty state on requeue-limit skip (m_Dirty, m_DirtyMask
+//     stay set). Deferred nodes are re-inserted into the dirty queue at the
+//     end of the epoch for next-epoch processing with reset requeue counts.
+//     Uses m_DeferredRequeue array — O(K) where K is typically 1-3 nodes.
+//     Convergence: each deferred epoch makes at least one node's worth of
+//     progress, so topologies with N layers converge in ≤N extra epochs.
+//   Bug 3 — Both generators showing 160% LoadRatio:
+//     Root cause: AllocateOutputByPriority Phase 4 computed rawRatio using
+//     totalDemand which includes the FULL m_LastStableOutput of multi-input
+//     PASSTHROUGH targets (Combiner). Each source saw the total downstream
+//     demand, not its proportional share. 2×50u/s gen feeding 80u/s → 160%.
+//     Fix: Phase 4 computes adjustedDemand by dividing PASSTHROUGH target
+//     demand by CountPoweredIncoming (sources with m_OutputPower > epsilon).
+//     Only affects display LoadRatio, NOT actual power allocation/delivery.
+//     Edge cases: cold-start (all OutputPower=0) → poweredIn=0 → no division
+//     → falls through with full demand (correct bootstrap). Single source
+//     or offline co-source → poweredIn=1 → no division (correct).
 // =========================================================
 
 class LFPG_ElecGraph
@@ -222,6 +246,14 @@ class LFPG_ElecGraph
     protected int  m_MutationDepth;
     protected ref array<string> m_DeferredOrphanCleanup;
 
+    // --- v0.8.3: Deferred requeue for requeue-limit orphans ---
+    // When a node hits LFPG_MAX_REQUEUE_PER_EPOCH and is skipped, its dirty
+    // state is preserved and the nodeId is added here. At the end of the epoch,
+    // these nodes are re-inserted into the dirty queue for next-epoch processing
+    // with reset requeue counts. Prevents permanent orphaning when downstream
+    // converges while the node is limit-skipped.
+    protected ref array<string> m_DeferredRequeue;
+
     // --- v0.7.43 (Fix 3): NetworkID backup for entity re-resolution ---
     // When DeviceRegistry ref goes stale (entity streamed/recreated),
     // SyncNodeToEntity can re-resolve via GetObjectByNetworkId.
@@ -269,6 +301,9 @@ class LFPG_ElecGraph
         m_MutationDepth = 0;
         m_DeferredOrphanCleanup = new array<string>;
 
+        // v0.8.3: Deferred requeue
+        m_DeferredRequeue = new array<string>;
+
         // v0.7.43 (Fix 3): NetworkID backup maps
         m_NodeNetLow = new map<string, int>;
         m_NodeNetHigh = new map<string, int>;
@@ -307,6 +342,7 @@ class LFPG_ElecGraph
             m_MutationDepth = 0;
             m_DeferredOrphanCleanup.Clear();
         }
+        m_DeferredRequeue.Clear();
 
         // Step 1: Iterate all registered devices to create nodes
         ref array<EntityAI> allDevices = new array<EntityAI>;
@@ -1925,9 +1961,15 @@ class LFPG_ElecGraph
             {
                 string wReqMsg = "[ElecGraph] Requeue limit reached for " + nodeId + " epoch=" + m_CurrentEpoch.ToString();
                 LFPG_Util.Warn(wReqMsg);
-                node.m_Dirty = false;
+                // v0.8.3: Preserve dirty state for next-epoch recovery.
+                // Previous behavior cleared m_Dirty+m_DirtyMask, permanently
+                // orphaning the node when all downstream converged and stopped
+                // sending re-dirty signals (Bug: 3rd CeilingLight in chain at
+                // zero consumption). Now: keep dirty, defer to next epoch.
+                // m_InQueue=false allows future MarkNodeDirty to re-enqueue if
+                // an upstream re-dirty arrives before the deferred sweep runs.
                 node.m_InQueue = false;
-                node.m_DirtyMask = 0;
+                m_DeferredRequeue.Insert(nodeId);
                 continue;
             }
 
@@ -2322,6 +2364,33 @@ class LFPG_ElecGraph
 
             // --- Step 5: Sync state to entity ---
             SyncNodeToEntity(nodeId, node);
+        }
+
+        // v0.8.3: Re-enqueue nodes deferred by requeue limit.
+        // Dirty state was preserved in Edit 4. These nodes will process in
+        // the next epoch with reset requeue counts (ResetRequeueCounts runs
+        // at epoch start). O(K) where K = deferred nodes (typically 1-3).
+        // Convergence: each deferred epoch makes at least one node's worth
+        // of progress, so topologies with N layers converge in ≤N extra epochs.
+        if (m_DeferredRequeue.Count() > 0)
+        {
+            int dri;
+            for (dri = 0; dri < m_DeferredRequeue.Count(); dri = dri + 1)
+            {
+                string drNodeId = m_DeferredRequeue[dri];
+                ref LFPG_ElecNode drNode;
+                if (m_Nodes.Find(drNodeId, drNode) && drNode)
+                {
+                    if (drNode.m_Dirty && !drNode.m_InQueue)
+                    {
+                        drNode.m_InQueue = true;
+                        m_DirtyQueue.Insert(drNodeId);
+                        bool bDrEnq = true;
+                        m_EnqueuedThisEpoch.Set(drNodeId, bDrEnq);
+                    }
+                }
+            }
+            m_DeferredRequeue.Clear();
         }
 
         // H4: Compact the queue only when head passes threshold
@@ -2810,6 +2879,40 @@ class LFPG_ElecGraph
         return count;
     }
 
+    // v0.8.3: Count powered incoming edges for multi-source demand sharing.
+    // An incoming edge is "powered" if its source node has m_OutputPower > epsilon.
+    // Used in Phase 4 of AllocateOutputByPriority to proportionally divide
+    // PASSTHROUGH demand among active suppliers for LoadRatio calculation.
+    // Returns 0 if node has no incoming edges or none are powered.
+    // Cost: O(K) where K = incoming edge count (typically 1-2 for Combiner).
+    protected int CountPoweredIncoming(string nodeId)
+    {
+        ref array<ref LFPG_ElecEdge> inEdges;
+        if (!m_Incoming.Find(nodeId, inEdges) || !inEdges)
+            return 0;
+
+        int count = 0;
+        int cpi;
+        for (cpi = 0; cpi < inEdges.Count(); cpi = cpi + 1)
+        {
+            ref LFPG_ElecEdge cpEdge = inEdges[cpi];
+            if (!cpEdge)
+                continue;
+            if ((cpEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+
+            ref LFPG_ElecNode cpSrcNode;
+            if (m_Nodes.Find(cpEdge.m_SourceNodeId, cpSrcNode) && cpSrcNode)
+            {
+                if (cpSrcNode.m_OutputPower > LFPG_PROPAGATION_EPSILON)
+                {
+                    count = count + 1;
+                }
+            }
+        }
+        return count;
+    }
+
     // Sprint 4.3: Priority-based power allocation across outgoing edges.
     protected float AllocateOutputByPriority(string nodeId, float availableOutput, int edgeBudgetRemaining)
     {
@@ -3083,9 +3186,54 @@ class LFPG_ElecGraph
         {
             if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
+                // v0.8.3: Adjusted demand for multi-source LoadRatio.
+                // When a SOURCE feeds a PASSTHROUGH that has multiple powered inputs
+                // (e.g. Gen1+Gen2 → Combiner), each source is only responsible for
+                // its proportional share of the downstream demand. Without this,
+                // each source sees the FULL demand via m_LastStableOutput, inflating
+                // LoadRatio (e.g. 160% instead of 80% for 2×50u/s feeding 80u/s).
+                // Power allocation is NOT changed — only the display metric.
+                // Uses CountPoweredIncoming (m_OutputPower > epsilon) so offline
+                // sources don't divide, and cold-start (all at 0) falls through.
+                float adjustedDemand = 0.0;
+                int adi;
+                for (adi = 0; adi < enabledCount; adi = adi + 1)
+                {
+                    int adOrigIdx = idxArr[adi];
+                    float adEdgeDemand = demandArr[adi];
+                    ref LFPG_ElecEdge adEdge = outEdges[adOrigIdx];
+                    if (adEdge)
+                    {
+                        ref LFPG_ElecNode adTarget;
+                        if (m_Nodes.Find(adEdge.m_TargetNodeId, adTarget) && adTarget)
+                        {
+                            if (adTarget.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                            {
+                                int poweredIn = CountPoweredIncoming(adEdge.m_TargetNodeId);
+                                if (poweredIn > 1)
+                                {
+                                    adjustedDemand = adjustedDemand + (adEdgeDemand / poweredIn);
+                                }
+                                else
+                                {
+                                    adjustedDemand = adjustedDemand + adEdgeDemand;
+                                }
+                            }
+                            else
+                            {
+                                adjustedDemand = adjustedDemand + adEdgeDemand;
+                            }
+                        }
+                        else
+                        {
+                            adjustedDemand = adjustedDemand + adEdgeDemand;
+                        }
+                    }
+                }
+
                 if (srcNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
                 {
-                    float rawRatio = totalDemand / srcNode.m_MaxOutput;
+                    float rawRatio = adjustedDemand / srcNode.m_MaxOutput;
                     // v0.7.26 (Audit 4): NaN/infinity guard — clamp to sane range.
                     // Prevents floating point corruption from propagating to UI/telemetry.
                     if (rawRatio < 0.0)
@@ -3101,7 +3249,7 @@ class LFPG_ElecGraph
                 else
                 {
                     // v0.7.26: If MaxOutput is 0 but there IS demand, report overload
-                    if (totalDemand > LFPG_PROPAGATION_EPSILON)
+                    if (adjustedDemand > LFPG_PROPAGATION_EPSILON)
                     {
                         srcNode.m_LoadRatio = 100.0;
                     }

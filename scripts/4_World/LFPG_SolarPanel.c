@@ -26,14 +26,14 @@
 //                     Created by LFPG_ActionUpgradeSolarPanel.
 //
 // Memory points required in T1/T2 p3d (LOD Memory):
-//   port_output_1 — cable connection point
+//   port_output_1 -- cable connection point
 //
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
 
 // ---------------------------------------------------------
 // KIT: DeployableContainer_Base pattern (different-model hologram)
-// Box model in hands → hologram shows panel T1 model.
+// Box model in hands -> hologram shows panel T1 model.
 // On confirm, spawns LF_SolarPanel at hologram position.
 //
 // Based on sample_container proven pattern:
@@ -45,7 +45,7 @@
 class LF_SolarPanel_Kit : DeployableContainer_Base
 {
     // Returns the classname that the hologram should project.
-    // Called by LFPG_HologramMod overrides to swap box → panel.
+    // Called by LFPG_HologramMod overrides to swap box -> panel.
     string GetDeployedClassname()
     {
         return "LF_SolarPanel";
@@ -176,6 +176,12 @@ class LF_SolarPanel : Inventory_Base
     }
 
     override bool CanBePlaced(Man player, vector position)
+    {
+        return false;
+    }
+
+    // Prevent heavy-item carry behavior (parity with Splitter/Combiner/CeilingLight)
+    override bool IsHeavyBehaviour()
     {
         return false;
     }
@@ -625,7 +631,7 @@ class LF_SolarPanel : Inventory_Base
 
 // ---------------------------------------------------------
 // T2: Upgraded Solar Panel SOURCE (50 u/s during daylight)
-// Inherits T1 — only overrides capacity and blocks attachments.
+// Inherits T1 -- only overrides capacity and blocks attachments.
 // ---------------------------------------------------------
 class LF_SolarPanel_T2 : LF_SolarPanel
 {

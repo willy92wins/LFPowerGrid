@@ -22,7 +22,7 @@ class CfgPatches
         units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner" };
         weapons[] = {};
         requiredVersion = 0.1;
-        requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping" };
+        requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
     };
 };
 
@@ -250,7 +250,7 @@ class CfgVehicles
     };
 
     // ---- Solar Panel T2 (upgraded device, SOURCE 50 u/s) ----
-    // No attachment slots â already upgraded.
+    // No attachment slots - already upgraded.
     // Memory points required in p3d: port_output_1
     class LF_SolarPanel_T2 : Inventory_Base
     {

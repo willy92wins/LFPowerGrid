@@ -281,7 +281,7 @@ class LFPG_ActionRaycast
 // Bidirectional: first click starts session, second finishes.
 // WiringClient.Finish handles direction swap if needed.
 // =========================================================
-class ActionLFPG_PortBase : ActionSingleUseBase
+class ActionLFPG_PortBase : ActionInteractBase
 {
     protected int m_PortIndex;
 
@@ -492,6 +492,11 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
 
         return true;
     }
+	
+	override bool AddActionJuncture(ActionData action_data)
+    {
+        return true;
+    }
 
     override void OnExecuteClient(ActionData action_data)
     {
@@ -568,6 +573,11 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         {
             player.MessageStatus("[LFPG] Wiring cancelled.");
         }
+    }
+	
+	override bool AddActionJuncture(ActionData action_data)
+    {
+        return true;
     }
 };
 
