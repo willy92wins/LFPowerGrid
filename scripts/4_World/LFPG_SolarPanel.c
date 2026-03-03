@@ -1,15 +1,24 @@
 // =========================================================
-// LF_PowerGrid - Solar Panel devices (v0.7.47, Sprint 6)
+// LF_PowerGrid - Solar Panel devices (v0.8.1, Sprint 6)
 //
-// LF_SolarPanel_Kit:  Holdable kit (shared box model).
-//                     Player places via hologram -> spawns LF_SolarPanel.
-//                     Uses Inventory_Base + isDeployable=1 pattern.
-//                     Hologram projection swap handled by LFPG_HologramMod.c
-//                     (kit model = box, deployed model = panel).
+// LF_SolarPanel_Kit:  Deployable kit (DeployableContainer_Base pattern).
+//                     Uses shared box model (lf_kit_box.p3d).
+//                     Hologram shows T1 panel model during placement
+//                     via LFPG_HologramMod.c overrides (6 methods).
+//                     On confirm, spawns LF_SolarPanel and deletes kit.
+//
+// v0.8.1: Refactored from Inventory_Base + isDeployable=1 to
+//   DeployableContainer_Base + vanilla actions (sample_container pattern).
+//   - Kit parent: DeployableContainer_Base (not Inventory_Base)
+//   - SetActions: ActionTogglePlaceObject + ActionPlaceObject (vanilla)
+//   - OnPlacementComplete: CreateObject (not CreateObjectEx), DeleteSafe
+//   - LFPG_ActionPlaceSolarPanel removed (no longer needed)
+//   - 6 Hologram overrides in LFPG_HologramMod.c prevent ghost entity
+//     from ProjectionBasedOnParent creating real entities.
 //
 // LF_SolarPanel:      T1 SOURCE device (20 u/s during daylight).
 //                     1 output port (output_1). Owns wires.
-//                     Solar timer checks daylight every 15s.
+//                     Sun state managed by NetworkManager centralized timer.
 //                     Accepts MetalPlate + Nail attachments for upgrade.
 //
 // LF_SolarPanel_T2:   T2 SOURCE device (50 u/s during daylight).
@@ -23,47 +32,18 @@
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT: holdable item that spawns the actual Solar Panel
-// Uses shared box model — hologram shows panel via overrides.
+// KIT: DeployableContainer_Base pattern (different-model hologram)
+// Box model in hands → hologram shows panel T1 model.
+// On confirm, spawns LF_SolarPanel at hologram position.
+//
+// Based on sample_container proven pattern:
+//   Kit extends DeployableContainer_Base
+//   Config: SingleUseActions[]={527}, ContinuousActions[]={231}
+//   Hologram: 6 overrides in LFPG_HologramMod.c
+//   PlaceEntity override prevents ghost entity creation
 // ---------------------------------------------------------
-class LF_SolarPanel_Kit : Inventory_Base
+class LF_SolarPanel_Kit : DeployableContainer_Base
 {
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    // v0.7.48: Disabled loop sound during placement.
-    // ObjectDelete(this) in OnPlacementComplete destroys the kit
-    // server-side during the action callback. The loop sound is
-    // client-side and bound to the action lifecycle — the entity
-    // deletion aborts the cleanup cycle before sound stop runs,
-    // leaving an orphaned loop with no owner.
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
     // Returns the classname that the hologram should project.
     // Called by LFPG_HologramMod overrides to swap box → panel.
     string GetDeployedClassname()
@@ -76,54 +56,68 @@ class LF_SolarPanel_Kit : Inventory_Base
         return "0 0 0";
     }
 
+    // Orientation offset applied during hologram preview.
+    // Adjust if the T1 model appears rotated during placement.
+    // Format: "Yaw Pitch Roll" in degrees.
     vector GetDeployOrientationOffset()
     {
         return "0 0 0";
     }
 
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceSolarPanel);
-    }
-
-    // v0.7.48: Use PARAMETERS, not GetPosition().
-    // GetPosition() returns kit physical pos (near player), not hologram.
-    // Same fix as Splitter v0.7.41 and CeilingLight.
-    // Only delete kit on successful spawn (Splitter v0.7.32 pattern).
+    // v0.8.1: DeployableContainer_Base pattern (sample_container).
+    // Uses CreateObject (not CreateObjectEx), pb.GetLocalProjectionPosition()
+    // as initial spawn position, then SetPosition/SetOrientation from params.
+    // DeleteSafe instead of ObjectDelete for safer network cleanup.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
 
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
+        if (!GetGame().IsDedicatedServer())
+            return;
 
-        LFPG_Util.Info("[SolarPanel_Kit] OnPlacementComplete: pos=" + finalPos.ToString() + " ori=" + finalOri.ToString());
+        PlayerBase pb = PlayerBase.Cast(player);
+        if (!pb)
+            return;
 
-        EntityAI panel = GetGame().CreateObjectEx("LF_SolarPanel", finalPos, ECE_CREATEPHYSICS);
-        if (panel)
-        {
-            panel.SetPosition(finalPos);
-            panel.SetOrientation(finalOri);
-            panel.Update();
-            LFPG_Util.Info("[SolarPanel_Kit] Deployed LF_SolarPanel at " + finalPos.ToString());
+        // Spawn T1 panel at hologram position
+        LF_SolarPanel panel = LF_SolarPanel.Cast(GetGame().CreateObject(GetDeployedClassname(), pb.GetLocalProjectionPosition(), false));
 
-            // Only delete kit on successful spawn (v0.7.32 parity).
-            // If CreateObjectEx fails, player keeps the kit.
-            GetGame().ObjectDelete(this);
-        }
-        else
+        if (!panel)
         {
             LFPG_Util.Error("[SolarPanel_Kit] Failed to create LF_SolarPanel! Kit preserved.");
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Solar panel placement failed. Kit preserved.");
-            }
+            pb.MessageStatus("[LFPG] Solar panel placement failed. Kit preserved.");
+            return;
         }
-        #endif
+
+        panel.SetPosition(position);
+        panel.SetOrientation(orientation);
+
+        SetIsDeploySound(true);
+
+        LFPG_Util.Info("[SolarPanel_Kit] Deployed LF_SolarPanel at pos=" + position.ToString() + " ori=" + orientation.ToString());
+
+        // Delete kit only on successful spawn
+        this.DeleteSafe();
+    }
+
+    override bool IsBasebuildingKit()
+    {
+        return true;
+    }
+
+    override bool IsDeployable()
+    {
+        return true;
+    }
+
+    override void SetActions()
+    {
+        super.SetActions();
+        // v0.8.1: Vanilla placement actions (no custom LFPG_ActionPlaceSolarPanel).
+        // Config also declares these via SingleUseActions[]={527} ContinuousActions[]={231}.
+        // DayZ deduplicates, having both is safe and matches sample_container pattern.
+        AddAction(ActionTogglePlaceObject);
+        AddAction(ActionPlaceObject);
     }
 };
 
@@ -150,11 +144,6 @@ class LF_SolarPanel : Inventory_Base
     // ---- Load telemetry (replicated to clients) ----
     protected float m_LoadRatio = 0.0;
     protected int m_OverloadMask = 0;
-
-    // ---- Solar timer constants ----
-    static const int LFPG_SOLAR_CHECK_MS = 15000;   // 15s interval
-    static const int LFPG_SOLAR_DAWN_HOUR = 6;      // daylight start
-    static const int LFPG_SOLAR_DUSK_HOUR = 20;     // daylight end
 
     void LF_SolarPanel()
     {
@@ -197,57 +186,27 @@ class LF_SolarPanel : Inventory_Base
     }
 
     // ============================================
-    // Solar timer (server-only)
+    // Solar state update (called by NetworkManager centralized timer)
     // ============================================
-    protected void StartSolarTimer()
+    // v0.8.0: Replaces per-panel CheckSunlight/StartSolarTimer/StopSolarTimer.
+    // NetworkManager.LFPG_TickSolarPanels() calls this on all panels
+    // when sun state transitions (dawn/dusk). Also called from EEInit
+    // with cached state for immediate initialization.
+    void LFPG_UpdateSunState(bool hasSun)
     {
         #ifdef SERVER
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckSunlight, LFPG_SOLAR_CHECK_MS, true);
-        #endif
-    }
-
-    protected void StopSolarTimer()
-    {
-        #ifdef SERVER
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(CheckSunlight);
-        #endif
-    }
-
-    protected void CheckSunlight()
-    {
-        #ifdef SERVER
-        if (!GetGame())
+        if (hasSun == m_SourceOn)
             return;
 
-        World world = GetGame().GetWorld();
-        if (!world)
-            return;
+        m_SourceOn = hasSun;
+        SetSynchDirty();
 
-        int year = 0;
-        int month = 0;
-        int day = 0;
-        int hour = 0;
-        int minute = 0;
-        world.GetDate(year, month, day, hour, minute);
-
-        bool hasSun = false;
-        if (hour >= LFPG_SOLAR_DAWN_HOUR && hour < LFPG_SOLAR_DUSK_HOUR)
+        if (m_DeviceId != "")
         {
-            hasSun = true;
+            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         }
 
-        if (hasSun != m_SourceOn)
-        {
-            m_SourceOn = hasSun;
-            SetSynchDirty();
-
-            if (m_DeviceId != "")
-            {
-                LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
-            }
-
-            LFPG_Util.Info("[LF_SolarPanel] Sunlight changed: m_SourceOn=" + m_SourceOn.ToString() + " hour=" + hour.ToString() + " id=" + m_DeviceId);
-        }
+        LFPG_Util.Info("[LF_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString() + " id=" + m_DeviceId);
         #endif
     }
 
@@ -270,25 +229,18 @@ class LF_SolarPanel : Inventory_Base
         LFPG_TryRegister();
 
         #ifdef SERVER
-        StartSolarTimer();
-
-        // Immediate sunlight check on init (don't wait 15s).
-        // CheckSunlight() calls RequestPropagate() internally if
-        // m_SourceOn changes. No additional propagate needed here
-        // for fresh spawns (m_SourceOn starts false, CheckSunlight
-        // flips it to true during daytime and propagates).
-        //
-        // For persistence restores: m_SourceOn is loaded from save.
-        // If it's already true and CheckSunlight sees daytime → no change
-        // → no propagation. We must propagate explicitly in that case.
-        bool preCheckState = m_SourceOn;
-        CheckSunlight();
-        bool postCheckState = m_SourceOn;
+        // v0.8.0: Use cached sun state from centralized timer (no per-panel timer).
+        // LFPG_UpdateSunState propagates internally if m_SourceOn changes.
+        bool preState = m_SourceOn;
+        bool cachedSun = LFPG_NetworkManager.Get().LFPG_GetCachedSunState();
+        LFPG_UpdateSunState(cachedSun);
 
         LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
 
-        // Only propagate if CheckSunlight didn't already trigger it
-        if (preCheckState == postCheckState && m_SourceOn && m_DeviceId != "")
+        // Persistence restore: if loaded m_SourceOn already matched cached sun,
+        // LFPG_UpdateSunState was a no-op (no propagation). We must propagate
+        // explicitly to rebuild graph edge allocations for this device.
+        if (preState == m_SourceOn && m_SourceOn && m_DeviceId != "")
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         }
@@ -298,14 +250,12 @@ class LF_SolarPanel : Inventory_Base
     override void EEDelete(EntityAI parent)
     {
         m_LFPG_Deleting = true;
-        StopSolarTimer();
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
     }
 
     override void EEKilled(Object killer)
     {
-        StopSolarTimer();
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
         #ifdef SERVER

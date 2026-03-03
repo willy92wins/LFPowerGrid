@@ -40,7 +40,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.8.0";
+        version = "0.8.1";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
@@ -189,15 +189,20 @@ class CfgVehicles
     };
 
     // =========================================================
-    // v0.8.0: SOLAR PANEL
+    // v0.8.1: SOLAR PANEL (DeployableContainer_Base refactor)
     // =========================================================
 
-    // ---- Solar Panel Kit (shared box model, holdable) ----
-    // Uses isDeployable=1 + hologram projection swap (box → panel).
-    // ProjectionBasedOnParent in LFPG_HologramMod returns "LF_SolarPanel"
-    // so hologram shows deployed panel shape, not the box.
-    // On placement, spawns LF_SolarPanel and deletes the kit.
-    class LF_SolarPanel_Kit : Inventory_Base
+    // ---- Solar Panel Kit (DeployableContainer_Base, different-model hologram) ----
+    // v0.8.1: Refactored from Inventory_Base + isDeployable=1 to
+    //   DeployableContainer_Base + vanilla actions (sample_container pattern).
+    //   - isDeployable REMOVED (DeployableContainer_Base handles deployment)
+    //   - itemBehaviour=2 retained (hand-held item behavior)
+    //   - SingleUseActions[]={527}  = ActionTogglePlaceObject
+    //   - ContinuousActions[]={231} = ActionPlaceObject
+    //   Hologram shows deployed panel model (not box) via 6 overrides
+    //   in LFPG_HologramMod.c. PlaceEntity override prevents ghost entity.
+    class DeployableContainer_Base;
+    class LF_SolarPanel_Kit : DeployableContainer_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_KIT";
@@ -205,12 +210,15 @@ class CfgVehicles
         model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 2000;
         itemSize[] = {5, 3};
-        rotationFlags = 17;
-        isDeployable = 1;
+        rotationFlags = 2;
         itemBehaviour = 2;
         canBeDigged = 0;
         carveNavmesh = 1;
         physLayer = "item_small";
+        // v0.8.1: Vanilla placement actions (sample_container pattern).
+        // Script also registers via AddAction() for safety (DayZ deduplicates).
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // ---- Solar Panel T1 (placed device, SOURCE 20 u/s) ----

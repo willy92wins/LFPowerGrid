@@ -107,6 +107,11 @@ class LFPG_NetworkManager
     protected int m_VanillaLoadedVer = 0;
     protected bool m_VanillaReadOnly = false;
 
+    // v0.8.0: Centralized solar timer cached state.
+    // Single timer reads GetDate() once per tick, updates all panels atomically.
+    // Eliminates N per-panel CallLater timers and prevents race conditions.
+    protected bool m_SolarHasSun = false;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -202,6 +207,11 @@ class LFPG_NetworkManager
         {
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, bTrue);
         }
+
+        // v0.8.0: Centralized solar timer — 1 timer for all solar panels.
+        // Seed cached sun state immediately (panels may init before first tick).
+        LFPG_ComputeSunState();
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
         #endif
     }
 
@@ -3087,6 +3097,89 @@ class LFPG_NetworkManager
                 UntrackDeviceFromPolling(neighborId);
             }
         }
+        #endif
+    }
+
+    // ===========================
+    // v0.8.0: Centralized Solar Timer
+    // ===========================
+    // Single timer replaces N per-panel CallLater timers.
+    // Benefits:
+    //   - 1 GetDate() call instead of N (100 panels = 100x savings)
+    //   - Atomic state change (all panels transition in same frame)
+    //   - No timer leak on panel delete (no per-panel timer to stop)
+    //   - Eliminates race condition where panels in the same tick
+    //     see different sun states during dawn/dusk transition
+
+    // Public getter: panels read cached sun state on EEInit
+    // (avoids per-panel GetDate call during initialization).
+    bool LFPG_GetCachedSunState()
+    {
+        return m_SolarHasSun;
+    }
+
+    // Read world time once, update cached sun state.
+    // Called by constructor (seed) and by LFPG_TickSolarPanels (periodic).
+    protected void LFPG_ComputeSunState()
+    {
+        #ifdef SERVER
+        if (!GetGame())
+            return;
+
+        World world = GetGame().GetWorld();
+        if (!world)
+            return;
+
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        int hour = 0;
+        int minute = 0;
+        world.GetDate(year, month, day, hour, minute);
+
+        bool hasSun = false;
+        if (hour >= LFPG_SOLAR_DAWN_HOUR && hour < LFPG_SOLAR_DUSK_HOUR)
+        {
+            hasSun = true;
+        }
+
+        m_SolarHasSun = hasSun;
+        #endif
+    }
+
+    // Periodic tick (every LFPG_SOLAR_CHECK_MS = 15s).
+    // Recomputes sun state; if unchanged, returns immediately (O(1)).
+    // If changed, iterates all registered devices, updates solar panels.
+    // LF_SolarPanel.Cast catches both T1 and T2 (T2 inherits T1).
+    protected void LFPG_TickSolarPanels()
+    {
+        #ifdef SERVER
+        bool prevSun = m_SolarHasSun;
+        LFPG_ComputeSunState();
+
+        // No transition → nothing to do. This is the common case
+        // (dawn/dusk only happens twice per in-game day).
+        if (m_SolarHasSun == prevSun)
+            return;
+
+        // Sun state changed — update all solar panels
+        array<EntityAI> allDevs = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDevs);
+
+        int i;
+        int updated = 0;
+        for (i = 0; i < allDevs.Count(); i = i + 1)
+        {
+            LF_SolarPanel panel = LF_SolarPanel.Cast(allDevs[i]);
+            if (!panel)
+                continue;
+
+            panel.LFPG_UpdateSunState(m_SolarHasSun);
+            updated = updated + 1;
+        }
+
+        string msg = "[Solar] Sun changed to " + m_SolarHasSun.ToString() + ", updated " + updated.ToString() + " panels";
+        LFPG_Util.Info(msg);
         #endif
     }
 };

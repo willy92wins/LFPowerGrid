@@ -19,6 +19,15 @@
 //   - ProjectionBasedOnParent() swaps kit box model → panel model.
 //   - Solar panel uses floor-only placement (vanilla super).
 //   - Collision bypass needed because projection model != kit model.
+// v0.8.1: DeployableContainer_Base refactor for Solar Panel Kit.
+//   - Added GetProjectionName(): returns deployed class for solar kit.
+//   - Added PlaceEntity(): CRITICAL — prevents ghost entity creation.
+//     Without this, ProjectionBasedOnParent causes engine to spawn
+//     a REAL LF_SolarPanel as the preview (runs EEInit, registers,
+//     replicates). PlaceEntity override returns entity_for_placing
+//     as-is, preventing the duplicate creation.
+//   - Added SetProjectionPosition(): applies kit position offset.
+//   - Added GetDefaultOrientation(): applies kit orientation offset.
 //
 // Strategy:
 //   1. Do a forward raycast from the camera
@@ -45,8 +54,11 @@ modded class Hologram
     protected bool m_LFPG_IsLFPGKit;
 
     // ============================================
-    // v0.8.0: Projection model swap for different-model kits
+    // v0.8.1: DeployableContainer_Base hologram overrides
+    //         for different-model kit (Solar Panel)
     // ============================================
+
+    // --- ProjectionBasedOnParent ---
     // When placing a solar panel kit (box model), the hologram
     // should show the deployed solar panel model instead.
     // This override is called during Hologram construction to
@@ -65,6 +77,110 @@ modded class Hologram
 
         return super.ProjectionBasedOnParent();
     }
+
+    // --- GetProjectionName ---
+    // v0.8.1: Called by Hologram to resolve the projection entity classname.
+    // Must match ProjectionBasedOnParent for different-model kits.
+    // Without this, engine may use the kit classname instead of deployed
+    // classname in certain code paths (e.g. re-creation after LOD change).
+    override string GetProjectionName(ItemBase item)
+    {
+        if (m_Parent)
+        {
+            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
+            if (solarKit)
+            {
+                return solarKit.GetDeployedClassname();
+            }
+        }
+
+        return super.GetProjectionName(item);
+    }
+
+    // --- PlaceEntity --- (CRITICAL: ghost entity prevention)
+    // v0.8.1: ProjectionBasedOnParent makes the engine create a REAL
+    // entity of the deployed class (LF_SolarPanel) as the hologram preview.
+    // This entity runs EEInit, registers in DeviceRegistry, replicates to
+    // clients, and creates a "ghost" solar panel that exists in the world
+    // but has no physical representation at the placement site.
+    //
+    // PlaceEntity is called when the engine needs the actual entity to place.
+    // By returning entity_for_placing as-is (instead of letting vanilla
+    // create a NEW entity), we prevent the ghost duplication.
+    // The real entity is created by OnPlacementComplete in the kit script.
+    override EntityAI PlaceEntity(EntityAI entity_for_placing)
+    {
+        if (m_Parent)
+        {
+            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
+            if (solarKit)
+            {
+                // Return existing preview entity without creating a new one.
+                // Kit.OnPlacementComplete handles spawning the real device.
+                return entity_for_placing;
+            }
+        }
+
+        return super.PlaceEntity(entity_for_placing);
+    }
+
+    // --- SetProjectionPosition ---
+    // v0.8.1: Applies kit-defined position offset during hologram preview.
+    // Currently offset is "0 0 0" but this allows future adjustment
+    // (e.g. raising panel above ground, centering model pivot).
+    override void SetProjectionPosition(vector position)
+    {
+        if (m_Parent)
+        {
+            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
+            if (solarKit)
+            {
+                vector posOffset = solarKit.GetDeployPositionOffset();
+                vector finalPos = position + posOffset;
+
+                if (m_Projection)
+                {
+                    m_Projection.SetPosition(finalPos);
+
+                    // If hologram is floating, snap to ground
+                    if (IsFloating())
+                    {
+                        vector groundPos = SetOnGround(finalPos);
+                        m_Projection.SetPosition(groundPos);
+                    }
+                }
+                return;
+            }
+        }
+
+        super.SetProjectionPosition(position);
+    }
+
+    // --- GetDefaultOrientation ---
+    // v0.8.1: Applies kit-defined orientation offset to hologram.
+    // Useful if the P3D model has a different default facing than expected.
+    // Currently offset is "0 0 0" — adjust in kit script if model appears
+    // rotated (e.g. "0 -90 0" for 90° correction).
+    override vector GetDefaultOrientation()
+    {
+        if (m_Parent)
+        {
+            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
+            if (solarKit)
+            {
+                vector baseOri = super.GetDefaultOrientation();
+                vector oriOffset = solarKit.GetDeployOrientationOffset();
+                vector result = baseOri + oriOffset;
+                return result;
+            }
+        }
+
+        return super.GetDefaultOrientation();
+    }
+
+    // ============================================
+    // Kit projection detection helper
+    // ============================================
 
     // ---- Helper: check if projection entity is ANY LFPG deployable kit ----
     // v0.7.47: Generalized from Splitter-only to include all LFPG kits.
@@ -94,6 +210,10 @@ modded class Hologram
 
         return false;
     }
+
+    // ============================================
+    // Wall/Ceiling placement (UpdateHologram)
+    // ============================================
 
     // ---- Main override ----
     override void UpdateHologram(float timeslice)
@@ -251,6 +371,10 @@ modded class Hologram
         SetIsColliding(bNoCollide);
     }
 
+    // ============================================
+    // Collision/validation overrides
+    // ============================================
+
     // ---- Main collision gate: action system calls this to allow/block placement ----
     // v0.7.38 (Fix): Uses entity type check instead of state flags.
     // On the server, m_LFPG_IsWallMode is never set (UpdateHologram only
@@ -261,7 +385,7 @@ modded class Hologram
     // the client hologram still provides visual feedback, and CanBePlaced
     // returns true unconditionally for the kits.
     // v0.7.47: Generalized to all LFPG kits (Splitter + CeilingLight).
-    // v0.8.0: Includes Solar Panel Kit (different-model, m_Parent check).
+    // v0.8.1: Includes Solar Panel Kit (different-model, m_Parent check).
     override bool IsColliding()
     {
         if (LFPG_IsLFPGKitProjection())
@@ -276,7 +400,7 @@ modded class Hologram
     // Server hologram never runs UpdateHologram, so state flags are unset.
     // For LFPG kits, always allow — client hologram already validated visually.
     // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.0: Includes Solar Panel Kit.
+    // v0.8.1: Includes Solar Panel Kit.
     override void EvaluateCollision(ItemBase action_item)
     {
         if (LFPG_IsLFPGKitProjection())
@@ -290,7 +414,7 @@ modded class Hologram
 
     // ---- Angle check: always pass for LFPG kits ----
     // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.0: Includes Solar Panel Kit.
+    // v0.8.1: Includes Solar Panel Kit.
     override bool IsCollidingAngle()
     {
         if (LFPG_IsLFPGKitProjection())
@@ -302,7 +426,7 @@ modded class Hologram
 
     // ---- Floating check: LFPG kits can be wall/ceiling-mounted ----
     // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.0: Includes Solar Panel Kit.
+    // v0.8.1: Includes Solar Panel Kit.
     override bool IsFloating()
     {
         if (LFPG_IsLFPGKitProjection())

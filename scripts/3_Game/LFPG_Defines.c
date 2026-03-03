@@ -505,3 +505,10 @@ static const int LFPG_SORT_INSPECTOR  = 10001;
 // When true, enables detailed logging for PASSTHROUGH chain propagation.
 // Search RPT for "[PT-CHAIN]" lines. Set false for production.
 static const bool LFPG_DIAG_PT_CHAIN = true;
+
+// ---- v0.8.0: Centralized Solar Timer ----
+// Moved from LF_SolarPanel per-panel constants to shared defines.
+// NetworkManager runs a single timer that updates all solar panels atomically.
+static const int   LFPG_SOLAR_CHECK_MS   = 15000;  // check interval (ms)
+static const int   LFPG_SOLAR_DAWN_HOUR  = 6;      // daylight start hour
+static const int   LFPG_SOLAR_DUSK_HOUR  = 20;     // daylight end hour

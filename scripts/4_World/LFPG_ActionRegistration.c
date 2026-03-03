@@ -3,6 +3,9 @@
 //
 // v0.7.47: Added LFPG_ActionUpgradeSolarPanel + LFPG_ActionPlaceSolarPanel
 //          + modded Hammer for upgrade action.
+// v0.8.1:  Removed LFPG_ActionPlaceSolarPanel — solar kit now uses
+//          DeployableContainer_Base pattern with vanilla ActionPlaceObject.
+//          LFPG_ActionPlaceSolarPanel.c can be deleted from the project.
 //
 // IMPORTANT:
 //  - Actions MUST be registered in ActionConstructor::RegisterActions()
@@ -36,15 +39,14 @@ modded class ActionConstructor
         actions.Insert(ActionLFPG_ToggleSource);
         actions.Insert(ActionLFPG_DebugStatus);
 
-        // --- v0.7.47: Solar Panel placement + upgrade ---
-        actions.Insert(LFPG_ActionPlaceSolarPanel);
+        // --- v0.7.47: Solar Panel upgrade (placement now uses vanilla ActionPlaceObject) ---
         actions.Insert(LFPG_ActionUpgradeSolarPanel);
 
         // --- v0.7.48: Placement actions (parity registration) ---
         actions.Insert(LFPG_ActionPlaceSplitter);
         actions.Insert(LFPG_ActionPlaceCeilingLight);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (23)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (22)");
     }
 };
 
