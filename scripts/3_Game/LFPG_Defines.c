@@ -458,6 +458,13 @@ static const int   LFPG_RETRY_MAX            = 5;      // max retry attempts for
 static const float LFPG_RETRY_TICK_S         = 2.0;    // seconds between retry ticks
 static const float LFPG_RETRY_BUDGET_TTL_S   = 60.0;   // v0.7.38 (M11): TTL for BUDGET retries
 
+// ---- Reconciliation system (v0.7.38, Audit #1 mitigation) ----
+// Interval for periodic cable reconciliation on client.
+// Detects wires that exhausted retry attempts but whose entities
+// have since become available. Re-inserts into retry queue.
+// 60s = low overhead (O(wires) scan, no raycasts, no entity resolution).
+static const int   LFPG_RECONCILE_TICK_MS    = 60000;  // 60 seconds
+
 // ---- Wiring session timeout (v0.7.33, Fix #14) ----
 // Maximum duration a wiring session can remain active (ms).
 // Auto-cancels to prevent stuck sessions from disconnect, alt-tab, etc.

@@ -623,6 +623,11 @@ class LFPG_CableRenderer
 
             // Periodic negative cache cleanup
             GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(PurgeNegCache, NEG_CACHE_PURGE_INTERVAL_MS, bRepeat);
+
+            // v0.7.38 (Audit #1): Periodic reconciliation for exhausted-retry wires.
+            // Runs every 60s. Detects wires with data but no built segments and
+            // no active retry entry, then re-inserts them for another build attempt.
+            GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(ReconcileTick, LFPG_RECONCILE_TICK_MS, bRepeat);
         }
     }
 
@@ -650,6 +655,7 @@ class LFPG_CableRenderer
                 cq.Remove(CullTick);
                 cq.Remove(RetryTick);
                 cq.Remove(PurgeNegCache);
+                cq.Remove(ReconcileTick);
             }
         }
 
@@ -3127,6 +3133,84 @@ class LFPG_CableRenderer
 
             string retOkMsg = "[CableRenderer] Retry succeeded: " + wireKey;
             LFPG_Util.Debug(retOkMsg);
+        }
+    }
+
+    // ===========================
+    // ReconcileTick — periodic cable self-heal (v0.7.38, Audit #1)
+    // ===========================
+    // Runs every 60s (LFPG_RECONCILE_TICK_MS). Client-side only.
+    //
+    // Problem: A wire enters retry as TARGET_MISSING, retryCount hits
+    // LFPG_RETRY_MAX (5), the entry is removed. If the target entity
+    // loads AFTER that (late streaming, heavy server), the cable stays
+    // invisible until the player reconnects or an admin forces refresh.
+    //
+    // Solution: Scan all owners' wire data. For each wire that has:
+    //   - valid data in m_ByOwnerId (wire exists in topology)
+    //   - NO built segments in m_WireSegments
+    //   - NO active entry in m_RetryQueue
+    // → re-insert into retry queue with fresh retryCount=0.
+    //
+    // Cost: O(total_wires) string lookups + map.Contains checks.
+    // No entity resolution, no raycasts, no geometry. Safe at 60s interval.
+    //
+    // Note: NegCache entries for failed deviceIds expire after 5s
+    // (NEG_CACHE_TTL_MS), so by the time ReconcileTick runs (60s),
+    // stale NegCache entries are already purged. The re-inserted retry
+    // will get a fresh resolution attempt in the next RetryTick cycle.
+    protected void ReconcileTick()
+    {
+        int reconciled = 0;
+        int totalWiresScanned = 0;
+
+        int ownerIdx;
+        for (ownerIdx = 0; ownerIdx < m_ByOwnerId.Count(); ownerIdx = ownerIdx + 1)
+        {
+            string ownerId = m_ByOwnerId.GetKey(ownerIdx);
+            ref LFPG_OwnerWireState st = m_ByOwnerId.GetElement(ownerIdx);
+
+            if (!st || !st.wires)
+                continue;
+
+            int wireCount = st.wires.Count();
+            int w;
+            for (w = 0; w < wireCount; w = w + 1)
+            {
+                totalWiresScanned = totalWiresScanned + 1;
+
+                LFPG_WireData wd = st.wires[w];
+                if (!wd)
+                    continue;
+
+                // Build the wireKey for this wire
+                string wireKey = ownerId + "|" + w.ToString();
+
+                // Check: does this wire have built segments?
+                bool hasSegments = m_WireSegments.Contains(wireKey);
+
+                // Check: is this wire already in the retry queue?
+                bool inRetry = m_RetryQueue.Contains(wireKey);
+
+                // If wire has data but no segments and no pending retry → reconcile
+                if (!hasSegments && !inRetry)
+                {
+                    // Re-insert with TARGET_MISSING reason and fresh retryCount.
+                    // AddRetry already checks for duplicates (no-op if key exists).
+                    AddRetry(ownerId, w, LFPG_RetryReason.TARGET_MISSING);
+                    reconciled = reconciled + 1;
+                }
+            }
+        }
+
+        if (reconciled > 0)
+        {
+            string logMsg = "[CableRenderer] ReconcileTick: re-queued ";
+            logMsg = logMsg + reconciled.ToString();
+            logMsg = logMsg + " orphaned wire(s) out of ";
+            logMsg = logMsg + totalWiresScanned.ToString();
+            logMsg = logMsg + " scanned";
+            LFPG_Util.Info(logMsg);
         }
     }
 
