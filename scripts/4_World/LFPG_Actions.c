@@ -853,7 +853,7 @@ class ActionLFPG_CutPort5 : ActionLFPG_CutPortBase
 // ---------------------------------------------------------
 // TOGGLE SOURCE - on/off (LFPG generators only)
 // ---------------------------------------------------------
-class ActionLFPG_ToggleSource : ActionSingleUseBase 
+class ActionLFPG_ToggleSource : ActionInteractBase
 {
     // v0.7.35 (Bloque F): Debounce cache to prevent scroll menu text flicker.
     // After a toggle, the net-synced switch state can oscillate briefly on the
