@@ -106,6 +106,7 @@ class CfgVehicles
     // Uses the splitter model directly so hologram matches final result.
     // On placement, spawns LF_Splitter and deletes the kit.
     class Inventory_Base;
+    class DeployableContainer_Base;
     class LF_Splitter_Kit : Inventory_Base
     {
         scope = 2;
@@ -193,15 +194,9 @@ class CfgVehicles
     // =========================================================
 
     // ---- Solar Panel Kit (DeployableContainer_Base, different-model hologram) ----
-    // v0.8.1: Refactored from Inventory_Base + isDeployable=1 to
-    //   DeployableContainer_Base + vanilla actions (sample_container pattern).
-    //   - isDeployable REMOVED (DeployableContainer_Base handles deployment)
-    //   - itemBehaviour=2 retained (hand-held item behavior)
-    //   - SingleUseActions[]={527}  = ActionTogglePlaceObject
-    //   - ContinuousActions[]={231} = ActionPlaceObject
-    //   Hologram shows deployed panel model (not box) via 6 overrides
-    //   in LFPG_HologramMod.c. PlaceEntity override prevents ghost entity.
-    class LF_SolarPanel_Kit : Inventory_Base
+    // v0.8.2: Refactored BACK TO Inventory_Base + isDeployable=1
+    //   old DeployableContainer_Base IS NOT SHOWING KIT.
+    class LF_SolarPanel_Kit : DeployableContainer_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_KIT";

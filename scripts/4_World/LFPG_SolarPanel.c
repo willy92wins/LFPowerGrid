@@ -146,6 +146,7 @@ class LF_SolarPanel : Inventory_Base
     // ---- Load telemetry (replicated to clients) ----
     protected float m_LoadRatio = 0.0;
     protected int m_OverloadMask = 0;
+    protected int m_WarningMask = 0;
 
     void LF_SolarPanel()
     {
@@ -155,6 +156,7 @@ class LF_SolarPanel : Inventory_Base
         RegisterNetSyncVariableBool("m_SourceOn");
         RegisterNetSyncVariableFloat("m_LoadRatio", 0.0, 5.0, 2);
         RegisterNetSyncVariableInt("m_OverloadMask");
+        RegisterNetSyncVariableInt("m_WarningMask");
     }
 
     // ============================================
@@ -446,6 +448,22 @@ class LF_SolarPanel : Inventory_Base
         if (m_OverloadMask != mask)
         {
             m_OverloadMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    int LFPG_GetWarningMask()
+    {
+        return m_WarningMask;
+    }
+
+    void LFPG_SetWarningMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_WarningMask != mask)
+        {
+            m_WarningMask = mask;
             SetSynchDirty();
         }
         #endif
