@@ -3004,17 +3004,52 @@ class LFPG_ElecGraph
             return 0.0;
 
         // Phase 2: Sort by priority (descending) — insertion sort
+        // S7-2: Tie-break: equal priority → ascending by m_TargetNodeId (lexicographic).
+        // Without tie-break, order depends on RPC arrival order and varies across
+        // restarts, making brownout policy non-deterministic.
+        // All loop temporaries hoisted — Enforce Script requires this.
         int si;
         int sj;
+        int keyIdx;
+        float keyDem;
+        int keyPrio;
+        string keyTargetId;
+        string sjTargetId;
+        ref LFPG_ElecEdge sortKeyEdge;
+        ref LFPG_ElecEdge sortSjEdge;
+        bool shouldSwap;
+
         for (si = 1; si < enabledCount; si = si + 1)
         {
-            int keyIdx = idxArr[si];
-            float keyDem = demandArr[si];
-            int keyPrio = prioArr[si];
+            keyIdx = idxArr[si];
+            keyDem = demandArr[si];
+            keyPrio = prioArr[si];
+
+            // Extract key's target node ID once (used only for tie-break on equal priority)
+            keyTargetId = "";
+            sortKeyEdge = outEdges[keyIdx];
+            if (sortKeyEdge)
+                keyTargetId = sortKeyEdge.m_TargetNodeId;
 
             sj = si - 1;
-            while (sj >= 0 && prioArr[sj] < keyPrio)
+            while (sj >= 0)
             {
+                // Primary sort: descending priority
+                shouldSwap = prioArr[sj] < keyPrio;
+
+                // S7-2: Tie-break: ascending m_TargetNodeId (lower ID sorts earlier)
+                if (!shouldSwap && prioArr[sj] == keyPrio)
+                {
+                    sjTargetId = "";
+                    sortSjEdge = outEdges[idxArr[sj]];
+                    if (sortSjEdge)
+                        sjTargetId = sortSjEdge.m_TargetNodeId;
+                    shouldSwap = sjTargetId > keyTargetId;
+                }
+
+                if (!shouldSwap)
+                    break;
+
                 idxArr[sj + 1] = idxArr[sj];
                 demandArr[sj + 1] = demandArr[sj];
                 prioArr[sj + 1] = prioArr[sj];

@@ -122,6 +122,16 @@ class LFPG_NetworkManager
     // Rate limiter stale threshold: entries idle for > 10 minutes are purged
     protected static const float RATE_LIMITER_STALE_SEC = 600.0;
 
+    // S7-4: Sliding window rate limiter — max ops per player per 1-second window.
+    // Prevents RPC spam from malicious or bugged clients even if cooldown is small.
+    protected static const int LFPG_RPC_MAX_OPS_PER_SEC = 5;
+
+    // S7-4: Per-player sliding window state (keyed by plain player ID).
+    // m_RateWindowStart: timestamp when the current 1s window began.
+    // m_RateOpsInWindow: number of ops in the current window.
+    protected ref map<string, float> m_RateWindowStart;
+    protected ref map<string, int>   m_RateOpsInWindow;
+
     protected ref map<string, EntityAI> m_PendingBroadcastLFPG;
     protected ref map<string, EntityAI> m_PendingBroadcastVanilla;
 
@@ -157,6 +167,8 @@ class LFPG_NetworkManager
     void LFPG_NetworkManager()
     {
         m_RateByPlayer = new map<string, ref LFPG_RateLimiter>;
+        m_RateWindowStart = new map<string, float>;
+        m_RateOpsInWindow = new map<string, int>;
         m_VanillaWires = new map<string, ref array<ref LFPG_WireData>>;
         m_ReverseIdx = new map<string, int>;
         m_ReverseOwners = new map<string, ref array<string>>;
@@ -225,6 +237,11 @@ class LFPG_NetworkManager
     // ===========================
     // Rate limit
     // ===========================
+    // S7-4: Two-layer rate limiting:
+    //   Layer 1 (sliding window): max LFPG_RPC_MAX_OPS_PER_SEC ops/s per player.
+    //     Blocks burst spam regardless of individual op cooldown.
+    //   Layer 2 (per-op cooldown): existing LFPG_RateLimiter with RpcCooldownSeconds.
+    //     Enforces minimum gap between consecutive ops.
     bool AllowPlayerAction(PlayerIdentity ident)
     {
         if (!ident) return false;
@@ -233,6 +250,49 @@ class LFPG_NetworkManager
         LFPG_ServerSettings st = LFPG_Settings.Get();
         float now = GetGame().GetTime() * 0.001;
 
+        // --- Layer 1: sliding window ---
+        float windowStart = 0.0;
+        int opsInWindow = 0;
+
+        if (m_RateWindowStart.Find(pid, windowStart))
+        {
+            float elapsed = now - windowStart;
+            if (elapsed >= 1.0)
+            {
+                // Window expired — start a new one
+                m_RateWindowStart[pid] = now;
+                m_RateOpsInWindow[pid] = 0;
+                opsInWindow = 0;
+            }
+            else
+            {
+                if (!m_RateOpsInWindow.Find(pid, opsInWindow))
+                    opsInWindow = 0;
+
+                if (opsInWindow >= LFPG_RPC_MAX_OPS_PER_SEC)
+                {
+                    string swLog = "[RateLimiter] Sliding window exceeded for " + pid;
+                    swLog = swLog + " ops=" + opsInWindow.ToString();
+                    LFPG_Util.Warn(swLog);
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            m_RateWindowStart[pid] = now;
+            m_RateOpsInWindow[pid] = 0;
+            opsInWindow = 0;
+        }
+
+        // Count this op in the window BEFORE Layer 2 check.
+        // Intentional: we count the attempt, not the success. A spammer hitting
+        // the cooldown on every op is still attempting spam — the window fills
+        // up and they get hard-blocked. Legitimate players (1-2 ops/s) never
+        // approach LFPG_RPC_MAX_OPS_PER_SEC=5.
+        m_RateOpsInWindow[pid] = opsInWindow + 1;
+
+        // --- Layer 2: per-op cooldown (existing) ---
         ref LFPG_RateLimiter rl;
         if (!m_RateByPlayer.Find(pid, rl) || !rl)
         {
@@ -245,6 +305,9 @@ class LFPG_NetworkManager
 
     // Periodic cleanup: remove rate limiters for disconnected/idle players.
     // Runs every 5 minutes via CallLater. Prevents unbounded map growth.
+    // S7-3: Also calls PruneNullEntries on DeviceRegistry — covers sessions
+    //        with heavy destruction that don't trigger a full self-heal.
+    // S7-4: Also purges sliding window maps for the same stale players.
     protected void PurgeStaleRateLimiters()
     {
         #ifdef SERVER
@@ -267,15 +330,30 @@ class LFPG_NetworkManager
 
         int removed = staleKeys.Count();
         int k;
+        string staleKey;
         for (k = 0; k < removed; k = k + 1)
         {
-            m_RateByPlayer.Remove(staleKeys[k]);
+            staleKey = staleKeys[k];
+            m_RateByPlayer.Remove(staleKey);
+            // S7-4: Keep sliding window maps in sync with cooldown map
+            m_RateWindowStart.Remove(staleKey);
+            m_RateOpsInWindow.Remove(staleKey);
         }
 
         if (removed > 0)
         {
             string purgeMsg = "[RateLimiter] Purged " + removed.ToString() + " stale entries";
             LFPG_Util.Info(purgeMsg);
+        }
+
+        // S7-3: Periodic null-entry prune on DeviceRegistry.
+        // Self-heal already calls this, but long sessions with many device
+        // destructions that don't trigger self-heal can accumulate stale refs.
+        int pruned = LFPG_DeviceRegistry.Get().PruneNullEntries();
+        if (pruned > 0)
+        {
+            string pruneMsg = "[PurgeStale] DeviceRegistry pruned " + pruned.ToString() + " null entries";
+            LFPG_Util.Info(pruneMsg);
         }
         #endif
     }
