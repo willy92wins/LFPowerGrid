@@ -653,6 +653,62 @@ class LFPG_NetworkManager
         #endif
     }
 
+    // Returns true if the specified IN port has at least one wire
+    // from a source device that is currently providing power.
+    // Uses m_ReverseOwners for O(owners) lookup (same index as CountWiresTargeting).
+    // Works for SOURCE (generator on + sparkplug) and PASSTHROUGH (splitter powered).
+    // Used by Zen_RaidAlarmRadar for per-port trigger detection.
+    bool IsPortTargetedByPoweredSource(string targetDeviceId, string targetPort)
+    {
+        #ifdef SERVER
+        if (targetDeviceId == "" || targetPort == "")
+            return false;
+
+        string rKey = targetDeviceId + "|" + targetPort;
+
+        // Quick check: any wires at all? (O(1) via reverse index)
+        int count = 0;
+        m_ReverseIdx.Find(rKey, count);
+        if (count <= 0)
+            return false;
+
+        // Get owner device IDs that have wires targeting this port
+        ref array<string> owners;
+        if (!m_ReverseOwners.Find(rKey, owners))
+            return false;
+
+        if (!owners)
+            return false;
+
+        int i;
+        for (i = 0; i < owners.Count(); i = i + 1)
+        {
+            string ownerId = owners[i];
+            if (ownerId == "")
+                continue;
+
+            EntityAI srcEntity = LFPG_DeviceRegistry.Get().FindById(ownerId);
+            if (!srcEntity)
+            {
+                // Try vanilla resolution as fallback
+                srcEntity = LFPG_DeviceAPI.ResolveVanillaDevice(ownerId);
+            }
+
+            if (!srcEntity)
+                continue;
+
+            // GetSourceOn works for both device types:
+            //   SOURCE:      switch on + sparkplug valid
+            //   PASSTHROUGH: m_PoweredNet (upstream provides power)
+            bool srcOn = LFPG_DeviceAPI.GetSourceOn(srcEntity);
+            if (srcOn)
+                return true;
+        }
+        #endif
+
+        return false;
+    }
+
     // Incremental reverse index: add one wire entry + track owner
     void ReverseIdxAdd(string targetDeviceId, string targetPort, string ownerDeviceId = "")
     {

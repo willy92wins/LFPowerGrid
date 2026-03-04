@@ -150,6 +150,16 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         vector pos = panel.GetPosition();
         vector ori = panel.GetOrientation();
 
+        // ---- Apply 180° yaw offset ----
+        // T2 model is rotated 180° relative to T1 in its p3d.
+        // Compensate so the spawned T2 faces the same direction as the T1 it replaces.
+        float correctedYaw = ori[0] + 180.0;
+        if (correctedYaw >= 360.0)
+        {
+            correctedYaw = correctedYaw - 360.0;
+        }
+        ori = Vector(correctedYaw, ori[1], ori[2]);
+
         // ---- Consume / detach materials BEFORE panel deletion ----
         // ObjectDelete(panel) cascade-deletes all attachments.
         // Excess materials must be detached to ground first.

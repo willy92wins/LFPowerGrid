@@ -281,7 +281,7 @@ class LFPG_ActionRaycast
 // Bidirectional: first click starts session, second finishes.
 // WiringClient.Finish handles direction swap if needed.
 // =========================================================
-class ActionLFPG_PortBase : ActionInteractBase
+class ActionLFPG_PortBase : ActionSingleUseBase 
 {
     protected int m_PortIndex;
 
@@ -490,11 +490,6 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         if (LFPG_ActionRaycast.IsCursorOnDevice(player))
             return false;
 
-        return true;
-    }
-	
-	override bool AddActionJuncture(ActionData action_data)
-    {
         return true;
     }
 
@@ -858,7 +853,7 @@ class ActionLFPG_CutPort5 : ActionLFPG_CutPortBase
 // ---------------------------------------------------------
 // TOGGLE SOURCE - on/off (LFPG generators only)
 // ---------------------------------------------------------
-class ActionLFPG_ToggleSource : ActionInteractBase
+class ActionLFPG_ToggleSource : ActionSingleUseBase 
 {
     // v0.7.35 (Bloque F): Debounce cache to prevent scroll menu text flicker.
     // After a toggle, the net-synced switch state can oscillate briefly on the

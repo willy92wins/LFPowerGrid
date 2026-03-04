@@ -57,11 +57,13 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
     }
 
     // Orientation offset applied during hologram preview.
-    // Adjust if the T1 model appears rotated during placement.
+    // The T1 P3D model is authored flat (horizontal). Apply pitch
+    // correction so the hologram shows the panel standing upright.
     // Format: "Yaw Pitch Roll" in degrees.
+    // NOTE: If panel faces wrong way, try "0 90 0" instead.
     vector GetDeployOrientationOffset()
     {
-        return "0 0 0";
+        return "0 -90 0";
     }
 
     // v0.8.1: DeployableContainer_Base pattern (sample_container).

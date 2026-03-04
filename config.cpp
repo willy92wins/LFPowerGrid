@@ -201,8 +201,7 @@ class CfgVehicles
     //   - ContinuousActions[]={231} = ActionPlaceObject
     //   Hologram shows deployed panel model (not box) via 6 overrides
     //   in LFPG_HologramMod.c. PlaceEntity override prevents ghost entity.
-    class DeployableContainer_Base;
-    class LF_SolarPanel_Kit : DeployableContainer_Base
+    class LF_SolarPanel_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_KIT";
