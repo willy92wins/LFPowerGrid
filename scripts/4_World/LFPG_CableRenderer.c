@@ -211,23 +211,68 @@ class LFPG_WireSegmentInfo
     }
 
     // Build occlusion sample points from ACTUAL cable geometry.
-    // v0.7.9: Uses real sub-segment positions (after sag + waypoints)
-    // instead of the straight line A→B. Fixes incorrect occlusion
-    // for cables with waypoints or heavy sag.
-    // Short wires: 1 sample (midpoint of chain).
-    // Long wires:  3 samples (25%, 50%, 75% along chain).
+    //
+    // v0.8.2: Endpoint-anchored sampling with per-span distribution
+    // for waypoint cables. Fixes long cable visibility behind walls.
+    //
+    // ---- ROOT CAUSE OF BUG ----
+    //   A cable [DeviceA]--10% visible--[WALL]--90% hidden--[DeviceB]
+    //   with uniform samples at 16/33/50/66/83% has NO sample in the
+    //   visible 10% section. All samples blocked → cable hides entirely.
+    //
+    // ---- FIX ----
+    //   Always insert cachedPosA and cachedPosB as samples first.
+    //   For waypoint cables (Branch A): sample the MIDPOINT of each span
+    //   (A→j[0], j[0]→j[1], ...) instead of uniform length fractions.
+    //   Each span is independently testable. If the span near the player
+    //   is visible, its midpoint passes → cable shows.
+    //
+    // ---- BUDGET CONSTRAINT (CRITICAL — DO NOT EXCEED 5 SAMPLES) ----
+    //   DrawFrame has a STRICT budget check:
+    //     if (samplesNeeded <= rayBudget) → check; else → SKIP entirely
+    //   Worst-case adaptive budget = max(3, OCC_MAX_RAYCASTS/4) = 5
+    //   for bases with >50 wires. A wire with 6+ samples PERMANENTLY
+    //   skips its recheck → freezes occluded=true → invisible forever.
+    //
+    // ---- PARTIAL THRESHOLD INTERACTION (CRITICAL — DO NOT IGNORE) ----
+    //   UpdateOcclusion treats a wire as blocked (→ hides it) when:
+    //     occBlockedRatio >= LFPG_OCC_PARTIAL_THRESHOLD (≈0.66)
+    //   This means "cable shows" requires AT LEAST 2 samples to pass.
+    //   With N total samples, blockedCount ≤ N-2 → ratio ≤ (N-2)/N:
+    //     N=3: ratio ≤ 0.33 < 0.66 ✓   N=4: ratio ≤ 0.50 < 0.66 ✓
+    //     N=5: ratio ≤ 0.60 < 0.66 ✓
+    //   Branch A achieves this: posA + span0_midpoint are BOTH visible
+    //   whenever the near-player span is unobstructed (the common case).
+    //   Branch B: only posA passes for cables going straight into a wall.
+    //     Short (2 samples): 1/2=0.50 → shows ✓
+    //     Medium (3 samples): 2/3=0.667 ≥ 0.66 → hides (same as before)
+    //     Long (5 samples): 4/5=0.80 → hides (same as before)
+    //   This is intentional: straight cables that immediately enter a wall
+    //   are correctly hidden. Branch A fixes the actual reported use case
+    //   ("cable with turns behind a wall").
+    //
+    // ---- SAMPLE ALLOCATION (all totals ≤ 5) ----
+    //   Branch A, 1-3 spans: 1 midpoint/span + 2 ep → 3-5 total
+    //   Branch A, 4+ spans:  first+middle+last + 2 ep → 5 total
+    //   Branch B, short (<LONG_WIRE_M): 0 interior + 2 ep → 2 total
+    //   Branch B, medium (>=LONG_WIRE_M): 1 interior + 2 ep → 3 total
+    //   Branch B, long (>=20m): 3 interior + 2 ep → 5 total
     void BuildOccSamples()
     {
         occSamples.Clear();
 
-        if (!segments || segments.Count() == 0)
-        {
-            // Fallback: midpoint of endpoints
-            occSamples.Insert((cachedPosA + cachedPosB) * 0.5);
-            return;
-        }
+        // Always sample both device endpoint positions (2 of 5 budget).
+        // Ensures the cable shows whenever either device is directly visible
+        // from the camera. Also provides the second "passing sample" that
+        // keeps occBlockedRatio below LFPG_OCC_PARTIAL_THRESHOLD in
+        // Branch A when posA + span0_mid are both unobstructed.
+        occSamples.Insert(cachedPosA);
+        occSamples.Insert(cachedPosB);
 
-        // Compute total chain length
+        if (!segments || segments.Count() == 0)
+            return;
+
+        // Compute total chain length (needed for Branch B tier selection)
         float totalLen = 0.0;
         int i;
         LFPG_CableParticle seg;
@@ -240,39 +285,156 @@ class LFPG_WireSegmentInfo
         }
 
         if (totalLen < 0.01)
+            return;  // endpoints already inserted, sufficient
+
+        // ------------------------------------------------------------------
+        // BRANCH A: Cable with player-placed waypoints (corner joints).
+        //
+        // Sample the midpoint of each span:
+        //   A → j[0], j[0] → j[1], ..., j[N-1] → B
+        //
+        // This is the primary fix for the reported bug. The visible span
+        // (e.g. A→j[0] before the wall) produces a midpoint that passes
+        // the raycast. Combined with posA (also passing), 2 of N samples
+        // pass → occBlockedRatio < LFPG_OCC_PARTIAL_THRESHOLD → shows.
+        //
+        // Interior budget = 3 (total ≤ 5).
+        //   1-3 spans (jCount 1-2): 1 midpoint/span (3-5 total)
+        //   4+ spans  (jCount >=3): first+middle+last span (5 total)
+        //
+        // Index safety proof for 4+ spans path:
+        //   jCount = spanCount-1 >= 3
+        //   midSpan = spanCount/2 (floor) → midSpan in [2, spanCount/2]
+        //   cachedJoints[midSpan-1]: max index = spanCount/2-1 < jCount ✓
+        //   midNext = midSpan+1: max = spanCount/2+1 ≤ spanCount-1 = jCount
+        //   so midNext > jCount is unreachable (proof in comment below).
+        // ------------------------------------------------------------------
+        if (cachedJoints && cachedJoints.Count() > 0)
         {
-            occSamples.Insert((cachedPosA + cachedPosB) * 0.5);
+            int jCount = cachedJoints.Count();
+            int spanCount = jCount + 1;
+
+            // Hoisted before branching: Enforce Script forbids same-name
+            // variable declarations in sibling if/else blocks.
+            vector spnA;
+            vector spnB;
+            vector spnMid;
+            // nextIdx hoisted here — declared inside a loop body can
+            // cause compiler issues in some Enforce Script versions.
+            int nextIdx;
+
+            if (spanCount <= 3)
+            {
+                // 1-3 spans: one midpoint per span (budget allows it)
+                int ni;
+                for (ni = 0; ni < spanCount; ni = ni + 1)
+                {
+                    if (ni == 0)
+                        spnA = cachedPosA;
+                    else
+                        spnA = cachedJoints[ni - 1];
+
+                    nextIdx = ni + 1;
+                    if (nextIdx > jCount)
+                        spnB = cachedPosB;
+                    else
+                        spnB = cachedJoints[nextIdx - 1];
+
+                    spnMid[0] = (spnA[0] + spnB[0]) * 0.5;
+                    spnMid[1] = (spnA[1] + spnB[1]) * 0.5;
+                    spnMid[2] = (spnA[2] + spnB[2]) * 0.5;
+                    occSamples.Insert(spnMid);
+                }
+            }
+            else
+            {
+                // 4+ spans: first + last + middle (3 interior samples).
+                // First and last cover the exits from each device.
+                // Middle covers cables traversing multiple rooms.
+
+                // Span 0: cachedPosA → j[0]
+                spnA = cachedPosA;
+                spnB = cachedJoints[0];
+                spnMid[0] = (spnA[0] + spnB[0]) * 0.5;
+                spnMid[1] = (spnA[1] + spnB[1]) * 0.5;
+                spnMid[2] = (spnA[2] + spnB[2]) * 0.5;
+                occSamples.Insert(spnMid);
+
+                // Last span: j[jCount-1] → cachedPosB
+                spnA = cachedJoints[jCount - 1];
+                spnB = cachedPosB;
+                spnMid[0] = (spnA[0] + spnB[0]) * 0.5;
+                spnMid[1] = (spnA[1] + spnB[1]) * 0.5;
+                spnMid[2] = (spnA[2] + spnB[2]) * 0.5;
+                occSamples.Insert(spnMid);
+
+                // Middle span (floor of spanCount/2).
+                // midNext > jCount proof: midSpan+1 > jCount = spanCount-1
+                //   → spanCount/2 > spanCount-2 → only true when spanCount<4.
+                //   We are in spanCount>=4 branch, so this never triggers.
+                int midSpan = spanCount / 2;
+                int midNext = midSpan + 1;
+
+                spnA = cachedJoints[midSpan - 1];
+                if (midNext > jCount)
+                    spnB = cachedPosB;
+                else
+                    spnB = cachedJoints[midNext - 1];
+
+                spnMid[0] = (spnA[0] + spnB[0]) * 0.5;
+                spnMid[1] = (spnA[1] + spnB[1]) * 0.5;
+                spnMid[2] = (spnA[2] + spnB[2]) * 0.5;
+                occSamples.Insert(spnMid);
+            }
+
             return;
         }
 
-        // Determine sample fractions
-        // v0.7.9: 3-tier adaptive — short wires 1 sample, medium 3, long 5.
-        // More samples for long wires improves detection of partial occlusion
-        // behind irregular geometry (rocks, railings, vehicles).
-        int sampleCount = 1;
+        // ------------------------------------------------------------------
+        // BRANCH B: Straight cable (no waypoints). Uniform interior samples.
+        // Endpoints already inserted. Interior budget = 3.
+        //
+        //   < LONG_WIRE_M:  0 interior → 2 total
+        //   >= LONG_WIRE_M: 1 interior → 3 total (midpoint)
+        //   >= 20m:         3 interior → 5 total (25%, 50%, 75%)
+        //
+        // For straight cables entering a wall immediately after posA:
+        //   Short (2 samples): ratio=0.50 → shows with partial fade ✓
+        //   Medium (3 samples): ratio=0.667 ≥ threshold → hides (same as
+        //   original behavior — acceptable for cables going straight into
+        //   walls with no waypoints to mark the visible section).
+        //
+        // The interior samples serve a different purpose here: detecting
+        // cables whose MIDDLE is occluded (both endpoints visible but cable
+        // dips through geometry). occBlockedRatio then produces a partial
+        // alpha fade (DrawFrame line ~2326) proportional to blockage.
+        // ------------------------------------------------------------------
+        int uniformCount = 0;
         if (totalLen >= 20.0)
         {
-            sampleCount = 5;
+            uniformCount = 3;
         }
         else if (totalLen >= LFPG_OCC_LONG_WIRE_M)
         {
-            sampleCount = 3;
+            uniformCount = 1;
         }
 
-        // Walk the chain to find points at desired fractions
+        if (uniformCount == 0)
+            return;  // short straight cable — endpoints are sufficient
+
         int si;
         LFPG_CableParticle s;
-        for (si = 0; si < sampleCount; si = si + 1)
+        for (si = 0; si < uniformCount; si = si + 1)
         {
             float frac;
-            if (sampleCount == 1)
+            if (uniformCount == 1)
             {
                 frac = 0.5;
             }
             else
             {
-                // 0.25, 0.50, 0.75
-                frac = (si + 1.0) / (sampleCount + 1.0);
+                // uniformCount == 3: fractions 0.25, 0.50, 0.75
+                frac = (si + 1.0) / (uniformCount + 1.0);
             }
 
             float targetDist = totalLen * frac;
@@ -287,28 +449,24 @@ class LFPG_WireSegmentInfo
                     continue;
 
                 float segLen = vector.Distance(s.m_From, s.m_To);
-                if (walked + segLen >= targetDist)
+                float nextWalked = walked + segLen;
+                if (nextWalked >= targetDist)
                 {
-                    // Interpolate within this segment
                     float remain = targetDist - walked;
                     float t = 0.5;
                     if (segLen > 0.01)
-                    {
                         t = remain / segLen;
-                    }
+
                     vector pt = s.m_From + (s.m_To - s.m_From) * t;
                     occSamples.Insert(pt);
                     found = true;
                     break;
                 }
-                walked = walked + segLen;
+                walked = nextWalked;
             }
 
             if (!found)
-            {
-                // Edge case: use last segment endpoint
                 occSamples.Insert(cachedPosB);
-            }
         }
     }
 
