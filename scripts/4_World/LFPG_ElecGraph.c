@@ -1235,7 +1235,7 @@ class LFPG_ElecGraph
                 // Splitter returns 0.0 explicitly → no regression.
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
-            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
+            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
@@ -1519,7 +1519,7 @@ class LFPG_ElecGraph
             LFPG_DeviceAPI.SetOverloadMask(orphanObj, 0);
             LFPG_DeviceAPI.SetWarningMask(orphanObj, 0);
         }
-        else if (deviceType == LFPG_DeviceType.CONSUMER)
+        else if (deviceType == LFPG_DeviceType.CONSUMER || deviceType == LFPG_DeviceType.CAMERA)
         {
             LFPG_DeviceAPI.SetPowered(orphanObj, false);
         }
@@ -2112,7 +2112,7 @@ class LFPG_ElecGraph
                     LFPG_Util.Info(ptLog2);
                 }
             }
-            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
+            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
                 if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                 {
@@ -2626,8 +2626,8 @@ class LFPG_ElecGraph
             if (!node)
                 continue;
 
-            // Only validate consumers
-            if (node.m_DeviceType != LFPG_DeviceType.CONSUMER)
+            // Only validate consumers (CONSUMER + CAMERA)
+            if (node.m_DeviceType != LFPG_DeviceType.CONSUMER && node.m_DeviceType != LFPG_DeviceType.CAMERA)
                 continue;
 
             // Skip nodes currently in the dirty queue — they have pending updates
@@ -2808,7 +2808,7 @@ class LFPG_ElecGraph
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
 
-            if (node.m_DeviceType == LFPG_DeviceType.CONSUMER)
+            if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
@@ -2950,7 +2950,7 @@ class LFPG_ElecGraph
             ref LFPG_ElecNode targetNode;
             if (m_Nodes.Find(edge.m_TargetNodeId, targetNode) && targetNode)
             {
-                if (targetNode.m_DeviceType == LFPG_DeviceType.CONSUMER)
+                if (targetNode.m_DeviceType == LFPG_DeviceType.CONSUMER || targetNode.m_DeviceType == LFPG_DeviceType.CAMERA)
                 {
                     edgeDemand = targetNode.m_Consumption;
                 }

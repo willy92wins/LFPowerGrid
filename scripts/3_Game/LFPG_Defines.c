@@ -397,6 +397,7 @@ static const float LFPG_INTERACT_DIST_M      = 5.0;    // max interaction raycas
 static const float LFPG_ALPHA_FADE_START_M   = 35.0;   // distance at which alpha fade begins
 static const float LFPG_ALPHA_MIN_THRESHOLD  = 0.02;   // v0.7.38 (M1): skip wire if alpha below this
 static const float LFPG_OCC_ALPHA_MIN        = 0.15;   // v0.7.38 (M1): min alpha for occluded wires (ghost)
+static const float LFPG_OCC_HIT_MARGIN_M     = 0.10;   // v0.9.2 (M1): occlusion hit margin between camera→surface and cable sample
 
 // ---- Screen margins (v0.7.38 M1) ----
 // Margin around screen bounds for Cohen-Sutherland clipping.

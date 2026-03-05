@@ -659,12 +659,7 @@ class LFPG_RetryEntry
     float createdMs;
 };
 
-// v0.7.48 (Bug 3): Occlusion hit margin — minimum distance gap between
-// camera→hitSurface and camera→cableSample to consider the cable occluded.
-// 0.10m is tight enough for thin building floors (~0.15m) while still
-// tolerating minor raycast imprecision on uneven terrain.
-// TODO(M1): consolidate into LFPG_Defines.c alongside LFPG_OCC_SAMPLE_LIFT_M.
-const float LFPG_OCC_HIT_MARGIN_M = 0.10;
+// v0.9.2 (M1): LFPG_OCC_HIT_MARGIN_M moved to LFPG_Defines.c.
 
 class LFPG_CableRenderer
 {

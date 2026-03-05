@@ -112,6 +112,14 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
         return true;
     }
 
+    // v0.9.2: Prevent orphan loop sound — same fix as all other LFPG kits.
+    // DeleteSafe during OnPlacementComplete interrupts callback cleanup
+    // before the sound system detaches the loop.
+    override string GetLoopDeploySoundset()
+    {
+        return "";
+    }
+
     override void SetActions()
     {
         super.SetActions();
