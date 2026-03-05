@@ -42,7 +42,7 @@ FrameWidgetClass CameraOverlayRoot {
     position 16 -12
     hexactpos 1
     vexactpos 1
-    text "0000-00-00  00:00:00"
+    text "0000-00-00  00:00"
     color "180 40 200 40"
     size 0.025 0.025
     hexactsize 0

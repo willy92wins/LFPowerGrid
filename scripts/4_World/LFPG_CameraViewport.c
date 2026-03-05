@@ -209,14 +209,12 @@ class LFPG_CameraViewport
             int day = 0;
             int hour = 0;
             int minute = 0;
-            int second = 0;
-            GetGame().GetWorld().GetDate(year, month, day, hour, minute, second);
+            GetGame().GetWorld().GetDate(year, month, day, hour, minute);
 
             string moStr = month.ToString();
             string dStr = day.ToString();
             string hStr = hour.ToString();
             string miStr = minute.ToString();
-            string sStr = second.ToString();
 
             if (month < 10)
                 moStr = "0" + moStr;
@@ -226,8 +224,6 @@ class LFPG_CameraViewport
                 hStr = "0" + hStr;
             if (minute < 10)
                 miStr = "0" + miStr;
-            if (second < 10)
-                sStr = "0" + sStr;
 
             string ts = year.ToString();
             ts = ts + "-";
@@ -238,8 +234,6 @@ class LFPG_CameraViewport
             ts = ts + hStr;
             ts = ts + ":";
             ts = ts + miStr;
-            ts = ts + ":";
-            ts = ts + sStr;
             m_TimestampWidget.SetText(ts);
         }
     }

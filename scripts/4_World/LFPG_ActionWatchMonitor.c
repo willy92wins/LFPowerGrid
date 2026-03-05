@@ -30,7 +30,9 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
 {
     void LFPG_ActionWatchMonitor()
     {
-        m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
+        // No command animation — camera view is instant.
+        // CMD_ACTIONMOD_INTERACTONCE causes native crash on LF_Monitor
+        // (Inventory_Base in world, not BaseBuildingBase with anim support).
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
         m_Text       = "#STR_LFPG_ACTION_VIEW_CAMERA";
     }
@@ -53,7 +55,8 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!targetObj)
             return false;
 
-        if (!targetObj.IsKindOf("LF_Monitor"))
+        string monitorType = "LF_Monitor";
+        if (!targetObj.IsKindOf(monitorType))
             return false;
 
         // DistSq antes del Cast: falla rapido si el jugador esta lejos.
@@ -83,9 +86,14 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
     }
 
     // Client: enviar RPC pidiendo la lista de camaras al servidor.
-    override void OnExecuteClient(ActionData action_data)
+    // v0.9.5: Moved from OnExecuteClient to OnStartClient.
+    // OnExecuteClient fires AFTER the CMD_ACTIONMOD_INTERACTONCE animation.
+    // The animation command was causing a native crash on LF_Monitor
+    // (Inventory_Base placed in world — not a BaseBuildingBase with
+    // proper animation support). OnStartClient fires BEFORE the command.
+    override void OnStartClient(ActionData action_data)
     {
-        super.OnExecuteClient(action_data);
+        super.OnStartClient(action_data);
 
         if (!action_data.m_Target)
             return;
@@ -94,7 +102,8 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!targetObj)
             return;
 
-        if (!targetObj.IsKindOf("LF_Monitor"))
+        string monitorCheck = "LF_Monitor";
+        if (!targetObj.IsKindOf(monitorCheck))
             return;
 
         int netLow  = 0;
@@ -102,7 +111,8 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         targetObj.GetNetworkID(netLow, netHigh);
 
         ScriptRPC rpc = new ScriptRPC();
-        rpc.Write((int)LFPG_RPC_SubId.REQUEST_CAMERA_LIST);
+        int subId = LFPG_RPC_SubId.REQUEST_CAMERA_LIST;
+        rpc.Write(subId);
         rpc.Write(netLow);
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
