@@ -490,7 +490,12 @@ class LF_Monitor : Inventory_Base
     {
         return m_PoweredNet;
     }
-
+	
+	float LFPG_GetCapacity()
+    {
+        return LFPG_MONITOR_THROUGHPUT;
+    }
+	
     // Autoconsumo del monitor.
     // ElecGraph v0.7.47 soporta m_Consumption > 0 en PASSTHROUGH.
     // Se descuenta del input antes de propagar a los outputs.

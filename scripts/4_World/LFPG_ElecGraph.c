@@ -2216,21 +2216,71 @@ class LFPG_ElecGraph
                 }
             }
 
-            // --- Step 2c (v0.7.47): PASSTHROUGH self-consumption demand stabilizer ---
-            // When a PASSTHROUGH with self-consumption has zero downstream output
-            // (afterSelf=0, e.g. receives exactly selfCons or has no downstream wires),
-            // newOutput=0 and Step 2b's demand signaling code is unreachable (it's inside
-            // the newOutput > EPSILON branch). Without this fixup, m_LastStableOutput
-            // oscillates between 0 (triggers cold-start fallback demand = m_MaxOutput)
-            // and selfCons, causing infinite re-queues and demand inflation that can
-            // starve co-consumer devices via false brownout.
-            // Fix: signal selfCons as demand so upstream allocates the correct amount.
-            // Splitter (selfCons=0): condition is false → no-op.
+            // --- Step 2c (v0.7.47 + v0.9.4): PASSTHROUGH demand stabilizer ---
+            // v0.7.47: Signal selfCons so upstream allocates for self.
+            // v0.9.4:  ALSO discover downstream demand when afterSelf=0.
+            // Without this, a Monitor (selfCons=10) receiving exactly 10 u/s
+            // can never signal that its Camera (15 u/s) also needs power →
+            // permanent deadlock. Read-only demand probe (no edge mutation,
+            // no BROWNOUT flags) using same logic as AllocateOutputByPriority
+            // Phase 1. Splitter (selfCons=0): outer condition false → no-op.
             if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH && newPowered)
             {
                 if (newOutput < LFPG_PROPAGATION_EPSILON && node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                 {
-                    newOutput = node.m_Consumption;
+                    // v0.9.4: Read-only demand probe — sum downstream need
+                    // without touching edge flags or allocations.
+                    float demProbe = 0.0;
+                    ref array<ref LFPG_ElecEdge> demEdges;
+                    if (m_Outgoing.Find(nodeId, demEdges) && demEdges)
+                    {
+                        int dpi;
+                        for (dpi = 0; dpi < demEdges.Count(); dpi = dpi + 1)
+                        {
+                            ref LFPG_ElecEdge dpEdge = demEdges[dpi];
+                            if (!dpEdge)
+                                continue;
+                            if ((dpEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                                continue;
+
+                            ref LFPG_ElecNode dpTgt;
+                            if (m_Nodes.Find(dpEdge.m_TargetNodeId, dpTgt) && dpTgt)
+                            {
+                                if (dpTgt.m_DeviceType == LFPG_DeviceType.CONSUMER || dpTgt.m_DeviceType == LFPG_DeviceType.CAMERA)
+                                {
+                                    demProbe = demProbe + dpTgt.m_Consumption;
+                                }
+                                else if (dpTgt.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                                {
+                                    // Same cold-start fallback as AllocateOutputByPriority Phase 1.
+                                    float dpPtDem = dpTgt.m_LastStableOutput;
+                                    if (dpPtDem < LFPG_PROPAGATION_EPSILON)
+                                    {
+                                        if (dpTgt.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                                        {
+                                            dpPtDem = dpTgt.m_MaxOutput;
+                                        }
+                                    }
+                                    demProbe = demProbe + dpPtDem;
+                                }
+                            }
+                        }
+                    }
+
+                    if (demProbe > LFPG_PROPAGATION_EPSILON)
+                    {
+                        // Signal full need: self + downstream.
+                        newOutput = node.m_Consumption + demProbe;
+                        if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
+                        {
+                            newOutput = node.m_MaxOutput;
+                        }
+                    }
+                    else
+                    {
+                        // No downstream → original v0.7.47 behavior.
+                        newOutput = node.m_Consumption;
+                    }
                 }
             }
 
