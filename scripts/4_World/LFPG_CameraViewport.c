@@ -77,6 +77,12 @@ class LFPG_CameraViewport
     protected TextWidget   m_RecWidget;
     protected TextWidget   m_TimestampWidget;
 
+    // v0.9.6: Deferred overlay creation.
+    // CreateWidgets in the same frame as Camera.SetActive(true) causes
+    // a native crash — the engine workspace is not stable mid-transition.
+    // Flag defers overlay creation to the next Tick() frame.
+    protected bool         m_PendingOverlay;
+
     void LFPG_CameraViewport()
     {
         m_ViewCamObj     = null;
@@ -95,6 +101,7 @@ class LFPG_CameraViewport
         m_LabelWidget     = null;
         m_RecWidget       = null;
         m_TimestampWidget = null;
+        m_PendingOverlay  = false;
 
         // Precomputar colores — cast float→int implicito (Enforce Script).
         int scanAlphaI = LFPG_CCTV_SCANLINE_ALPHA * 255.0;
@@ -149,8 +156,17 @@ class LFPG_CameraViewport
             }
         }
 
-        GetGame().GetInput().ChangeGameFocus(1);
-        GetGame().GetUIManager().ShowUICursor(false);
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            inp.ChangeGameFocus(1);
+        }
+
+        UIManager uiMgr = GetGame().GetUIManager();
+        if (uiMgr)
+        {
+            uiMgr.ShowUICursor(false);
+        }
     }
 
     // =========================================================
@@ -172,7 +188,11 @@ class LFPG_CameraViewport
             }
         }
 
-        GetGame().GetInput().ChangeGameFocus(-1);
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            inp.ChangeGameFocus(-1);
+        }
     }
 
     // =========================================================
@@ -284,22 +304,11 @@ class LFPG_CameraViewport
         // Suprimir input del jugador + ocultar HUD vanilla
         HideAllUI();
 
-        // Crear overlay layout (label, REC, timestamp)
-        string overlayPath = "LFPowerGrid/gui/layouts/LFPG_CameraOverlay.layout";
-        m_OverlayRoot = GetGame().GetWorkspace().CreateWidgets(overlayPath);
-        if (m_OverlayRoot)
-        {
-            string wCamLabel = "CamLabel";
-            string wRecLabel = "RecLabel";
-            string wTimestamp = "TimestampLabel";
-            m_LabelWidget     = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCamLabel));
-            m_RecWidget       = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRecLabel));
-            m_TimestampWidget = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTimestamp));
-            int overlaySort = 11000;
-            m_OverlayRoot.Show(true);
-            m_OverlayRoot.SetSort(overlaySort);
-            UpdateOverlayText();
-        }
+        // v0.9.6: Diferir overlay al siguiente frame.
+        // CreateWidgets en el mismo frame que Camera.SetActive(true) causa
+        // crash nativo — el workspace del engine no esta estable durante
+        // la transicion de camara. Tick() lo crea en el frame siguiente.
+        m_PendingOverlay = true;
 
         // Feedback al jugador
         if (p)
@@ -476,6 +485,7 @@ class LFPG_CameraViewport
         m_CameraList     = null;
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
+        m_PendingOverlay = false;
 
         LFPG_Util.Info("[CameraViewport] Viewport cerrado.");
     }
@@ -488,6 +498,33 @@ class LFPG_CameraViewport
     {
         if (!m_Active)
             return;
+
+        // v0.9.6: Deferred overlay creation.
+        // Runs on the first Tick after EnterFromList, one frame after
+        // Camera.SetActive(true). The workspace is now stable.
+        if (m_PendingOverlay)
+        {
+            m_PendingOverlay = false;
+            string overlayPath = "LFPowerGrid/gui/layouts/LFPG_CameraOverlay.layout";
+            WorkspaceWidget ws = GetGame().GetWorkspace();
+            if (ws)
+            {
+                m_OverlayRoot = ws.CreateWidgets(overlayPath);
+            }
+            if (m_OverlayRoot)
+            {
+                string wCamLabel = "CamLabel";
+                string wRecLabel = "RecLabel";
+                string wTimestamp = "TimestampLabel";
+                m_LabelWidget     = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCamLabel));
+                m_RecWidget       = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRecLabel));
+                m_TimestampWidget = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTimestamp));
+                int overlaySort = 11000;
+                m_OverlayRoot.Show(true);
+                m_OverlayRoot.SetSort(overlaySort);
+                UpdateOverlayText();
+            }
+        }
 
         // Auto-exit por tiempo maximo
         m_ActiveDuration = m_ActiveDuration + timeslice;

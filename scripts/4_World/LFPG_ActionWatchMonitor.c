@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Action: Watch Monitor (v0.9.4 - Wire check fix)
+// LF_PowerGrid - Action: Watch Monitor (v0.9.6 - Crash fix)
 //
 // Replaces LFPG_ActionViewCamera (v0.9.0).
 // Server-authoritative camera list via RPC.
@@ -24,16 +24,20 @@
 //   On the client, monitor.LFPG_GetWires().Count() is ALWAYS 0 → action
 //   never appeared. Server already validates wires + powered cameras in
 //   HandleLFPG_RequestCameraList — client check was redundant and broken.
+// v0.9.6 (Crash fix): Reverted RPC send from OnStartClient back to OnExecuteClient.
+//   OnStartClient fires BEFORE the animation command completes. The RPC response
+//   (CAMERA_LIST_RESPONSE) could arrive while the action is still in-flight,
+//   causing Camera.SetActive(true) to execute during ActionManager processing
+//   → native C++ crash. OnExecuteClient fires AFTER the animation completes,
+//   ensuring the action pipeline is fully resolved before the viewport activates.
+//   Restored m_CommandUID = CMD_ACTIONMOD_INTERACTONCE (required for OnExecuteClient).
 // =========================================================
 
 class LFPG_ActionWatchMonitor : ActionInteractBase
 {
     void LFPG_ActionWatchMonitor()
     {
-        // No command animation — camera view is instant.
-        // CMD_ACTIONMOD_INTERACTONCE causes native crash on LF_Monitor
-        // (Inventory_Base in world, not BaseBuildingBase with anim support).
-		m_CommandUID = -1;
+        m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
         m_Text       = "#STR_LFPG_ACTION_VIEW_CAMERA";
     }
@@ -60,7 +64,6 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!targetObj.IsKindOf(monitorType))
             return false;
 
-        // DistSq antes del Cast: falla rapido si el jugador esta lejos.
         float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), targetObj.GetPosition());
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
@@ -69,16 +72,9 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!monitor)
             return false;
 
-        // Monitor debe estar encendido (m_PoweredNet se replica via SyncVar)
         if (!monitor.LFPG_IsPowered())
             return false;
 
-        // v0.9.4: Wire/camera validation is server-authoritative.
-        // HandleLFPG_RequestCameraList checks wires, resolves cameras,
-        // filters powered ones, and sends appropriate error messages
-        // if no cameras are connected or active.
-
-        // No mostrar si el viewport ya esta activo
         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
         if (vp && vp.IsActive())
             return false;
@@ -86,15 +82,13 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         return true;
     }
 
-    // Client: enviar RPC pidiendo la lista de camaras al servidor.
-    // v0.9.5: Moved from OnExecuteClient to OnStartClient.
-    // OnExecuteClient fires AFTER the CMD_ACTIONMOD_INTERACTONCE animation.
-    // The animation command was causing a native crash on LF_Monitor
-    // (Inventory_Base placed in world — not a BaseBuildingBase with
-    // proper animation support). OnStartClient fires BEFORE the command.
-    override void OnStartClient(ActionData action_data)
+    // v0.9.6: RPC en OnExecuteClient — se dispara DESPUES de que la animacion
+    // de interact termina. La respuesta CAMERA_LIST_RESPONSE llega cuando la
+    // action ya no esta activa, evitando el crash nativo al llamar
+    // Camera.SetActive(true) durante el procesamiento del ActionManager.
+    override void OnExecuteClient(ActionData action_data)
     {
-        super.OnStartClient(action_data);
+        super.OnExecuteClient(action_data);
 
         if (!action_data.m_Target)
             return;
@@ -119,6 +113,5 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
 
-    // Server: toda la logica esta en PlayerRPC handler.
     override void OnExecuteServer(ActionData action_data) {}
 };
