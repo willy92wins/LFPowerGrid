@@ -1,32 +1,35 @@
 // =========================================================
-// LF_PowerGrid - Action: Cycle camera source for a Monitor (v0.9.0 - Etapa 2)
+// LF_PowerGrid - Action: Watch Monitor (v0.9.2 - Sprint B)
 //
-// Aparece al mirar un LF_Monitor. Sin item requerido en mano.
-// Cicla entre todas las LF_Camera del servidor ordenadas por
-// distancia al monitor (mas cercana primero).
+// Replaces LFPG_ActionViewCamera (v0.9.0).
+// Server-authoritative camera list via RPC.
+//
+// Aparece al mirar un LF_Monitor que:
+//   - este encendido (m_PoweredNet = true)
+//   - tenga al menos un wire (OUT ports)
+//   - el viewport NO este ya activo
+//
+// No requiere item en mano (CCINone).
 //
 // Flujo:
-//   Client: GetNetworkID(monitor) → RPC CAMERA_CYCLE → server
-//   Server: recopila cameras, avanza indice, llama LFPG_SetLinkedCamera
-//   Monitor: SyncVars replican → OnVariablesSynchronized actualiza estado
+//   Client: envía REQUEST_CAMERA_LIST(monitorNetLow, monitorNetHigh)
+//   Server: resuelve monitor → filtra cameras powered → responde
+//   Client: recibe CAMERA_LIST_RESPONSE → CameraViewport.EnterFromList
 //
-// Registrar en LFPG_ActionRegistration.RegisterActions():
-//   actions.Insert(LFPG_ActionCycleCamera);
+// Registrar en LF_Monitor.SetActions() y LFPG_ActionRegistration.
 // =========================================================
 
-class LFPG_ActionCycleCamera : ActionSingleUseBase
+class LFPG_ActionWatchMonitor : ActionSingleUseBase
 {
-    void LFPG_ActionCycleCamera()
+    void LFPG_ActionWatchMonitor()
     {
         m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
-        m_Text = "#STR_LFPG_ACTION_CYCLE_CAMERA";
+        m_Text       = "#STR_LFPG_ACTION_VIEW_CAMERA";
     }
 
     override void CreateConditionComponents()
     {
-        // CCINone: no item requerido en mano.
-        // CCTCursor: el jugador debe mirar el objeto objetivo.
         m_ConditionItem   = new CCINone;
         m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
     }
@@ -46,21 +49,30 @@ class LFPG_ActionCycleCamera : ActionSingleUseBase
         if (!targetObj.IsKindOf("LF_Monitor"))
             return false;
 
-        // DistSq: evita sqrt en per-frame condition check.
+        // DistSq antes del Cast: falla rapido si el jugador esta lejos.
         float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), targetObj.GetPosition());
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
-        // CAM-04: solo mostrar si el monitor tiene alimentacion.
-        LF_Monitor mon = LF_Monitor.Cast(targetObj);
-        if (!mon)
+        LF_Monitor monitor = LF_Monitor.Cast(targetObj);
+        if (!monitor)
             return false;
 
-        if (!mon.LFPG_IsPowered())
+        // Monitor debe estar encendido
+        if (!monitor.LFPG_IsPowered())
             return false;
 
-        // CAM-07: no mostrar mientras el jugador este viendo el feed CCTV.
-        // Get() devuelve null en servidor dedicado → condicion segura.
+        // Monitor debe tener wire store con al menos un cable
+        if (!monitor.LFPG_HasWireStore())
+            return false;
+
+        array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
+        if (!wires)
+            return false;
+        if (wires.Count() == 0)
+            return false;
+
+        // No mostrar si el viewport ya esta activo
         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
         if (vp && vp.IsActive())
             return false;
@@ -68,6 +80,7 @@ class LFPG_ActionCycleCamera : ActionSingleUseBase
         return true;
     }
 
+    // Client: enviar RPC pidiendo la lista de camaras al servidor.
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -87,12 +100,12 @@ class LFPG_ActionCycleCamera : ActionSingleUseBase
         targetObj.GetNetworkID(netLow, netHigh);
 
         ScriptRPC rpc = new ScriptRPC();
-        rpc.Write((int)LFPG_RPC_SubId.CAMERA_CYCLE);
+        rpc.Write((int)LFPG_RPC_SubId.REQUEST_CAMERA_LIST);
         rpc.Write(netLow);
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
 
-    // Toda la logica es server-authoritative via RPC.
+    // Server: toda la logica esta en PlayerRPC handler.
     override void OnExecuteServer(ActionData action_data) {}
 };

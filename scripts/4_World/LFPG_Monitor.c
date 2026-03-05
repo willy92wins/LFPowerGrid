@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Monitor device (v0.9.1 - PASSTHROUGH conversion)
+// LF_PowerGrid - Monitor device (v0.9.2 - Sprint B)
 //
 // LF_Monitor_Kit: Holdable, deployable (same-model pattern).
 // LF_Monitor:     PASSTHROUGH, 1 IN (input_1) + 4 OUT (output_1..4).
@@ -7,13 +7,9 @@
 //                 OUT ports restricted to LF_Camera only (CanConnectTo).
 //                 Owns wires on output side (same pattern as Splitter).
 //
-// v0.9.1: Converted from CONSUMER to PASSTHROUGH.
-//   - Removed m_LinkedCamIdLow/High SyncVars (camera selection is now
-//     client-side in CameraView, based on ElecGraph edges).
-//   - Added wire store (m_Wires) + full WireHelper API.
-//   - Added m_OverloadMask, m_WarningMask SyncVars.
-//   - Persistence: DeviceIds + wires JSON (NO m_PoweredNet — derived).
-//   - RVMAT swap: ON when powered, OFF otherwise.
+// v0.9.2 Sprint B: ActionWatchMonitor replaces ActionViewCamera.
+//   Camera view is now server-authoritative (RPC REQUEST_CAMERA_LIST).
+//   ActionCycleCamera and ActionUnlinkCamera removed (deprecated).
 //
 // ⚠ SAVE WIPE REQUERIDA — esquema incompatible con v0.9.0.
 // =========================================================
@@ -348,9 +344,8 @@ class LF_Monitor : Inventory_Base
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
 
-        // v0.9.1: ActionViewCamera se mantiene temporalmente.
-        // Sprint B reemplazara por ActionWatchMonitor (RPC-based).
-        AddAction(LFPG_ActionViewCamera);
+        // v0.9.2 Sprint B: ActionWatchMonitor (RPC-based, replaces ActionViewCamera).
+        AddAction(LFPG_ActionWatchMonitor);
     }
 
     override bool IsElectricAppliance()

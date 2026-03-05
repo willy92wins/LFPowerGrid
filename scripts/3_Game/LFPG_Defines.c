@@ -233,8 +233,10 @@ enum LFPG_RPC_SubId
     REQUEST_DEVICE_SYNC = 10,   // v0.7.35 D1: client requests wire sync for a specific device
     INSPECT_DEVICE = 11,        // Sprint 5: client requests wire topology for inspector
     INSPECT_RESPONSE = 12,       // Sprint 5: server sends wire topology back to client
-	CAMERA_CYCLE = 13,
-	CAMERA_UNLINK = 14
+	CAMERA_CYCLE = 13,          // v0.9.0 DEPRECATED — drain-only
+	CAMERA_UNLINK = 14,         // v0.9.0 DEPRECATED — drain-only
+	REQUEST_CAMERA_LIST = 15,   // Sprint B: client requests camera list for a monitor
+	CAMERA_LIST_RESPONSE = 16   // Sprint B: server sends camera list back to client
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
@@ -527,4 +529,5 @@ static const int   LFPG_SOLAR_DUSK_HOUR  = 20;     // daylight end hour
 // Throughput cap = 4 cameras x 15 u/s + 10 u/s self-consumption.
 static const float LFPG_MONITOR_THROUGHPUT   = 70.0;   // u/s max output capacity
 static const float LFPG_MONITOR_CONSUMPTION  = 10.0;   // u/s self-consumption
+static const int   LFPG_MONITOR_MAX_CAMERAS  = 4;      // Sprint B: max cameras per monitor (= OUT ports)
 static const int   LFPG_MONITOR_MAX_OUTPUTS  = 4;      // output ports (output_1..4)

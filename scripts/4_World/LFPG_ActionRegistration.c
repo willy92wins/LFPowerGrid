@@ -7,6 +7,8 @@
 //          DeployableContainer_Base pattern with vanilla ActionPlaceObject.
 //          LFPG_ActionPlaceSolarPanel.c can be deleted from the project.
 // v0.8.2:  Added LFPG_ActionPlaceCombiner for Combiner Kit deployment.
+// v0.9.2:  Sprint B — Replaced ActionViewCamera/CycleCamera/UnlinkCamera
+//          with single ActionWatchMonitor (RPC-based camera list + in-viewport cycling).
 //
 // IMPORTANT:
 //  - Actions MUST be registered in ActionConstructor::RegisterActions()
@@ -53,10 +55,11 @@ modded class ActionConstructor
 		// --- v0.9.0: CCTV Kit placement ---
         actions.Insert(LFPG_ActionPlaceCamera);
         actions.Insert(LFPG_ActionPlaceMonitor);
-        actions.Insert(LFPG_ActionCycleCamera);
-        actions.Insert(LFPG_ActionUnlinkCamera);
-		actions.Insert(LFPG_ActionViewCamera);
-        LFPG_Util.Debug("[Actions] LFPG actions registered (28)");
+
+        // v0.9.2 Sprint B: ActionWatchMonitor replaces ViewCamera/CycleCamera/UnlinkCamera
+        actions.Insert(LFPG_ActionWatchMonitor);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (26)");
     }
 };
 

@@ -60,6 +60,10 @@ modded class PlayerBase
         {
             HandleLFPG_CameraUnlink(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
+        {
+            HandleLFPG_RequestCameraList(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -72,6 +76,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.INSPECT_RESPONSE)
         {
             HandleLFPG_InspectResponse(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.CAMERA_LIST_RESPONSE)
+        {
+            HandleLFPG_CameraListResponse(ctx);
         }
         #endif
     }
@@ -955,6 +963,231 @@ modded class PlayerBase
         ctx.Read(discardLow);
         ctx.Read(discardHigh);
         LFPG_Util.Warn("[CameraUnlink] DEPRECATED RPC received — ignoring");
+    }
+
+    // =====================================
+    // SERVER: Sprint B — Request camera list for a monitor
+    // Resolves wired cameras, filters powered, sends list to client.
+    // =====================================
+    protected void HandleLFPG_RequestCameraList(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int monNetLow = 0;
+        int monNetHigh = 0;
+        if (!ctx.Read(monNetLow))
+            return;
+        if (!ctx.Read(monNetHigh))
+            return;
+
+        // Resolve monitor entity by NetworkID
+        EntityAI monEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(monNetLow, monNetHigh));
+        if (!monEnt)
+        {
+            LFPG_Util.Warn("[RequestCameraList] monitor entity not found");
+            LFPG_SendClientMsg(this, "Monitor not found.");
+            return;
+        }
+
+        LF_Monitor monitor = LF_Monitor.Cast(monEnt);
+        if (!monitor)
+        {
+            LFPG_Util.Warn("[RequestCameraList] entity is not LF_Monitor");
+            return;
+        }
+
+        if (!monitor.LFPG_IsPowered())
+        {
+            LFPG_SendClientMsg(this, "El monitor no tiene alimentacion.");
+            return;
+        }
+
+        // Collect powered cameras from monitor's wire store
+        array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
+        if (!wires)
+        {
+            LFPG_SendClientMsg(this, "No hay camaras conectadas.");
+            return;
+        }
+
+        // Build camera list — up to LFPG_MONITOR_MAX_CAMERAS entries
+        // Hoist all variables before loop (Enforce Script)
+        int camCount = 0;
+        ref array<vector> camPositions = new array<vector>;
+        ref array<vector> camOrientations = new array<vector>;
+        ref array<string> camLabels = new array<string>;
+
+        EntityAI camEnt = null;
+        LF_Camera cam = null;
+        string camDevId = "";
+        int idLen = 0;
+        string camLabel = "";
+        int wi = 0;
+
+        while (wi < wires.Count())
+        {
+            LFPG_WireData wd = wires[wi];
+            wi = wi + 1;
+
+            if (!wd)
+                continue;
+
+            camDevId = wd.m_TargetDeviceId;
+            if (camDevId == "")
+                continue;
+
+            camEnt = LFPG_DeviceRegistry.Get().FindById(camDevId);
+            if (!camEnt)
+                continue;
+
+            cam = LF_Camera.Cast(camEnt);
+            if (!cam)
+                continue;
+
+            if (!cam.LFPG_IsPowered())
+                continue;
+
+            // Build label: CAM-XXXXXX (last 6 chars of deviceId)
+            idLen = camDevId.Length();
+            if (idLen > 6)
+            {
+                camLabel = "CAM-" + camDevId.Substring(idLen - 6, 6);
+            }
+            else
+            {
+                camLabel = "CAM-" + camDevId;
+            }
+
+            camPositions.Insert(cam.GetPosition());
+            camOrientations.Insert(cam.GetOrientation());
+            camLabels.Insert(camLabel);
+            camCount = camCount + 1;
+
+            if (camCount >= LFPG_MONITOR_MAX_CAMERAS)
+                break;
+        }
+
+        if (camCount == 0)
+        {
+            LFPG_SendClientMsg(this, "No hay camaras activas conectadas.");
+            return;
+        }
+
+        // Send CAMERA_LIST_RESPONSE to the requesting player (this = PlayerBase)
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write(LFPG_RPC_SubId.CAMERA_LIST_RESPONSE);
+        rpc.Write(camCount);
+
+        int ci = 0;
+        vector writePos = "0 0 0";
+        vector writeOri = "0 0 0";
+        float wf = 0.0;
+        while (ci < camCount)
+        {
+            writePos = camPositions[ci];
+            wf = writePos[0];
+            rpc.Write(wf);
+            wf = writePos[1];
+            rpc.Write(wf);
+            wf = writePos[2];
+            rpc.Write(wf);
+            writeOri = camOrientations[ci];
+            wf = writeOri[0];
+            rpc.Write(wf);
+            wf = writeOri[1];
+            rpc.Write(wf);
+            wf = writeOri[2];
+            rpc.Write(wf);
+            rpc.Write(camLabels[ci]);
+            ci = ci + 1;
+        }
+
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
+
+        string logMsg = "[RequestCameraList] Sent " + camCount.ToString() + " cameras to player";
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Sprint B — Receive camera list from server
+    // Passes data to CameraViewport for viewport activation.
+    // =====================================
+    protected void HandleLFPG_CameraListResponse(ParamsReadContext ctx)
+    {
+        int camCount = 0;
+        if (!ctx.Read(camCount))
+            return;
+
+        if (camCount <= 0)
+        {
+            PlayerBase pLocal = PlayerBase.Cast(GetGame().GetPlayer());
+            if (pLocal)
+                pLocal.MessageStatus("[LFPG] No hay camaras activas conectadas.");
+            return;
+        }
+
+        ref array<ref LFPG_CameraListEntry> entries = new array<ref LFPG_CameraListEntry>;
+
+        // Read per-camera data: 3 floats pos + 3 floats ori + 1 string label
+        float readPx = 0.0;
+        float readPy = 0.0;
+        float readPz = 0.0;
+        float readOx = 0.0;
+        float readOy = 0.0;
+        float readOz = 0.0;
+        string readLabel = "";
+        vector assembledPos = "0 0 0";
+        vector assembledOri = "0 0 0";
+        int ri = 0;
+
+        while (ri < camCount)
+        {
+            if (!ctx.Read(readPx))
+                break;
+            if (!ctx.Read(readPy))
+                break;
+            if (!ctx.Read(readPz))
+                break;
+            if (!ctx.Read(readOx))
+                break;
+            if (!ctx.Read(readOy))
+                break;
+            if (!ctx.Read(readOz))
+                break;
+            if (!ctx.Read(readLabel))
+                break;
+
+            assembledPos[0] = readPx;
+            assembledPos[1] = readPy;
+            assembledPos[2] = readPz;
+            assembledOri[0] = readOx;
+            assembledOri[1] = readOy;
+            assembledOri[2] = readOz;
+
+            ref LFPG_CameraListEntry entry = new LFPG_CameraListEntry();
+            entry.m_Pos   = assembledPos;
+            entry.m_Ori   = assembledOri;
+            entry.m_Label = readLabel;
+            entries.Insert(entry);
+
+            ri = ri + 1;
+        }
+
+        if (entries.Count() == 0)
+            return;
+
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (!vp)
+            return;
+
+        vp.EnterFromList(entries);
     }
 
     // =====================================
