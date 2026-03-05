@@ -196,7 +196,7 @@ class CfgVehicles
     // ---- Solar Panel Kit (DeployableContainer_Base, different-model hologram) ----
     // v0.8.2: Refactored BACK TO Inventory_Base + isDeployable=1
     //   old DeployableContainer_Base IS NOT SHOWING KIT.
-    class LF_SolarPanel_Kit : DeployableContainer_Base
+    class LF_SolarPanel_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_KIT";

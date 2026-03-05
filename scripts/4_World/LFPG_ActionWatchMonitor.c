@@ -19,7 +19,12 @@
 // Registrar en LF_Monitor.SetActions() y LFPG_ActionRegistration.
 // =========================================================
 
-class LFPG_ActionWatchMonitor : ActionSingleUseBase
+// v0.9.3 (Bug 2 fix): Changed parent from ActionSingleUseBase to ActionInteractBase.
+// ActionSingleUseBase is for item-in-hand actions — never evaluated when player
+// has empty hands looking at a world entity. ActionInteractBase is for world entity
+// interactions (same as ActionLFPG_ToggleSource on Generator). CCINone + CCTCursor
+// pattern is identical and compatible with ActionInteractBase.
+class LFPG_ActionWatchMonitor : ActionInteractBase
 {
     void LFPG_ActionWatchMonitor()
     {

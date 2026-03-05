@@ -455,6 +455,11 @@ class LFPG_DeviceInspector
             typeStr = Loc("#STR_LFPG_INSPECT_PASSTHROUGH");
             typeColor = ARGB(255, 160, 120, 220);
         }
+        else if (devType == LFPG_DeviceType.CAMERA)
+        {
+            typeStr = Loc("#STR_LFPG_INSPECT_CAMERA");
+            typeColor = ARGB(255, 100, 180, 220);
+        }
 
         m_wDeviceType.SetText(typeStr);
         m_wDeviceType.SetColor(typeColor);
@@ -549,6 +554,13 @@ class LFPG_DeviceInspector
             float cons = LFPG_DeviceAPI.GetConsumption(device);
             capText = Loc("#STR_LFPG_INSPECT_CONSUMPTION");
             capText = capText + FormatFloat1(cons);
+            capText = capText + " u/s";
+        }
+        else if (devType == LFPG_DeviceType.CAMERA)
+        {
+            float camCons = LFPG_DeviceAPI.GetConsumption(device);
+            capText = Loc("#STR_LFPG_INSPECT_CONSUMPTION");
+            capText = capText + FormatFloat1(camCons);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
