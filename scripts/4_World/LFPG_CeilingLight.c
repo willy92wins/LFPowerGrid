@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - CeilingLight device (v0.8.3)
+// LF_PowerGrid - CeilingLight device (v0.9.3)
 //
 // LF_CeilingLight_Kit:  Holdable item (deployable).
 //                       Player places via hologram -> spawns LF_CeilingLight.
@@ -30,6 +30,10 @@
 // v0.8.3 (Audit Parity): Added CanBePickedUp()->false and
 //   IsHeavyBehaviour()->false. Prevents F-key pick-up and shoulder
 //   carry that silently break wire connections.
+// v0.9.3 (Sync Audit):
+//   S4: LFPG_TryRegister now captures oldId before recalculating.
+//       Prevents ghost entries in DeviceRegistry from partial SyncVars.
+//       Parity with all other devices (v0.7.45 Patch 4).
 // =========================================================
 
 // ---------------------------------------------------------
@@ -343,7 +347,20 @@ class LF_CeilingLight : Inventory_Base
         if (m_LFPG_Deleting)
             return;
 
+        // v0.9.3 (S4 fix): Capture old ID before recalculating.
+        // If OnVarSync delivers partial SyncVars (DeviceIdLow before High),
+        // the transient ID gets registered. When the second SyncVar arrives
+        // and the ID changes, the old entry must be unregistered to prevent
+        // ghost entries in DeviceRegistry.
+        // Parity with Generator/Lamp/Splitter/Combiner/Camera/Monitor (v0.7.45).
+        string oldId = m_DeviceId;
         LFPG_UpdateDeviceIdString();
+
+        if (oldId != "" && oldId != m_DeviceId)
+        {
+            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
+        }
+
         if (m_DeviceId != "")
         {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);

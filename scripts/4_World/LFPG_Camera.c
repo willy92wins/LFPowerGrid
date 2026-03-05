@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Camera device (v0.9.0 - Etapa 3)
+// LF_PowerGrid - Camera device (v0.9.3 - Sync Audit fixes)
 //
 // LF_Camera_Kit:  Holdable, deployable (same-model pattern = Splitter/Combiner).
 // LF_Camera:      CONSUMER, 1 IN (input_1), 15 u/s, no OUT, no wire store.
@@ -15,6 +15,13 @@
 //   LED rojo (lf_camera_led_on.rvmat)  cuando m_PoweredNet=true.
 //   LED apagado (lf_camera_led_off.rvmat) cuando m_PoweredNet=false.
 //   Assets en data/camera/ (NO data/cctv/).
+//
+// v0.9.3 (Sync Audit):
+//   S3: m_PoweredNet removed from persistence — derived state.
+//       Same "Ghost Lamp" bug as v0.7.42. Camera was the only device
+//       still persisting m_PoweredNet, causing LED ON after restart
+//       when source no longer exists.
+//       ⚠ SAVE WIPE REQUIRED — schema change (field removed from stream).
 // =========================================================
 
 static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\camera\\lf_camera_led_off.rvmat";
@@ -282,7 +289,13 @@ class LF_Camera : Inventory_Base
     }
 
     // ============================================
-    // Persistence - CONSUMER: ids + m_PoweredNet
+    // Persistence - CONSUMER: ids only.
+    // v0.9.3 (S3 fix): m_PoweredNet removed from persistence.
+    // It is a derived state from the electrical graph; persisting it
+    // caused cameras to show LED ON after restart when their source
+    // no longer exists (same "Ghost Lamp" bug fixed in v0.7.42).
+    // Field default (false) is correct; propagation re-derives it.
+    // ⚠ SAVE WIPE REQUIRED — schema change (field removed from stream).
     // Orden DEBE coincidir exactamente entre Save y Load.
     // ============================================
     override void OnStoreSave(ParamsWriteContext ctx)
@@ -290,7 +303,7 @@ class LF_Camera : Inventory_Base
         super.OnStoreSave(ctx);
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        ctx.Write(m_PoweredNet);
+        // v0.9.3: m_PoweredNet no longer persisted — derived state.
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -302,8 +315,9 @@ class LF_Camera : Inventory_Base
             return false;
         if (!ctx.Read(m_DeviceIdHigh))
             return false;
-        if (!ctx.Read(m_PoweredNet))
-            return false;
+
+        // v0.9.3: m_PoweredNet no longer persisted.
+        // Field default (false) is correct; propagation re-derives it.
 
         return true;
     }

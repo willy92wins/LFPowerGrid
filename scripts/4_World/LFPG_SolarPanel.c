@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Solar Panel devices (v0.8.1, Sprint 6)
+// LF_PowerGrid - Solar Panel devices (v0.9.3, Sprint 6)
 //
 // LF_SolarPanel_Kit:  Deployable kit (DeployableContainer_Base pattern).
 //                     Uses shared box model (lf_kit_box.p3d).
@@ -15,6 +15,13 @@
 //   - LFPG_ActionPlaceSolarPanel removed (no longer needed)
 //   - 6 Hologram overrides in LFPG_HologramMod.c prevent ghost entity
 //     from ProjectionBasedOnParent creating real entities.
+//
+// v0.9.3 (Sync Audit):
+//   S4: LFPG_TryRegister now captures oldId before recalculating.
+//       Prevents ghost entries in DeviceRegistry from partial SyncVars.
+//       Parity with all other devices (v0.7.45 Patch 4).
+//   S5: LFPG_SetLoadRatio now uses delta threshold (0.01) to avoid
+//       SetSynchDirty from float jitter. Parity with LF_TestGenerator.
 //
 // LF_SolarPanel:      T1 SOURCE device (20 u/s during daylight).
 //                     1 output port (output_1). Owns wires.
@@ -350,7 +357,20 @@ class LF_SolarPanel : Inventory_Base
         if (m_LFPG_Deleting)
             return;
 
+        // v0.9.3 (S4 fix): Capture old ID before recalculating.
+        // If OnVarSync delivers partial SyncVars (DeviceIdLow before High),
+        // the transient ID gets registered. When the second SyncVar arrives
+        // and the ID changes, the old entry must be unregistered to prevent
+        // ghost entries in DeviceRegistry.
+        // Parity with Generator/Lamp/Splitter/Combiner/Camera/Monitor (v0.7.45).
+        string oldId = m_DeviceId;
         LFPG_UpdateDeviceIdString();
+
+        if (oldId != "" && oldId != m_DeviceId)
+        {
+            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
+        }
+
         if (m_DeviceId != "")
         {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
@@ -460,7 +480,19 @@ class LF_SolarPanel : Inventory_Base
     void LFPG_SetLoadRatio(float ratio)
     {
         #ifdef SERVER
-        if (m_LoadRatio != ratio)
+        if (ratio < 0.0)
+        {
+            ratio = 0.0;
+        }
+
+        // v0.9.3 (S5 fix): Delta threshold to avoid SetSynchDirty from float jitter.
+        // Parity with LF_TestGenerator.LFPG_SetLoadRatio (v0.7.8+).
+        float diff = ratio - m_LoadRatio;
+        if (diff < 0.0)
+        {
+            diff = -diff;
+        }
+        if (diff > 0.01)
         {
             m_LoadRatio = ratio;
             SetSynchDirty();

@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Monitor device (v0.9.2 - Sprint B)
+// LF_PowerGrid - Monitor device (v0.9.3 - Sync Audit fixes)
 //
 // LF_Monitor_Kit: Holdable, deployable (same-model pattern).
 // LF_Monitor:     PASSTHROUGH, 1 IN (input_1) + 4 OUT (output_1..4).
@@ -10,6 +10,14 @@
 // v0.9.2 Sprint B: ActionWatchMonitor replaces ActionViewCamera.
 //   Camera view is now server-authoritative (RPC REQUEST_CAMERA_LIST).
 //   ActionCycleCamera and ActionUnlinkCamera removed (deprecated).
+//
+// v0.9.3 (Sync Audit):
+//   S1: EEInit was calling nonexistent LFPG_WireHelper.BroadcastWires().
+//       Fixed to LFPG_NetworkManager.Get().BroadcastOwnerWires(this).
+//       Monitor wires were never broadcast to clients on startup/JIP.
+//   S2: OnVarSync was calling nonexistent nm.RequestDeviceSync(this, id).
+//       Fixed to CableRenderer.RequestDeviceSync(id, this) + visual notify.
+//       Monitor cables were invisible on JIP until ReconcileTick (60s).
 //
 // ⚠ SAVE WIPE REQUERIDA — esquema incompatible con v0.9.0.
 // =========================================================
@@ -182,10 +190,9 @@ class LF_Monitor : Inventory_Base
 
         #ifdef SERVER
         // PASSTHROUGH con wire store: broadcast wires persistidos a todos los clientes.
-        if (m_Wires.Count() > 0)
-        {
-            LFPG_WireHelper.BroadcastWires(this, m_Wires, m_DeviceId);
-        }
+        // v0.9.3 (S1 fix): Was calling nonexistent LFPG_WireHelper.BroadcastWires().
+        // Correct API is NetworkManager.BroadcastOwnerWires (handles empty arrays internally).
+        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
         #endif
     }
 
@@ -260,11 +267,21 @@ class LF_Monitor : Inventory_Base
             SetObjectMaterial(0, LFPG_MONITOR_RVMAT_OFF);
         }
 
-        // PASSTHROUGH: sincronizar representacion visual de cables.
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
-        if (nm)
+        // v0.9.3 (S2 fix): Was calling nonexistent nm.RequestDeviceSync(this, m_DeviceId).
+        // Correct API: CableRenderer.RequestDeviceSync(deviceId, entity).
+        // Pattern matches Splitter/Combiner/CeilingLight parity.
+        if (m_DeviceId != "")
         {
-            nm.RequestDeviceSync(this, m_DeviceId);
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                r.RequestDeviceSync(m_DeviceId, this);
+
+                if (r.HasOwnerData(m_DeviceId))
+                {
+                    r.NotifyOwnerVisualChanged(m_DeviceId);
+                }
+            }
         }
         #endif
     }
