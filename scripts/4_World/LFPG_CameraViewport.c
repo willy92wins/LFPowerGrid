@@ -39,7 +39,7 @@
 // =========================================================
 
 static const float LFPG_CCTV_SCANLINE_SPACING = 5.0;   // px entre lineas
-static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.22;  // 0-1 opacidad lineas
+static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.32;  // 0-1 opacidad lineas (verde oscuro CCTV)
 static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;  // px/s desplazamiento
 static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;  // 0-1 opacidad vignette
 static const float LFPG_CCTV_VIGNETTE_W       = 55.0;  // px grosor borde
@@ -71,6 +71,12 @@ class LFPG_CameraViewport
     protected int       m_ScanColor;
     protected int       m_VigColor;
 
+    // ---- Overlay widgets (layout-based) ----
+    protected Widget       m_OverlayRoot;
+    protected TextWidget   m_LabelWidget;
+    protected TextWidget   m_RecWidget;
+    protected TextWidget   m_TimestampWidget;
+
     void LFPG_CameraViewport()
     {
         m_ViewCamObj     = null;
@@ -85,10 +91,15 @@ class LFPG_CameraViewport
         m_NextInput      = null;
         m_PrevInput      = null;
 
+        m_OverlayRoot     = null;
+        m_LabelWidget     = null;
+        m_RecWidget       = null;
+        m_TimestampWidget = null;
+
         // Precomputar colores — cast float→int implicito (Enforce Script).
         int scanAlphaI = LFPG_CCTV_SCANLINE_ALPHA * 255.0;
         int vigAlphaI  = LFPG_CCTV_VIGNETTE_ALPHA * 255.0;
-        m_ScanColor    = ARGB(scanAlphaI, 0, 0, 0);
+        m_ScanColor    = ARGB(scanAlphaI, 0, 15, 0);
         m_VigColor     = ARGB(vigAlphaI,  0, 0, 0);
     }
 
@@ -118,6 +129,119 @@ class LFPG_CameraViewport
     bool IsActive()
     {
         return m_Active;
+    }
+
+    // =========================================================
+    // HideAllUI — suprime input del jugador + oculta HUD vanilla
+    // ChangeGameFocus(1) incrementa contador interno del motor.
+    // ShowHudPlayer(false) usa capa "player hide" (no toca m_HudState).
+    // =========================================================
+    protected void HideAllUI()
+    {
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            Hud hud = mission.GetHud();
+            if (hud)
+            {
+                hud.ShowHudPlayer(false);
+                hud.ShowQuickbarPlayer(false);
+            }
+        }
+
+        GetGame().GetInput().ChangeGameFocus(1);
+        GetGame().GetUIManager().ShowUICursor(false);
+    }
+
+    // =========================================================
+    // RestoreAllUI — restaura input + HUD vanilla
+    // ChangeGameFocus(-1) decrementa contador.
+    // ShowHudPlayer(true) es idempotente — no fuerza HUD si
+    // el jugador lo habia ocultado con ~ antes de entrar.
+    // =========================================================
+    protected void RestoreAllUI()
+    {
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            Hud hud = mission.GetHud();
+            if (hud)
+            {
+                hud.ShowHudPlayer(true);
+                hud.ShowQuickbarPlayer(true);
+            }
+        }
+
+        GetGame().GetInput().ChangeGameFocus(-1);
+    }
+
+    // =========================================================
+    // UpdateOverlayText — actualiza label, REC parpadeo, timestamp
+    // Llamado cada frame desde Tick + una vez al entrar.
+    // =========================================================
+    protected void UpdateOverlayText()
+    {
+        if (m_LabelWidget)
+        {
+            int displayIdx = m_CameraIndex + 1;
+            string idxStr = displayIdx.ToString();
+            string totalStr = m_CameraTotal.ToString();
+            string labelText = m_CameraLabel;
+            labelText = labelText + "  [";
+            labelText = labelText + idxStr;
+            labelText = labelText + "/";
+            labelText = labelText + totalStr;
+            labelText = labelText + "]";
+            m_LabelWidget.SetText(labelText);
+        }
+
+        if (m_RecWidget)
+        {
+            int recSec = m_ActiveDuration;
+            bool recVisible = ((recSec % 2) == 0);
+            m_RecWidget.Show(recVisible);
+        }
+
+        if (m_TimestampWidget)
+        {
+            int year = 0;
+            int month = 0;
+            int day = 0;
+            int hour = 0;
+            int minute = 0;
+            int second = 0;
+            GetGame().GetWorld().GetDate(year, month, day, hour, minute, second);
+
+            string moStr = month.ToString();
+            string dStr = day.ToString();
+            string hStr = hour.ToString();
+            string miStr = minute.ToString();
+            string sStr = second.ToString();
+
+            if (month < 10)
+                moStr = "0" + moStr;
+            if (day < 10)
+                dStr = "0" + dStr;
+            if (hour < 10)
+                hStr = "0" + hStr;
+            if (minute < 10)
+                miStr = "0" + miStr;
+            if (second < 10)
+                sStr = "0" + sStr;
+
+            string ts = year.ToString();
+            ts = ts + "-";
+            ts = ts + moStr;
+            ts = ts + "-";
+            ts = ts + dStr;
+            ts = ts + "  ";
+            ts = ts + hStr;
+            ts = ts + ":";
+            ts = ts + miStr;
+            ts = ts + ":";
+            ts = ts + sStr;
+            m_TimestampWidget.SetText(ts);
+        }
     }
 
     // =========================================================
@@ -163,16 +287,42 @@ class LFPG_CameraViewport
         m_ScanlineOffset = 0.0;
         m_ActiveDuration = 0.0;
 
+        // Suprimir input del jugador + ocultar HUD vanilla
+        HideAllUI();
+
+        // Crear overlay layout (label, REC, timestamp)
+        string overlayPath = "LFPowerGrid/gui/layouts/LFPG_CameraOverlay.layout";
+        m_OverlayRoot = GetGame().GetWorkspace().CreateWidgets(overlayPath);
+        if (m_OverlayRoot)
+        {
+            string wCamLabel = "CamLabel";
+            string wRecLabel = "RecLabel";
+            string wTimestamp = "TimestampLabel";
+            m_LabelWidget     = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCamLabel));
+            m_RecWidget       = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRecLabel));
+            m_TimestampWidget = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTimestamp));
+            int overlaySort = 11000;
+            m_OverlayRoot.Show(true);
+            m_OverlayRoot.SetSort(overlaySort);
+            UpdateOverlayText();
+        }
+
         // Feedback al jugador
         if (p)
         {
             string totalStr = m_CameraTotal.ToString();
-            string enterMsg = "[LFPG] " + m_CameraLabel + " (1/" + totalStr + ")  Q/E=Ciclar  SPACE=Salir";
+            string enterMsg = "[LFPG] ";
+            enterMsg = enterMsg + m_CameraLabel;
+            enterMsg = enterMsg + " (1/";
+            enterMsg = enterMsg + totalStr;
+            enterMsg = enterMsg + ")  Q/E=Ciclar  SPACE=Salir";
             p.MessageStatus(enterMsg);
         }
 
-        string logEntry = "[CameraViewport] EnterFromList: " + m_CameraTotal.ToString() + " cameras";
-        logEntry = logEntry + ", active: " + m_CameraLabel;
+        string logEntry = "[CameraViewport] EnterFromList: ";
+        logEntry = logEntry + m_CameraTotal.ToString();
+        logEntry = logEntry + " cameras, active: ";
+        logEntry = logEntry + m_CameraLabel;
         LFPG_Util.Info(logEntry);
     }
 
@@ -282,7 +432,13 @@ class LFPG_CameraViewport
         int displayIdx = m_CameraIndex + 1;
         string idxStr = displayIdx.ToString();
         string totalStr = m_CameraTotal.ToString();
-        string msg = "[LFPG] " + m_CameraLabel + " (" + idxStr + "/" + totalStr + ")";
+        string msg = "[LFPG] ";
+        msg = msg + m_CameraLabel;
+        msg = msg + " (";
+        msg = msg + idxStr;
+        msg = msg + "/";
+        msg = msg + totalStr;
+        msg = msg + ")";
         p.MessageStatus(msg);
     }
 
@@ -293,6 +449,19 @@ class LFPG_CameraViewport
     {
         if (!m_Active)
             return;
+
+        // Restaurar input + HUD vanilla (ANTES de limpiar estado)
+        RestoreAllUI();
+
+        // Destruir overlay layout
+        if (m_OverlayRoot)
+        {
+            m_OverlayRoot.Unlink();
+            m_OverlayRoot     = null;
+            m_LabelWidget     = null;
+            m_RecWidget       = null;
+            m_TimestampWidget = null;
+        }
 
         m_Active = false;
 
@@ -362,6 +531,9 @@ class LFPG_CameraViewport
             CyclePrev();
         }
 
+        // Actualizar texto del overlay (label, REC parpadeo, timestamp)
+        UpdateOverlayText();
+
         // Avanzar offset de scanlines
         m_ScanlineOffset = m_ScanlineOffset + (LFPG_CCTV_SCROLL_SPEED * timeslice);
         while (m_ScanlineOffset >= LFPG_CCTV_SCANLINE_SPACING)
@@ -371,8 +543,9 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // DrawOverlay — scanlines + vignette + indicador REC
-    // Sin cambios funcionales respecto a v0.9.1.
+    // DrawOverlay — scanlines verdes + vignette
+    // v0.9.3: REC indicador migrado a TextWidget (UpdateOverlayText).
+    //         Scanlines ahora verde oscuro (CCTV look).
     // =========================================================
     void DrawOverlay(LFPG_CableHUD hud)
     {
@@ -405,23 +578,5 @@ class LFPG_CameraViewport
         hud.DrawLineScreen(sw - vhalf, 0.0,  sw - vhalf, sh,   vw, m_VigColor);
         hud.DrawLineScreen(0.0,        vhalf, sw,         vhalf, vw, m_VigColor);
         hud.DrawLineScreen(0.0,        sh - vhalf, sw, sh - vhalf, vw, m_VigColor);
-
-        // Indicador REC parpadeante
-        int recTick = m_ActiveDuration;
-        if ((recTick % 2) == 0)
-        {
-            int   recColor = ARGB(210, 190, 0, 0);
-            float recX     = sw - 24.0;
-            float recY     = 14.0;
-            float recSz    = 7.0;
-            float recYEnd  = recY + recSz;
-
-            float ry = recY;
-            while (ry <= recYEnd)
-            {
-                hud.DrawLineScreen(recX, ry, recX + recSz, ry, 1.0, recColor);
-                ry = ry + 1.0;
-            }
-        }
     }
 }
