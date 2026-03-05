@@ -329,6 +329,20 @@ class LF_Camera : Inventory_Base
         return m_DeviceId;
     }
 
+    // Getters de los campos low/high — necesarios porque m_DeviceIdLow/High son
+    // protected. PlayerRPC.HandleLFPG_CameraLink llama estos metodos directamente:
+    //   monitor.LFPG_SetLinkedCamera(nextCam.LFPG_GetDeviceIdLow(), nextCam.LFPG_GetDeviceIdHigh())
+    // Sin estos getters el script no compila.
+    int LFPG_GetDeviceIdLow()
+    {
+        return m_DeviceIdLow;
+    }
+
+    int LFPG_GetDeviceIdHigh()
+    {
+        return m_DeviceIdHigh;
+    }
+
     int LFPG_GetPortCount()
     {
         return 1;
