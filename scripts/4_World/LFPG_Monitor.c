@@ -231,6 +231,10 @@ class LF_Monitor : Inventory_Base
         }
         #endif
 
+        #ifndef SERVER
+        LFPG_CameraViewport.Reset();
+        #endif
+
         super.EEKilled(killer);
     }
 
@@ -238,6 +242,10 @@ class LF_Monitor : Inventory_Base
     {
         m_LFPG_Deleting = true;
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
+        #ifndef SERVER
+        LFPG_CameraViewport.Reset();
+        #endif
+
         super.EEDelete(parent);
     }
 

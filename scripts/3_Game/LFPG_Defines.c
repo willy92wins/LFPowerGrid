@@ -259,7 +259,8 @@ enum LFPG_DeviceType
     UNKNOWN     = 0,   // Fallback — not classified
     SOURCE      = 1,   // Generates energy (generators)
     CONSUMER    = 2,   // Consumes energy (lamps, appliances)
-    PASSTHROUGH = 3    // Retransmits energy (splitter, future switch/fuse)
+    PASSTHROUGH = 3,   // Retransmits energy (splitter, future switch/fuse)
+    CAMERA      = 4    // v0.9.0: security camera (future BFS filter)
 };
 
 // ---- Dirty reason masks (Sprint 4.2, active + differentiated) ----

@@ -196,6 +196,10 @@ class LF_Camera : Inventory_Base
         }
         #endif
 
+        #ifndef SERVER
+        LFPG_CameraViewport.Reset();
+        #endif
+
         super.EEKilled(killer);
     }
 
@@ -208,6 +212,10 @@ class LF_Camera : Inventory_Base
         // OnDeviceDeleted cubre: wire cut + graph notification + unregister.
         // NO llamar solo a Unregister — perderiamos el cleanup del grafo.
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
+
+        #ifndef SERVER
+        LFPG_CameraViewport.Reset();
+        #endif
 
         super.EEDelete(parent);
     }
@@ -413,7 +421,7 @@ class LF_Camera : Inventory_Base
 
     int LFPG_GetDeviceType()
     {
-        return LFPG_DeviceType.CONSUMER;
+        return LFPG_DeviceType.CAMERA;
     }
 
     bool LFPG_IsSource()

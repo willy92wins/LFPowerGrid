@@ -51,6 +51,20 @@ class LFPG_ActionCycleCamera : ActionSingleUseBase
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
+        // CAM-04: solo mostrar si el monitor tiene alimentacion.
+        LF_Monitor mon = LF_Monitor.Cast(targetObj);
+        if (!mon)
+            return false;
+
+        if (!mon.LFPG_IsPowered())
+            return false;
+
+        // CAM-07: no mostrar mientras el jugador este viendo el feed CCTV.
+        // Get() devuelve null en servidor dedicado → condicion segura.
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (vp && vp.IsActive())
+            return false;
+
         return true;
     }
 

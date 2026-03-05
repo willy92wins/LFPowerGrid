@@ -52,6 +52,12 @@ class LFPG_ActionUnlinkCamera : ActionSingleUseBase
         if (mon.LFPG_GetLinkedCameraId() == "")
             return false;
 
+        // CAM-08: no permitir desvincular si alguien esta viendo el feed.
+        // Get() devuelve null en servidor dedicado → condicion segura.
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (vp && vp.IsActive())
+            return false;
+
         return true;
     }
 

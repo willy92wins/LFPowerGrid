@@ -180,7 +180,7 @@ class LFPG_CameraViewport
             return;
         }
 
-        viewCam.SetPosition(camPos);
+        // SetPosition omitida: CreateObject ya ubica el objeto en camPos.
         viewCam.SetOrientation(camOri);
 
         Camera viewCamTyped = Camera.Cast(viewCam);
@@ -244,6 +244,7 @@ class LFPG_CameraViewport
 
         m_CameraLabel    = "";
         m_ActiveDuration = 0.0;
+        m_ScanlineOffset = 0.0; // OBS-03: simetria con Enter(). Sin efecto funcional.
 
         LFPG_Util.Info("[CameraViewport] Viewport cerrado.");
     }
@@ -322,7 +323,10 @@ class LFPG_CameraViewport
         // m_VigColor precalculado en el constructor — no recalcular cada frame.
         // DrawLineScreen con grosor = vw actua como banda solida.
         // --------------------------------------------------
-        float vw    = LFPG_CCTV_VIGNETTE_W;
+        // OBS-04: escalar vignette proporcional a la altura de pantalla.
+        // 55px en 1080p = ~5.1% de sh. Mantener esa proporcion en 4K.
+        float vwScale = sh / 1080.0;
+        float vw    = LFPG_CCTV_VIGNETTE_W * vwScale;
         float vhalf = vw * 0.5;
 
         hud.DrawLineScreen(vhalf,      0.0,  vhalf,      sh,   vw, m_VigColor); // izq
