@@ -3095,6 +3095,31 @@ class LFPG_CableRenderer
             vector target = wsi.occSamples[si];
             target[1] = target[1] + LFPG_OCC_SAMPLE_LIFT_M;
 
+            // v0.8.x: Camera-aware pullback for wall-mounted devices.
+            // The Y lift only helps cables near the ground. For devices
+            // mounted on walls, the obstruction is lateral (X/Z). When
+            // the camera looks at an angle, the ray cam→target passes
+            // through wall thickness and registers as blocked.
+            //
+            // Fix: retract the sample point slightly toward the camera
+            // along the cam→target direction. This pulls it out of the
+            // wall surface regardless of wall orientation.
+            //
+            // Cost: 3 sub + 3 mul + 1 sqrt + 3 mul + 3 sub per sample.
+            // Acceptable: max 5 samples/wire, budget-limited to ~20/frame.
+            float pbDx = target[0] - camPos[0];
+            float pbDy = target[1] - camPos[1];
+            float pbDz = target[2] - camPos[2];
+            float pbLenSq = pbDx * pbDx + pbDy * pbDy + pbDz * pbDz;
+            if (pbLenSq > 0.01)
+            {
+                float pbLen = Math.Sqrt(pbLenSq);
+                float pbInv = LFPG_OCC_WALL_PULLBACK_M / pbLen;
+                target[0] = target[0] - pbDx * pbInv;
+                target[1] = target[1] - pbDy * pbInv;
+                target[2] = target[2] - pbDz * pbInv;
+            }
+
             vector hitPos;
             vector hitNormal;
             int contactComponent;

@@ -187,6 +187,7 @@ static const float LFPG_OCC_PARTIAL_THRESHOLD = 0.66;  // v0.7.38: blocked ratio
 static const int   LFPG_OCC_MAX_RAYCASTS     = 20;
 static const float LFPG_OCC_DIST_SCALE_MAX   = 3.0;    // v0.7.38: max recheck interval multiplier
 static const float LFPG_OCC_SAMPLE_LIFT_M    = 0.03;   // v0.7.38: sample point Y offset above cable
+static const float LFPG_OCC_WALL_PULLBACK_M  = 0.20;   // v0.8.x: camera-aware pullback for wall-mounted devices. Retracts sample 20cm toward camera to escape wall geometry. Tuned for typical wall thickness (15-30cm).
 static const float LFPG_OCC_LONG_WIRE_M      = 10.0;
 static const float LFPG_OCC_CAM_MOVE_THRESH  = 0.3;
 static const float LFPG_OCC_CAM_DIR_THRESH   = 0.02;
