@@ -232,7 +232,9 @@ enum LFPG_RPC_SubId
     CUT_PORT = 9,
     REQUEST_DEVICE_SYNC = 10,   // v0.7.35 D1: client requests wire sync for a specific device
     INSPECT_DEVICE = 11,        // Sprint 5: client requests wire topology for inspector
-    INSPECT_RESPONSE = 12       // Sprint 5: server sends wire topology back to client
+    INSPECT_RESPONSE = 12,       // Sprint 5: server sends wire topology back to client
+	CAMERA_CYCLE = 13,
+	CAMERA_UNLINK = 14
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----

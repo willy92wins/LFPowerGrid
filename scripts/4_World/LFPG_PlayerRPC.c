@@ -52,6 +52,14 @@ modded class PlayerBase
         {
             HandleLFPG_InspectDevice(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
+        {
+            HandleLFPG_CameraLink(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
+        {
+            HandleLFPG_CameraUnlink(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -919,6 +927,191 @@ modded class PlayerBase
         {
             LFPG_SendClientMsg(this, "No wires to cut.");
         }
+    }
+
+    // =====================================
+    // SERVER: Ciclar camara enlazada a un monitor
+    // =====================================
+    protected void HandleLFPG_CameraLink(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int monNetLow = 0;
+        if (!ctx.Read(monNetLow))
+        {
+            LFPG_Util.Warn("[CameraLink] read monNetLow FAIL");
+            return;
+        }
+        int monNetHigh = 0;
+        if (!ctx.Read(monNetHigh))
+        {
+            LFPG_Util.Warn("[CameraLink] read monNetHigh FAIL");
+            return;
+        }
+
+        // Resolucion autoritativa por NetworkID (patron de todos los RPCs).
+        EntityAI monEnt = LFPG_DeviceAPI.ResolveByNetworkId(monNetLow, monNetHigh);
+        if (!monEnt)
+        {
+            LFPG_Util.Warn("[CameraLink] monitor entity not found net=" + monNetLow.ToString() + ":" + monNetHigh.ToString());
+            return;
+        }
+
+        LF_Monitor monitor = LF_Monitor.Cast(monEnt);
+        if (!monitor)
+        {
+            LFPG_Util.Warn("[CameraLink] entity is not LF_Monitor type=" + monEnt.GetType());
+            return;
+        }
+
+        // Guard de distancia: el jugador debe estar cerca del monitor.
+        float distSq = LFPG_WorldUtil.DistSq(this.GetPosition(), monEnt.GetPosition());
+        float maxDistSq = (LFPG_INTERACT_DIST_M + 1.0) * (LFPG_INTERACT_DIST_M + 1.0);
+        if (distSq > maxDistSq)
+        {
+            LFPG_Util.Warn("[CameraLink] denied (too far dist=" + Math.Sqrt(distSq).ToString() + "m)");
+            LFPG_SendClientMsg(this, "Too far from monitor.");
+            return;
+        }
+
+        // Recopilar camaras del registry.
+        // v0.9.0 (Etapa 3): Filtrar solo camaras con energia (m_PoweredNet=true).
+        // Razon: un monitor no debe enlazarse a una camara sin alimentacion
+        // porque el viewport de Etapa 3 requiere que la camara este encendida.
+        // Las camaras sin energia se omiten silenciosamente del ciclo.
+        array<EntityAI> all = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(all);
+
+        ref array<LF_Camera> cameras = new array<LF_Camera>;
+        int i;
+        for (i = 0; i < all.Count(); i = i + 1)
+        {
+            LF_Camera cam = LF_Camera.Cast(all[i]);
+            if (!cam)
+                continue;
+
+            // Solo camaras con alimentacion activa.
+            if (!cam.LFPG_IsPowered())
+                continue;
+
+            cameras.Insert(cam);
+        }
+
+        if (cameras.Count() == 0)
+        {
+            LFPG_SendClientMsg(this, "No powered cameras found.");
+            return;
+        }
+
+        // Ordenar por distancia al monitor (insertion sort — correcto para Enforce Script).
+        // Las arrays de camaras son pequenas en uso normal (<20); sin overhead relevante.
+        vector monPos = monEnt.GetPosition();
+        int n = cameras.Count();
+        int j;
+        for (i = 1; i < n; i = i + 1)
+        {
+            LF_Camera key = cameras[i];
+            float keyDist = LFPG_WorldUtil.DistSq(key.GetPosition(), monPos);
+            j = i - 1;
+            while (j >= 0 && LFPG_WorldUtil.DistSq(cameras[j].GetPosition(), monPos) > keyDist)
+            {
+                cameras[j + 1] = cameras[j];
+                j = j - 1;
+            }
+            cameras[j + 1] = key;
+        }
+
+        // Encontrar indice de la camara actualmente enlazada.
+        string currentLinkedId = monitor.LFPG_GetLinkedCameraId();
+        int currentIdx = -1;
+        for (i = 0; i < cameras.Count(); i = i + 1)
+        {
+            if (cameras[i].LFPG_GetDeviceId() == currentLinkedId)
+            {
+                currentIdx = i;
+                break;
+            }
+        }
+
+        // Avanzar al siguiente (ciclico).
+        int nextIdx = currentIdx + 1;
+        if (nextIdx >= cameras.Count())
+        {
+            nextIdx = 0;
+        }
+
+        LF_Camera nextCam = cameras[nextIdx];
+        monitor.LFPG_SetLinkedCamera(nextCam.LFPG_GetDeviceIdLow(), nextCam.LFPG_GetDeviceIdHigh());
+
+        string feedMsg = "Camera linked (" + (nextIdx + 1).ToString() + "/" + cameras.Count().ToString() + ")";
+        feedMsg = feedMsg + " id=" + nextCam.LFPG_GetDeviceId();
+        LFPG_Util.Info("[CameraLink] " + feedMsg + " monitor=" + monitor.LFPG_GetDeviceId());
+        LFPG_SendClientMsg(this, feedMsg);
+    }
+
+    // =====================================
+    // SERVER: Desvincular camara de un monitor
+    // =====================================
+    protected void HandleLFPG_CameraUnlink(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int monNetLow = 0;
+        if (!ctx.Read(monNetLow))
+        {
+            LFPG_Util.Warn("[CameraUnlink] read monNetLow FAIL");
+            return;
+        }
+        int monNetHigh = 0;
+        if (!ctx.Read(monNetHigh))
+        {
+            LFPG_Util.Warn("[CameraUnlink] read monNetHigh FAIL");
+            return;
+        }
+
+        EntityAI monEnt = LFPG_DeviceAPI.ResolveByNetworkId(monNetLow, monNetHigh);
+        if (!monEnt)
+        {
+            LFPG_Util.Warn("[CameraUnlink] monitor entity not found");
+            return;
+        }
+
+        LF_Monitor monitor = LF_Monitor.Cast(monEnt);
+        if (!monitor)
+        {
+            LFPG_Util.Warn("[CameraUnlink] entity is not LF_Monitor type=" + monEnt.GetType());
+            return;
+        }
+
+        float distSq = LFPG_WorldUtil.DistSq(this.GetPosition(), monEnt.GetPosition());
+        float maxDistSq = (LFPG_INTERACT_DIST_M + 1.0) * (LFPG_INTERACT_DIST_M + 1.0);
+        if (distSq > maxDistSq)
+        {
+            LFPG_Util.Warn("[CameraUnlink] denied (too far)");
+            LFPG_SendClientMsg(this, "Too far from monitor.");
+            return;
+        }
+
+        // 0, 0 = sin enlace (MakeDeviceKey devuelve "" para 0:0).
+        monitor.LFPG_SetLinkedCamera(0, 0);
+
+        string unlinkMsg = "[CameraUnlink] Unlinked monitor=" + monitor.LFPG_GetDeviceId();
+        LFPG_Util.Info(unlinkMsg);
+        LFPG_SendClientMsg(this, "Camera unlinked.");
     }
 
     // =====================================

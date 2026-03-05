@@ -206,6 +206,12 @@ modded class Hologram
 
         if (proj.IsKindOf("LF_Combiner_Kit"))
             return true;
+		
+		if (proj.IsKindOf("LF_Camera_Kit"))
+            return true;
+
+        if (proj.IsKindOf("LF_Monitor_Kit"))
+            return true;
 
         // Different-model kits: projection is deployed type,
         // check m_Parent to identify kit origin
@@ -236,6 +242,8 @@ modded class Hologram
         bool isSplitterKit = projection.IsKindOf("LF_Splitter_Kit");
         bool isCeilingKit  = projection.IsKindOf("LF_CeilingLight_Kit");
         bool isCombinerKit = projection.IsKindOf("LF_Combiner_Kit");
+		bool isCameraKit  = projection.IsKindOf("LF_Camera_Kit");
+        bool isMonitorKit = projection.IsKindOf("LF_Monitor_Kit");
 
         // v0.8.0: Solar Panel Kit â different-model kit, check m_Parent.
         // Floor-only placement: set flag for collision bypass, then vanilla super.
@@ -245,7 +253,7 @@ modded class Hologram
             isSolarKit = true;
         }
 
-        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit)
+        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit && !isCameraKit && !isMonitorKit)
         {
             super.UpdateHologram(timeslice);
             return;
@@ -280,7 +288,7 @@ modded class Hologram
         int contactComponent;
 
         // v0.7.38: Exclude projection entity (not player) from raycast.
-        // The hologram sits between camera and wall â excluding the player
+        // The hologram sits between camera and wall excluding the player
         // let the ray hit the hologram itself instead of the wall behind it,
         // causing the hologram to snap to itself, jitter, and prevent placement.
         // ObjIntersectFire matches vanilla placement raycasts and has
@@ -321,7 +329,7 @@ modded class Hologram
             // ================================================================
             // ---- CEILING ---- (normal points DOWN)
             // Only CeilingLight_Kit supports ceiling placement.
-            // Splitter falls through to vanilla (which will reject â correct).
+            // Splitter falls through to vanilla (which will reject correct).
             // ================================================================
             if (!isCeilingKit)
             {

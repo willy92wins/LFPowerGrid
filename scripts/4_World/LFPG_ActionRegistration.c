@@ -49,8 +49,14 @@ modded class ActionConstructor
 
         // --- v0.8.2: Combiner Kit placement ---
         actions.Insert(LFPG_ActionPlaceCombiner);
-
-        LFPG_Util.Debug("[Actions] LFPG actions registered (23)");
+		
+		// --- v0.9.0: CCTV Kit placement ---
+        actions.Insert(LFPG_ActionPlaceCamera);
+        actions.Insert(LFPG_ActionPlaceMonitor);
+        actions.Insert(LFPG_ActionCycleCamera);
+        actions.Insert(LFPG_ActionUnlinkCamera);
+		actions.Insert(LFPG_ActionViewCamera);
+        LFPG_Util.Debug("[Actions] LFPG actions registered (28)");
     }
 };
 

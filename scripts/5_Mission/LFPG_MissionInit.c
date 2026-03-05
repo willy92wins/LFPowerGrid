@@ -1,21 +1,13 @@
 // =========================================================
-// LF_PowerGrid - mission hooks (v0.7.13)
+// LF_PowerGrid - mission hooks (v0.9.0 - Etapa 3)
 //
-// ALL wiring input handled via scroll actions (LFPG_Actions.c).
-// MissionGameplay handles:
-//  - FullSync request on first tick with valid player (throttled)
-//  - Committed cable rendering via Canvas 2D every frame
-//  - Wiring preview HUD (only during active wiring session)
-//  - Auto-cancel when cable reel is removed from hands
+// Cambios respecto a v0.8.x:
+//   - LFPG_CameraViewport.Reset() en OnInit (clean slate reconexion)
+//   - LFPG_CameraViewport.Get().Tick(timeslice) en OnUpdate
+//   - viewport.DrawOverlay(hud) dentro de la ventana BeginFrame/EndFrame
+//   - LFPG_CameraViewport.Reset() en OnMissionFinish (limpieza)
 //
-// v0.7.7: Canvas 2D for both preview AND committed cables.
-//   Shape.LINE (debug API) does not render on retail client.
-//   BeginFrame/DrawFrame/EndFrame runs every frame for cables.
-//   Preview lines drawn on top within the same canvas pass.
-//   LOD visual (3/2/1 passes), depth width, alpha fade.
-// v0.7.8: Cable state system (IDLE/POWERED colors).
-//   Joints at waypoints, endcaps at ports (LOD close only).
-// v0.7.13: Telemetry tick after render for G1/G5 metrics collection.
+// INTEGRACION: Este archivo es REEMPLAZO COMPLETO del existente.
 // =========================================================
 
 modded class MissionServer
@@ -35,7 +27,7 @@ modded class MissionServer
 
 modded class MissionGameplay
 {
-    protected bool m_LFPG_WasActive = false;
+    protected bool m_LFPG_WasActive    = false;
     protected bool m_LFPG_SyncRequested = false;
 
     override void OnInit()
@@ -48,6 +40,12 @@ modded class MissionGameplay
         LFPG_CableRenderer.Reset();
         LFPG_WiringClient.Reset();
         LFPG_DeviceInspector.Init();
+
+        // Etapa 3: reset del viewport CCTV al conectar/reconectar.
+        // Asegura que no quede un staticcamera local de una sesion anterior
+        // si el jugador se desconecta mientras miraba una camara.
+        LFPG_CameraViewport.Reset();
+
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
 
@@ -88,34 +86,65 @@ modded class MissionGameplay
             m_LFPG_WasActive = false;
         }
 
-        // ---- Every frame: render committed cables + preview ----
+        // ---- Etapa 3: tick del viewport CCTV ----
+        // Procesa input de salida (SPACE), animacion de scanlines y auto-timeout.
+        // Debe ejecutarse ANTES del bloque BeginFrame/EndFrame para que
+        // m_Active y m_ScanlineOffset esten actualizados antes del draw.
+        // Get() devuelve null en servidor → sin coste en servidor.
+        LFPG_CameraViewport viewport = LFPG_CameraViewport.Get();
+        if (viewport)
+        {
+            viewport.Tick(timeslice);
+        }
+
+        // ---- Every frame: render committed cables + preview + CCTV overlay ----
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame();
 
-        // Committed cables (Canvas 2D + raycast occlusion)
+        // Committed cables (Canvas 2D + raycast occlusion).
+        // SKIP cuando el viewport CCTV esta activo: el POV se ha movido al
+        // staticcamera y GetCurrentCameraPosition() devolveria la posicion de la
+        // camara de seguridad. DrawFrame proyectaria cables desde ese POV,
+        // produciendo cables flotantes en la pantalla del feed CCTV.
+        bool viewportActive = (viewport && viewport.IsActive());
         LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
-        if (renderer)
+        if (renderer && !viewportActive)
         {
             renderer.DrawFrame();
         }
 
-        // Preview lines (only during active wiring session)
-        if (isActive)
+        // Preview lines (solo durante sesion de cableado activa Y sin viewport CCTV).
+        // TickPreview usa GetCurrentCameraPosition() internamente: con viewport activo
+        // esa posicion es la del staticcamera, por lo que las lineas de preview
+        // se proyectarian desde el POV de la camara de seguridad y aparecerian
+        // en el feed CCTV, igual que el problema resuelto para DrawFrame arriba.
+        if (isActive && !viewportActive)
         {
             LFPG_WiringClient.TickPreview();
         }
 
+        // Etapa 3: overlay CCTV — scanlines + vignette + indicador REC.
+        // DrawOverlay es no-op si viewport.IsActive() == false, sin coste.
+        if (viewport)
+        {
+            viewport.DrawOverlay(hud);
+        }
+
         hud.EndFrame();
 
-        // v0.7.13 (Sprint 2.5): Telemetry tick — reads G1 (preview) + G5 (render)
-        // counters filled by DrawFrame and TickPreview above, accumulates into
-        // interval window, dumps summary to RPT every LFPG_TELEM_INTERVAL_MS.
+        // Telemetry tick
         LFPG_Telemetry.Tick(GetGame().GetTime());
 
-        // Sprint 5: Device inspector tick (runs when NOT wiring — has own guards)
-        LFPG_DeviceInspector.Tick();
+        // Device inspector tick.
+        // Saltarlo cuando el viewport CCTV esta activo: el inspector hace raycasts
+        // desde GetCurrentCameraPosition(), que apuntaria a la camara de seguridad,
+        // pudiendo mostrar el panel flotante dentro del feed CCTV.
+        if (!viewportActive)
+        {
+            LFPG_DeviceInspector.Tick();
+        }
 
-        // ---- Auto-cancel: cable reel removed from hands ----
+        // ---- Auto-cancel wiring: cable reel removed from hands ----
         if (!isActive)
             return;
 
@@ -138,6 +167,11 @@ modded class MissionGameplay
     override void OnMissionFinish()
     {
         LFPG_DeviceInspector.Cleanup();
+
+        // Etapa 3: salir del viewport CCTV y liberar el staticcamera local
+        // antes de que el motor destruya la escena.
+        LFPG_CameraViewport.Reset();
+
         super.OnMissionFinish();
     }
 

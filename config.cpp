@@ -19,7 +19,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner" };
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -40,7 +40,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.8.2";
+        version = "0.9.0";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
@@ -300,7 +300,87 @@ class CfgVehicles
         isDeployable = 0;
         hiddenSelections[] = {};
     };
+	
+	// =========================================================
+    // v0.9.0: CCTV SYSTEM (Camera + Monitor, same-model deploy)
+    // =========================================================
 
+    // ---- Camera Kit (holdable, deployable) ----
+    class LF_Camera_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_CameraKit";
+        descriptionShort = "$STR_LFPG_CameraKit_Desc";
+        model = "\LFPowerGrid\data\cctv\CamaraLF.p3d";
+        weight = 1500;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Camera (placed device) ----
+    // Memory points (LOD Memory): port_input_1
+    // Named selections (LOD Resolution): cam_led (hiddenSelections[0])
+    class LF_Camera : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Camera";
+        descriptionShort = "$STR_LFPG_Camera_Desc";
+        model = "\LFPowerGrid\data\cctv\CamaraLF.p3d";
+        weight = 2000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = { "cam_led" };
+		hiddenSelectionsTextures[] = { "\LFPowerGrid\data\camera\lf_camera_led.paa" };
+		hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\camera\lf_camera_led_off.rvmat" };
+    };
+
+    // ---- Monitor Kit (holdable, deployable) ----
+    class LF_Monitor_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_MonitorKit";
+        descriptionShort = "$STR_LFPG_MonitorKit_Desc";
+        model = "\LFPowerGrid\data\cctv\MonitorLF.p3d";
+        weight = 3000;
+        itemSize[] = {4, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Monitor (placed device) ----
+    // Memory points (LOD Memory): port_input_1
+    // Named selections (LOD Resolution): screen (hiddenSelections[0])
+    class LF_Monitor : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Monitor";
+        descriptionShort = "$STR_LFPG_Monitor_Desc";
+        model = "\LFPowerGrid\data\cctv\MonitorLF.p3d";
+        weight = 4000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {"screen"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\cctv\lf_monitor_off.rvmat"};
+    };
+	
     // =========================================================
     // v0.8.0: MODDED VANILLA ITEMS (additive, not destructive)
     // Allow MetalPlate and Nail to go into solar panel slots.
