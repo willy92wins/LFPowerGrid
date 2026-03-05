@@ -63,21 +63,16 @@ class LFPG_ActionViewCamera : ActionSingleUseBase
         if (!monitor.LFPG_IsPowered())
             return false;
 
-        // Monitor debe tener camara enlazada
-        string linkedId = monitor.LFPG_GetLinkedCameraId();
-        if (linkedId == "")
+        // Monitor debe tener al menos una camara cableada (wire store).
+        // TODO Sprint B: reemplazar por RPC REQUEST_CAMERA_LIST flow.
+        if (!monitor.LFPG_HasWireStore())
             return false;
 
-        // CAM-05: verificar que la camara enlazada tenga alimentacion.
-        // OBS-06: si FindById retorna null (camara fuera de burbuja de red),
-        // NO ocultar la accion — Enter() mostrara el mensaje de rango.
-        EntityAI camEnt = LFPG_DeviceRegistry.Get().FindById(linkedId);
-        if (camEnt)
-        {
-            LF_Camera linkedCam = LF_Camera.Cast(camEnt);
-            if (linkedCam && !linkedCam.LFPG_IsPowered())
-                return false;
-        }
+        array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
+        if (!wires)
+            return false;
+        if (wires.Count() == 0)
+            return false;
 
         // No mostrar si el viewport ya esta activo
         // (Get() devuelve null en servidor dedicado → condicion segura)

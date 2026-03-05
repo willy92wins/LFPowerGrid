@@ -110,8 +110,6 @@ class LFPG_CameraViewport
     void Enter(LF_Monitor monitor)
     {
         // Hoist: una sola declaracion de PlayerBase p para todos los early-returns.
-        // Evita declarar la misma variable en bloques secuenciales del mismo scope
-        // (riesgo de error Enforce Script) y elimina 4 llamadas a GetGame().GetPlayer().
         PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
 
         if (!monitor)
@@ -127,38 +125,54 @@ class LFPG_CameraViewport
             return;
         }
 
-        string linkedId = monitor.LFPG_GetLinkedCameraId();
-        if (linkedId == "")
+        // v0.9.1: Resolver la primera camara powered desde el wire store del monitor.
+        // TODO Sprint B: reemplazar por RPC-based camera list (CameraView + snapshot).
+        array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
+        if (!wires)
         {
             if (p)
-                p.MessageStatus("[LFPG] No hay camara enlazada al monitor.");
+                p.MessageStatus("[LFPG] No hay camaras conectadas al monitor.");
             return;
         }
 
-        // Resolver la entidad LF_Camera en el DeviceRegistry del cliente.
-        // El registry se popula en EEInit de LF_Camera (sin #ifdef SERVER),
-        // por lo que el cliente siempre tiene la referencia si la camara
-        // esta dentro de su burbuja de red.
-        EntityAI camEnt = LFPG_DeviceRegistry.Get().FindById(linkedId);
-        if (!camEnt)
+        // Hoist variables fuera del loop (Enforce Script: no declarar en bloques hermanos).
+        LF_Camera cam = null;
+        EntityAI camEnt = null;
+        string camDevId = "";
+        int wi = 0;
+        while (wi < wires.Count())
         {
-            LFPG_Util.Warn("[CameraViewport] LF_Camera no en registry id=" + linkedId);
-            if (p)
-                p.MessageStatus("[LFPG] Camara fuera de rango. Intenta mas cerca.");
-            return;
+            LFPG_WireData wd = wires[wi];
+            wi = wi + 1;
+            if (!wd)
+                continue;
+
+            camDevId = wd.m_TargetDeviceId;
+            if (camDevId == "")
+                continue;
+
+            camEnt = LFPG_DeviceRegistry.Get().FindById(camDevId);
+            if (!camEnt)
+                continue;
+
+            cam = LF_Camera.Cast(camEnt);
+            if (!cam)
+                continue;
+
+            if (!cam.LFPG_IsPowered())
+            {
+                cam = null;
+                continue;
+            }
+
+            // Encontramos una camara valida y powered.
+            break;
         }
 
-        LF_Camera cam = LF_Camera.Cast(camEnt);
         if (!cam)
         {
-            LFPG_Util.Warn("[CameraViewport] Entity no es LF_Camera id=" + linkedId);
-            return;
-        }
-
-        if (!cam.LFPG_IsPowered())
-        {
             if (p)
-                p.MessageStatus("[LFPG] La camara no tiene alimentacion.");
+                p.MessageStatus("[LFPG] No hay camaras activas conectadas.");
             return;
         }
 
@@ -166,8 +180,8 @@ class LFPG_CameraViewport
         if (m_Active)
             Exit();
 
-        vector camPos = camEnt.GetPosition();
-        vector camOri = camEnt.GetOrientation();
+        vector camPos = cam.GetPosition();
+        vector camOri = cam.GetOrientation();
 
         // Crear staticcamera LOCAL en la posicion de LF_Camera.
         // create_local=true → solo visible en ESTE cliente, no replicado.
@@ -199,14 +213,14 @@ class LFPG_CameraViewport
         m_ActiveDuration = 0.0;
 
         // Etiqueta de camara (ultimos 6 chars del DeviceId para pantalla)
-        int idLen = linkedId.Length();
+        int idLen = camDevId.Length();
         if (idLen > 6)
         {
-            m_CameraLabel = "CAM-" + linkedId.Substring(idLen - 6, 6);
+            m_CameraLabel = "CAM-" + camDevId.Substring(idLen - 6, 6);
         }
         else
         {
-            m_CameraLabel = "CAM-" + linkedId;
+            m_CameraLabel = "CAM-" + camDevId;
         }
 
         string logEntry = "[CameraViewport] Viewport activo: " + m_CameraLabel;

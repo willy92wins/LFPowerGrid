@@ -522,3 +522,9 @@ static const bool LFPG_DIAG_PT_CHAIN = true;
 static const int   LFPG_SOLAR_CHECK_MS   = 15000;  // check interval (ms)
 static const int   LFPG_SOLAR_DAWN_HOUR  = 6;      // daylight start hour
 static const int   LFPG_SOLAR_DUSK_HOUR  = 20;     // daylight end hour
+
+// ---- v0.9.1: Monitor PASSTHROUGH ----
+// Throughput cap = 4 cameras x 15 u/s + 10 u/s self-consumption.
+static const float LFPG_MONITOR_THROUGHPUT   = 70.0;   // u/s max output capacity
+static const float LFPG_MONITOR_CONSUMPTION  = 10.0;   // u/s self-consumption
+static const int   LFPG_MONITOR_MAX_OUTPUTS  = 4;      // output ports (output_1..4)

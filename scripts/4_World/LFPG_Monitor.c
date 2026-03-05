@@ -1,21 +1,21 @@
 // =========================================================
-// LF_PowerGrid - Monitor device (v0.9.0 - Etapa 3)
+// LF_PowerGrid - Monitor device (v0.9.1 - PASSTHROUGH conversion)
 //
 // LF_Monitor_Kit: Holdable, deployable (same-model pattern).
-// LF_Monitor:     CONSUMER, 1 IN (input_1), 20 u/s, no OUT, no wire store.
+// LF_Monitor:     PASSTHROUGH, 1 IN (input_1) + 4 OUT (output_1..4).
+//                 Self-consumption: 10 u/s. Throughput cap: 70 u/s.
+//                 OUT ports restricted to LF_Camera only (CanConnectTo).
+//                 Owns wires on output side (same pattern as Splitter).
 //
-// Etapa 2: Sistema de emparejamiento Monitor<->Camera.
-//   m_LinkedCamIdLow/High: SyncVars del DeviceId de la camara enlazada.
+// v0.9.1: Converted from CONSUMER to PASSTHROUGH.
+//   - Removed m_LinkedCamIdLow/High SyncVars (camera selection is now
+//     client-side in CameraView, based on ElecGraph edges).
+//   - Added wire store (m_Wires) + full WireHelper API.
+//   - Added m_OverloadMask, m_WarningMask SyncVars.
+//   - Persistence: DeviceIds + wires JSON (NO m_PoweredNet — derived).
+//   - RVMAT swap: ON when powered, OFF otherwise.
 //
-// Etapa 3: Viewport CCTV + material swap.
-//   ActionLFPG_ViewCamera: entra en POV de la camara enlazada (client-only).
-//   SetObjectMaterial: rvmat ON cuando monitor encendido + camara enlazada,
-//   OFF en cualquier otro estado. Swap en OnVariablesSynchronized.
-//
-// ⚠ SAVE WIPE REQUERIDA al subir a v0.9.0 — la persistencia cambia
-//   de orden (2 campos nuevos). No hay migrador por diseno del proyecto.
-//
-// Etapa 3: OnVariablesSynchronized amplia con viewport render.
+// ⚠ SAVE WIPE REQUERIDA — esquema incompatible con v0.9.0.
 // =========================================================
 
 static const string LFPG_MONITOR_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_monitor_off.rvmat";
@@ -102,7 +102,10 @@ class LF_Monitor_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
-// DEVICE - CONSUMER, 1 IN (input_1), 20 u/s
+// DEVICE - PASSTHROUGH, 1 IN (input_1) + 4 OUT (output_1..4)
+// Self-consumption: 10 u/s. Throughput cap: 70 u/s.
+// Owns wires on output side (same pattern as Splitter).
+// OUT ports restricted to LF_Camera only via CanConnectTo.
 // ---------------------------------------------------------
 class LF_Monitor : Inventory_Base
 {
@@ -111,15 +114,15 @@ class LF_Monitor : Inventory_Base
     protected int  m_DeviceIdHigh = 0;
     protected bool m_PoweredNet   = false;
 
-    // ---- SyncVars: camara enlazada (DeviceId del LF_Camera) ----
-    // Mismo patron que m_DeviceIdLow/High: par de int que forma "low:high".
-    // 0:0 = sin enlace.
-    protected int m_LinkedCamIdLow  = 0;
-    protected int m_LinkedCamIdHigh = 0;
+    // ---- Wires owned (output side, same as Splitter/Generator) ----
+    protected ref array<ref LFPG_WireData> m_Wires;
+
+    // ---- SyncVars: overload/warning bitmasks (output wires) ----
+    protected int m_OverloadMask = 0;
+    protected int m_WarningMask  = 0;
 
     // ---- Estado local (no sincronizado directamente) ----
     protected string m_DeviceId      = "";
-    protected string m_LinkedCameraId = "";   // derivado de m_LinkedCamIdLow/High
     protected bool   m_LFPG_Deleting = false;
 
     // ============================================
@@ -128,11 +131,12 @@ class LF_Monitor : Inventory_Base
     // ============================================
     void LF_Monitor()
     {
+        m_Wires = new array<ref LFPG_WireData>;
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableInt("m_LinkedCamIdLow");
-        RegisterNetSyncVariableInt("m_LinkedCamIdHigh");
+        RegisterNetSyncVariableInt("m_OverloadMask");
+        RegisterNetSyncVariableInt("m_WarningMask");
     }
 
     // ============================================
@@ -141,11 +145,6 @@ class LF_Monitor : Inventory_Base
     protected void LFPG_UpdateDeviceIdString()
     {
         m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
-    }
-
-    protected void LFPG_UpdateLinkedCameraIdString()
-    {
-        m_LinkedCameraId = LFPG_Util.MakeDeviceKey(m_LinkedCamIdLow, m_LinkedCamIdHigh);
     }
 
     protected void LFPG_TryRegister()
@@ -165,39 +164,6 @@ class LF_Monitor : Inventory_Base
         {
             LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
         }
-
-        // Mantener la string derivada del enlace siempre actualizada.
-        LFPG_UpdateLinkedCameraIdString();
-    }
-
-    // ============================================
-    // API publica: enlace de camara
-    // ============================================
-
-    // Getter: devuelve el DeviceId de la camara enlazada, o "" si no hay.
-    // Usado por ActionUnlinkCamera para la condicion de visibilidad.
-    string LFPG_GetLinkedCameraId()
-    {
-        return m_LinkedCameraId;
-    }
-
-    // Setter: solo llamar desde el servidor (RPC handler CAMERA_CYCLE / CAMERA_UNLINK).
-    // low=0, high=0 significa desvincular.
-    void LFPG_SetLinkedCamera(int low, int high)
-    {
-        #ifdef SERVER
-        if (m_LinkedCamIdLow == low && m_LinkedCamIdHigh == high)
-            return;
-
-        m_LinkedCamIdLow  = low;
-        m_LinkedCamIdHigh = high;
-        LFPG_UpdateLinkedCameraIdString();
-        SetSynchDirty();
-
-        string msg = "[LF_Monitor] SetLinkedCamera(" + low.ToString() + "," + high.ToString() + ")";
-        msg = msg + " -> linkedId=" + m_LinkedCameraId + " monitorId=" + m_DeviceId;
-        LFPG_Util.Info(msg);
-        #endif
     }
 
     // ============================================
@@ -217,6 +183,14 @@ class LF_Monitor : Inventory_Base
 
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
+
+        #ifdef SERVER
+        // PASSTHROUGH con wire store: broadcast wires persistidos a todos los clientes.
+        if (m_Wires.Count() > 0)
+        {
+            LFPG_WireHelper.BroadcastWires(this, m_Wires, m_DeviceId);
+        }
+        #endif
     }
 
     override void EEKilled(Object killer)
@@ -277,14 +251,11 @@ class LF_Monitor : Inventory_Base
         super.OnVariablesSynchronized();
         LFPG_TryRegister();
 
-        // Etapa 2: la string derivada m_LinkedCameraId ya se actualiza
-        // en LFPG_TryRegister() via LFPG_UpdateLinkedCameraIdString().
-
-        // Etapa 3: material swap segun estado del monitor.
-        // ON: encendido Y con camara enlazada (pantalla activa).
-        // OFF: cualquier otro estado (pantalla apagada/estatica).
+        // Material swap segun estado del monitor.
+        // ON: monitor alimentado (pantalla activa).
+        // OFF: sin alimentacion (pantalla apagada).
         #ifndef SERVER
-        if (m_PoweredNet && m_LinkedCameraId != "")
+        if (m_PoweredNet)
         {
             SetObjectMaterial(0, LFPG_MONITOR_RVMAT_ON);
         }
@@ -292,22 +263,30 @@ class LF_Monitor : Inventory_Base
         {
             SetObjectMaterial(0, LFPG_MONITOR_RVMAT_OFF);
         }
+
+        // PASSTHROUGH: sincronizar representacion visual de cables.
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm)
+        {
+            nm.RequestDeviceSync(this, m_DeviceId);
+        }
         #endif
     }
 
     // ============================================
-    // Persistence - CONSUMER: ids + m_PoweredNet + camara enlazada
-    // Orden DEBE coincidir exactamente entre Save y Load.
-    // ⚠ SAVE WIPE: campos m_LinkedCamIdLow/High son nuevos en v0.9.0.
+    // Persistence - PASSTHROUGH: ids + wires JSON
+    // m_PoweredNet es estado derivado (propagacion lo recalcula).
+    // ⚠ SAVE WIPE REQUERIDA — esquema incompatible con v0.9.0 anterior.
     // ============================================
     override void OnStoreSave(ParamsWriteContext ctx)
     {
         super.OnStoreSave(ctx);
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        ctx.Write(m_PoweredNet);
-        ctx.Write(m_LinkedCamIdLow);
-        ctx.Write(m_LinkedCamIdHigh);
+
+        string json = "";
+        LFPG_WireHelper.SerializeJSON(m_Wires, json);
+        ctx.Write(json);
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -316,17 +295,27 @@ class LF_Monitor : Inventory_Base
             return false;
 
         if (!ctx.Read(m_DeviceIdLow))
+        {
+            LFPG_Util.Error("[LF_Monitor] OnStoreLoad: failed to read m_DeviceIdLow");
             return false;
-        if (!ctx.Read(m_DeviceIdHigh))
-            return false;
-        if (!ctx.Read(m_PoweredNet))
-            return false;
-        if (!ctx.Read(m_LinkedCamIdLow))
-            return false;
-        if (!ctx.Read(m_LinkedCamIdHigh))
-            return false;
+        }
 
-        LFPG_UpdateLinkedCameraIdString();
+        if (!ctx.Read(m_DeviceIdHigh))
+        {
+            LFPG_Util.Error("[LF_Monitor] OnStoreLoad: failed to read m_DeviceIdHigh");
+            return false;
+        }
+
+        LFPG_UpdateDeviceIdString();
+
+        string json = "";
+        if (!ctx.Read(json))
+        {
+            LFPG_Util.Error("[LF_Monitor] OnStoreLoad: failed to read wires json for " + m_DeviceId);
+            return false;
+        }
+        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_Monitor");
+
         return true;
     }
 
@@ -359,11 +348,8 @@ class LF_Monitor : Inventory_Base
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
 
-        // Etapa 2: acciones de emparejamiento.
-        AddAction(LFPG_ActionCycleCamera);
-        AddAction(LFPG_ActionUnlinkCamera);
-
-        // Etapa 3: accion de vista de camara.
+        // v0.9.1: ActionViewCamera se mantiene temporalmente.
+        // Sprint B reemplazara por ActionWatchMonitor (RPC-based).
         AddAction(LFPG_ActionViewCamera);
     }
 
@@ -382,13 +368,21 @@ class LF_Monitor : Inventory_Base
 
     int LFPG_GetPortCount()
     {
-        return 1;
+        return 5;
     }
 
     string LFPG_GetPortName(int idx)
     {
         if (idx == 0)
             return "input_1";
+        if (idx == 1)
+            return "output_1";
+        if (idx == 2)
+            return "output_2";
+        if (idx == 3)
+            return "output_3";
+        if (idx == 4)
+            return "output_4";
         return "";
     }
 
@@ -396,6 +390,8 @@ class LF_Monitor : Inventory_Base
     {
         if (idx == 0)
             return LFPG_PortDir.IN;
+        if (idx >= 1 && idx <= 4)
+            return LFPG_PortDir.OUT;
         return -1;
     }
 
@@ -403,6 +399,14 @@ class LF_Monitor : Inventory_Base
     {
         if (idx == 0)
             return "Power Input";
+        if (idx == 1)
+            return "Camera 1";
+        if (idx == 2)
+            return "Camera 2";
+        if (idx == 3)
+            return "Camera 3";
+        if (idx == 4)
+            return "Camera 4";
         return "";
     }
 
@@ -410,6 +414,17 @@ class LF_Monitor : Inventory_Base
     {
         if (dir == LFPG_PortDir.IN && portName == "input_1")
             return true;
+        if (dir == LFPG_PortDir.OUT)
+        {
+            if (portName == "output_1")
+                return true;
+            if (portName == "output_2")
+                return true;
+            if (portName == "output_3")
+                return true;
+            if (portName == "output_4")
+                return true;
+        }
         return false;
     }
 
@@ -449,17 +464,27 @@ class LF_Monitor : Inventory_Base
 
     int LFPG_GetDeviceType()
     {
-        return LFPG_DeviceType.CONSUMER;
+        return LFPG_DeviceType.PASSTHROUGH;
     }
 
+    // PASSTHROUGH: retransmite energia hacia outputs.
     bool LFPG_IsSource()
     {
-        return false;
+        return true;
     }
 
+    // Source is "on" when receiving power from upstream.
+    bool LFPG_GetSourceOn()
+    {
+        return m_PoweredNet;
+    }
+
+    // Autoconsumo del monitor.
+    // ElecGraph v0.7.47 soporta m_Consumption > 0 en PASSTHROUGH.
+    // Se descuenta del input antes de propagar a los outputs.
     float LFPG_GetConsumption()
     {
-        return 20.0;
+        return LFPG_MONITOR_CONSUMPTION;
     }
 
     bool LFPG_IsPowered()
@@ -467,27 +492,183 @@ class LF_Monitor : Inventory_Base
         return m_PoweredNet;
     }
 
+    // Called by graph propagation when upstream power state changes.
+    // PASSTHROUGH: no RequestPropagate here — graph handles dirty
+    // propagation automatically via DIRTY_INPUT on downstream nodes.
     void LFPG_SetPowered(bool powered)
     {
         #ifdef SERVER
         if (m_PoweredNet == powered)
+        {
+            string skipMsg = "[LF_Monitor] SetPowered(" + powered.ToString() + ") SKIP (no change) id=" + m_DeviceId;
+            LFPG_Util.Debug(skipMsg);
             return;
+        }
 
         m_PoweredNet = powered;
         SetSynchDirty();
 
         string msg = "[LF_Monitor] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId;
+        msg = msg + " wires=" + m_Wires.Count().ToString();
         LFPG_Util.Debug(msg);
         #endif
     }
 
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
+    // Overload bitmask (which output wires exceed capacity)
+    int LFPG_GetOverloadMask()
     {
-        return false;
+        return m_OverloadMask;
     }
 
+    void LFPG_SetOverloadMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_OverloadMask != mask)
+        {
+            m_OverloadMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // Warning bitmask (partial allocation)
+    int LFPG_GetWarningMask()
+    {
+        return m_WarningMask;
+    }
+
+    void LFPG_SetWarningMask(int mask)
+    {
+        #ifdef SERVER
+        if (m_WarningMask != mask)
+        {
+            m_WarningMask = mask;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ---- Connection validation ----
+    // OUT ports del monitor solo pueden conectarse a LF_Camera.
+    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
+    {
+        if (!other)
+            return false;
+
+        // Solo output ports pueden iniciar conexiones.
+        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT))
+            return false;
+
+        // Restriccion: solo LF_Camera como destino.
+        if (!other.IsKindOf("LF_Camera"))
+            return false;
+
+        EntityAI otherEntity = EntityAI.Cast(other);
+        if (!otherEntity)
+            return false;
+
+        // Verificar que el destino tenga el puerto IN especificado.
+        return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN);
+    }
+
+    // ============================================
+    // Wire ownership API (delegates to WireHelper)
+    // Patron identico a LF_Splitter.
+    // ============================================
     bool LFPG_HasWireStore()
     {
-        return false;
+        return true;
+    }
+
+    array<ref LFPG_WireData> LFPG_GetWires()
+    {
+        return m_Wires;
+    }
+
+    string LFPG_GetWiresJSON()
+    {
+        return LFPG_WireHelper.GetJSON(m_Wires);
+    }
+
+    bool LFPG_AddWire(LFPG_WireData wd)
+    {
+        if (!wd)
+            return false;
+
+        // Solo permitir wires desde puertos output.
+        if (wd.m_SourcePort == "")
+        {
+            wd.m_SourcePort = "output_1";
+        }
+
+        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
+        {
+            LFPG_Util.Warn("[LF_Monitor] AddWire rejected: not an output port: " + wd.m_SourcePort);
+            return false;
+        }
+
+        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_ClearWires()
+    {
+        bool result = LFPG_WireHelper.ClearAll(m_Wires);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_ClearWiresForCreator(string creatorId)
+    {
+        bool result = LFPG_WireHelper.ClearForCreator(m_Wires, creatorId);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
+    }
+
+    bool LFPG_PruneMissingTargets()
+    {
+        // Use cached map from NetworkManager if available (during self-heal),
+        // otherwise build our own (standalone calls like wire creation).
+        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
+        if (!validIds)
+        {
+            validIds = new map<string, bool>;
+            array<EntityAI> all = new array<EntityAI>;
+            LFPG_DeviceRegistry.Get().GetAll(all);
+            int vi;
+            for (vi = 0; vi < all.Count(); vi = vi + 1)
+            {
+                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
+                if (did != "")
+                {
+                    validIds[did] = true;
+                }
+            }
+        }
+
+        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
+        if (result)
+        {
+            #ifdef SERVER
+            SetSynchDirty();
+            #endif
+        }
+        return result;
     }
 };

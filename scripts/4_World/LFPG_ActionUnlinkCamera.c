@@ -44,21 +44,10 @@ class LFPG_ActionUnlinkCamera : ActionSingleUseBase
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
-        // Solo aparece cuando el monitor tiene una camara enlazada.
-        LF_Monitor mon = LF_Monitor.Cast(targetObj);
-        if (!mon)
-            return false;
-
-        if (mon.LFPG_GetLinkedCameraId() == "")
-            return false;
-
-        // CAM-08: no permitir desvincular si alguien esta viendo el feed.
-        // Get() devuelve null en servidor dedicado → condicion segura.
-        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
-        if (vp && vp.IsActive())
-            return false;
-
-        return true;
+        // v0.9.1: DEPRECATED — ActionUnlinkCamera ya no se registra en SetActions.
+        // El enlace de camaras ahora es fisico (cables), no logico (SyncVar).
+        // Este archivo se eliminara en Sprint B.
+        return false;
     }
 
     override void OnExecuteClient(ActionData action_data)
