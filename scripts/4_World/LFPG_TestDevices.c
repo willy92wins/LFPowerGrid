@@ -75,6 +75,13 @@ class LF_TestGenerator : PowerGenerator
     // for a device leaving the network bubble after EEDelete has started.
     protected bool m_LFPG_Deleting = false;
 
+    // v0.9.1 (H3 JIP Fix): CompEM retry counter for client-side recovery.
+    // When OnVarSync tries SwitchOn but CompEM fails (fuel/sparkplug not
+    // yet synced), we schedule retries up to LFPG_COMPEM_RETRY_MAX times.
+    protected int m_LFPG_CompEMRetries = 0;
+    static const int LFPG_COMPEM_RETRY_MAX = 3;
+    static const int LFPG_COMPEM_RETRY_MS = 1500;
+
     // v0.7.30: Per-device position polling removed.
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
     // with round-robin batching (Audit 1+2 closure).
@@ -192,6 +199,14 @@ class LF_TestGenerator : PowerGenerator
         // v0.7.38 (RC-04): Set deletion flag BEFORE unregistration.
         // Prevents OnVariablesSynchronized from re-registering a dying device.
         m_LFPG_Deleting = true;
+
+        // v0.9.1 (H3): Cancel any pending CompEM retry to prevent
+        // post-mortem SwitchOn on a deleted entity.
+        ScriptCallQueue scqDel = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
+        if (scqDel)
+        {
+            scqDel.Remove(LFPG_RetryCompEM);
+        }
 
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -423,6 +438,11 @@ class LF_TestGenerator : PowerGenerator
         // Without this, CompEM stays dead after EEInit kills it (EEInit does
         // SwitchOff on both sides but SwitchOn only on server). This is the
         // single recovery path for all client-side CompEM desync scenarios.
+        //
+        // v0.9.1 (H3 JIP Fix): If SwitchOn fails silently (fuel/sparkplug
+        // not yet synced to client), schedule a deferred retry via CallLater.
+        // Without retry, CompEM stays dead permanently when no further
+        // SyncVar updates arrive. Max LFPG_COMPEM_RETRY_MAX attempts.
         if (!m_LFPG_Deleting)
         {
             ComponentEnergyManager emSync = GetCompEM();
@@ -432,10 +452,38 @@ class LF_TestGenerator : PowerGenerator
                 if (m_SourceOn && !emWorking)
                 {
                     emSync.SwitchOn();
+
+                    // v0.9.1 (H3): Check if SwitchOn actually succeeded.
+                    // C++ CompEM may reject SwitchOn if fuel or sparkplug
+                    // haven't replicated to this client yet.
+                    bool didStart = emSync.IsWorking();
+                    if (!didStart && m_LFPG_CompEMRetries < LFPG_COMPEM_RETRY_MAX)
+                    {
+                        ScriptCallQueue scq = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
+                        if (scq)
+                        {
+                            scq.Remove(LFPG_RetryCompEM);
+                            int retryDelay = LFPG_COMPEM_RETRY_MS;
+                            bool retryRepeat = false;
+                            scq.CallLater(LFPG_RetryCompEM, retryDelay, retryRepeat);
+                        }
+
+                        string retryMsg = "[LF_TestGenerator] CompEM SwitchOn failed on client, retry scheduled #";
+                        retryMsg = retryMsg + m_LFPG_CompEMRetries.ToString();
+                        retryMsg = retryMsg + " id=" + m_DeviceId;
+                        LFPG_Util.Info(retryMsg);
+                    }
                 }
                 else if (!m_SourceOn && emWorking)
                 {
                     emSync.SwitchOff();
+                }
+
+                // v0.9.1 (H3): Reset retry counter on successful sync
+                // (either CompEM started, or source is off — both are resolved states).
+                if (!m_SourceOn || emSync.IsWorking())
+                {
+                    m_LFPG_CompEMRetries = 0;
                 }
             }
         }
@@ -462,6 +510,59 @@ class LF_TestGenerator : PowerGenerator
             }
         }
         #endif
+    }
+
+    // v0.9.1 (H3 JIP Fix): Deferred CompEM recovery for client-side JIP.
+    // Called via CallLater when OnVarSync's SwitchOn() fails because
+    // fuel/sparkplug replication has not completed yet.
+    // Runs on client only (the CallLater is scheduled inside #ifndef SERVER).
+    // Retry count is bounded by LFPG_COMPEM_RETRY_MAX to prevent infinite loops.
+    void LFPG_RetryCompEM()
+    {
+        if (m_LFPG_Deleting)
+            return;
+
+        if (!m_SourceOn)
+            return;
+
+        ComponentEnergyManager emRetry = GetCompEM();
+        if (!emRetry)
+            return;
+
+        bool isWorking = emRetry.IsWorking();
+        if (isWorking)
+        {
+            // CompEM recovered on its own (another OnVarSync or C++ path).
+            m_LFPG_CompEMRetries = 0;
+            return;
+        }
+
+        m_LFPG_CompEMRetries = m_LFPG_CompEMRetries + 1;
+        emRetry.SwitchOn();
+
+        bool didStart = emRetry.IsWorking();
+
+        string retryLog = "[LF_TestGenerator] LFPG_RetryCompEM attempt=";
+        retryLog = retryLog + m_LFPG_CompEMRetries.ToString();
+        retryLog = retryLog + " success=" + didStart.ToString();
+        retryLog = retryLog + " id=" + m_DeviceId;
+        LFPG_Util.Info(retryLog);
+
+        if (!didStart && m_LFPG_CompEMRetries < LFPG_COMPEM_RETRY_MAX)
+        {
+            // Schedule another retry
+            ScriptCallQueue scq = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
+            if (scq)
+            {
+                int retryDelay = LFPG_COMPEM_RETRY_MS;
+                bool retryRepeat = false;
+                scq.CallLater(LFPG_RetryCompEM, retryDelay, retryRepeat);
+            }
+        }
+        else if (didStart)
+        {
+            m_LFPG_CompEMRetries = 0;
+        }
     }
 
     protected void LFPG_UpdateDeviceIdString()

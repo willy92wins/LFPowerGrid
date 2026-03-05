@@ -2807,8 +2807,7 @@ class LFPG_ElecGraph
                 // Splitter returns 0.0 explicitly → no regression.
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }
-
-            if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
+            else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
             }

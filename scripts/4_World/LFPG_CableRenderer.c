@@ -1182,6 +1182,11 @@ class LFPG_CableRenderer
     // Called from OnVariablesSynchronized on owner devices
     // (Generator, Splitter) to eliminate the 0-2s CullTick delay.
     // ==========================================================
+    // v0.9.1 (H5): Enriched to also update per-wire cableState immediately.
+    // Previously only st.lastPowered/masks were updated, but individual
+    // LFPG_WireSegmentInfo.cableState was only set in CullTick (2s delay).
+    // DrawFrame reads info.cableState for color, causing 0-2s of stale
+    // cable colors after JIP or power state changes.
     void NotifyOwnerVisualChanged(string ownerDeviceId)
     {
         if (ownerDeviceId == "") return;
@@ -1197,7 +1202,53 @@ class LFPG_CableRenderer
         st.lastOverloadMask  = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
         st.lastWarningMask   = LFPG_DeviceAPI.GetWarningMask(ownerObj);
 
-        string nvcMsg = "[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId + " load=" + st.lastLoadRatio.ToString() + " overload=" + st.lastOverloadMask.ToString() + " warning=" + st.lastWarningMask.ToString();
+        // v0.9.1 (H5): Update per-wire cableState immediately.
+        // Eliminates 0-2s color delay on JIP and power state transitions.
+        if (st.cachedWireKeys)
+        {
+            int nvcWi;
+            for (nvcWi = 0; nvcWi < st.cachedWireKeys.Count(); nvcWi = nvcWi + 1)
+            {
+                string nvcKey = st.cachedWireKeys[nvcWi];
+                LFPG_WireSegmentInfo nvcInfo;
+                if (m_WireSegments.Find(nvcKey, nvcInfo) && nvcInfo)
+                {
+                    bool nvcOverloaded = false;
+                    bool nvcWarning = false;
+                    if (nvcInfo.wireIndex >= 0 && nvcInfo.wireIndex <= 30)
+                    {
+                        int nvcBit = 1 << nvcInfo.wireIndex;
+                        nvcOverloaded = ((st.lastOverloadMask & nvcBit) != 0);
+                        nvcWarning = ((st.lastWarningMask & nvcBit) != 0);
+                    }
+
+                    if (nvcOverloaded)
+                    {
+                        nvcInfo.cableState = LFPG_CableState.CRITICAL_LOAD;
+                    }
+                    else if (nvcWarning)
+                    {
+                        nvcInfo.cableState = LFPG_CableState.WARNING_LOAD;
+                    }
+                    else if (st.lastPowered)
+                    {
+                        nvcInfo.cableState = LFPG_CableState.POWERED;
+                    }
+                    else
+                    {
+                        nvcInfo.cableState = LFPG_CableState.IDLE;
+                    }
+
+                    nvcInfo.powered = st.lastPowered;
+                }
+            }
+        }
+
+        string nvcMsg = "[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId;
+        nvcMsg = nvcMsg + " powered=" + st.lastPowered.ToString();
+        nvcMsg = nvcMsg + " load=" + st.lastLoadRatio.ToString();
+        nvcMsg = nvcMsg + " overload=" + st.lastOverloadMask.ToString();
+        nvcMsg = nvcMsg + " warning=" + st.lastWarningMask.ToString();
         LFPG_Util.Debug(nvcMsg);
     }
 

@@ -245,6 +245,10 @@ class LF_Camera : Inventory_Base
 
     // ============================================
     // Client sync - delegar a LFPG_TryRegister (patron CeilingLight/Combiner)
+    // v0.9.1 (H4 JIP Fix): Added RequestDeviceSync for cables
+    // targeting this camera. Without it, cables from upstream
+    // owners (Generator/Splitter) don't appear on JIP clients.
+    // Pattern: LF_TestLamp parity (CONSUMER, no wire store).
     // ============================================
     override void OnVariablesSynchronized()
     {
@@ -262,6 +266,17 @@ class LF_Camera : Inventory_Base
         else
         {
             SetObjectMaterial(0, LFPG_CAMERA_RVMAT_OFF);
+        }
+
+        // v0.9.1 (H4): Request wire data from server so cables
+        // TOWARDS this camera render on JIP. Cooldown-throttled.
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                r.RequestDeviceSync(m_DeviceId, this);
+            }
         }
         #endif
     }

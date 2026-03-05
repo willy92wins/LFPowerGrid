@@ -291,6 +291,10 @@ class LF_CeilingLight : Inventory_Base
 
     // ============================================
     // OnVariablesSynchronized
+    // v0.9.1 (H2 JIP Fix): Added CableRenderer sync block.
+    // CeilingLight is PASSTHROUGH with OUT port — owns wires.
+    // Without RequestDeviceSync, cables from output_1 never
+    // appear on JIP clients until ReconcileTick (60s).
     // ============================================
     override void OnVariablesSynchronized()
     {
@@ -307,6 +311,21 @@ class LF_CeilingLight : Inventory_Base
         {
             LFPG_DestroyLight();
             LFPG_SetRvmatOff();
+        }
+
+        // v0.9.1 (H2): CableRenderer sync — parity with Splitter/Combiner.
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                r.RequestDeviceSync(m_DeviceId, this);
+
+                if (r.HasOwnerData(m_DeviceId))
+                {
+                    r.NotifyOwnerVisualChanged(m_DeviceId);
+                }
+            }
         }
         #endif
     }

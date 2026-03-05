@@ -307,10 +307,33 @@ class LF_SolarPanel : Inventory_Base
         #endif
     }
 
+    // v0.9.1 (H1 JIP Fix): Added CableRenderer sync block.
+    // SolarPanel is SOURCE with OUT ports — owns wires.
+    // Without RequestDeviceSync, cables from SolarPanel never
+    // appear on JIP clients until ReconcileTick (60s).
+    // Pattern: Splitter/Combiner/Generator parity.
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
         LFPG_TryRegister();
+
+        #ifndef SERVER
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                if (!r.HasOwnerData(m_DeviceId))
+                {
+                    r.RequestDeviceSync(m_DeviceId, this);
+                }
+                else
+                {
+                    r.NotifyOwnerVisualChanged(m_DeviceId);
+                }
+            }
+        }
+        #endif
     }
 
     // ============================================

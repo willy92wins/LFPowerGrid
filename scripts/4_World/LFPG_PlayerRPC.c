@@ -1082,7 +1082,7 @@ modded class PlayerBase
 
         // Send CAMERA_LIST_RESPONSE to the requesting player (this = PlayerBase)
         ScriptRPC rpc = new ScriptRPC();
-        rpc.Write(LFPG_RPC_SubId.CAMERA_LIST_RESPONSE);
+        rpc.Write((int)LFPG_RPC_SubId.CAMERA_LIST_RESPONSE);
         rpc.Write(camCount);
 
         int ci = 0;
@@ -1131,6 +1131,13 @@ modded class PlayerBase
             if (pLocal)
                 pLocal.MessageStatus("[LFPG] No hay camaras activas conectadas.");
             return;
+        }
+
+        // v0.9.2 (Safety): Cap camCount against malformed/malicious RPC payloads.
+        // Server sends at most LFPG_MONITOR_MAX_CAMERAS entries.
+        if (camCount > LFPG_MONITOR_MAX_CAMERAS)
+        {
+            camCount = LFPG_MONITOR_MAX_CAMERAS;
         }
 
         ref array<ref LFPG_CameraListEntry> entries = new array<ref LFPG_CameraListEntry>;
@@ -1636,7 +1643,7 @@ modded class PlayerBase
         // Send response with CLIENT's deviceId as correlation key
         // (client uses this to detect stale responses)
         ScriptRPC rpc = new ScriptRPC();
-        rpc.Write(LFPG_RPC_SubId.INSPECT_RESPONSE);
+        rpc.Write((int)LFPG_RPC_SubId.INSPECT_RESPONSE);
         rpc.Write(clientDeviceId);
 
         int wireCount = entries.Count();
