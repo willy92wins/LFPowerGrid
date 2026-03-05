@@ -33,6 +33,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         // No command animation — camera view is instant.
         // CMD_ACTIONMOD_INTERACTONCE causes native crash on LF_Monitor
         // (Inventory_Base in world, not BaseBuildingBase with anim support).
+		m_CommandUID = -1;
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
         m_Text       = "#STR_LFPG_ACTION_VIEW_CAMERA";
     }

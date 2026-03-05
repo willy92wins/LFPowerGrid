@@ -1121,6 +1121,7 @@ modded class PlayerBase
     // =====================================
     protected void HandleLFPG_CameraListResponse(ParamsReadContext ctx)
     {
+		LFPG_Util.Info("[CameraListResponse] ENTRY");
         int camCount = 0;
         if (!ctx.Read(camCount))
             return;
