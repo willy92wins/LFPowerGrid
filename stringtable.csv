@@ -49,7 +49,7 @@
 "STR_LFPG_MonitorKit","Monitor Kit","Monitor Kit","Kit de Monitor","Monitor Kit","Monitor Kit"
 "STR_LFPG_MonitorKit_Desc","A kit to deploy a security monitor.","A kit to deploy a security monitor.","Kit para instalar un monitor de seguridad.","A kit to deploy a security monitor.","A kit to deploy a security monitor."
 "STR_LFPG_Monitor","Security Monitor","Security Monitor","Monitor de Seguridad","Security Monitor","Security Monitor"
-"STR_LFPG_Monitor_Desc","Displays camera feed. Consumes 20 u/s.","Displays camera feed. Consumes 20 u/s.","Muestra imagen de camara. Consume 20 u/s.","Displays camera feed. Consumes 20 u/s.","Displays camera feed. Consumes 20 u/s."
+"STR_LFPG_Monitor_Desc","Displays camera feed. Consumes 10 u/s.","Displays camera feed. Consumes 10 u/s.","Muestra imagen de camara. Consume 10 u/s.","Displays camera feed. Consumes 10 u/s.","Displays camera feed. Consumes 10 u/s."
 "STR_LFPG_ACTION_CYCLE_CAMERA","Cycle Camera","Cycle Camera","Cambiar Camara","Cycle Camera","Cycle Camera"
 "STR_LFPG_ACTION_UNLINK_CAMERA","Unlink Camera","Unlink Camera","Desvincular Camara","Unlink Camera","Unlink Camera"
 "STR_LFPG_ACTION_VIEW_CAMERA","View Camera","View Camera","Ver Cámara","View Camera","View Camera"

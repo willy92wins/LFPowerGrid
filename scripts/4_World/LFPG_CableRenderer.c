@@ -3088,6 +3088,26 @@ class LFPG_CableRenderer
         // G5: get render metrics once outside loop
         LFPG_RenderMetrics occRnd = LFPG_Telemetry.GetRender();
 
+        // v0.8.x (Fix 3): Dynamic margin for short cables.
+        // Wall-mounted devices produce short cables (bounding radius < 3m)
+        // whose samples sit very close to wall surfaces. Use enhanced
+        // margin (0.25m) to tolerate typical wall thickness (0.15-0.30m).
+        // Combined with Fix 1 pullback (0.20m), total tolerance is ~0.45m.
+        // Long cables keep the standard tight margin (0.10m) to avoid
+        // bleeding through thin floors (Bug 3 regression guard).
+        float effectiveMargin = LFPG_OCC_HIT_MARGIN_M;
+        if (wsi.cachedRadius < LFPG_OCC_SHORT_WIRE_RADIUS_M)
+        {
+            effectiveMargin = LFPG_OCC_HIT_MARGIN_WALL_M;
+        }
+
+        // v0.8.x (Fix 2): Device proximity guard — precompute threshold.
+        // Hits within this squared radius of either endpoint are likely
+        // the device model or the wall surface at the device mount point.
+        // Cost: 2 DistSq calls per blocked hit (only evaluated when margin
+        // check already passed, so rare path for non-wall cables).
+        float devRadSq = LFPG_OCC_DEVICE_RADIUS_M * LFPG_OCC_DEVICE_RADIUS_M;
+
         int si;
         for (si = 0; si < sampleCount; si = si + 1)
         {
@@ -3148,6 +3168,9 @@ class LFPG_CableRenderer
                     // 0.3m was too generous — thin building floors (~0.15m)
                     // passed margin, letting cables bleed through.
                     //
+                    // v0.8.x (Fix 3): effectiveMargin is 0.25 for short cables
+                    // (wall-mounted) and 0.10 for long cables (floor guard).
+                    //
                     // Algebraic optimisation (saves one sqrt per sample):
                     //   hitDist < targetDist - M
                     //   hitDist + M < targetDist          (rearrange)
@@ -3155,12 +3178,41 @@ class LFPG_CableRenderer
                     // So: compute ONE sqrt(hitDistSq), square the offset sum,
                     //     compare against targetDistSq which we already have.
                     float hitDist = Math.Sqrt(hitDistSq);
-                    float offsetDist = hitDist + LFPG_OCC_HIT_MARGIN_M;
+                    float offsetDist = hitDist + effectiveMargin;
                     float offsetDistSq = offsetDist * offsetDist;
 
                     if (offsetDistSq < targetDistSq)
                     {
-                        blockedCount = blockedCount + 1;
+                        // v0.8.x (Fix 2): Device proximity guard.
+                        // If the hit position is very close to either cable
+                        // endpoint, it is likely the device model itself or
+                        // the wall surface at the device mounting point.
+                        // In both cases the cable should be visible near its
+                        // connection. Skip this hit instead of counting it.
+                        //
+                        // This catches: (a) Fire Geometry of the device model
+                        // protruding in front of the port position, and
+                        // (b) the wall slice directly behind a flush-mounted
+                        // device where pullback alone was insufficient.
+                        //
+                        // Cost: 2 DistSq (6 sub + 6 mul + 2 add) per blocked
+                        // hit. Negligible — only reached when margin check
+                        // already passed, which is the rare occluded path.
+                        float hitToASq = LFPG_WorldUtil.DistSq(hitPos, wsi.cachedPosA);
+                        float hitToBSq = LFPG_WorldUtil.DistSq(hitPos, wsi.cachedPosB);
+                        bool nearDevice = false;
+                        if (hitToASq < devRadSq)
+                        {
+                            nearDevice = true;
+                        }
+                        if (hitToBSq < devRadSq)
+                        {
+                            nearDevice = true;
+                        }
+                        if (!nearDevice)
+                        {
+                            blockedCount = blockedCount + 1;
+                        }
                     }
                 }
             }

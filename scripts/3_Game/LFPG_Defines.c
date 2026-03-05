@@ -187,7 +187,7 @@ static const float LFPG_OCC_PARTIAL_THRESHOLD = 0.66;  // v0.7.38: blocked ratio
 static const int   LFPG_OCC_MAX_RAYCASTS     = 20;
 static const float LFPG_OCC_DIST_SCALE_MAX   = 3.0;    // v0.7.38: max recheck interval multiplier
 static const float LFPG_OCC_SAMPLE_LIFT_M    = 0.03;   // v0.7.38: sample point Y offset above cable
-static const float LFPG_OCC_WALL_PULLBACK_M  = 0.20;   // v0.8.x: camera-aware pullback for wall-mounted devices. Retracts sample 20cm toward camera to escape wall geometry. Tuned for typical wall thickness (15-30cm).
+static const float LFPG_OCC_WALL_PULLBACK_M  = 0.25;   // v0.8.x: camera-aware pullback for wall-mounted devices. Retracts sample 20cm toward camera to escape wall geometry. Tuned for typical wall thickness (15-30cm).
 static const float LFPG_OCC_LONG_WIRE_M      = 10.0;
 static const float LFPG_OCC_CAM_MOVE_THRESH  = 0.3;
 static const float LFPG_OCC_CAM_DIR_THRESH   = 0.02;
@@ -399,6 +399,9 @@ static const float LFPG_ALPHA_FADE_START_M   = 35.0;   // distance at which alph
 static const float LFPG_ALPHA_MIN_THRESHOLD  = 0.02;   // v0.7.38 (M1): skip wire if alpha below this
 static const float LFPG_OCC_ALPHA_MIN        = 0.15;   // v0.7.38 (M1): min alpha for occluded wires (ghost)
 static const float LFPG_OCC_HIT_MARGIN_M     = 0.10;   // v0.9.2 (M1): occlusion hit margin between camera→surface and cable sample
+static const float LFPG_OCC_HIT_MARGIN_WALL_M = 0.25;  // v0.8.x (Fix 3): enhanced margin for short wall-mounted cables. Tolerates wall thickness up to ~0.45m combined with pullback.
+static const float LFPG_OCC_SHORT_WIRE_RADIUS_M = 3.0; // v0.8.x (Fix 3): bounding sphere radius threshold. Cables below this use MARGIN_WALL instead of standard margin.
+static const float LFPG_OCC_DEVICE_RADIUS_M   = 0.50;  // v0.8.x (Fix 2): device proximity guard. Hits within this distance of either endpoint are treated as device-model self-occlusion.
 
 // ---- Screen margins (v0.7.38 M1) ----
 // Margin around screen bounds for Cohen-Sutherland clipping.

@@ -1,12 +1,11 @@
 // =========================================================
-// LF_PowerGrid - Action: Watch Monitor (v0.9.2 - Sprint B)
+// LF_PowerGrid - Action: Watch Monitor (v0.9.4 - Wire check fix)
 //
 // Replaces LFPG_ActionViewCamera (v0.9.0).
 // Server-authoritative camera list via RPC.
 //
 // Aparece al mirar un LF_Monitor que:
 //   - este encendido (m_PoweredNet = true)
-//   - tenga al menos un wire (OUT ports)
 //   - el viewport NO este ya activo
 //
 // No requiere item en mano (CCINone).
@@ -17,13 +16,16 @@
 //   Client: recibe CAMERA_LIST_RESPONSE → CameraViewport.EnterFromList
 //
 // Registrar en LF_Monitor.SetActions() y LFPG_ActionRegistration.
+//
+// v0.9.3 (Bug 2 fix): Changed parent from ActionSingleUseBase to ActionInteractBase.
+// v0.9.4 (Bug fix): Removed client-side HasWireStore/GetWires/Count check.
+//   m_Wires is populated server-side only (persistence + wiring RPCs).
+//   BroadcastOwnerWires sends data to CableRenderer, NOT to entity m_Wires.
+//   On the client, monitor.LFPG_GetWires().Count() is ALWAYS 0 → action
+//   never appeared. Server already validates wires + powered cameras in
+//   HandleLFPG_RequestCameraList — client check was redundant and broken.
 // =========================================================
 
-// v0.9.3 (Bug 2 fix): Changed parent from ActionSingleUseBase to ActionInteractBase.
-// ActionSingleUseBase is for item-in-hand actions — never evaluated when player
-// has empty hands looking at a world entity. ActionInteractBase is for world entity
-// interactions (same as ActionLFPG_ToggleSource on Generator). CCINone + CCTCursor
-// pattern is identical and compatible with ActionInteractBase.
 class LFPG_ActionWatchMonitor : ActionInteractBase
 {
     void LFPG_ActionWatchMonitor()
@@ -63,19 +65,14 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!monitor)
             return false;
 
-        // Monitor debe estar encendido
+        // Monitor debe estar encendido (m_PoweredNet se replica via SyncVar)
         if (!monitor.LFPG_IsPowered())
             return false;
 
-        // Monitor debe tener wire store con al menos un cable
-        if (!monitor.LFPG_HasWireStore())
-            return false;
-
-        array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
-        if (!wires)
-            return false;
-        if (wires.Count() == 0)
-            return false;
+        // v0.9.4: Wire/camera validation is server-authoritative.
+        // HandleLFPG_RequestCameraList checks wires, resolves cameras,
+        // filters powered ones, and sends appropriate error messages
+        // if no cameras are connected or active.
 
         // No mostrar si el viewport ya esta activo
         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
