@@ -1,118 +1,70 @@
 // =========================================================
-// LF_PowerGrid - CCTV Viewport Manager (v0.9.2 - Sprint B)
+// LF_PowerGrid - CCTV Viewport Manager (v0.9.7)
 //
-// Singleton CLIENT-ONLY. Gestiona la transicion al POV de una
-// camara de seguridad vinculada a un LF_Monitor.
-//
-// Sprint B: Server-authoritative camera list + in-viewport cycling.
-//   - EnterFromList(array<LFPG_CameraListEntry>) reemplaza Enter(LF_Monitor)
-//   - Q/E ciclan entre camaras (sin RPC adicional)
-//   - SPACE sale del viewport
-//
-// Flujo de entrada (HandleLFPG_CameraListResponse → EnterFromList):
-//   1. Server resolvio cameras powered → envio lista al cliente
-//   2. EnterFromList almacena lista → EnterCamera(0)
-//   3. EnterCamera: CreateObject staticcamera + SetActive(true)
-//   4. Activa overlay: scanlines + vignette + indicador REC
-//
-// Flujo de ciclado (Q/E en Tick):
-//   1. CycleNext/CyclePrev avanza indice circular
-//   2. Reposiciona staticcamera existente (sin destroy/create)
-//   3. Muestra MessageStatus con label "CAM X/Y"
-//
-// Flujo de salida (SPACE, timeout o Exit() directo):
-//   1. Camera.SetActive(false) → motor restaura POV del jugador
-//   2. ObjectDelete del staticcamera local
-//   3. Limpia lista y estado
-//
-// Overlay (DrawOverlay, llamado por MissionGameplay.OnUpdate):
-//   - Lineas horizontales semi-transparentes (efecto CRT)
-//   - Desplazamiento vertical lento para animacion de scanlines
-//   - Vignette oscura en los 4 bordes (marco CRT)
-//   - Indicador REC parpadeante en esquina superior derecha
-//
-// ENFORCE SCRIPT NOTES:
-//   - No foreach, no ++/--, no ternario, no multilinea en params
-//   - cast implicito float→int via asignacion directa
-//   - Hoisting de variables antes de if/else
-//   - create_local=true en CreateObject (objeto solo en este cliente)
+// v0.9.7:
+//   - CreateWidgets ELIMINADO: crash nativo con staticcamera.
+//   - ChangeGameFocus ELIMINADO: bloquea LocalPress sin suprimir controles.
+//   - ResetGameFocus() llamado tras SetActive(true) para limpiar
+//     cualquier focus lock que el engine imponga al activar staticcamera.
+//   - Input: LocalValue edge detect como metodo principal.
+//   - Timeout 30s como mecanismo de salida garantizado.
+//   - m_ExitedThisFrame flag para que MissionInit sepa si debe
+//     saltar DeviceInspector en el frame del exit.
 // =========================================================
 
-static const float LFPG_CCTV_SCANLINE_SPACING = 5.0;   // px entre lineas
-static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.32;  // 0-1 opacidad lineas (verde oscuro CCTV)
-static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;  // px/s desplazamiento
-static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;  // 0-1 opacidad vignette
-static const float LFPG_CCTV_VIGNETTE_W       = 55.0;  // px grosor borde
-static const float LFPG_CCTV_MAX_DURATION_S   = 120.0; // auto-exit tras 2 min
+static const float LFPG_CCTV_SCANLINE_SPACING = 5.0;
+static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.32;
+static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;
+static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;
+static const float LFPG_CCTV_VIGNETTE_W       = 55.0;
+static const float LFPG_CCTV_MAX_DURATION_S   = 30.0;
 
 class LFPG_CameraViewport
 {
-    // ---- Singleton ----
     protected static ref LFPG_CameraViewport s_Instance;
 
-    // ---- Estado ----
-    protected Object    m_ViewCamObj;      // staticcamera local creado en EnterCamera
+    protected Object    m_ViewCamObj;
     protected bool      m_Active;
-    protected float     m_ScanlineOffset; // px: posicion actual del scroll
-    protected float     m_ActiveDuration; // segundos desde Enter
+    protected float     m_ScanlineOffset;
+    protected float     m_ActiveDuration;
 
-    // ---- Sprint B: camera list + cycling ----
     protected ref array<ref LFPG_CameraListEntry> m_CameraList;
-    protected int       m_CameraIndex;   // indice actual en m_CameraList
-    protected int       m_CameraTotal;   // cache de m_CameraList.Count()
-    protected string    m_CameraLabel;   // etiqueta actual (e.g. "CAM-XXXXXX")
+    protected int       m_CameraIndex;
+    protected int       m_CameraTotal;
+    protected string    m_CameraLabel;
 
-    // ---- Input caches (lazy init en primer Tick) ----
-    protected UAInput   m_ExitInput;     // SPACE (UAJump)
-    protected UAInput   m_NextInput;     // E (UAPeekRight)
-    protected UAInput   m_PrevInput;     // Q (UAPeekLeft)
-
-    // ---- Colores precalculados ----
     protected int       m_ScanColor;
     protected int       m_VigColor;
 
-    // ---- Overlay widgets (layout-based) ----
-    protected Widget       m_OverlayRoot;
-    protected TextWidget   m_LabelWidget;
-    protected TextWidget   m_RecWidget;
-    protected TextWidget   m_TimestampWidget;
+    // Edge detect state
+    protected bool      m_PrevSpace;
+    protected bool      m_PrevE;
+    protected bool      m_PrevQ;
 
-    // v0.9.6: Deferred overlay creation.
-    // CreateWidgets in the same frame as Camera.SetActive(true) causes
-    // a native crash — the engine workspace is not stable mid-transition.
-    // Flag defers overlay creation to the next Tick() frame.
-    protected bool         m_PendingOverlay;
+    // Flag para MissionInit: skip DeviceInspector en frame de exit
+    protected bool      m_ExitedThisFrame;
 
     void LFPG_CameraViewport()
     {
-        m_ViewCamObj     = null;
-        m_Active         = false;
-        m_ScanlineOffset = 0.0;
-        m_CameraLabel    = "";
-        m_ActiveDuration = 0.0;
-        m_CameraList     = null;
-        m_CameraIndex    = 0;
-        m_CameraTotal    = 0;
-        m_ExitInput      = null;
-        m_NextInput      = null;
-        m_PrevInput      = null;
+        m_ViewCamObj      = null;
+        m_Active          = false;
+        m_ScanlineOffset  = 0.0;
+        m_CameraLabel     = "";
+        m_ActiveDuration  = 0.0;
+        m_CameraList      = null;
+        m_CameraIndex     = 0;
+        m_CameraTotal     = 0;
+        m_PrevSpace       = false;
+        m_PrevE           = false;
+        m_PrevQ           = false;
+        m_ExitedThisFrame = false;
 
-        m_OverlayRoot     = null;
-        m_LabelWidget     = null;
-        m_RecWidget       = null;
-        m_TimestampWidget = null;
-        m_PendingOverlay  = false;
-
-        // Precomputar colores — cast float→int implicito (Enforce Script).
         int scanAlphaI = LFPG_CCTV_SCANLINE_ALPHA * 255.0;
         int vigAlphaI  = LFPG_CCTV_VIGNETTE_ALPHA * 255.0;
         m_ScanColor    = ARGB(scanAlphaI, 0, 15, 0);
         m_VigColor     = ARGB(vigAlphaI,  0, 0, 0);
     }
 
-    // =========================================================
-    // Singleton
-    // =========================================================
     static LFPG_CameraViewport Get()
     {
         if (GetGame().IsDedicatedServer())
@@ -138,11 +90,11 @@ class LFPG_CameraViewport
         return m_Active;
     }
 
-    // =========================================================
-    // HideAllUI — suprime input del jugador + oculta HUD vanilla
-    // ChangeGameFocus(1) incrementa contador interno del motor.
-    // ShowHudPlayer(false) usa capa "player hide" (no toca m_HudState).
-    // =========================================================
+    bool DidExitThisFrame()
+    {
+        return m_ExitedThisFrame;
+    }
+
     protected void HideAllUI()
     {
         Mission mission = GetGame().GetMission();
@@ -156,12 +108,6 @@ class LFPG_CameraViewport
             }
         }
 
-        Input inp = GetGame().GetInput();
-        if (inp)
-        {
-            inp.ChangeGameFocus(1);
-        }
-
         UIManager uiMgr = GetGame().GetUIManager();
         if (uiMgr)
         {
@@ -169,12 +115,6 @@ class LFPG_CameraViewport
         }
     }
 
-    // =========================================================
-    // RestoreAllUI — restaura input + HUD vanilla
-    // ChangeGameFocus(-1) decrementa contador.
-    // ShowHudPlayer(true) es idempotente — no fuerza HUD si
-    // el jugador lo habia ocultado con ~ antes de entrar.
-    // =========================================================
     protected void RestoreAllUI()
     {
         Mission mission = GetGame().GetMission();
@@ -187,81 +127,8 @@ class LFPG_CameraViewport
                 hud.ShowQuickbarPlayer(true);
             }
         }
-
-        Input inp = GetGame().GetInput();
-        if (inp)
-        {
-            inp.ChangeGameFocus(-1);
-        }
     }
 
-    // =========================================================
-    // UpdateOverlayText — actualiza label, REC parpadeo, timestamp
-    // Llamado cada frame desde Tick + una vez al entrar.
-    // =========================================================
-    protected void UpdateOverlayText()
-    {
-        if (m_LabelWidget)
-        {
-            int displayIdx = m_CameraIndex + 1;
-            string idxStr = displayIdx.ToString();
-            string totalStr = m_CameraTotal.ToString();
-            string labelText = m_CameraLabel;
-            labelText = labelText + "  [";
-            labelText = labelText + idxStr;
-            labelText = labelText + "/";
-            labelText = labelText + totalStr;
-            labelText = labelText + "]";
-            m_LabelWidget.SetText(labelText);
-        }
-
-        if (m_RecWidget)
-        {
-            int recSec = m_ActiveDuration;
-            bool recVisible = ((recSec % 2) == 0);
-            m_RecWidget.Show(recVisible);
-        }
-
-        if (m_TimestampWidget)
-        {
-            int year = 0;
-            int month = 0;
-            int day = 0;
-            int hour = 0;
-            int minute = 0;
-            GetGame().GetWorld().GetDate(year, month, day, hour, minute);
-
-            string moStr = month.ToString();
-            string dStr = day.ToString();
-            string hStr = hour.ToString();
-            string miStr = minute.ToString();
-
-            if (month < 10)
-                moStr = "0" + moStr;
-            if (day < 10)
-                dStr = "0" + dStr;
-            if (hour < 10)
-                hStr = "0" + hStr;
-            if (minute < 10)
-                miStr = "0" + miStr;
-
-            string ts = year.ToString();
-            ts = ts + "-";
-            ts = ts + moStr;
-            ts = ts + "-";
-            ts = ts + dStr;
-            ts = ts + "  ";
-            ts = ts + hStr;
-            ts = ts + ":";
-            ts = ts + miStr;
-            m_TimestampWidget.SetText(ts);
-        }
-    }
-
-    // =========================================================
-    // EnterFromList — Sprint B: llamado desde HandleLFPG_CameraListResponse
-    // Recibe la lista de camaras ya validadas por el servidor.
-    // =========================================================
     void EnterFromList(array<ref LFPG_CameraListEntry> entries)
     {
         PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
@@ -279,16 +146,14 @@ class LFPG_CameraViewport
             return;
         }
 
-        // Limpiar viewport previo si lo habia
         if (m_Active)
             Exit();
 
-        // Almacenar lista de camaras
-        m_CameraList  = entries;
-        m_CameraTotal = entries.Count();
-        m_CameraIndex = 0;
+        m_CameraList      = entries;
+        m_CameraTotal     = entries.Count();
+        m_CameraIndex     = 0;
+        m_ExitedThisFrame = false;
 
-        // Activar viewport con la primera camara
         bool ok = EnterCamera(0);
         if (!ok)
         {
@@ -300,17 +165,20 @@ class LFPG_CameraViewport
         m_Active         = true;
         m_ScanlineOffset = 0.0;
         m_ActiveDuration = 0.0;
+        m_PrevSpace      = false;
+        m_PrevE          = false;
+        m_PrevQ          = false;
 
-        // Suprimir input del jugador + ocultar HUD vanilla
         HideAllUI();
 
-        // v0.9.6: Diferir overlay al siguiente frame.
-        // CreateWidgets en el mismo frame que Camera.SetActive(true) causa
-        // crash nativo — el workspace del engine no esta estable durante
-        // la transicion de camara. Tick() lo crea en el frame siguiente.
-        m_PendingOverlay = true;
+        // v0.9.7: Limpiar cualquier game focus que el engine haya puesto
+        // al activar staticcamera. Sin esto, el Input API no detecta teclas.
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            inp.ResetGameFocus();
+        }
 
-        // Feedback al jugador
         if (p)
         {
             string totalStr = m_CameraTotal.ToString();
@@ -318,7 +186,7 @@ class LFPG_CameraViewport
             enterMsg = enterMsg + m_CameraLabel;
             enterMsg = enterMsg + " (1/";
             enterMsg = enterMsg + totalStr;
-            enterMsg = enterMsg + ")  Q/E=Ciclar  SPACE=Salir";
+            enterMsg = enterMsg + ")  SPACE=Salir  Q/E=Ciclar";
             p.MessageStatus(enterMsg);
         }
 
@@ -329,10 +197,6 @@ class LFPG_CameraViewport
         LFPG_Util.Info(logEntry);
     }
 
-    // =========================================================
-    // EnterCamera — crea o reposiciona el staticcamera en la camara[index]
-    // Retorna true si exitoso.
-    // =========================================================
     protected bool EnterCamera(int index)
     {
         if (!m_CameraList)
@@ -348,7 +212,6 @@ class LFPG_CameraViewport
         vector camOri = entry.m_Ori;
         m_CameraLabel = entry.m_Label;
 
-        // Si ya existe un staticcamera, reposicionar (cycling, sin destroy/create)
         if (m_ViewCamObj)
         {
             m_ViewCamObj.SetPosition(camPos);
@@ -357,15 +220,10 @@ class LFPG_CameraViewport
             return true;
         }
 
-        // Primera entrada: crear staticcamera LOCAL
-        // create_local=true → solo visible en ESTE cliente, no replicado.
         Object viewCam = GetGame().CreateObject("staticcamera", camPos, true, false, false);
         if (!viewCam)
         {
             LFPG_Util.Error("[CameraViewport] Fallo CreateObject staticcamera");
-            PlayerBase pErr = PlayerBase.Cast(GetGame().GetPlayer());
-            if (pErr)
-                pErr.MessageStatus("[LFPG] Error al activar camara. Intenta de nuevo.");
             return false;
         }
 
@@ -386,9 +244,6 @@ class LFPG_CameraViewport
         return true;
     }
 
-    // =========================================================
-    // CycleNext / CyclePrev — avanza/retrocede indice circular
-    // =========================================================
     void CycleNext()
     {
         if (!m_Active)
@@ -431,7 +286,6 @@ class LFPG_CameraViewport
         if (!p)
             return;
 
-        // Display index is 1-based
         int displayIdx = m_CameraIndex + 1;
         string idxStr = displayIdx.ToString();
         string totalStr = m_CameraTotal.ToString();
@@ -445,28 +299,15 @@ class LFPG_CameraViewport
         p.MessageStatus(msg);
     }
 
-    // =========================================================
-    // Exit
-    // =========================================================
     void Exit()
     {
         if (!m_Active)
             return;
 
-        // Restaurar input + HUD vanilla (ANTES de limpiar estado)
         RestoreAllUI();
 
-        // Destruir overlay layout
-        if (m_OverlayRoot)
-        {
-            m_OverlayRoot.Unlink();
-            m_OverlayRoot     = null;
-            m_LabelWidget     = null;
-            m_RecWidget       = null;
-            m_TimestampWidget = null;
-        }
-
-        m_Active = false;
+        m_Active          = false;
+        m_ExitedThisFrame = true;
 
         if (m_ViewCamObj)
         {
@@ -485,87 +326,75 @@ class LFPG_CameraViewport
         m_CameraList     = null;
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
-        m_PendingOverlay = false;
+        m_PrevSpace      = false;
+        m_PrevE          = false;
+        m_PrevQ          = false;
 
         LFPG_Util.Info("[CameraViewport] Viewport cerrado.");
     }
 
-    // =========================================================
-    // Tick — llamado cada frame desde MissionGameplay.OnUpdate
-    // Detecta: SPACE=exit, Q=prev, E=next, timeout
-    // =========================================================
     void Tick(float timeslice)
     {
+        m_ExitedThisFrame = false;
+
         if (!m_Active)
             return;
 
-        // v0.9.6: Deferred overlay creation.
-        // Runs on the first Tick after EnterFromList, one frame after
-        // Camera.SetActive(true). The workspace is now stable.
-        if (m_PendingOverlay)
-        {
-            m_PendingOverlay = false;
-            string overlayPath = "LFPowerGrid/gui/layouts/LFPG_CameraOverlay.layout";
-            WorkspaceWidget ws = GetGame().GetWorkspace();
-            if (ws)
-            {
-                m_OverlayRoot = ws.CreateWidgets(overlayPath);
-            }
-            if (m_OverlayRoot)
-            {
-                string wCamLabel = "CamLabel";
-                string wRecLabel = "RecLabel";
-                string wTimestamp = "TimestampLabel";
-                m_LabelWidget     = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCamLabel));
-                m_RecWidget       = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRecLabel));
-                m_TimestampWidget = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTimestamp));
-                int overlaySort = 11000;
-                m_OverlayRoot.Show(true);
-                m_OverlayRoot.SetSort(overlaySort);
-                UpdateOverlayText();
-            }
-        }
-
-        // Auto-exit por tiempo maximo
         m_ActiveDuration = m_ActiveDuration + timeslice;
         if (m_ActiveDuration >= LFPG_CCTV_MAX_DURATION_S)
         {
-            LFPG_Util.Info("[CameraViewport] Auto-exit (timeout)");
+            LFPG_Util.Info("[CameraViewport] Auto-exit (timeout 30s)");
             Exit();
             return;
         }
 
-        // Lazy init de inputs (evita GetInputByName cada frame)
-        if (!m_ExitInput)
-            m_ExitInput = GetUApi().GetInputByName("UAJump");
-        if (!m_NextInput)
-            m_NextInput = GetUApi().GetInputByName("UAPeekRight");
-        if (!m_PrevInput)
-            m_PrevInput = GetUApi().GetInputByName("UAPeekLeft");
+        Input inp = GetGame().GetInput();
+        if (!inp)
+            return;
 
-        // SPACE → salir
-        if (m_ExitInput && m_ExitInput.LocalPress())
+        // SPACE = salir (LocalValue edge detect)
+        float spaceVal = inp.LocalValue("UAJump");
+        bool spaceCur = false;
+        if (spaceVal > 0.5)
         {
+            spaceCur = true;
+        }
+        if (spaceCur && !m_PrevSpace)
+        {
+            LFPG_Util.Info("[CameraViewport] EXIT via SPACE");
             Exit();
+            m_PrevSpace = false;
             return;
         }
+        m_PrevSpace = spaceCur;
 
-        // E → siguiente camara
-        if (m_NextInput && m_NextInput.LocalPress())
+        // E = siguiente camara
+        float eVal = inp.LocalValue("UAPeekRight");
+        bool eCur = false;
+        if (eVal > 0.5)
+        {
+            eCur = true;
+        }
+        if (eCur && !m_PrevE)
         {
             CycleNext();
         }
+        m_PrevE = eCur;
 
-        // Q → camara anterior
-        if (m_PrevInput && m_PrevInput.LocalPress())
+        // Q = camara anterior
+        float qVal = inp.LocalValue("UAPeekLeft");
+        bool qCur = false;
+        if (qVal > 0.5)
+        {
+            qCur = true;
+        }
+        if (qCur && !m_PrevQ)
         {
             CyclePrev();
         }
+        m_PrevQ = qCur;
 
-        // Actualizar texto del overlay (label, REC parpadeo, timestamp)
-        UpdateOverlayText();
-
-        // Avanzar offset de scanlines
+        // Avanzar scanlines
         m_ScanlineOffset = m_ScanlineOffset + (LFPG_CCTV_SCROLL_SPEED * timeslice);
         while (m_ScanlineOffset >= LFPG_CCTV_SCANLINE_SPACING)
         {
@@ -573,11 +402,6 @@ class LFPG_CameraViewport
         }
     }
 
-    // =========================================================
-    // DrawOverlay — scanlines verdes + vignette
-    // v0.9.3: REC indicador migrado a TextWidget (UpdateOverlayText).
-    //         Scanlines ahora verde oscuro (CCTV look).
-    // =========================================================
     void DrawOverlay(LFPG_CableHUD hud)
     {
         if (!m_Active)
@@ -592,7 +416,6 @@ class LFPG_CameraViewport
         if (sw <= 0.0 || sh <= 0.0)
             return;
 
-        // Scanlines
         float lineY = m_ScanlineOffset;
         while (lineY < sh)
         {
@@ -600,7 +423,6 @@ class LFPG_CameraViewport
             lineY = lineY + LFPG_CCTV_SCANLINE_SPACING;
         }
 
-        // Vignette (4 bordes oscuros)
         float vwScale = sh / 1080.0;
         float vw    = LFPG_CCTV_VIGNETTE_W * vwScale;
         float vhalf = vw * 0.5;
