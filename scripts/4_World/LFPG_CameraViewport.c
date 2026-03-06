@@ -1,39 +1,37 @@
 // =========================================================
-// LF_PowerGrid - CCTV Viewport Manager (v0.9.9)
+// LF_PowerGrid - CCTV Viewport Manager (v1.0.0)
 //
-// Evidencia de tests v0.9.7 / v0.9.8 / v0.9.9-a:
+// Rewrite completo. Usa Camera de script (new Camera()) en vez
+// de CreateObject("staticcamera").
 //
-//   1. staticcamera bloquea Input API de script (LocalPress,
-//      LocalValue, UAInput) a nivel C++ engine.
-//   2. CreateWidgets colgaba/crasheaba en TODAS las versiones.
-//      Causa real: layout malformado — hijos sin bloque { }
-//      interno. El parser nativo entra en loop infinito.
-//      Corregido en LFPG_CCTVMenu.layout v0.9.9.
-//   3. ShowScriptedMenu congela el juego (loop modal interno).
-//   4. MissionGameplay.OnKeyPress SI RECIBE TECLAS incluso con
-//      staticcamera activa (confirmado via crash log de BBP).
+// HISTORIA DE BUGS CON staticcamera:
+//   - Input API bloqueado a nivel C++ (LocalPress/LocalValue)
+//   - ObjectDelete deja puntero dangling → crash at 0x68
+//   - SetActive(false) corrompe estado interno del engine
+//   - Otros mods (AdminTools, Expansion, BBP) crashean en
+//     super.OnUpdate al leer el puntero corrupto
+//   - Requeria skip de super.OnUpdate + cooldown de 10+ frames
 //
-// Solucion v0.9.9 (3 pilares):
+// SOLUCION: Camera de script (new Camera())
+//   - Objeto gestionado por script, no por el world object system
+//   - SetActive(true/false) limpio, sin corrupcion de punteros
+//   - No necesita ObjectDelete — el GC limpia al nullificar ref
+//   - No necesita skip de super.OnUpdate
+//   - No necesita three-phase exit ni cooldown
+//   - Exit simple: SetActive(false) + null ref + unlock focus
 //
-//   PILAR 1 — Layout corregido con bloques { } anidados.
-//     Widgets creados lazy en EnterFromList (primer uso).
-//     Se muestran/ocultan con Show(true/false) por sesion.
+// INPUT: MissionGameplay.OnKeyPress (funciona con cualquier camara)
+//   - SPACE: salir (deferred a Tick via m_WantsExit)
+//   - Q/E: ciclar camaras
+//   - ESC excluido (el engine lo procesa para menu de pausa)
 //
-//   PILAR 2 — Input via MissionGameplay.OnKeyPress override.
-//     CameraViewport.HandleKeyDown(key) procesa Q/E/SPACE/ESC.
-//
-//   PILAR 3 — ChangeGameFocus(1) suprime movimiento del jugador.
-//     Tracking con m_FocusLocked para prevenir desbalance.
-//
-//   Two-phase delete:
-//     Frame N:   SetActive(false), m_PendingDelete = obj
-//     Frame N+1: ObjectDelete + ChangeGameFocus(-1) + restore HUD
-//     Frame N+2+: Inspector cooldown expira
+// OVERLAY: Widgets lazy-init en primer uso. Layout corregido
+//   con bloques { } anidados (LFPG_CCTVMenu.layout).
+//   DESHABILITADO temporalmente hasta validar camara+input.
 //
 // ENFORCE SCRIPT NOTES:
 //   - No foreach, no ++/--, no ternario, no multilinea en params
-//   - cast implicito float→int via asignacion directa
-//   - Hoisting de variables antes de if/else
+//   - Variables hoisted antes de if/else
 // =========================================================
 
 static const float LFPG_CCTV_SCANLINE_SPACING = 5.0;
@@ -43,15 +41,12 @@ static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;
 static const float LFPG_CCTV_VIGNETTE_W       = 55.0;
 static const float LFPG_CCTV_MAX_DURATION_S   = 120.0;
 
-static const int   LFPG_CCTV_EXIT_COOLDOWN    = 3;
-
-// Key codes (raw ints — Enforce no expone KeyboardKey como enum)
-static const int   LFPG_KC_ESCAPE = 1;
+// Key codes (raw ints)
 static const int   LFPG_KC_Q      = 16;
 static const int   LFPG_KC_E      = 18;
 static const int   LFPG_KC_SPACE  = 57;
 
-// Overlay layout — ya empaquetado en PBO (gui/layouts/)
+// Overlay layout
 static const string LFPG_CCTV_LAYOUT = "LFPowerGrid/gui/layouts/LFPG_CCTVMenu.layout";
 
 class LFPG_CameraViewport
@@ -59,8 +54,16 @@ class LFPG_CameraViewport
     // ---- Singleton ----
     protected static ref LFPG_CameraViewport s_Instance;
 
-    // ---- Estado ----
-    protected Object    m_ViewCamObj;
+    // ---- Camera (world object via CreateObject) ----
+    // new Camera() no funciona en DayZ Enforce (~Object private).
+    // CreateObject("staticcamera") crea un objeto del world system.
+    //
+    // EXIT: ObjectDelete SIN SetActive(false).
+    // SetActive(false) corrompe un puntero interno del engine (0x68).
+    // ObjectDelete directo fuerza al engine a detectar que la camara
+    // activa fue destruida y hacer fallback al player camera por un
+    // code path diferente que SI limpia el estado correctamente.
+    protected Object m_ViewCamObj;
     protected bool      m_Active;
     protected float     m_ScanlineOffset;
     protected float     m_ActiveDuration;
@@ -75,7 +78,7 @@ class LFPG_CameraViewport
     protected int       m_ScanColor;
     protected int       m_VigColor;
 
-    // ---- Overlay widgets (pre-creados en InitWidgets, ocultos por defecto) ----
+    // ---- Overlay widgets ----
     protected Widget       m_OverlayRoot;
     protected TextWidget   m_wCamLabel;
     protected TextWidget   m_wRecLabel;
@@ -83,25 +86,13 @@ class LFPG_CameraViewport
     protected float        m_BlinkTimer;
     protected bool         m_RecVisible;
 
-    // ---- Two-phase delete ----
-    protected Object    m_PendingDelete;
-
-    // ---- Inspector cooldown ----
-    protected int       m_ExitCooldown;
-
     // ---- Focus lock tracking ----
-    // true si ChangeGameFocus(1) fue llamado y aun no se libero.
-    // Previene double-increment / double-decrement.
     protected bool      m_FocusLocked;
 
-    // ---- Three-phase exit (v0.9.9) ----
-    // m_ExitPhase:
-    //   0 = normal
-    //   1 = exit requested (m_Active=false, camera STILL ACTIVE)
-    //   2 = SetActive(false) done this Tick, PendingDelete queued
-    //       (next super.OnUpdate sees player cam restored)
-    //   3+ = ObjectDelete + unlock (cleanup)
-    protected int       m_ExitPhase;
+    // ---- Deferred exit ----
+    // OnKeyPress corre ANTES de OnUpdate. Ponemos flag aqui,
+    // Tick() (DESPUES de super.OnUpdate) procesa el exit.
+    protected bool      m_WantsExit;
 
     void LFPG_CameraViewport()
     {
@@ -119,10 +110,8 @@ class LFPG_CameraViewport
         m_wTimestamp      = null;
         m_BlinkTimer     = 0.0;
         m_RecVisible     = true;
-        m_PendingDelete  = null;
-        m_ExitCooldown   = 0;
         m_FocusLocked    = false;
-        m_ExitPhase      = 0;
+        m_WantsExit      = false;
 
         int scanAlphaI = LFPG_CCTV_SCANLINE_ALPHA * 255.0;
         int vigAlphaI  = LFPG_CCTV_VIGNETTE_ALPHA * 255.0;
@@ -147,7 +136,7 @@ class LFPG_CameraViewport
     {
         if (s_Instance)
         {
-            s_Instance.ForceCleanup();
+            s_Instance.Cleanup();
             delete s_Instance;
             s_Instance = null;
         }
@@ -158,25 +147,18 @@ class LFPG_CameraViewport
         return m_Active;
     }
 
+    // =========================================================
+    // ShouldSkipInspector — skip raycasts durante viewport activo.
+    // DeviceInspector usa GetCurrentCameraPosition() que apuntaria
+    // al POV de la camara CCTV en vez del jugador.
+    // =========================================================
     bool ShouldSkipInspector()
     {
-        if (m_Active)
-            return true;
-        if (m_ExitCooldown > 0)
-            return true;
-        return false;
+        return m_Active;
     }
 
     // =========================================================
-    // InitWidgets — crear overlay widgets (hidden).
-    // Llamado LAZY desde EnterFromList, ANTES de activar
-    // staticcamera (workspace estable, sin crash).
-    //
-    // NO llamar desde MissionGameplay.OnInit — cuelga el engine
-    // (FrameWidgetClass fullscreen en init causa hang).
-    //
-    // Los widgets se crean una sola vez y se reusan entre sesiones.
-    // Show(true) al entrar, Show(false) al salir.
+    // InitWidgets — lazy, primer uso.
     // =========================================================
     void InitWidgets()
     {
@@ -187,12 +169,11 @@ class LFPG_CameraViewport
         m_OverlayRoot = GetGame().GetWorkspace().CreateWidgets(LFPG_CCTV_LAYOUT);
         if (!m_OverlayRoot)
         {
-            LFPG_Util.Error("[CameraViewport] Failed to create overlay from: " + LFPG_CCTV_LAYOUT);
+            LFPG_Util.Error("[CameraViewport] Failed to create overlay: " + LFPG_CCTV_LAYOUT);
             return;
         }
         Print("[CameraViewport] DIAG: InitWidgets — CreateWidgets OK");
 
-        // Sort por encima de CableHUD (10000) y DeviceInspector (10001)
         m_OverlayRoot.SetSort(10002);
 
         string wCam = "CamLabel";
@@ -202,11 +183,8 @@ class LFPG_CameraViewport
         m_wRecLabel  = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRec));
         m_wTimestamp = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTs));
 
-        // Ocultar hasta que se active una sesion CCTV
         m_OverlayRoot.Show(false);
-
         Print("[CameraViewport] DIAG: InitWidgets complete");
-        LFPG_Util.Info("[CameraViewport] Overlay widgets created (hidden)");
     }
 
     protected void DestroyWidgets()
@@ -223,12 +201,6 @@ class LFPG_CameraViewport
 
     // =========================================================
     // EnterFromList — punto de entrada desde RPC response.
-    //
-    // Orden:
-    //   1. Mostrar overlay (widgets ya existen, solo Show(true))
-    //   2. ChangeGameFocus(1) — suprimir movimiento del jugador
-    //   3. Ocultar HUD vanilla
-    //   4. CreateObject staticcamera + SetActive(true)
     // =========================================================
     void EnterFromList(array<ref LFPG_CameraListEntry> entries)
     {
@@ -255,44 +227,33 @@ class LFPG_CameraViewport
             return;
         }
 
-        // Limpiar pending delete si quedaba
-        if (m_PendingDelete)
-        {
-            GetGame().ObjectDelete(m_PendingDelete);
-            m_PendingDelete = null;
-        }
-
         m_CameraList  = entries;
         m_CameraTotal = entries.Count();
         m_CameraIndex = 0;
+        m_WantsExit   = false;
 
-        // PASO 1: Overlay widgets DESHABILITADO para test.
-        // CreateWidgets cuelga con el layout actual — investigar por separado.
-        // Este test valida: staticcamera POV + OnKeyPress input.
-        // Si ambos funcionan, el layout se arregla despues.
-        if (m_OverlayRoot)
-        {
-            m_OverlayRoot.Show(true);
-            m_BlinkTimer = 0.0;
-            m_RecVisible = true;
-            if (m_wRecLabel)
-                m_wRecLabel.Show(true);
-        }
+        // Overlay widgets (deshabilitado temporalmente para test)
+        // if (!m_OverlayRoot)
+        //     InitWidgets();
+        // if (m_OverlayRoot)
+        // {
+        //     m_OverlayRoot.Show(true);
+        //     m_BlinkTimer = 0.0;
+        //     m_RecVisible = true;
+        // }
 
-        // PASO 2: Suprimir input del jugador
+        // Suprimir input del jugador
         LockFocus();
 
-        // PASO 3: Ocultar HUD vanilla
+        // Ocultar HUD vanilla
         HideHUD();
 
-        // PASO 4: Activar staticcamera
+        // Activar camara
         Print("[CameraViewport] DIAG: pre-EnterCamera(0)");
         bool camOk = EnterCamera(0);
         if (!camOk)
         {
             LFPG_Util.Error("[CameraViewport] EnterCamera failed — aborting");
-            if (m_OverlayRoot)
-                m_OverlayRoot.Show(false);
             UnlockFocus();
             RestoreHUD();
             m_CameraList  = null;
@@ -304,9 +265,7 @@ class LFPG_CameraViewport
         m_Active         = true;
         m_ScanlineOffset = 0.0;
         m_ActiveDuration = 0.0;
-        m_ExitCooldown   = 0;
 
-        // PASO 5: Actualizar overlay label
         UpdateOverlayLabel();
 
         if (p)
@@ -328,7 +287,14 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // EnterCamera
+    // EnterCamera — crea o reposiciona Camera de script.
+    //
+    // new Camera() crea un objeto gestionado por script, NO
+    // por el world object system. No sufre los bugs de
+    // CreateObject("staticcamera"):
+    //   - Sin puntero dangling al destruir
+    //   - SetActive(false) no corrompe estado del engine
+    //   - No necesita ObjectDelete — ref counting + GC
     // =========================================================
     protected bool EnterCamera(int index)
     {
@@ -345,6 +311,7 @@ class LFPG_CameraViewport
         vector camOri = entry.m_Ori;
         m_CameraLabel = entry.m_Label;
 
+        // Reusar camara existente (cycling)
         if (m_ViewCamObj)
         {
             m_ViewCamObj.SetPosition(camPos);
@@ -353,10 +320,12 @@ class LFPG_CameraViewport
             return true;
         }
 
+        // Primera entrada: crear staticcamera LOCAL
+        Print("[CameraViewport] DIAG: CreateObject staticcamera");
         Object viewCam = GetGame().CreateObject("staticcamera", camPos, true, false, false);
         if (!viewCam)
         {
-            LFPG_Util.Error("[CameraViewport] Fallo CreateObject staticcamera");
+            LFPG_Util.Error("[CameraViewport] CreateObject staticcamera failed");
             return false;
         }
 
@@ -380,26 +349,23 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // HandleKeyDown — llamado desde MissionGameplay.OnKeyPress.
-    // Retorna true si la tecla fue consumida.
+    // HandleKeyDown — desde MissionGameplay.OnKeyPress.
+    // Solo pone flags. No toca la camara.
     // =========================================================
     bool HandleKeyDown(int key)
     {
         if (!m_Active)
             return false;
 
-        // SPACE o ESC → marcar para salir en Tick
-        // NUNCA llamar SetActive/RequestExit aqui — OnKeyPress corre
-        // ANTES de OnUpdate, y SetActive(false) deja la camara en estado
-        // transitorio que crashea otros mods en super.OnUpdate.
-        if (key == LFPG_KC_SPACE || key == LFPG_KC_ESCAPE)
+        // SPACE → marcar para salir en Tick
+        if (key == LFPG_KC_SPACE)
         {
-            Print("[CameraViewport] DIAG: EXIT queued via key=" + key.ToString());
-            m_ExitPhase = 1;
+            Print("[CameraViewport] DIAG: EXIT queued via SPACE");
+            m_WantsExit = true;
             return true;
         }
 
-        // E → siguiente camara (solo reposiciona, sin cambio de estado)
+        // E → siguiente camara
         if (key == LFPG_KC_E)
         {
             CycleNext();
@@ -475,43 +441,69 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // RequestExit — two-phase delete.
+    // DoExit — sale del viewport. Llamado desde Tick.
     //
-    // RequestExit ELIMINADO — toda la logica de exit esta en las 3 fases
-    // del state machine en Tick(). HandleKeyDown y timeout solo ponen
-    // m_ExitPhase = 1, y Tick() procesa las fases en frames sucesivos.
-
+    // Camera de script: SetActive(false) restaura la camara del
+    // jugador limpiamente. Nullificar m_Camera libera el ref count
+    // y el GC destruye el objeto — sin puntero dangling.
     // =========================================================
-    // Exit — forzado (Reset / OnMissionFinish). Todo en un frame.
-    // =========================================================
-    void Exit()
+    protected void DoExit()
     {
-        m_Active = false;
+        Print("[CameraViewport] DIAG: DoExit");
 
+        m_Active    = false;
+        m_WantsExit = false;
+
+        // Destruir camara SIN SetActive(false).
+        // SetActive(false) corrompe puntero interno del engine (0x68).
+        // ObjectDelete directo fuerza al engine a detectar la destruccion
+        // de la camara activa y hacer fallback al player camera por un
+        // code path interno que SI limpia el estado correctamente.
         if (m_ViewCamObj)
         {
-            Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
-            if (viewCamTyped)
-            {
-                viewCamTyped.SetActive(false);
-            }
+            Print("[CameraViewport] DIAG: ObjectDelete (sin SetActive false)");
             GetGame().ObjectDelete(m_ViewCamObj);
             m_ViewCamObj = null;
         }
 
-        if (m_PendingDelete)
-        {
-            GetGame().ObjectDelete(m_PendingDelete);
-            m_PendingDelete = null;
-        }
-
+        // Ocultar overlay
         if (m_OverlayRoot)
         {
             m_OverlayRoot.Show(false);
         }
 
+        // Restaurar input + HUD
         UnlockFocus();
         RestoreHUD();
+
+        // Limpiar estado
+        m_CameraLabel    = "";
+        m_ActiveDuration = 0.0;
+        m_ScanlineOffset = 0.0;
+        m_CameraList     = null;
+        m_CameraIndex    = 0;
+        m_CameraTotal    = 0;
+
+        LFPG_Util.Info("[CameraViewport] Viewport cerrado.");
+    }
+
+    // =========================================================
+    // Cleanup — forzado (Reset / OnMissionFinish).
+    // =========================================================
+    protected void Cleanup()
+    {
+        m_Active    = false;
+        m_WantsExit = false;
+
+        if (m_ViewCamObj)
+        {
+            GetGame().ObjectDelete(m_ViewCamObj);
+            m_ViewCamObj = null;
+        }
+
+        UnlockFocus();
+        RestoreHUD();
+        DestroyWidgets();
 
         m_CameraLabel    = "";
         m_ActiveDuration = 0.0;
@@ -519,115 +511,34 @@ class LFPG_CameraViewport
         m_CameraList     = null;
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
-        m_ExitCooldown   = 0;
-        m_ExitPhase      = 0;
-    }
-
-    protected void ForceCleanup()
-    {
-        Exit();
-        DestroyWidgets();
     }
 
     // =========================================================
-    // Tick — per-frame (runs AFTER super.OnUpdate in MissionGameplay)
+    // Tick — per-frame (runs AFTER super.OnUpdate)
     //
-    //   1. Phase 2 del two-phase delete
-    //   2. Inspector cooldown
-    //   3. Three-phase exit state machine
-    //   4. Timeout
-    //   5. Overlay text update (REC blink, timestamp)
-    //   6. Scanline advance
-    //
-    // CRITICO: Tick corre DESPUES de super.OnUpdate. El exit se
-    // distribuye en 3 frames para que super.OnUpdate SIEMPRE vea
-    // una camara en estado valido:
-    //
-    //   Frame N:   OnKeyPress pone m_ExitPhase=1
-    //              super.OnUpdate: camara activa, mods OK
-    //              Tick: m_Active=false, oculta overlay. Camara SIGUE activa.
-    //
-    //   Frame N+1: super.OnUpdate: camara activa aun, mods OK
-    //              Tick: SetActive(false), queue PendingDelete
-    //
-    //   Frame N+2: super.OnUpdate: player cam restaurada, mods OK
-    //              Tick: ObjectDelete + unlock focus + restore HUD
+    //   1. Deferred exit (m_WantsExit from OnKeyPress)
+    //   2. Timeout
+    //   3. Overlay text update
+    //   4. Scanline advance
     // =========================================================
     void Tick(float timeslice)
     {
-        // ---- Three-phase exit state machine ----
-        if (m_ExitPhase == 3)
-        {
-            // Phase 3: cleanup final
-            Print("[CameraViewport] DIAG: Phase 3 — ObjectDelete + restore");
-            if (m_PendingDelete)
-            {
-                GetGame().ObjectDelete(m_PendingDelete);
-                m_PendingDelete = null;
-            }
-            UnlockFocus();
-            RestoreHUD();
-            m_ExitPhase = 0;
-        }
-
-        if (m_ExitPhase == 2)
-        {
-            // Phase 2: desactivar camara (super.OnUpdate de este frame
-            // ya corrio con la camara activa — safe)
-            Print("[CameraViewport] DIAG: Phase 2 — SetActive(false)");
-            if (m_ViewCamObj)
-            {
-                Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
-                if (viewCamTyped)
-                {
-                    viewCamTyped.SetActive(false);
-                }
-                m_PendingDelete = m_ViewCamObj;
-                m_ViewCamObj    = null;
-            }
-            m_ExitPhase = 3;
-        }
-
-        if (m_ExitPhase == 1)
-        {
-            // Phase 1: marcar inactivo, ocultar overlay.
-            // Camara SIGUE ACTIVA — super.OnUpdate del frame siguiente
-            // vera camara valida.
-            Print("[CameraViewport] DIAG: Phase 1 — m_Active=false, camera stays");
-            m_Active       = false;
-            m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
-
-            if (m_OverlayRoot)
-            {
-                m_OverlayRoot.Show(false);
-            }
-
-            m_CameraLabel    = "";
-            m_ActiveDuration = 0.0;
-            m_ScanlineOffset = 0.0;
-            m_CameraList     = null;
-            m_CameraIndex    = 0;
-            m_CameraTotal    = 0;
-
-            LFPG_Util.Info("[CameraViewport] Exit phase 1 (camera stays active)");
-            m_ExitPhase = 2;
-        }
-
-        // ---- Cooldown de inspector ----
-        if (m_ExitCooldown > 0)
-        {
-            m_ExitCooldown = m_ExitCooldown - 1;
-        }
-
         if (!m_Active)
             return;
+
+        // ---- Deferred exit ----
+        if (m_WantsExit)
+        {
+            DoExit();
+            return;
+        }
 
         // ---- Timeout ----
         m_ActiveDuration = m_ActiveDuration + timeslice;
         if (m_ActiveDuration >= LFPG_CCTV_MAX_DURATION_S)
         {
             LFPG_Util.Info("[CameraViewport] Auto-exit (timeout)");
-            m_ExitPhase = 1;
+            DoExit();
             return;
         }
 

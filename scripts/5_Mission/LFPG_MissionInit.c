@@ -1,16 +1,12 @@
 // =========================================================
-// LF_PowerGrid - mission hooks (v0.9.9)
+// LF_PowerGrid - mission hooks (v1.0.0)
 //
-// v0.9.9:
-//   - OnKeyPress override: delega Q/E/SPACE/ESC al viewport
-//     cuando CCTV esta activo. MissionGameplay.OnKeyPress es
-//     llamado por el engine INCLUSO con staticcamera activa
-//     (confirmado via crash log de BBP en v0.9.8).
-//     Cuando CCTV esta activo, NO llama super para evitar que
-//     otros mods procesen teclas (BBP crashea sin player null-check).
-//   - ShouldSkipInspector() con cooldown de 3 frames post-exit.
-//   - Overlay widgets NO se crean en OnInit (cuelga el engine).
-//     Se crean lazy en CameraViewport.EnterFromList.
+// v1.0.0: Clean rewrite.
+//   - OnKeyPress override: delega SPACE/Q/E al viewport.
+//     NO llama super cuando CCTV activo (evita crash de BBP).
+//   - super.OnUpdate se llama SIEMPRE — sin skip, sin cooldown.
+//     Camera de script (new Camera) no corrompe estado del engine.
+//   - ShouldSkipInspector solo cubre viewport activo.
 // =========================================================
 
 modded class MissionServer
@@ -50,19 +46,8 @@ modded class MissionGameplay
     }
 
     // =========================================================
-    // OnKeyPress — llamado por el engine para TODA tecla.
-    //
-    // Funciona incluso con staticcamera activa (a diferencia de
-    // Input.LocalPress/LocalValue que estan bloqueados por el
-    // engine C++ cuando staticcamera captura el input pipeline).
-    //
-    // Cuando el viewport CCTV esta activo:
-    //   - Delegamos la tecla a HandleKeyDown
-    //   - NO llamamos super → evita que otros mods procesen la
-    //     tecla (BBP crashea con null player en este callback)
-    //
-    // Cuando el viewport NO esta activo:
-    //   - Llamamos super normalmente → chain de mods intacto
+    // OnKeyPress — funciona incluso con Camera activa.
+    // Cuando CCTV activo: consume la tecla, NO llama super.
     // =========================================================
     override void OnKeyPress(int key)
     {
@@ -70,7 +55,6 @@ modded class MissionGameplay
         if (vp && vp.IsActive())
         {
             vp.HandleKeyDown(key);
-            // NO super — suprimir procesamiento de otros mods durante CCTV
             return;
         }
 
@@ -121,14 +105,13 @@ modded class MissionGameplay
             viewport.Tick(timeslice);
         }
 
-        // v0.9.9: ShouldSkipInspector cubre viewport activo + cooldown post-exit.
+        // ---- Render cables + preview + CCTV overlay ----
         bool skipCameraOps = false;
         if (viewport)
         {
             skipCameraOps = viewport.ShouldSkipInspector();
         }
 
-        // ---- Every frame: render committed cables + preview + CCTV overlay ----
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame();
 
@@ -153,7 +136,7 @@ modded class MissionGameplay
         // Telemetry tick
         LFPG_Telemetry.Tick(GetGame().GetTime());
 
-        // Skip DeviceInspector durante viewport + cooldown post-exit
+        // DeviceInspector — skip durante CCTV activo
         if (!skipCameraOps)
         {
             LFPG_DeviceInspector.Tick();
