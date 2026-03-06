@@ -1194,6 +1194,23 @@ modded class PlayerBase
         if (!vp)
             return;
 
+        // v0.9.8: Guard de re-entrada. Si el viewport ya esta activo
+        // (otro RPC response llego antes, o doble-click rapido), ignorar.
+        if (vp.IsActive())
+        {
+            LFPG_Util.Warn("[CameraListResponse] viewport already active — ignoring");
+            return;
+        }
+
+        // v0.9.8: Guard de jugador valido. Si el jugador murio o esta
+        // inconsciente entre el RPC request y la respuesta, no activar.
+        PlayerBase pGuard = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!pGuard || !pGuard.IsAlive() || pGuard.IsUnconscious())
+        {
+            LFPG_Util.Warn("[CameraListResponse] player dead/unconscious — ignoring");
+            return;
+        }
+
         vp.EnterFromList(entries);
     }
 

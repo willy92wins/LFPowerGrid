@@ -1,11 +1,16 @@
 // =========================================================
-// LF_PowerGrid - mission hooks (v0.9.7)
+// LF_PowerGrid - mission hooks (v0.9.9)
 //
-// v0.9.7:
-//   - DeviceInspector skip en el frame donde viewport hace Exit().
-//     Tras Camera.SetActive(false) + ObjectDelete, GetCurrentCameraPosition()
-//     puede devolver basura o crashear en el mismo frame.
-//     DidExitThisFrame() evita raycasts con camara en transicion.
+// v0.9.9:
+//   - OnKeyPress override: delega Q/E/SPACE/ESC al viewport
+//     cuando CCTV esta activo. MissionGameplay.OnKeyPress es
+//     llamado por el engine INCLUSO con staticcamera activa
+//     (confirmado via crash log de BBP en v0.9.8).
+//     Cuando CCTV esta activo, NO llama super para evitar que
+//     otros mods procesen teclas (BBP crashea sin player null-check).
+//   - ShouldSkipInspector() con cooldown de 3 frames post-exit.
+//   - Overlay widgets NO se crean en OnInit (cuelga el engine).
+//     Se crean lazy en CameraViewport.EnterFromList.
 // =========================================================
 
 modded class MissionServer
@@ -42,6 +47,34 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
+    }
+
+    // =========================================================
+    // OnKeyPress — llamado por el engine para TODA tecla.
+    //
+    // Funciona incluso con staticcamera activa (a diferencia de
+    // Input.LocalPress/LocalValue que estan bloqueados por el
+    // engine C++ cuando staticcamera captura el input pipeline).
+    //
+    // Cuando el viewport CCTV esta activo:
+    //   - Delegamos la tecla a HandleKeyDown
+    //   - NO llamamos super → evita que otros mods procesen la
+    //     tecla (BBP crashea con null player en este callback)
+    //
+    // Cuando el viewport NO esta activo:
+    //   - Llamamos super normalmente → chain de mods intacto
+    // =========================================================
+    override void OnKeyPress(int key)
+    {
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (vp && vp.IsActive())
+        {
+            vp.HandleKeyDown(key);
+            // NO super — suprimir procesamiento de otros mods durante CCTV
+            return;
+        }
+
+        super.OnKeyPress(key);
     }
 
     override void OnUpdate(float timeslice)
@@ -88,33 +121,24 @@ modded class MissionGameplay
             viewport.Tick(timeslice);
         }
 
-        // v0.9.7: Detectar si Exit() ocurrio en este frame.
-        // Tras Camera.SetActive(false) + ObjectDelete, el engine necesita
-        // un frame para restaurar la camara del jugador.
-        // GetCurrentCameraPosition() devuelve basura -> crash en DeviceInspector.
-        bool viewportExited = false;
+        // v0.9.9: ShouldSkipInspector cubre viewport activo + cooldown post-exit.
+        bool skipCameraOps = false;
         if (viewport)
         {
-            viewportExited = viewport.DidExitThisFrame();
+            skipCameraOps = viewport.ShouldSkipInspector();
         }
 
         // ---- Every frame: render committed cables + preview + CCTV overlay ----
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame();
 
-        bool viewportActive = false;
-        if (viewport)
-        {
-            viewportActive = viewport.IsActive();
-        }
-
         LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
-        if (renderer && !viewportActive)
+        if (renderer && !skipCameraOps)
         {
             renderer.DrawFrame();
         }
 
-        if (isActive && !viewportActive)
+        if (isActive && !skipCameraOps)
         {
             LFPG_WiringClient.TickPreview();
         }
@@ -129,10 +153,8 @@ modded class MissionGameplay
         // Telemetry tick
         LFPG_Telemetry.Tick(GetGame().GetTime());
 
-        // v0.9.7: Skip DeviceInspector si:
-        //   - viewport CCTV esta activo (raycasts apuntarian a staticcamera)
-        //   - viewport acaba de hacer Exit() este frame (camara en transicion)
-        if (!viewportActive && !viewportExited)
+        // Skip DeviceInspector durante viewport + cooldown post-exit
+        if (!skipCameraOps)
         {
             LFPG_DeviceInspector.Tick();
         }

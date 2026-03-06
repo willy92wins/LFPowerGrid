@@ -1,0 +1,52 @@
+FrameWidgetClass CCTVMenuRoot {
+	visible 0
+	ignorepointer 1
+	position 0 0
+	size 1 1
+	hexactpos 0
+	hexactsize 0
+	vexactpos 0
+	vexactsize 0
+	{
+		TextWidgetClass CamLabel {
+			visible 1
+			ignorepointer 1
+			position 16 12
+			hexactpos 1
+			vexactpos 1
+			text "CAM-000000  [1/1]"
+			color "200 40 220 40"
+			size 0.03 0.03
+			hexactsize 0
+			vexactsize 0
+		}
+
+		TextWidgetClass RecLabel {
+			visible 1
+			ignorepointer 1
+			halign right_ref
+			position -60 12
+			hexactpos 1
+			vexactpos 1
+			text "REC"
+			color "220 220 30 30"
+			size 0.03 0.03
+			hexactsize 0
+			vexactsize 0
+		}
+
+		TextWidgetClass TimestampLabel {
+			visible 1
+			ignorepointer 1
+			valign bottom_ref
+			position 16 -12
+			hexactpos 1
+			vexactpos 1
+			text "0000-00-00  00:00"
+			color "180 40 200 40"
+			size 0.025 0.025
+			hexactsize 0
+			vexactsize 0
+		}
+	}
+}
