@@ -26,8 +26,9 @@ modded class MissionServer
 
 modded class MissionGameplay
 {
-    protected bool m_LFPG_WasActive    = false;
-    protected bool m_LFPG_SyncRequested = false;
+    protected bool m_LFPG_WasActive      = false;
+    protected bool m_LFPG_SyncRequested   = false;
+    protected bool m_LFPG_WidgetsCreated  = false;
 
     override void OnInit()
     {
@@ -80,6 +81,19 @@ modded class MissionGameplay
                     m_LFPG_SyncRequested = true;
                     LFPG_WiringClient.RequestFullSync();
                 }
+            }
+        }
+
+        // ---- CCTV overlay widgets: crear en contexto OnUpdate (seguro) ----
+        // CreateWidgets() cuelga cuando se llama desde contexto RPC.
+        // Creamos los widgets aquí (hidden) y solo Show(true/false) desde RPC.
+        if (!m_LFPG_WidgetsCreated && m_LFPG_SyncRequested)
+        {
+            LFPG_CameraViewport vpInit = LFPG_CameraViewport.Get();
+            if (vpInit)
+            {
+                vpInit.InitWidgets();
+                m_LFPG_WidgetsCreated = true;
             }
         }
 

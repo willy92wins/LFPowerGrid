@@ -194,6 +194,29 @@ class LFPG_CameraViewport
         m_wRecLabel  = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRec));
         m_wTimestamp = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTs));
 
+        // Colores y texto desde script — NO en layout.
+        // Layout con color "A R G B" (comillas) cuelga el parser nativo.
+        // DeviceInspector tampoco pone color en layout.
+        int greenColor = ARGB(200, 40, 220, 40);
+        int redColor   = ARGB(220, 220, 30, 30);
+        int dimGreen   = ARGB(180, 40, 200, 40);
+
+        if (m_wCamLabel)
+        {
+            m_wCamLabel.SetColor(greenColor);
+            m_wCamLabel.SetText("CAM-000000  [1/1]");
+        }
+        if (m_wRecLabel)
+        {
+            m_wRecLabel.SetColor(redColor);
+            m_wRecLabel.SetText("REC");
+        }
+        if (m_wTimestamp)
+        {
+            m_wTimestamp.SetColor(dimGreen);
+            m_wTimestamp.SetText("0000-00-00  00:00");
+        }
+
         m_OverlayRoot.Show(false);
 
         Print("[CameraViewport] DIAG: InitWidgets complete");
@@ -250,6 +273,12 @@ class LFPG_CameraViewport
         m_CameraTotal = entries.Count();
         m_CameraIndex = 0;
 
+        // Widgets: NO crear aquí — EnterFromList corre en contexto RPC
+        // y CreateWidgets cuelga el engine desde RPC handlers.
+        // Verificado: COT, VPP y CableHUD crean widgets desde OnUpdate.
+        // InitWidgets() se llama desde MissionGameplay.OnUpdate.
+        // Aquí solo Show(true) si ya existen.
+
         LockFocus();
         HideHUD();
 
@@ -258,6 +287,8 @@ class LFPG_CameraViewport
         if (!camOk)
         {
             LFPG_Util.Error("[CameraViewport] EnterCamera failed — aborting");
+            if (m_OverlayRoot)
+                m_OverlayRoot.Show(false);
             UnlockFocus();
             RestoreHUD();
             m_CameraList  = null;
@@ -272,12 +303,7 @@ class LFPG_CameraViewport
         m_ExitCooldown   = 0;
         m_ExitPhase      = 0;
 
-        // Overlay widgets: crear DESPUÉS de EnterCamera + m_Active=true.
-        // En c3fc0dc (versión funcional) CreateWidgets se llama en este
-        // punto exacto — con la staticcamera ya activa y el HUD oculto.
-        if (!m_OverlayRoot)
-            InitWidgets();
-
+        // Solo Show — widgets ya creados arriba (o en sesión anterior)
         if (m_OverlayRoot)
         {
             m_OverlayRoot.Show(true);
