@@ -64,6 +64,10 @@ modded class PlayerBase
         {
             HandleLFPG_RequestCameraList(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.CCTV_EXIT)
+        {
+            HandleLFPG_CCTVExit(sender);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -1112,6 +1116,29 @@ modded class PlayerBase
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
 
         string logMsg = "[RequestCameraList] Sent " + camCount.ToString() + " cameras to player";
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // SERVER: CCTV Exit — restore player camera via SelectPlayer.
+    // COT pattern: server must call SelectPlayer(identity, player)
+    // to force engine to update global camera pointer.
+    // Without this, staticcamera ObjectDeleteOnClient leaves
+    // a dangling pointer at 0x68 that crashes BBP/Expansion/LBmaster.
+    // =====================================
+    protected void HandleLFPG_CCTVExit(PlayerIdentity sender)
+    {
+        if (!sender)
+            return;
+
+        PlayerBase player = PlayerBase.Cast(sender.GetPlayer());
+        if (!player)
+            return;
+
+        GetGame().SelectPlayer(sender, player);
+
+        string logMsg = "[CCTV_EXIT] SelectPlayer for ";
+        logMsg = logMsg + sender.GetName();
         LFPG_Util.Info(logMsg);
     }
 
