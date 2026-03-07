@@ -80,12 +80,14 @@ class LFPG_CameraViewport
     protected int       m_VigColor;
 
     // ---- Overlay widgets ----
-    protected Widget       m_OverlayRoot;
-    protected TextWidget   m_wCamLabel;
-    protected TextWidget   m_wRecLabel;
-    protected TextWidget   m_wTimestamp;
-    protected float        m_BlinkTimer;
-    protected bool         m_RecVisible;
+    protected Widget         m_OverlayRoot;
+    protected ImageWidget    m_wGreyOverlay;
+    protected CanvasWidget   m_wScanCanvas;
+    protected TextWidget     m_wCamLabel;
+    protected TextWidget     m_wRecLabel;
+    protected TextWidget     m_wTimestamp;
+    protected float          m_BlinkTimer;
+    protected bool           m_RecVisible;
 
     // ---- Two-phase exit (COT pattern) ----
     // ---- Two-phase exit + server confirmation (COT pattern) ----
@@ -116,6 +118,8 @@ class LFPG_CameraViewport
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
         m_OverlayRoot    = null;
+        m_wGreyOverlay   = null;
+        m_wScanCanvas    = null;
         m_wCamLabel      = null;
         m_wRecLabel      = null;
         m_wTimestamp      = null;
@@ -172,7 +176,7 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // InitWidgets
+    // InitWidgets — positions set from script (resolution-independent)
     // =========================================================
     void InitWidgets()
     {
@@ -190,32 +194,67 @@ class LFPG_CameraViewport
 
         m_OverlayRoot.SetSort(10002);
 
-        string wCam = "CamLabel";
-        string wRec = "RecLabel";
-        string wTs  = "TimestampLabel";
-        m_wCamLabel  = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCam));
-        m_wRecLabel  = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRec));
-        m_wTimestamp = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTs));
+        // Find all widgets
+        string wOvl  = "GreyOverlay";
+        string wScan = "ScanlineCanvas";
+        string wCam  = "CamLabel";
+        string wRec  = "RecLabel";
+        string wTs   = "TimestampLabel";
+        m_wGreyOverlay = ImageWidget.Cast(m_OverlayRoot.FindAnyWidget(wOvl));
+        m_wScanCanvas  = CanvasWidget.Cast(m_OverlayRoot.FindAnyWidget(wScan));
+        m_wCamLabel    = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wCam));
+        m_wRecLabel    = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRec));
+        m_wTimestamp   = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTs));
 
-        // Colores y texto desde script — NO en layout.
-        // Layout con color "A R G B" (comillas) cuelga el parser nativo.
-        // DeviceInspector tampoco pone color en layout.
+        // Screen dimensions for positioning
+        int scrW = 0;
+        int scrH = 0;
+        GetScreenSize(scrW, scrH);
+        float sw = scrW;
+        float sh = scrH;
+        float scale = sh / 1080.0;
+
+        // Grey-green overlay: very subtle tint for "old camera" effect
+        // Alpha 12 out of 255 ≈ 5% opacity — barely perceptible green wash
+        if (m_wGreyOverlay)
+        {
+            int overlayColor = ARGB(12, 0, 15, 0);
+            m_wGreyOverlay.SetColor(overlayColor);
+        }
+
+        // Colors
         int greenColor = ARGB(200, 40, 220, 40);
         int redColor   = ARGB(220, 220, 30, 30);
         int dimGreen   = ARGB(180, 40, 200, 40);
 
+        // CamLabel: top-left
+        float labelH = 28.0 * scale;
+        float margin = 16.0 * scale;
         if (m_wCamLabel)
         {
+            m_wCamLabel.SetPos(margin, margin);
+            m_wCamLabel.SetSize(400.0 * scale, labelH);
             m_wCamLabel.SetColor(greenColor);
             m_wCamLabel.SetText("CAM-000000  [1/1]");
         }
+
+        // RecLabel: top-right
+        float recW = 60.0 * scale;
         if (m_wRecLabel)
         {
+            float recX = sw - margin - recW;
+            m_wRecLabel.SetPos(recX, margin);
+            m_wRecLabel.SetSize(recW, labelH);
             m_wRecLabel.SetColor(redColor);
             m_wRecLabel.SetText("REC");
         }
+
+        // TimestampLabel: bottom-left
         if (m_wTimestamp)
         {
+            float tsY = sh - margin - labelH;
+            m_wTimestamp.SetPos(margin, tsY);
+            m_wTimestamp.SetSize(300.0 * scale, labelH);
             m_wTimestamp.SetColor(dimGreen);
             m_wTimestamp.SetText("0000-00-00  00:00");
         }
@@ -233,9 +272,11 @@ class LFPG_CameraViewport
             m_OverlayRoot.Unlink();
             m_OverlayRoot = null;
         }
-        m_wCamLabel  = null;
-        m_wRecLabel  = null;
-        m_wTimestamp = null;
+        m_wGreyOverlay = null;
+        m_wScanCanvas  = null;
+        m_wCamLabel    = null;
+        m_wRecLabel    = null;
+        m_wTimestamp   = null;
     }
 
     // =========================================================
@@ -726,37 +767,52 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // DrawOverlay
+    // DrawOverlay — uses own ScanlineCanvas (not CableHUD).
+    // CableHUD canvas doesn't render over SelectSpectator view.
+    // Our canvas is part of the overlay widget tree → renders correctly.
     // =========================================================
     void DrawOverlay(LFPG_CableHUD hud)
     {
         if (!m_Active)
             return;
 
-        if (!hud || !hud.IsReady())
+        if (!m_wScanCanvas)
             return;
 
-        float sw = hud.GetScreenW();
-        float sh = hud.GetScreenH();
+        m_wScanCanvas.Clear();
+
+        int scrW = 0;
+        int scrH = 0;
+        GetScreenSize(scrW, scrH);
+        float sw = scrW;
+        float sh = scrH;
 
         if (sw <= 0.0 || sh <= 0.0)
             return;
 
+        // Scanlines: horizontal lines scrolling down
         float lineY = m_ScanlineOffset;
         while (lineY < sh)
         {
-            hud.DrawLineScreen(0.0, lineY, sw, lineY, 1.0, m_ScanColor);
+            m_wScanCanvas.DrawLine(0.0, lineY, sw, lineY, 1.0, m_ScanColor);
             lineY = lineY + LFPG_CCTV_SCANLINE_SPACING;
         }
 
+        // Vignette: dark edges (thick semi-transparent black lines)
         float vwScale = sh / 1080.0;
         float vw    = LFPG_CCTV_VIGNETTE_W * vwScale;
         float vhalf = vw * 0.5;
 
-        hud.DrawLineScreen(vhalf,      0.0,  vhalf,      sh,   vw, m_VigColor);
-        hud.DrawLineScreen(sw - vhalf, 0.0,  sw - vhalf, sh,   vw, m_VigColor);
-        hud.DrawLineScreen(0.0,        vhalf, sw,         vhalf, vw, m_VigColor);
-        hud.DrawLineScreen(0.0,        sh - vhalf, sw, sh - vhalf, vw, m_VigColor);
+        // Left edge
+        m_wScanCanvas.DrawLine(vhalf, 0.0, vhalf, sh, vw, m_VigColor);
+        // Right edge
+        float rX = sw - vhalf;
+        m_wScanCanvas.DrawLine(rX, 0.0, rX, sh, vw, m_VigColor);
+        // Top edge
+        m_wScanCanvas.DrawLine(0.0, vhalf, sw, vhalf, vw, m_VigColor);
+        // Bottom edge
+        float bY = sh - vhalf;
+        m_wScanCanvas.DrawLine(0.0, bY, sw, bY, vw, m_VigColor);
     }
 
     // =========================================================

@@ -1300,6 +1300,23 @@ class LFPG_ElecGraph
             }
         }
 
+        // v0.9.3: Duplicate edge guard — skip if edge with same src+tgt+ports exists.
+        // Can happen if DeviceRegistry returns same entity under multiple keys,
+        // causing RebuildFromWires to iterate the same wire store twice.
+        if (existOut)
+        {
+            int dupCheck;
+            for (dupCheck = 0; dupCheck < existOut.Count(); dupCheck = dupCheck + 1)
+            {
+                LFPG_ElecEdge dupE = existOut[dupCheck];
+                if (!dupE) continue;
+                if (dupE.m_TargetNodeId == targetId && dupE.m_SourcePort == srcPort && dupE.m_TargetPort == tgtPort)
+                {
+                    return false;
+                }
+            }
+        }
+
         // Create edge
         ref LFPG_ElecEdge edge = new LFPG_ElecEdge();
         edge.m_SourceNodeId = sourceId;
@@ -3025,6 +3042,17 @@ class LFPG_ElecGraph
                             edgeDemand = 0.0;
                         }
                     }
+
+                    // v0.9.3: Multi-source demand split for Combiner pattern.
+                    // When a PASSTHROUGH has N powered inputs (e.g. Combiner with
+                    // 2 generators), each source should see demand/N, not the full
+                    // downstream demand. Without this, each generator allocates the
+                    // full 25 u/s when only 12.5 is needed from each.
+                    int ptPoweredIn = CountPoweredIncoming(edge.m_TargetNodeId);
+                    if (ptPoweredIn > 1)
+                    {
+                        edgeDemand = edgeDemand / ptPoweredIn;
+                    }
                 }
             }
 
@@ -3270,49 +3298,16 @@ class LFPG_ElecGraph
         {
             if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
-                // v0.8.3: Adjusted demand for multi-source LoadRatio.
-                // When a SOURCE feeds a PASSTHROUGH that has multiple powered inputs
-                // (e.g. Gen1+Gen2 → Combiner), each source is only responsible for
-                // its proportional share of the downstream demand. Without this,
-                // each source sees the FULL demand via m_LastStableOutput, inflating
-                // LoadRatio (e.g. 160% instead of 80% for 2×50u/s feeding 80u/s).
-                // Power allocation is NOT changed — only the display metric.
-                // Uses CountPoweredIncoming (m_OutputPower > epsilon) so offline
-                // sources don't divide, and cold-start (all at 0) falls through.
+                // v0.9.3: demandArr already contains per-source split demand
+                // (Phase 1 divides by CountPoweredIncoming for PASSTHROUGH targets).
+                // Just sum directly — no additional division needed.
+                // Previous v0.8.3 code divided here too, but that was because
+                // Phase 1 didn't split. Now Phase 1 does, so Phase 4 is simple.
                 float adjustedDemand = 0.0;
                 int adi;
                 for (adi = 0; adi < enabledCount; adi = adi + 1)
                 {
-                    int adOrigIdx = idxArr[adi];
-                    float adEdgeDemand = demandArr[adi];
-                    ref LFPG_ElecEdge adEdge = outEdges[adOrigIdx];
-                    if (adEdge)
-                    {
-                        ref LFPG_ElecNode adTarget;
-                        if (m_Nodes.Find(adEdge.m_TargetNodeId, adTarget) && adTarget)
-                        {
-                            if (adTarget.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-                            {
-                                int poweredIn = CountPoweredIncoming(adEdge.m_TargetNodeId);
-                                if (poweredIn > 1)
-                                {
-                                    adjustedDemand = adjustedDemand + (adEdgeDemand / poweredIn);
-                                }
-                                else
-                                {
-                                    adjustedDemand = adjustedDemand + adEdgeDemand;
-                                }
-                            }
-                            else
-                            {
-                                adjustedDemand = adjustedDemand + adEdgeDemand;
-                            }
-                        }
-                        else
-                        {
-                            adjustedDemand = adjustedDemand + adEdgeDemand;
-                        }
-                    }
+                    adjustedDemand = adjustedDemand + demandArr[adi];
                 }
 
                 if (srcNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)

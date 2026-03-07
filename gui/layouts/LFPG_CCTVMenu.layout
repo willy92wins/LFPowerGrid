@@ -7,9 +7,24 @@ FrameWidgetClass CCTVMenuRoot {
 	visible 0
 	ignorepointer 1
 	{
+		ImageWidgetClass GreyOverlay {
+			size 1 1
+			hexactpos 0
+			vexactpos 0
+			hexactsize 0
+			vexactsize 0
+			stretch 1
+			ignorepointer 1
+		}
+		CanvasWidgetClass ScanlineCanvas {
+			size 1 1
+			hexactpos 0
+			vexactpos 0
+			hexactsize 0
+			vexactsize 0
+			ignorepointer 1
+		}
 		TextWidgetClass CamLabel {
-			position 16 12
-			size 400 30
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -18,9 +33,6 @@ FrameWidgetClass CCTVMenuRoot {
 			ignorepointer 1
 		}
 		TextWidgetClass RecLabel {
-			halign right_ref
-			position -80 12
-			size 60 30
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -29,9 +41,6 @@ FrameWidgetClass CCTVMenuRoot {
 			ignorepointer 1
 		}
 		TextWidgetClass TimestampLabel {
-			valign bottom_ref
-			position 16 -40
-			size 300 26
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1

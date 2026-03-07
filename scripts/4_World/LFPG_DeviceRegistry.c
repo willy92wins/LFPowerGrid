@@ -67,13 +67,9 @@ class LFPG_DeviceRegistry
     }
 
     // v0.7.44 (Level 4, hallazgo 1a): Filter null refs in GetAll.
-    // Stale EntityAI refs can linger after engine invalidation (streaming,
-    // LOD unload). Without filtering, callers receive zombie pointers.
-    // All current callers have null guards, but this is defense-in-depth.
-    // NOTE: Avoid using `ref` or `out` here to prevent the Enforce warning:
-    // "FIX-ME: Method argument can't be strong reference".
-    // Passing an object parameter without `ref` gives weak reference semantics,
-    // while still allowing us to mutate the same array instance.
+    // v0.9.3: Deduplicate by entity pointer — same entity can be registered
+    // under multiple keys if TryRegister misses cleanup of old key.
+    // Without dedup, RebuildFromWires iterates wires twice → double edges.
     void GetAll(array<EntityAI> outArr)
     {
         if (!outArr)
@@ -89,6 +85,21 @@ class LFPG_DeviceRegistry
         {
             EntityAI ent = m_ById.GetElement(i);
             if (!ent) continue;
+
+            // Dedup: skip if this exact entity object is already in outArr
+            int already = outArr.Find(ent);
+            if (already != -1)
+            {
+                // Log the duplicate key for debugging
+                string dupKey = m_ById.GetKey(i);
+                string dedupMsg = "[DeviceRegistry] DEDUP: dupKey=";
+                dedupMsg = dedupMsg + dupKey;
+                dedupMsg = dedupMsg + " type=";
+                dedupMsg = dedupMsg + ent.GetType();
+                LFPG_Util.Warn(dedupMsg);
+                continue;
+            }
+
             outArr.Insert(ent);
         }
     }
