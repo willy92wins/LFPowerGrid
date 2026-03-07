@@ -368,7 +368,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "0.7.37";
+static const string LFPG_VERSION_STR = "1.0.0";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -519,7 +519,7 @@ static const int LFPG_SORT_INSPECTOR  = 10001;
 // ---- Sprint 5: PT-Chain diagnostic flag (Bug 1 investigation) ----
 // When true, enables detailed logging for PASSTHROUGH chain propagation.
 // Search RPT for "[PT-CHAIN]" lines. Set false for production.
-static const bool LFPG_DIAG_PT_CHAIN = true;
+static const bool LFPG_DIAG_PT_CHAIN = false;
 
 // ---- v0.8.0: Centralized Solar Timer ----
 // Moved from LF_SolarPanel per-panel constants to shared defines.

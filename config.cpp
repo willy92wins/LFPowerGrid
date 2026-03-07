@@ -19,7 +19,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -50,7 +50,6 @@ class CfgMods
             class gameScriptModule
             {
                 value = "";
-                // Tolerant paths to survive different packers (with/without root folder, case differences)
                 files[] = { "LFPowerGrid/scripts/3_Game", "LFPowerGrid/Scripts/3_Game", "scripts/3_Game", "Scripts/3_Game" };
             };
             class worldScriptModule
@@ -76,7 +75,7 @@ class CfgVehicles
     class LF_CableReel : CableReel
     {
         scope = 2;
-        isDeployable = 0; // disable vanilla placing/hologram
+        isDeployable = 0;
         displayName = "LF Cable Reel";
         descriptionShort = "Wiring tool for LF_PowerGrid.";
     };
@@ -103,10 +102,7 @@ class CfgVehicles
     };
 
     // ---- Splitter Kit (holdable, deployable) ----
-    // Uses the splitter model directly so hologram matches final result.
-    // On placement, spawns LF_Splitter and deletes the kit.
     class Inventory_Base;
-    class DeployableContainer_Base;
     class LF_Splitter_Kit : Inventory_Base
     {
         scope = 2;
@@ -117,23 +113,16 @@ class CfgVehicles
         itemSize[] = {3, 3};
         rotationFlags = 17;
         isDeployable = 1;
-		carveNavmesh    = 1;
-		physLayer       = "item_large";
-		// slopeTolerance = min dot(surfaceNormal, up). 1.0=flat only, 0.0=any surface.
-		// 0.0 allows walls/ceilings. For walls only (no ceiling): ~0.05
-		slopeTolerance  = 0.0;
-		yawPitchRollLimit[] = {90, 90, 90};
-		hiddenSelections[] = {"zbytek"};
-		hiddenSelectionsTextures[] = {""};
-		hiddenSelectionsMaterials[] = {""};
-		// placementOffset removed: causes oscillation loop with vanilla hologram.
-		// Wall offset handled by custom hologram (LFPG_SplitterHologram).
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"zbytek"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {""};
     };
 
     // ---- Splitter (placed device) ----
-    // 1 input, 3 outputs. Each output delivers 1/3 of incoming power.
-    // Memory points in p3d (LOD Memory):
-    //   port_input_1, port_output_1, port_output_2, port_output_3
     class LF_Splitter : Inventory_Base
     {
         scope = 2;
@@ -143,15 +132,12 @@ class CfgVehicles
         weight = 5000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
-		carveNavmesh    = 1;
-		physLayer       = "item_large";
-		isDeployable    = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
     };
 
     // ---- CeilingLight Kit (holdable, deployable) ----
-    // On placement, spawns LF_CeilingLight and deletes the kit.
-    // slopeTolerance=0.0 allows ceiling/wall placement.
-    // Pitch=180 for ceiling set by HologramMod, not player input.
     class LF_CeilingLight_Kit : Inventory_Base
     {
         scope = 2;
@@ -162,16 +148,13 @@ class CfgVehicles
         itemSize[] = {2, 2};
         rotationFlags = 17;
         isDeployable = 1;
-        carveNavmesh    = 1;
-        physLayer       = "item_large";
-        slopeTolerance  = 0.0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
     };
 
     // ---- CeilingLight (placed device) ----
-    // PASSTHROUGH: 1 input, 1 output. Consumes 10 u/s for light, passes rest downstream.
-    // Memory points (LOD Memory): light, port_input_1, port_output_1
-    // Named selection: light_emit (hiddenSelections[0] for rvmat swap on power toggle)
     class LF_CeilingLight : Inventory_Base
     {
         scope = 2;
@@ -181,21 +164,19 @@ class CfgVehicles
         weight = 3000;
         itemSize[] = {2, 2};
         rotationFlags = 17;
-        carveNavmesh    = 1;
-        physLayer       = "item_large";
-        isDeployable    = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
         hiddenSelections[] = {"light_emit"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\ceiling_light\lf_ceiling_light.rvmat"};
     };
 
     // =========================================================
-    // v0.8.1: SOLAR PANEL (DeployableContainer_Base refactor)
+    // v0.8.1: SOLAR PANEL
     // =========================================================
 
-    // ---- Solar Panel Kit (DeployableContainer_Base, different-model hologram) ----
-    // v0.8.2: Refactored BACK TO Inventory_Base + isDeployable=1
-    //   old DeployableContainer_Base IS NOT SHOWING KIT.
+    // ---- Solar Panel Kit ----
     class LF_SolarPanel_Kit : Inventory_Base
     {
         scope = 2;
@@ -209,15 +190,11 @@ class CfgVehicles
         canBeDigged = 0;
         carveNavmesh = 1;
         physLayer = "item_small";
-        // v0.8.1: Vanilla placement actions (sample_container pattern).
-        // Script also registers via AddAction() for safety (DayZ deduplicates).
         SingleUseActions[] = {527};
         ContinuousActions[] = {231};
     };
 
     // ---- Solar Panel T1 (placed device, SOURCE 20 u/s) ----
-    // Has attachment slots for upgrade materials (MetalPlate + Nail).
-    // Memory points required in p3d: port_output_1
     class LF_SolarPanel : Inventory_Base
     {
         scope = 2;
@@ -244,8 +221,6 @@ class CfgVehicles
     };
 
     // ---- Solar Panel T2 (upgraded device, SOURCE 50 u/s) ----
-    // No attachment slots - already upgraded.
-    // Memory points required in p3d: port_output_1
     class LF_SolarPanel_T2 : Inventory_Base
     {
         scope = 2;
@@ -259,7 +234,6 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
     };
-
 
     // =========================================================
     // v0.8.2: COMBINER (same-model deployment, floor + wall)
@@ -284,8 +258,6 @@ class CfgVehicles
     };
 
     // ---- Combiner (placed device) ----
-    // 2 inputs, 1 output. output = min(input_1 + input_2, 500 u/s)
-    // Memory points: port_input_1, port_input_2, port_output_1
     class LF_Combiner : Inventory_Base
     {
         scope = 2;
@@ -300,8 +272,8 @@ class CfgVehicles
         isDeployable = 0;
         hiddenSelections[] = {};
     };
-	
-	// =========================================================
+
+    // =========================================================
     // v0.9.0: CCTV SYSTEM (Camera + Monitor, same-model deploy)
     // =========================================================
 
@@ -324,8 +296,6 @@ class CfgVehicles
     };
 
     // ---- Camera (placed device) ----
-    // Memory points (LOD Memory): port_input_1
-    // Named selections (LOD Resolution): cam_led (hiddenSelections[0])
     class LF_Camera : Inventory_Base
     {
         scope = 2;
@@ -339,8 +309,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         hiddenSelections[] = { "cam_led" };
-		hiddenSelectionsTextures[] = { "\LFPowerGrid\data\camera\lf_camera_led.paa" };
-		hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\camera\lf_camera_led_off.rvmat" };
+        hiddenSelectionsTextures[] = { "\LFPowerGrid\data\camera\lf_camera_led.paa" };
+        hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\camera\lf_camera_led_off.rvmat" };
     };
 
     // ---- Monitor Kit (holdable, deployable) ----
@@ -362,8 +332,6 @@ class CfgVehicles
     };
 
     // ---- Monitor (placed device) ----
-    // Memory points (LOD Memory): port_input_1
-    // Named selections (LOD Resolution): screen (hiddenSelections[0])
     class LF_Monitor : Inventory_Base
     {
         scope = 2;
@@ -380,10 +348,86 @@ class CfgVehicles
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\cctv\lf_monitor_off.rvmat"};
     };
-	
+
+    // =========================================================
+    // v0.10.0: PUSH BUTTON (PASSTHROUGH, momentary toggle)
+    // =========================================================
+
+    // ---- PushButton Kit (holdable, deployable, same-model) ----
+    class LFPG_PushButton_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Push Button Kit";
+        descriptionShort = "A momentary push button switch. Place to deploy.";
+        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        weight = 500;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- PushButton (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
+    // Ports: input_1, output_1 (virtual — computed in script, no memory points)
+    // Toggle: momentary ON for 2s, then auto-OFF.
+    // LED: green (passing power), red (blocking), off (disconnected)
+    class LFPG_PushButton : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Electrical Push Button";
+        descriptionShort = "A worn industrial push button with LED status indicator.";
+        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        weight = 800;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"led_indicator"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat"};
+
+        class AnimationSources
+        {
+            class button_state
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class Zone_Housing
+                {
+                    class Health
+                    {
+                        hitpoints = 100;
+                        healthLevels[] =
+                        {
+                            {1.0, {}},
+                            {0.7, {}},
+                            {0.5, {}},
+                            {0.3, {}},
+                            {0.0, {}}
+                        };
+                    };
+                    componentNames[] = {"Component01"};
+                    fatalInjuryCoef = -1;
+                };
+            };
+        };
+    };
+
     // =========================================================
     // v0.8.0: MODDED VANILLA ITEMS (additive, not destructive)
-    // Allow MetalPlate and Nail to go into solar panel slots.
     // =========================================================
     class MetalPlate
     {

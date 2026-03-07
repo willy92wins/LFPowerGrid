@@ -1,170 +1,43 @@
 // =========================================================
-// LF_PowerGrid - Electrical Graph (Sprint 4.3+audit4, v0.8.3)
+// LF_PowerGrid - Electrical Graph (v1.0)
 //
 // In-memory directed graph of the electrical network.
 // Nodes = devices, edges = wires. Rebuilt from wire data at
 // startup, maintained incrementally during runtime.
 //
 // NOT persisted — wires are the source of truth.
-//
-// Sprint 4.2 S2 fixes:
-//   H1: AddEdgeInternal returns bool, OnWireAdded propagates it
-//   H3: Per-epoch requeue reset (not only when queue empties)
-//   H4: Head-index dirty queue (no array copy per tick)
-//   PostBulkRebuild: correct order for bulk mutations
-//
-// Sprint 4.2 S2b fixes (audit #2):
-//   H2: Dirty mask differentiation (INTERNAL/TOPOLOGY/INPUT)
-//   H6: Consumer respects m_Consumption (not just epsilon)
-//
-// Sprint 4.2 S3: Dead code removal — graph is sole propagation path.
-//
-// Sprint 4.3: Load modeling
-//   - Priority-based power allocation on outgoing edges
-//   - Overload detection: demand > capacity → brownout policy
-//   - Edge budget active (limits edges visited per tick)
-//   - Budget dedup fix (processed++ after epoch check)
-//   - Targeted ResetRequeueCounts (O(dirty) not O(N_total))
-//   - SyncNodeToEntity syncs LoadRatio + OverloadMask for sources
-//   - Per-component load telemetry
-//
 // Server-only: all public methods are guarded by #ifdef SERVER.
 //
-// v0.7.26 (Audit 4):
-//   - DFS depth limit in DetectCycleIfAdded (LFPG_DFS_MAX_VISITED)
-//   - NaN/infinity guards on loadRatio + inputSum calculations
-//   - Improved overload reporting when MaxOutput is zero
+// === POWER ALLOCATION (v1.0) ===
+// Binary all-off policy: if totalDemand > availableOutput on any
+// distributor node, ALL downstream of that node receives 0.
+// AllocateOutput (~90 lines) is the sole allocation function.
+// Overload state is per-node (m_Overloaded bool), not per-edge.
+// PASSTHROUGH always reports real demand (self + downstream) via
+// m_LastStableOutput, even when unpowered — prevents oscillation.
 //
-// v0.7.27 (Audit 5):
-//   - Pre-allocated temp arrays in AllocateOutputByPriority (GC pressure fix)
-//   - OverloadMask overflow warning for origIdx >= 31
-//   - Final NaN guard on accumulated inputSum
+// === KEY SUBSYSTEMS ===
+// - ProcessDirtyQueue: BFS propagation with node+edge budgets,
+//   requeue limits, and deferred requeue for deep chains.
+// - AllocateOutput: binary demand/allocation on outgoing edges.
+//   Multi-source split via CountPoweredIncoming (Combiner pattern).
+// - SyncNodeToEntity: syncs LoadRatio+Overloaded (SOURCE),
+//   Powered+Overloaded (PASSTHROUGH), Powered (CONSUMER/CAMERA).
+// - ValidateConsumerStates: bidirectional zombie/dark detection.
+// - PostBulkRebuild: type-aware orphan SyncVar reset.
 //
-// v0.7.31 (Bloque B): Component Watchdog
-//   - Per-component node limit replaces global cap (Audit2 #2)
-//   - O(1) fast-path via m_ComponentSizes (populated in RebuildComponents)
-//   - BFS fallback only when m_ComponentsDirty or nodes lack componentId
-//   - CountComponentLimited with early exit + reusable buffers
+// === ANTI-OSCILLATION ===
+// PASSTHROUGH demand signal = downstreamDemand + selfConsumption,
+// always written to m_LastStableOutput regardless of power state.
+// Demand is a topology property, not a power-flow property.
+// Cold-start fallback: m_MaxOutput when m_LastStableOutput=0.
 //
-// v0.7.32 (Bloque C): Consumer Zombie Validation
-//   - ValidateConsumerStates: periodic check for consumers claiming powered
-//     without sufficient incoming power (zombie lights)
-//   - v0.7.38: Bidirectional — also detects "dark consumers" (unpowered
-//     despite sufficient incoming power, caused by topology race conditions)
-//   - Runs in steady-state (queue empty) using tick-based gating
-//   - Budgeted: LFPG_VALIDATE_BATCH_SIZE consumers per invocation
-//   - Round-robin via m_ValidateNodeIdx to spread cost across ticks
-//   - Reads m_AllocatedPower directly (not GetEdgeAllocatedPower fallback)
-//
-// v0.7.33 (Bloque D): Per-Wire WARNING_LOAD (warningMask)
-//   - Three-tier edge classification in AllocateOutputByPriority Phase 3:
-//     Tier 1 (BROWNOUT): allocated≈0 → overloadMask bit → CRITICAL_LOAD
-//     Tier 2 (PARTIAL):  0<allocated<demand → warningMask bit → WARNING_LOAD
-//     Tier 3 (FULL):     allocated≈demand → neither → POWERED
-//   - m_WarningMask on ElecNode, synced to entity via DeviceAPI
-//   - Zero extra loops: piggybacks on existing Phase 3 allocation pass
-//
-// v0.7.34 (Bloque E): Atomic Graph Mutations
-//   - BeginGraphMutation / EndGraphMutation batch wrapper
-//   - Defers CleanupOrphanNode during multi-op sequences (replace wire,
-//     bulk cut) to prevent premature node deletion between remove + add
-//   - Nesting-safe via m_MutationDepth counter
-//   - Auto-close safety in ProcessDirtyQueue if caller forgot End
-//   - Reusable deferred cleanup buffer (m_DeferredOrphanCleanup)
-//   - Zero overhead when not in mutation (single bool check)
-//
-// v0.7.38 (BugFix B1): Topology-aware downstream propagation
-//   - Wire add/replace on a running source doesn't change total output,
-//     so outputDelta=0 and Step 3 never re-queues consumers.
-//     Consumers that process before the source read stale per-edge
-//     allocations (equal-split fallback) → false power-off.
-//   - Fix: forceDownstream=true when DIRTY_TOPOLOGY on SOURCE/PASSTHROUGH.
-//   - Optimization: reset m_LastEpoch on consumers already processed this
-//     epoch, allowing same-epoch reprocessing with correct allocations.
-//     Both SetPowered calls (stale + correct) land in the same frame,
-//     DayZ SyncVar batching sends only the final value → zero flicker.
-//     Safe: m_RequeueCount bounds reprocessing per epoch.
-//
-// v0.7.38 (RC-09): Carryover requeue count reset
-//   - ResetRequeueCounts now also resets m_RequeueCount for nodes still
-//     pending in the dirty queue from previous epochs (budget exhaustion).
-//     Prevents premature discard via LFPG_MAX_REQUEUE_PER_EPOCH in
-//     networks with cross-epoch carryover.
-//
-// v0.7.38 (RC-09 safety): Bidirectional consumer validation
-//   - ValidateConsumerStates now detects both zombie (powered but shouldn't)
-//     and dark consumer (unpowered but should be). Dark consumers are the
-//     fallback safety net for B1-class race conditions.
-//
-// v0.7.40 (BugFix): PASSTHROUGH inflated demand → false cable warning
-//   Root cause: PASSTHROUGH newOutput = inputSum (everything received),
-//   so m_LastStableOutput reflected throughput, not real downstream demand.
-//   When upstream SOURCE re-evaluated, it read m_LastStableOutput as the
-//   passthrough's "demand", causing inflated loadRatio and false
-//   WARNING/CRITICAL cable colors on the SOURCE→PASSTHROUGH wire.
-//   Fix A: Cap PASSTHROUGH output to downstream demand returned by
-//          AllocateOutputByPriority (Step 2b). m_LastStableOutput now
-//          reflects actual need, not throughput.
-//   Fix B: Phase 4 in AllocateOutputByPriority now sets overloadMask,
-//          warningMask, and loadRatio for PASSTHROUGH nodes (was SOURCE-only).
-//   Fix C: SyncNodeToEntity syncs masks for PASSTHROUGH to entity.
-//   Fix D: Clear path (newOutput=0) resets masks for PASSTHROUGH too.
-//   Fix E: Upstream demand propagation — when PASSTHROUGH caps output,
-//          re-dirties upstream sources (B1 pattern: reset m_LastEpoch for
-//          same-epoch reprocessing). Guarantees single-epoch convergence.
-//   Fix F: Epoch-skip zombie prevention — m_InQueue cleared on skip so
-//          future MarkNodeDirty can re-enqueue (pre-existing bug).
-//
-// v0.7.41 (BugFix): Orphan powered-state cleanup in PostBulkRebuild
-//   After graph rebuild, devices that were in the old graph but not the
-//   new one (disconnected by wire cuts) never receive a propagation visit
-//   because propagation is additive (source→downstream only). Their entity
-//   m_PoweredNet / CompEM stays stale. Fix: snapshot old node IDs before
-//   rebuild, then SetPowered(false) on any that dropped out. Centralized
-//   in PostBulkRebuild so all callers (CutWires, CutPort, self-heal) benefit.
-//
-// v0.7.47: PASSTHROUGH self-consumption support (CeilingLight pattern)
-//   - PopulateAllNodeElecStates + EnsureNodeExists: populate m_Consumption
-//     for PASSTHROUGH nodes (was CONSUMER-only). Splitter returns 0 → no-op.
-//   - ProcessDirtyQueue Step 2: PASSTHROUGH subtracts m_Consumption from
-//     inputSum before computing downstream output. If input < self-consumption,
-//     device is unpowered (light off, nothing downstream). Matches CONSUMER
-//     logic: must receive at least m_Consumption to be powered.
-//   - Step 2b demand signal: newOutput = downstreamDemand + m_Consumption,
-//     so upstream allocates enough for both self and downstream needs.
-//     Handles leaf PASSTHROUGH (no downstream wires) via selfCons-only path.
-//   - Step 2c demand stabilizer: when PASSTHROUGH is powered but afterSelf=0
-//     (receives exactly selfCons), newOutput=0 would skip Step 2b's demand
-//     signaling entirely → m_LastStableOutput oscillates 0↔selfCons forever.
-//     Fix: post-Step-2b, if powered + output<epsilon + selfCons>0 → report
-//     selfCons as demand. Prevents oscillation and cold-start demand inflation.
-//   - AllocateOutputByPriority: NO change needed — m_LastStableOutput already
-//     includes self-consumption from Step 2b, avoiding double-count.
-//   - Regression: Splitter m_Consumption=0 → all arithmetic is identity.
-//
-// v0.8.3 (BugFix): Requeue-limit orphan recovery + multi-source LoadRatio
-//   Bug 1 — 3rd CeilingLight in chain permanently at zero consumption:
-//     Root cause: LFPG_MAX_REQUEUE_PER_EPOCH=5 caused the Splitter to be
-//     skipped after 5+ re-dirties from converging chains. The skip path
-//     cleared m_Dirty+m_DirtyMask, permanently orphaning the node because
-//     all downstream chains had converged and stopped sending re-dirty signals.
-//     Fix: preserve dirty state on requeue-limit skip (m_Dirty, m_DirtyMask
-//     stay set). Deferred nodes are re-inserted into the dirty queue at the
-//     end of the epoch for next-epoch processing with reset requeue counts.
-//     Uses m_DeferredRequeue array — O(K) where K is typically 1-3 nodes.
-//     Convergence: each deferred epoch makes at least one node's worth of
-//     progress, so topologies with N layers converge in ≤N extra epochs.
-//   Bug 3 — Both generators showing 160% LoadRatio:
-//     Root cause: AllocateOutputByPriority Phase 4 computed rawRatio using
-//     totalDemand which includes the FULL m_LastStableOutput of multi-input
-//     PASSTHROUGH targets (Combiner). Each source saw the total downstream
-//     demand, not its proportional share. 2×50u/s gen feeding 80u/s → 160%.
-//     Fix: Phase 4 computes adjustedDemand by dividing PASSTHROUGH target
-//     demand by CountPoweredIncoming (sources with m_OutputPower > epsilon).
-//     Only affects display LoadRatio, NOT actual power allocation/delivery.
-//     Edge cases: cold-start (all OutputPower=0) → poweredIn=0 → no division
-//     → falls through with full demand (correct bootstrap). Single source
-//     or offline co-source → poweredIn=1 → no division (correct).
+// === SAFETY NETS ===
+// - Component Watchdog: per-subnet node limit (v0.7.31)
+// - Atomic Graph Mutations: deferred cleanup (v0.7.34)
+// - Topology-aware downstream propagation (v0.7.38 B1)
+// - Carryover requeue count reset (v0.7.38 RC-09)
+// - Deferred requeue for requeue-limit orphans (v0.8.3)
 // =========================================================
 
 class LFPG_ElecGraph
@@ -1694,7 +1567,7 @@ class LFPG_ElecGraph
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
             if (node && node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
-                if (node.m_LoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
+                if (node.m_Overloaded)
                 {
                     count = count + 1;
                 }
@@ -1727,8 +1600,8 @@ class LFPG_ElecGraph
         // Propagation is additive (source->down) so orphans never get visited
         // and their entity SyncVars stay stale. We detect them here.
         // Types are snapshotted in parallel array so the orphan loop can do
-        // type-aware reset (SOURCE needs LoadRatio+masks, CONSUMER needs
-        // powered, PASSTHROUGH needs powered+masks).
+        // type-aware reset (SOURCE needs LoadRatio+overloaded, CONSUMER needs
+        // powered, PASSTHROUGH needs powered+overloaded).
         ref array<string> oldNodeIds = new array<string>;
         ref array<int> oldNodeTypes = new array<int>;
         int sni;
@@ -2154,6 +2027,27 @@ class LFPG_ElecGraph
                     else if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                     {
                         newOutput = node.m_Consumption;
+                    }
+					EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
+                    if (gateEnt)
+                    {
+                        bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
+                        if (!gateOpen)
+                        {
+                            ref array<ref LFPG_ElecEdge> gateEdges;
+                            if (m_Outgoing.Find(nodeId, gateEdges) && gateEdges)
+                            {
+                                int gi;
+                                for (gi = 0; gi < gateEdges.Count(); gi = gi + 1)
+                                {
+                                    ref LFPG_ElecEdge gEdge = gateEdges[gi];
+                                    if (gEdge)
+                                    {
+                                        gEdge.m_AllocatedPower = 0.0;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2867,14 +2761,29 @@ class LFPG_ElecGraph
                     edgeDemand = targetNode.m_LastStableOutput;
                     if (edgeDemand < LFPG_PROPAGATION_EPSILON)
                     {
-                        // Cold-start fallback: use m_MaxOutput to bootstrap.
-                        if (targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                        // Cold-start fallback: bootstrap demand estimate.
+                        // Only use m_MaxOutput if the passthrough has downstream
+                        // consumers to serve. A passthrough with no outgoing edges
+                        // demands only its self-consumption (0 for Splitter/Combiner,
+                        // N for CeilingLight). Without this check, an empty Combiner
+                        // (cap=500) causes permanent false overload on a 50 u/s source.
+                        bool ptHasDown = false;
+                        ref array<ref LFPG_ElecEdge> ptOutEdges;
+                        if (m_Outgoing.Find(edge.m_TargetNodeId, ptOutEdges) && ptOutEdges)
+                        {
+                            if (ptOutEdges.Count() > 0)
+                            {
+                                ptHasDown = true;
+                            }
+                        }
+
+                        if (ptHasDown && targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
                         {
                             edgeDemand = targetNode.m_MaxOutput;
                         }
                         else
                         {
-                            edgeDemand = 0.0;
+                            edgeDemand = targetNode.m_Consumption;
                         }
                     }
 

@@ -64,8 +64,8 @@
 //   F1.1 — Fixed crash: m_AllWires → m_WireSegments (undefined member)
 //   F1.2 — Cohen-Sutherland screen clipping replaces offA&&offB cull.
 //          Fixes cables vanishing when segment spans viewport.
-//   F1.3 — warningMask integration: per-wire WARNING_LOAD state
-//          using LFPG_DeviceAPI.GetWarningMask() bitmask.
+//   F1.3 — v1.0: binary overload via LFPG_DeviceAPI.GetOverloaded().
+//          All wires show CRITICAL_LOAD when owner is overloaded.
 //   F1.4 — Sway-aware behind-camera clipping: ClipBehindCamera now
 //          receives swayed world coords instead of frozen geometry.
 //

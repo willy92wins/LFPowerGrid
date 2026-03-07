@@ -1080,6 +1080,9 @@ modded class PlayerBase
         int idLen = 0;
         string camLabel = "";
         int wi = 0;
+        vector rawOri = "0 0 0";
+        float adjYaw = 0.0;
+        vector adjOri = "0 0 0";
 
         while (wi < wires.Count())
         {
@@ -1116,7 +1119,13 @@ modded class PlayerBase
             }
 
             camPositions.Insert(cam.GetPosition());
-            camOrientations.Insert(cam.GetOrientation());
+            // v1.0.1: Camera model lens points 90° right of entity forward.
+            // Apply +90° yaw so the viewport aligns with the optic.
+            // DayZ yaw: positive = clockwise from above = right.
+            rawOri = cam.GetOrientation();
+            adjYaw = rawOri[0] + 90.0;
+            adjOri = Vector(adjYaw, rawOri[1], rawOri[2]);
+            camOrientations.Insert(adjOri);
             camLabels.Insert(camLabel);
             camCount = camCount + 1;
 

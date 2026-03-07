@@ -58,8 +58,11 @@ modded class ActionConstructor
 
         // v0.9.2 Sprint B: ActionWatchMonitor replaces ViewCamera/CycleCamera/UnlinkCamera
         actions.Insert(LFPG_ActionWatchMonitor);
+		
+		actions.Insert(LFPG_ActionPlacePushButton);
+		actions.Insert(LFPG_ActionTogglePushButton);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (26)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (28)");
     }
 };
 

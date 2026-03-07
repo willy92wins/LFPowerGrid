@@ -442,6 +442,11 @@ class LFPG_DeviceAPI
         return CallBool(obj, "LFPG_GetSourceOn", null, false);
     }
 
+	static bool IsGateOpen(EntityAI e)
+    {
+        if (!e) return true;
+        return CallBool(e, "LFPG_IsGateOpen", null, true);
+    }
     // v0.7.38 (BugFix): Generic powered-state getter.
     // Reads LFPG_IsPowered from LFPG-native devices (SyncVar m_PoweredNet).
     // Used by status display to show correct state instead of CompEM.

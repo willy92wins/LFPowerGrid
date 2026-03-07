@@ -861,25 +861,24 @@ class LFPG_CameraViewport
         {
             float panStep = LFPG_CCTV_PAN_SPEED * timeslice;
 
-            // A/D = yaw (horizontal). A=left(+yaw), D=right(-yaw)
+            // A/D = yaw (horizontal). A=left(-yaw), D=right(+yaw)
             if (m_KeyA)
-            {
-                m_YawOffset = m_YawOffset + panStep;
-            }
-            if (m_KeyD)
             {
                 m_YawOffset = m_YawOffset - panStep;
             }
+            if (m_KeyD)
+            {
+                m_YawOffset = m_YawOffset + panStep;
+            }
 
-            // W/S = pitch (vertical). W=up(-pitch), S=down(+pitch)
-            // DayZ: positive pitch = look down, negative = look up
+            // W/S = pitch (vertical). W=up(+pitch), S=down(-pitch)
             if (m_KeyW)
             {
-                m_PitchOffset = m_PitchOffset - panStep;
+                m_PitchOffset = m_PitchOffset + panStep;
             }
             if (m_KeyS)
             {
-                m_PitchOffset = m_PitchOffset + panStep;
+                m_PitchOffset = m_PitchOffset - panStep;
             }
 
             // Clamp to limits
