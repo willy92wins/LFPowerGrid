@@ -1059,17 +1059,31 @@ modded class PlayerBase
             return;
         }
 
-        // Collect powered cameras from monitor's wire store
+        // Collect cameras from monitor's wire store
         array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
-        if (!wires)
+        if (!wires || wires.Count() == 0)
         {
+            string noWireLog = "[RequestCameraList] monitor " + monitor.LFPG_GetDeviceId();
+            noWireLog = noWireLog + " has 0 wires";
+            LFPG_Util.Info(noWireLog);
             LFPG_SendClientMsg(this, "No hay camaras conectadas.");
             return;
         }
 
+        string wireCountLog = "[RequestCameraList] monitor " + monitor.LFPG_GetDeviceId();
+        wireCountLog = wireCountLog + " wire count=" + wires.Count().ToString();
+        LFPG_Util.Info(wireCountLog);
+
         // Build camera list — up to LFPG_MONITOR_MAX_CAMERAS entries
+        // v1.3.1: Per-camera power check REMOVED. The monitor is PASSTHROUGH:
+        // if the monitor itself is powered (checked above), cameras on its
+        // outputs WILL receive power once graph propagation completes.
+        // After server restart, propagation runs asynchronously — cameras
+        // may still have m_PoweredNet=false (derived state, not persisted).
+        // Requiring powered cameras caused "no cameras" on every restart.
         // Hoist all variables before loop (Enforce Script)
         int camCount = 0;
+        int unresolvedCount = 0;
         ref array<vector> camPositions = new array<vector>;
         ref array<vector> camOrientations = new array<vector>;
         ref array<string> camLabels = new array<string>;
@@ -1098,13 +1112,15 @@ modded class PlayerBase
 
             camEnt = LFPG_DeviceRegistry.Get().FindById(camDevId);
             if (!camEnt)
+            {
+                unresolvedCount = unresolvedCount + 1;
+                string missLog = "[RequestCameraList] wire target not in registry: " + camDevId;
+                LFPG_Util.Warn(missLog);
                 continue;
+            }
 
             cam = LF_Camera.Cast(camEnt);
             if (!cam)
-                continue;
-
-            if (!cam.LFPG_IsPowered())
                 continue;
 
             // Build label: CAM-XXXXXX (last 6 chars of deviceId)
@@ -1135,7 +1151,10 @@ modded class PlayerBase
 
         if (camCount == 0)
         {
-            LFPG_SendClientMsg(this, "No hay camaras activas conectadas.");
+            string noResolveLog = "[RequestCameraList] 0 cameras resolved. wires=" + wires.Count().ToString();
+            noResolveLog = noResolveLog + " unresolved=" + unresolvedCount.ToString();
+            LFPG_Util.Warn(noResolveLog);
+            LFPG_SendClientMsg(this, "No hay camaras detectables.");
             return;
         }
 

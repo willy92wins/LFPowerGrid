@@ -13,7 +13,7 @@ PixelShaderID="Super";
 VertexShaderID="Super";
 class Stage1
 {
-	texture="\LFPowerGrid\data\camera\lf_camera_led.paa";
+	texture="\LFPowerGrid\data\cctv\lf_camera_led.paa";
 	uvSource="tex";
 };
 class Stage2
@@ -43,6 +43,6 @@ class Stage6
 };
 class Stage7
 {
-	texture="\LFPowerGrid\data\camera\lf_camera_led.paa";
+	texture="\LFPowerGrid\data\cctv\lf_camera_led.paa";
 	uvSource="tex";
 };

@@ -243,7 +243,7 @@ class LFPG_PushButton : Inventory_Base
 
         #ifdef SERVER
         // Cancel pending pulse timer to prevent callback on dead entity
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(this, "LFPG_PulseOff");
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
 
         bool dirty = false;
         if (m_PoweredNet)
@@ -270,7 +270,7 @@ class LFPG_PushButton : Inventory_Base
         m_LFPG_Deleting = true;
 
         // Cancel pending pulse timer to prevent callback on deleted entity
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(this, "LFPG_PulseOff");
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
 
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -287,7 +287,7 @@ class LFPG_PushButton : Inventory_Base
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(this, "LFPG_PulseOff");
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
 
             bool locDirty = false;
             if (m_PoweredNet)
@@ -548,7 +548,7 @@ class LFPG_PushButton : Inventory_Base
         // a spurious RequestPropagate when the timer fires with no power.
         if (!powered && m_SwitchOn)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(this, "LFPG_PulseOff");
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
             m_SwitchOn = false;
         }
 

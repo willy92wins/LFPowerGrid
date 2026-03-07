@@ -184,6 +184,12 @@ modded class MissionGameplay
         {
             LFPG_DeviceInspector.Tick();
         }
+        else
+        {
+            // v1.3.1: Force-hide inspector panel if it was visible when
+            // CCTV viewport activated. Without this, panel stays frozen.
+            LFPG_DeviceInspector.ForceHide();
+        }
 
         // ---- Auto-cancel wiring: cable reel removed from hands ----
         if (!isActive)

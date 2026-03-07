@@ -122,6 +122,21 @@ class LFPG_DeviceInspector
         }
     }
 
+    // v1.3.1: Force-hide panel when CCTV viewport is active.
+    // MissionInit skips Tick() during CCTV, but if the panel was
+    // already visible when the viewport activated, stopping Tick()
+    // just freezes it on screen. This actively hides it.
+    static void ForceHide()
+    {
+        if (!s_Instance)
+            return;
+
+        if (!s_Instance.m_Visible)
+            return;
+
+        s_Instance.HidePanel();
+    }
+
     void LFPG_DeviceInspector()
     {
         m_wWireSlots = new array<TextWidget>;

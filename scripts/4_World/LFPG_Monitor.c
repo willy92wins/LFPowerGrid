@@ -298,6 +298,12 @@ class LF_Monitor : Inventory_Base
         string json = "";
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
         ctx.Write(json);
+
+        // v1.3.1: Diagnostic logging for wire persistence investigation.
+        string saveLog = "[LF_Monitor] OnStoreSave id=" + m_DeviceId;
+        saveLog = saveLog + " wireCount=" + m_Wires.Count().ToString();
+        saveLog = saveLog + " jsonLen=" + json.Length().ToString();
+        LFPG_Util.Info(saveLog);
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -326,6 +332,12 @@ class LF_Monitor : Inventory_Base
             return false;
         }
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_Monitor");
+
+        // v1.3.1: Diagnostic logging for wire persistence investigation.
+        string loadLog = "[LF_Monitor] OnStoreLoad id=" + m_DeviceId;
+        loadLog = loadLog + " wireCount=" + m_Wires.Count().ToString();
+        loadLog = loadLog + " jsonLen=" + json.Length().ToString();
+        LFPG_Util.Info(loadLog);
 
         return true;
     }
