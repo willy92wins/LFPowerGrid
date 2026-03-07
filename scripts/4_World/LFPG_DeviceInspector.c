@@ -33,7 +33,7 @@ class LFPG_InspectWireEntry
 
     // v0.7.47: Per-wire power data for inspector display
     float m_AllocatedPower;    // Power flowing through this edge (u/s)
-    int m_EdgeState;           // 0=OK, 1=WARNING (partial), 2=BROWNOUT (zero)
+    int m_EdgeState;           // v1.0: 0=OK, 2=OVERLOADED (all-off)
 
     void LFPG_InspectWireEntry()
     {
@@ -482,12 +482,6 @@ class LFPG_DeviceInspector
                     statusText = statusText + "  ";
                     statusColor = ARGB(255, 220, 50, 50);
                 }
-                else if (loadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
-                {
-                    statusText = Loc("#STR_LFPG_INSPECT_WARNING");
-                    statusText = statusText + "  ";
-                    statusColor = ARGB(255, 211, 155, 0);
-                }
                 else
                 {
                     statusText = Loc("#STR_LFPG_INSPECT_ACTIVE");
@@ -764,11 +758,6 @@ class LFPG_DeviceInspector
             {
                 // BROWNOUT: orange-red
                 wireColor = ARGB(255, 220, 80, 50);
-            }
-            else if (entry.m_EdgeState == 1)
-            {
-                // WARNING: amber
-                wireColor = ARGB(255, 211, 170, 50);
             }
             else if (entry.m_Direction == LFPG_PortDir.OUT)
             {

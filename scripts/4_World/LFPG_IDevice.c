@@ -616,35 +616,19 @@ class LFPG_DeviceAPI
         CallVoid(e, "LFPG_SetLoadRatio", p);
     }
 
-    // v0.7.8: Overload bitmask (which output wires exceed capacity)
-    // Bit N = 1 means wire at index N is overloaded.
-    static int GetOverloadMask(EntityAI e)
+    // v1.0: Overloaded state (all-off policy: demand > capacity).
+    // True when the device's downstream demand exceeds available power.
+    static bool GetOverloaded(EntityAI e)
     {
-        if (!e) return 0;
-        return CallInt(e, "LFPG_GetOverloadMask", null, 0);
+        if (!e) return false;
+        return CallBool(e, "LFPG_GetOverloaded", null, false);
     }
 
-    static void SetOverloadMask(EntityAI e, int mask)
+    static void SetOverloaded(EntityAI e, bool val)
     {
         if (!e) return;
-        Param1<int> p = new Param1<int>(mask);
-        CallVoid(e, "LFPG_SetOverloadMask", p);
-    }
-
-    // v0.7.35 (F1.3): Warning bitmask (partial allocation — demand > allocated).
-    // Bit N = 1 means wire at index N is receiving power but less than demanded.
-    // Used by CableRenderer for per-wire WARNING_LOAD visual state.
-    static int GetWarningMask(EntityAI e)
-    {
-        if (!e) return 0;
-        return CallInt(e, "LFPG_GetWarningMask", null, 0);
-    }
-
-    static void SetWarningMask(EntityAI e, int mask)
-    {
-        if (!e) return;
-        Param1<int> p = new Param1<int>(mask);
-        CallVoid(e, "LFPG_SetWarningMask", p);
+        Param1<bool> p = new Param1<bool>(val);
+        CallVoid(e, "LFPG_SetOverloaded", p);
     }
 
     // ----- Port enumeration (with vanilla fallback) -----

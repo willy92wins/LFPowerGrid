@@ -1,14 +1,15 @@
 // =========================================================
-// LF_PowerGrid - data structures (v0.7.44, Sprint 4.3+refactor)
+// LF_PowerGrid - data structures (v1.0, Sprint Overload Simplification)
 //
 // Pure data classes. No logic. No entity references.
 // Instantiated by LFPG_ElecGraph (4_World) or persistence (3_Game).
 //
 // The LFPG_ElecGraph class (4_World) owns and manipulates these.
 //
-// Sprint 4.3 additions:
-//   - m_LoadRatio, m_OverloadMask on ElecNode (source telemetry)
-//   - m_Demand on ElecEdge (downstream demand for priority allocation)
+// v1.0: Overload simplification — all-off binary policy.
+//   - ElecNode: m_OverloadMask/m_WarningMask → m_Overloaded (bool)
+//   - ElecEdge: removed m_Priority (always 0), m_EdgeIndex (bitmask dead)
+//   - ElecEdge: m_Flags reduced to LFPG_EDGE_ENABLED only
 //
 // v0.7.28 (Refactor): Consolidated missing data structures:
 //   - LFPG_WireData: single wire endpoint descriptor
@@ -142,10 +143,9 @@ class LFPG_ElecNode
     float  m_MaxOutput;        // Source capacity or passthrough limit
     float  m_Consumption;      // Consumer demand (populated at warmup)
 
-    // --- Sprint 4.3: load telemetry (source nodes only) ---
+    // --- Sprint 4.3 + v1.0 simplification: load telemetry ---
     float  m_LoadRatio;        // totalDemand / m_MaxOutput (0.0 = idle, >1.0 = overloaded)
-    int    m_OverloadMask;     // Bitmask: bit N = 1 means outgoing edge N is overloaded/brownout
-    int    m_WarningMask;      // v0.7.35 (F1.3): bit N = 1 means edge N has partial allocation
+    bool   m_Overloaded;       // v1.0: true when totalDemand > available (all-off policy)
     float  m_LastSyncedLoadRatio;  // Last load ratio synced to entity (avoids redundant syncs)
 
     void LFPG_ElecNode()
@@ -165,8 +165,7 @@ class LFPG_ElecNode
         m_MaxOutput = 0.0;
         m_Consumption = 0.0;
         m_LoadRatio = 0.0;
-        m_OverloadMask = 0;
-        m_WarningMask = 0;
+        m_Overloaded = false;
         m_LastSyncedLoadRatio = -1.0;
     }
 };
@@ -180,14 +179,12 @@ class LFPG_ElecEdge
     string          m_TargetPort;     // Input port on target
     ref LFPG_WireData m_WireRef;     // Reference to original WireData (not a copy)
 
-    // --- Sprint 4.2+4.3: active (used in propagation + load allocation) ---
-    int             m_Priority;       // Higher = served first during overload
-    int             m_Flags;          // LFPG_EDGE_ENABLED | LFPG_EDGE_OVERLOADED | LFPG_EDGE_BROWNOUT
+    // --- Sprint 4.2: active (used in propagation) ---
+    int             m_Flags;          // LFPG_EDGE_ENABLED
 
-    // --- Sprint 4.3: load allocation ---
+    // --- Sprint 4.3 + v1.0: load allocation ---
     float           m_Demand;         // Downstream demand seen through this edge
     float           m_AllocatedPower; // Power actually allocated to this edge this epoch
-    int             m_EdgeIndex;      // Index within source's outgoing array (for overload mask bit)
 
     void LFPG_ElecEdge()
     {
@@ -196,10 +193,8 @@ class LFPG_ElecEdge
         m_SourcePort = "";
         m_TargetPort = "";
         m_WireRef = null;
-        m_Priority = 0;
         m_Flags = LFPG_EDGE_ENABLED;
         m_Demand = 0.0;
         m_AllocatedPower = 0.0;
-        m_EdgeIndex = 0;
     }
 };

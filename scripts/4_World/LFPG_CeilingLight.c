@@ -150,8 +150,7 @@ class LF_CeilingLight : Inventory_Base
     protected bool m_PoweredNet = false;
 
     // ---- Overload/warning masks for cable coloring ----
-    protected int m_OverloadMask = 0;
-    protected int m_WarningMask = 0;
+    protected bool m_Overloaded = false;
 
     // ---- Anti-ghost guard (Hallazgo 5) ----
     protected bool m_LFPG_Deleting = false;
@@ -169,8 +168,7 @@ class LF_CeilingLight : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableInt("m_OverloadMask");
-        RegisterNetSyncVariableInt("m_WarningMask");
+        RegisterNetSyncVariableBool("m_Overloaded");
     }
 
     // ============================================
@@ -500,33 +498,17 @@ class LF_CeilingLight : Inventory_Base
     }
 
     // ---- Overload/Warning masks ----
-    int LFPG_GetOverloadMask()
+    bool LFPG_GetOverloaded()
     {
-        return m_OverloadMask;
+        return m_Overloaded;
     }
 
-    void LFPG_SetOverloadMask(int mask)
+    void LFPG_SetOverloaded(bool val)
     {
         #ifdef SERVER
-        if (m_OverloadMask != mask)
+        if (m_Overloaded != val)
         {
-            m_OverloadMask = mask;
-            SetSynchDirty();
-        }
-        #endif
-    }
-
-    int LFPG_GetWarningMask()
-    {
-        return m_WarningMask;
-    }
-
-    void LFPG_SetWarningMask(int mask)
-    {
-        #ifdef SERVER
-        if (m_WarningMask != mask)
-        {
-            m_WarningMask = mask;
+            m_Overloaded = val;
             SetSynchDirty();
         }
         #endif

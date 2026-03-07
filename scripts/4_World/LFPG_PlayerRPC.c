@@ -1706,15 +1706,11 @@ modded class PlayerBase
                     entry.m_RemotePort = oEdge.m_TargetPort;
                     entry.m_RemoteTypeName = LFPG_ResolveTypeName(oEdge.m_TargetNodeId);
 
-                    // v0.7.47: Per-wire power data for inspector
+                    // v1.0: Binary edge state for inspector
                     entry.m_AllocatedPower = oEdge.m_AllocatedPower;
-                    if ((oEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
+                    if (oEdge.m_AllocatedPower < LFPG_PROPAGATION_EPSILON && oEdge.m_Demand > LFPG_PROPAGATION_EPSILON)
                     {
                         entry.m_EdgeState = 2;
-                    }
-                    else if (oEdge.m_Demand > oEdge.m_AllocatedPower + LFPG_PROPAGATION_EPSILON)
-                    {
-                        entry.m_EdgeState = 1;
                     }
                     else
                     {
@@ -1743,15 +1739,11 @@ modded class PlayerBase
                     entry.m_RemotePort = iEdge.m_SourcePort;
                     entry.m_RemoteTypeName = LFPG_ResolveTypeName(iEdge.m_SourceNodeId);
 
-                    // v0.7.47: Per-wire power data for inspector
+                    // v1.0: Binary edge state for inspector
                     entry.m_AllocatedPower = iEdge.m_AllocatedPower;
-                    if ((iEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
+                    if (iEdge.m_AllocatedPower < LFPG_PROPAGATION_EPSILON && iEdge.m_Demand > LFPG_PROPAGATION_EPSILON)
                     {
                         entry.m_EdgeState = 2;
-                    }
-                    else if (iEdge.m_Demand > iEdge.m_AllocatedPower + LFPG_PROPAGATION_EPSILON)
-                    {
-                        entry.m_EdgeState = 1;
                     }
                     else
                     {

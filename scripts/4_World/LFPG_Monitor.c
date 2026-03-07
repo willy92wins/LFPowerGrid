@@ -122,8 +122,7 @@ class LF_Monitor : Inventory_Base
     protected ref array<ref LFPG_WireData> m_Wires;
 
     // ---- SyncVars: overload/warning bitmasks (output wires) ----
-    protected int m_OverloadMask = 0;
-    protected int m_WarningMask  = 0;
+    protected bool m_Overloaded = false;
 
     // ---- Estado local (no sincronizado directamente) ----
     protected string m_DeviceId      = "";
@@ -139,8 +138,7 @@ class LF_Monitor : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableInt("m_OverloadMask");
-        RegisterNetSyncVariableInt("m_WarningMask");
+        RegisterNetSyncVariableBool("m_Overloaded");
     }
 
     // ============================================
@@ -532,38 +530,22 @@ class LF_Monitor : Inventory_Base
     }
 
     // Overload bitmask (which output wires exceed capacity)
-    int LFPG_GetOverloadMask()
+    bool LFPG_GetOverloaded()
     {
-        return m_OverloadMask;
+        return m_Overloaded;
     }
 
-    void LFPG_SetOverloadMask(int mask)
+    void LFPG_SetOverloaded(bool val)
     {
         #ifdef SERVER
-        if (m_OverloadMask != mask)
+        if (m_Overloaded != val)
         {
-            m_OverloadMask = mask;
+            m_Overloaded = val;
             SetSynchDirty();
         }
         #endif
     }
 
-    // Warning bitmask (partial allocation)
-    int LFPG_GetWarningMask()
-    {
-        return m_WarningMask;
-    }
-
-    void LFPG_SetWarningMask(int mask)
-    {
-        #ifdef SERVER
-        if (m_WarningMask != mask)
-        {
-            m_WarningMask = mask;
-            SetSynchDirty();
-        }
-        #endif
-    }
 
     // ---- Connection validation ----
     // OUT ports del monitor solo pueden conectarse a LF_Camera.

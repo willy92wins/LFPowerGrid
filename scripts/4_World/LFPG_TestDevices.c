@@ -62,12 +62,11 @@ class LF_TestGenerator : PowerGenerator
     // v0.7.8: Bitmask of overloaded output wires.
     // Bit N = 1 means wire at index N exceeded available capacity.
     // Synced to clients for per-wire CRITICAL_LOAD cable state.
-    protected int m_OverloadMask = 0;
+    protected bool m_Overloaded = false;
 
     // v0.7.35 (F1.3): Bitmask of warning-level output wires.
     // Bit N = 1 means wire at index N is getting power but less than demanded.
     // Synced to clients for per-wire WARNING_LOAD cable state.
-    protected int m_WarningMask = 0;
 
     // v0.7.38 (RC-04): Deletion guard.
     // Set true at the start of EEDelete to prevent post-mortem re-registration
@@ -95,8 +94,7 @@ class LF_TestGenerator : PowerGenerator
         float syncMin = 0.0;
         float syncMax = 5.0;
         RegisterNetSyncVariableFloat("m_LoadRatio", syncMin, syncMax, 2);
-        RegisterNetSyncVariableInt("m_OverloadMask");
-        RegisterNetSyncVariableInt("m_WarningMask");
+        RegisterNetSyncVariableBool("m_Overloaded");
     }
 
     override void SetActions()
@@ -504,7 +502,7 @@ class LF_TestGenerator : PowerGenerator
                 else
                 {
                     // D4: Already have wire data — immediately refresh visual state
-                    // (LoadRatio, OverloadMask, WarningMask) to eliminate CullTick delay.
+                    // (LoadRatio, Overloaded) to eliminate CullTick delay.
                     r.NotifyOwnerVisualChanged(m_DeviceId);
                 }
             }
@@ -728,38 +726,22 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.8: Overload bitmask (which output wires exceed capacity)
-    int LFPG_GetOverloadMask()
+    bool LFPG_GetOverloaded()
     {
-        return m_OverloadMask;
+        return m_Overloaded;
     }
 
-    void LFPG_SetOverloadMask(int mask)
+    void LFPG_SetOverloaded(bool val)
     {
         #ifdef SERVER
-        if (m_OverloadMask != mask)
+        if (m_Overloaded != val)
         {
-            m_OverloadMask = mask;
+            m_Overloaded = val;
             SetSynchDirty();
         }
         #endif
     }
 
-    // v0.7.35 (F1.3): Warning bitmask (partial allocation)
-    int LFPG_GetWarningMask()
-    {
-        return m_WarningMask;
-    }
-
-    void LFPG_SetWarningMask(int mask)
-    {
-        #ifdef SERVER
-        if (m_WarningMask != mask)
-        {
-            m_WarningMask = mask;
-            SetSynchDirty();
-        }
-        #endif
-    }
 
     bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
     {

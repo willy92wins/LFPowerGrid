@@ -205,13 +205,7 @@ class LFPG_ElecGraph
     // --- Sprint 4.3: Load telemetry ---
     protected int m_LastOverloadCount;
 
-    // v0.7.27 (Audit 5): Pre-allocated temp arrays for AllocateOutputByPriority.
-    // Avoids GC pressure from creating 3 arrays per call in hot path.
-    protected ref array<int> m_AllocIdxArr;
-    protected ref array<float> m_AllocDemandArr;
-    protected ref array<int> m_AllocPrioArr;
-
-    // v0.7.46: Flag set by AllocateOutputByPriority when any edge's
+    // v0.7.46: Flag set by AllocateOutput when any edge's
     // m_AllocatedPower changed. ProcessDirtyQueue Step 3 uses this to
     // re-enqueue downstream even when total output is unchanged.
     protected bool m_AllocChanged;
@@ -280,9 +274,6 @@ class LFPG_ElecGraph
         m_EnqueuedThisEpoch = new map<string, bool>;
         m_EdgesVisitedThisEpoch = 0;
         m_LastOverloadCount = 0;
-        m_AllocIdxArr = new array<int>;
-        m_AllocDemandArr = new array<float>;
-        m_AllocPrioArr = new array<int>;
         m_AllocChanged = false;
 
         // v0.7.31 (Bloque B): Component Watchdog buffers
@@ -1324,15 +1315,8 @@ class LFPG_ElecGraph
         edge.m_SourcePort = srcPort;
         edge.m_TargetPort = tgtPort;
         edge.m_WireRef = wireRef;
-        // v0.7.42 (BugFix): Edges must start ENABLED. Without this,
-        // m_Flags defaults to 0 and every check that filters by
-        // LFPG_EDGE_ENABLED (input evaluation, AllocateOutputByPriority,
-        // CountEnabledOutgoing, GetEdgeAllocatedPower fallback) skips
-        // the edge entirely. This caused PASSTHROUGH chains (splitter→
-        // splitter) to never propagate power downstream because the
-        // source's AllocateOutputByPriority skipped disabled edges,
-        // setting m_AllocatedPower=0, and the equal-split fallback in
-        // GetEdgeAllocatedPower also returned 0 (CountEnabledOutgoing=0).
+        // Edges must start ENABLED. Without this, every check that
+        // filters by LFPG_EDGE_ENABLED skips the edge entirely.
         edge.m_Flags = LFPG_EDGE_ENABLED;
 
         // Insert into outgoing
@@ -1343,9 +1327,6 @@ class LFPG_ElecGraph
             m_Outgoing.Set(sourceId, outArr);
         }
         outArr.Insert(edge);
-
-        // Sprint 4.3: Assign edge index within source's outgoing array
-        edge.m_EdgeIndex = outArr.Count() - 1;
 
         // Insert into incoming
         ref array<ref LFPG_ElecEdge> inArr;
@@ -1392,16 +1373,6 @@ class LFPG_ElecGraph
             if (e && e.m_TargetNodeId == targetId && e.m_SourcePort == srcPort && e.m_TargetPort == tgtPort)
             {
                 arr.Remove(i);
-                // Sprint 4.3 fix: reindex m_EdgeIndex on remaining edges after removal
-                int ri;
-                for (ri = i; ri < arr.Count(); ri = ri + 1)
-                {
-                    ref LFPG_ElecEdge re = arr[ri];
-                    if (re)
-                    {
-                        re.m_EdgeIndex = ri;
-                    }
-                }
                 return true;
             }
             i = i - 1;
@@ -1529,12 +1500,8 @@ class LFPG_ElecGraph
         if (deviceType == LFPG_DeviceType.SOURCE)
         {
             // Reset load state. m_SourceOn NOT reset (sun/fuel independent).
-            // SetWarningMask is a no-op via CallVoid on entities without
-            // LFPG_SetWarningMask (e.g. SolarPanel), but correct for
-            // entities that have it (e.g. TestGenerator).
             LFPG_DeviceAPI.SetLoadRatio(orphanObj, 0.0);
-            LFPG_DeviceAPI.SetOverloadMask(orphanObj, 0);
-            LFPG_DeviceAPI.SetWarningMask(orphanObj, 0);
+            LFPG_DeviceAPI.SetOverloaded(orphanObj, false);
         }
         else if (deviceType == LFPG_DeviceType.CONSUMER || deviceType == LFPG_DeviceType.CAMERA)
         {
@@ -1543,8 +1510,7 @@ class LFPG_ElecGraph
         else if (deviceType == LFPG_DeviceType.PASSTHROUGH)
         {
             LFPG_DeviceAPI.SetPowered(orphanObj, false);
-            LFPG_DeviceAPI.SetOverloadMask(orphanObj, 0);
-            LFPG_DeviceAPI.SetWarningMask(orphanObj, 0);
+            LFPG_DeviceAPI.SetOverloaded(orphanObj, false);
         }
 
         string resetMsg = "[CleanupOrphan] Reset SyncVars type=" + deviceType.ToString() + " id=" + deviceId;
@@ -2155,147 +2121,38 @@ class LFPG_ElecGraph
 
             node.m_Powered = newPowered;
 
-            // --- Step 2b (Sprint 4.3): Priority-based output allocation ---
-            if (newOutput > LFPG_PROPAGATION_EPSILON)
+            // --- Step 2b (v1.0): Binary power allocation + demand signaling ---
+            // AllocateOutput always runs for SOURCE/PASSTHROUGH (even with newOutput=0)
+            // to compute totalDemand for upstream demand signaling.
+            if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-                {
-                    int edgeBudgetLeft = edgeBudget - m_EdgesVisitedThisEpoch;
-                    if (edgeBudgetLeft < 0)
-                    {
-                        edgeBudgetLeft = 0;
-                    }
-                    float downstreamDemand = AllocateOutputByPriority(nodeId, newOutput, edgeBudgetLeft);
+                float downstreamDemand = AllocateOutput(nodeId, newOutput);
 
-                    // v0.7.40 + v0.7.46: PASSTHROUGH demand signaling to upstream.
-                    // v0.7.40 originally capped output to downstream demand (over-report fix).
-                    // v0.7.46 generalizes: set newOutput = downstreamDemand in ALL cases.
-                    // v0.7.46: Also RAISE output to downstream demand when demand > input.
-                    // Without this, the passthrough only reports its constrained throughput
-                    // (inputSum) via m_LastStableOutput, and upstream never learns the real
-                    // downstream need — creating a circular deadlock where the generator
-                    // perpetually under-allocates. Example: Gen(50)→Splitter→2×Lamp(10):
-                    //   Splitter receives 10 (prev alloc for 1 lamp), reports 10,
-                    //   generator allocates 10 again → second lamp starved forever.
-                    // Fix: newOutput = downstreamDemand (capped at MaxOutput).
-                    // AllocateOutputByPriority already ran with real available power
-                    // (inputSum), so per-edge allocations are correct. This only changes
-                    // what m_LastStableOutput reports to upstream for demand signaling.
-                    // Guard: downstreamDemand=0 preserves cold-start bootstrap.
-                    if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-                    {
-                        if (downstreamDemand > LFPG_PROPAGATION_EPSILON)
-                        {
-                            // v0.7.47: Include self-consumption in upstream demand signal.
-                            // Without this, upstream only allocates for downstream need,
-                            // starving the passthrough's own light.
-                            // Splitter: m_Consumption=0 → no change.
-                            newOutput = downstreamDemand + node.m_Consumption;
-                            if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
-                            {
-                                newOutput = node.m_MaxOutput;
-                            }
-                        }
-                        else if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
-                        {
-                            // v0.7.47: No downstream demand but passthrough has own
-                            // consumption (e.g. CeilingLight with no output wires).
-                            // Report self-consumption so upstream allocates for it.
-                            newOutput = node.m_Consumption;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // Clear allocations on all outgoing edges
-                ref array<ref LFPG_ElecEdge> clearEdges;
-                if (m_Outgoing.Find(nodeId, clearEdges) && clearEdges)
+                // Off source/passthrough: clear overload state.
+                // "Off" is not "overloaded" — cables should show IDLE, not CRITICAL.
+                if (newOutput < LFPG_PROPAGATION_EPSILON)
                 {
-                    int cli;
-                    for (cli = 0; cli < clearEdges.Count(); cli = cli + 1)
-                    {
-                        ref LFPG_ElecEdge clEdge = clearEdges[cli];
-                        if (clEdge)
-                        {
-                            clEdge.m_AllocatedPower = 0.0;
-                            clEdge.m_Demand = 0.0;
-                            clEdge.m_Flags = clEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
-                            clEdge.m_Flags = clEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
-                        }
-                    }
-                }
-                if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-                {
+                    node.m_Overloaded = false;
                     node.m_LoadRatio = 0.0;
-                    node.m_OverloadMask = 0;
-                    node.m_WarningMask = 0;  // v0.7.33 (Bloque D)
                 }
-            }
 
-            // --- Step 2c (v0.7.47 + v0.9.4): PASSTHROUGH demand stabilizer ---
-            // v0.7.47: Signal selfCons so upstream allocates for self.
-            // v0.9.4:  ALSO discover downstream demand when afterSelf=0.
-            // Without this, a Monitor (selfCons=10) receiving exactly 10 u/s
-            // can never signal that its Camera (15 u/s) also needs power →
-            // permanent deadlock. Read-only demand probe (no edge mutation,
-            // no BROWNOUT flags) using same logic as AllocateOutputByPriority
-            // Phase 1. Splitter (selfCons=0): outer condition false → no-op.
-            if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH && newPowered)
-            {
-                if (newOutput < LFPG_PROPAGATION_EPSILON && node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+                // PASSTHROUGH: always report real demand (self + downstream)
+                // via m_LastStableOutput so upstream sources allocate correctly.
+                // This replaces Step 2c demand probe — demand is always signaled,
+                // even when unpowered or overloaded, preventing oscillation.
+                if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
-                    // v0.9.4: Read-only demand probe — sum downstream need
-                    // without touching edge flags or allocations.
-                    float demProbe = 0.0;
-                    ref array<ref LFPG_ElecEdge> demEdges;
-                    if (m_Outgoing.Find(nodeId, demEdges) && demEdges)
+                    float demandSignal = downstreamDemand + node.m_Consumption;
+                    if (demandSignal > LFPG_PROPAGATION_EPSILON)
                     {
-                        int dpi;
-                        for (dpi = 0; dpi < demEdges.Count(); dpi = dpi + 1)
-                        {
-                            ref LFPG_ElecEdge dpEdge = demEdges[dpi];
-                            if (!dpEdge)
-                                continue;
-                            if ((dpEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
-                                continue;
-
-                            ref LFPG_ElecNode dpTgt;
-                            if (m_Nodes.Find(dpEdge.m_TargetNodeId, dpTgt) && dpTgt)
-                            {
-                                if (dpTgt.m_DeviceType == LFPG_DeviceType.CONSUMER || dpTgt.m_DeviceType == LFPG_DeviceType.CAMERA)
-                                {
-                                    demProbe = demProbe + dpTgt.m_Consumption;
-                                }
-                                else if (dpTgt.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-                                {
-                                    // Same cold-start fallback as AllocateOutputByPriority Phase 1.
-                                    float dpPtDem = dpTgt.m_LastStableOutput;
-                                    if (dpPtDem < LFPG_PROPAGATION_EPSILON)
-                                    {
-                                        if (dpTgt.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
-                                        {
-                                            dpPtDem = dpTgt.m_MaxOutput;
-                                        }
-                                    }
-                                    demProbe = demProbe + dpPtDem;
-                                }
-                            }
-                        }
-                    }
-
-                    if (demProbe > LFPG_PROPAGATION_EPSILON)
-                    {
-                        // Signal full need: self + downstream.
-                        newOutput = node.m_Consumption + demProbe;
+                        newOutput = demandSignal;
                         if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
                         {
                             newOutput = node.m_MaxOutput;
                         }
                     }
-                    else
+                    else if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                     {
-                        // No downstream → original v0.7.47 behavior.
                         newOutput = node.m_Consumption;
                     }
                 }
@@ -2312,7 +2169,7 @@ class LFPG_ElecGraph
             // If a consumer processes BEFORE the source in the same epoch,
             // it reads stale allocation via equal-split fallback (e.g. 50/2=25
             // for a 50W consumer → incorrectly powers off).
-            // AllocateOutputByPriority on the source DOES set correct per-edge
+            // AllocateOutput on the source DOES set correct per-edge
             // allocations, but outputDelta=0 means Step 3 never re-queues
             // consumers to read them.
             // Fix: always re-queue downstream when DIRTY_TOPOLOGY on a producer.
@@ -2563,7 +2420,7 @@ class LFPG_ElecGraph
 
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
-            // Sprint 4.3: Sync load ratio and overload mask to source entity
+            // v1.0: Sync load ratio + overloaded bool to source entity
             float loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
             if (loadDelta < 0.0)
             {
@@ -2573,17 +2430,12 @@ class LFPG_ElecGraph
             {
                 LFPG_DeviceAPI.SetLoadRatio(entObj, node.m_LoadRatio);
 
-                // Sprint 4.3: Per-source load telemetry — log when delta exceeds threshold
                 if (loadDelta > LFPG_LOAD_TELEM_DELTA)
                 {
                     string loadState = "NORMAL";
                     if (node.m_LoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
                     {
-                        loadState = "CRITICAL";
-                    }
-                    else if (node.m_LoadRatio >= LFPG_LOAD_WARNING_THRESHOLD)
-                    {
-                        loadState = "WARNING";
+                        loadState = "OVERLOADED";
                     }
                     string telemMsg = "[LoadTelem] " + nodeId;
                     telemMsg = telemMsg + " load=" + node.m_LoadRatio.ToString();
@@ -2595,14 +2447,11 @@ class LFPG_ElecGraph
 
                 node.m_LastSyncedLoadRatio = node.m_LoadRatio;
             }
-            LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
-            LFPG_DeviceAPI.SetWarningMask(entObj, node.m_WarningMask);  // v0.7.33 (Bloque D)
+            LFPG_DeviceAPI.SetOverloaded(entObj, node.m_Overloaded);
             return;
         }
 
-        // v0.7.40: PASSTHROUGH nodes need powered state AND overload/warning masks.
-        // Without masks, cables from splitter to downstream devices can never show
-        // WARNING or CRITICAL colors even when the splitter is overloaded.
+        // v1.0: PASSTHROUGH nodes sync powered + overloaded for cable visuals.
         if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
         {
             // [DIAG PT-CHAIN] Punto 5b: PASSTHROUGH entity sync
@@ -2617,8 +2466,7 @@ class LFPG_ElecGraph
                 LFPG_Util.Info(ptLog5b);
             }
             LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
-            LFPG_DeviceAPI.SetOverloadMask(entObj, node.m_OverloadMask);
-            LFPG_DeviceAPI.SetWarningMask(entObj, node.m_WarningMask);
+            LFPG_DeviceAPI.SetOverloaded(entObj, node.m_Overloaded);
             return;
         }
 
@@ -2946,8 +2794,7 @@ class LFPG_ElecGraph
     }
 
     // v0.8.3: Count powered incoming edges for multi-source demand sharing.
-    // An incoming edge is "powered" if its source node has m_OutputPower > epsilon.
-    // Used in Phase 4 of AllocateOutputByPriority to proportionally divide
+    // Used in AllocateOutput to proportionally divide
     // PASSTHROUGH demand among active suppliers for LoadRatio calculation.
     // Returns 0 if node has no incoming edges or none are powered.
     // Cost: O(K) where K = incoming edge count (typically 1-2 for Combiner).
@@ -2979,8 +2826,11 @@ class LFPG_ElecGraph
         return count;
     }
 
-    // Sprint 4.3: Priority-based power allocation across outgoing edges.
-    protected float AllocateOutputByPriority(string nodeId, float availableOutput, int edgeBudgetRemaining)
+    // v1.0: Binary power allocation (all-off policy).
+    // If totalDemand > availableOutput → ALL edges get 0 (overloaded).
+    // If totalDemand <= availableOutput → each edge gets its full demand.
+    // Returns totalDemand (always — even when overloaded, for upstream demand signaling).
+    protected float AllocateOutput(string nodeId, float availableOutput)
     {
         #ifdef SERVER
         ref array<ref LFPG_ElecEdge> outEdges;
@@ -2991,16 +2841,8 @@ class LFPG_ElecGraph
         if (edgeCount <= 0)
             return 0.0;
 
-        // Phase 1: Collect enabled edges and their demands
-        // v0.7.27 (Audit 5): Reuse pre-allocated arrays (cleared each call).
-        // Eliminates 3 allocations per source node per propagation tick.
-        m_AllocIdxArr.Clear();
-        m_AllocDemandArr.Clear();
-        m_AllocPrioArr.Clear();
-        array<int> idxArr = m_AllocIdxArr;
-        array<float> demandArr = m_AllocDemandArr;
-        array<int> prioArr = m_AllocPrioArr;
-
+        // Pass 1: Collect demands and compute total.
+        // Store per-edge demand in edge.m_Demand for pass 2.
         float totalDemand = 0.0;
         float edgeDemand = 0.0;
         int ei;
@@ -3025,14 +2867,7 @@ class LFPG_ElecGraph
                     edgeDemand = targetNode.m_LastStableOutput;
                     if (edgeDemand < LFPG_PROPAGATION_EPSILON)
                     {
-                        // v0.7.36 (Audit Feb2026): Cold-start demand fallback.
-                        // When a passthrough hasn't been evaluated yet (fresh connect
-                        // or restart), m_LastStableOutput is 0. Using 0 as demand
-                        // causes the source to allocate 0 power → passthrough stays
-                        // at 0 output → perpetual deadlock. Use m_MaxOutput as the
-                        // upper-bound demand to bootstrap the passthrough.
-                        // After the first propagation tick, m_LastStableOutput will
-                        // have a real value and this fallback won't trigger.
+                        // Cold-start fallback: use m_MaxOutput to bootstrap.
                         if (targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
                         {
                             edgeDemand = targetNode.m_MaxOutput;
@@ -3044,10 +2879,6 @@ class LFPG_ElecGraph
                     }
 
                     // v0.9.3: Multi-source demand split for Combiner pattern.
-                    // When a PASSTHROUGH has N powered inputs (e.g. Combiner with
-                    // 2 generators), each source should see demand/N, not the full
-                    // downstream demand. Without this, each generator allocates the
-                    // full 25 u/s when only 12.5 is needed from each.
                     int ptPoweredIn = CountPoweredIncoming(edge.m_TargetNodeId);
                     if (ptPoweredIn > 1)
                     {
@@ -3056,187 +2887,39 @@ class LFPG_ElecGraph
                 }
             }
 
-            // [DIAG PT-CHAIN] Punto 4a: Per-edge demand for PASSTHROUGH targets
-            if (LFPG_DIAG_PT_CHAIN && targetNode && targetNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-            {
-                string ptLog4a = "[PT-CHAIN] AllocDemand: src=";
-                ptLog4a = ptLog4a + nodeId;
-                ptLog4a = ptLog4a + " -> tgt=" + edge.m_TargetNodeId;
-                ptLog4a = ptLog4a + " tgtType=PASSTHROUGH";
-                ptLog4a = ptLog4a + " lastStable=" + targetNode.m_LastStableOutput.ToString();
-                ptLog4a = ptLog4a + " maxOut=" + targetNode.m_MaxOutput.ToString();
-                ptLog4a = ptLog4a + " demand=" + edgeDemand.ToString();
-                ptLog4a = ptLog4a + " flags=" + edge.m_Flags.ToString();
-                LFPG_Util.Info(ptLog4a);
-            }
-
-            idxArr.Insert(ei);
-            demandArr.Insert(edgeDemand);
-            prioArr.Insert(edge.m_Priority);
+            edge.m_Demand = edgeDemand;
             totalDemand = totalDemand + edgeDemand;
         }
 
-        int enabledCount = idxArr.Count();
-        if (enabledCount <= 0)
-            return 0.0;
-
-        // Phase 2: Sort by priority (descending) — insertion sort
-        // S7-2: Tie-break: equal priority → ascending by m_TargetNodeId (lexicographic).
-        // Without tie-break, order depends on RPC arrival order and varies across
-        // restarts, making brownout policy non-deterministic.
-        // All loop temporaries hoisted — Enforce Script requires this.
-        int si;
-        int sj;
-        int keyIdx;
-        float keyDem;
-        int keyPrio;
-        string keyTargetId;
-        string sjTargetId;
-        ref LFPG_ElecEdge sortKeyEdge;
-        ref LFPG_ElecEdge sortSjEdge;
-        bool shouldSwap;
-
-        for (si = 1; si < enabledCount; si = si + 1)
-        {
-            keyIdx = idxArr[si];
-            keyDem = demandArr[si];
-            keyPrio = prioArr[si];
-
-            // Extract key's target node ID once (used only for tie-break on equal priority)
-            keyTargetId = "";
-            sortKeyEdge = outEdges[keyIdx];
-            if (sortKeyEdge)
-                keyTargetId = sortKeyEdge.m_TargetNodeId;
-
-            sj = si - 1;
-            while (sj >= 0)
-            {
-                // Primary sort: descending priority
-                shouldSwap = prioArr[sj] < keyPrio;
-
-                // S7-2: Tie-break: ascending m_TargetNodeId (lower ID sorts earlier)
-                if (!shouldSwap && prioArr[sj] == keyPrio)
-                {
-                    sjTargetId = "";
-                    sortSjEdge = outEdges[idxArr[sj]];
-                    if (sortSjEdge)
-                        sjTargetId = sortSjEdge.m_TargetNodeId;
-                    shouldSwap = sjTargetId > keyTargetId;
-                }
-
-                if (!shouldSwap)
-                    break;
-
-                idxArr[sj + 1] = idxArr[sj];
-                demandArr[sj + 1] = demandArr[sj];
-                prioArr[sj + 1] = prioArr[sj];
-                sj = sj - 1;
-            }
-            idxArr[sj + 1] = keyIdx;
-            demandArr[sj + 1] = keyDem;
-            prioArr[sj + 1] = keyPrio;
-        }
-
-        // Phase 2b: Assign demands for zero-demand edges
-        int zeroDemandCount = 0;
-        float declaredDemand = 0.0;
-        int zi;
-        for (zi = 0; zi < enabledCount; zi = zi + 1)
-        {
-            if (demandArr[zi] < LFPG_PROPAGATION_EPSILON)
-            {
-                zeroDemandCount = zeroDemandCount + 1;
-            }
-            else
-            {
-                declaredDemand = declaredDemand + demandArr[zi];
-            }
-        }
-
-        if (zeroDemandCount > 0)
-        {
-            float shareForZero = 0.0;
-            float afterDeclared = availableOutput - declaredDemand;
-            if (afterDeclared > LFPG_PROPAGATION_EPSILON)
-            {
-                shareForZero = afterDeclared / zeroDemandCount;
-            }
-            int zj;
-            for (zj = 0; zj < enabledCount; zj = zj + 1)
-            {
-                if (demandArr[zj] < LFPG_PROPAGATION_EPSILON)
-                {
-                    demandArr[zj] = shareForZero;
-                    totalDemand = totalDemand + shareForZero;
-                }
-            }
-        }
-
-        // [DIAG PT-CHAIN] Punto 4b: Allocation summary
-        if (LFPG_DIAG_PT_CHAIN)
-        {
-            string ptLog4b = "[PT-CHAIN] AllocSummary: node=";
-            ptLog4b = ptLog4b + nodeId;
-            ptLog4b = ptLog4b + " avail=" + availableOutput.ToString();
-            ptLog4b = ptLog4b + " totalDem=" + totalDemand.ToString();
-            ptLog4b = ptLog4b + " enabled=" + enabledCount.ToString();
-            bool willOverload = false;
-            if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
-            {
-                willOverload = true;
-            }
-            ptLog4b = ptLog4b + " overload=" + willOverload.ToString();
-            LFPG_Util.Info(ptLog4b);
-        }
-
-        // Phase 3: Allocate power in priority order
-        float remaining = availableOutput;
-        int overloadMask = 0;
-        int warningMask = 0;  // v0.7.33 (Bloque D): partial allocation bitmask
-        bool isOverloaded = false;
+        // Overload decision: binary all-on / all-off.
+        bool overloaded = false;
         if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
         {
-            isOverloaded = true;
+            overloaded = true;
         }
 
+        // Pass 2: Set allocations + detect changes.
         int ai;
-        for (ai = 0; ai < enabledCount; ai = ai + 1)
+        for (ai = 0; ai < edgeCount; ai = ai + 1)
         {
-            int origIdx = idxArr[ai];
-            ref LFPG_ElecEdge allocEdge = outEdges[origIdx];
+            ref LFPG_ElecEdge allocEdge = outEdges[ai];
             if (!allocEdge)
                 continue;
+            if ((allocEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
 
-            edgeDemand = demandArr[ai];
-            float allocated = 0.0;
-
-            if (remaining > LFPG_PROPAGATION_EPSILON)
+            float oldAlloc = allocEdge.m_AllocatedPower;
+            float newAlloc = 0.0;
+            if (!overloaded)
             {
-                if (edgeDemand <= remaining + LFPG_PROPAGATION_EPSILON)
-                {
-                    allocated = edgeDemand;
-                }
-                else
-                {
-                    allocated = remaining;
-                }
-                remaining = remaining - allocated;
-                if (remaining < 0.0)
-                {
-                    remaining = 0.0;
-                }
+                newAlloc = allocEdge.m_Demand;
             }
+            allocEdge.m_AllocatedPower = newAlloc;
 
-            // v0.7.46: Detect per-edge allocation change for downstream propagation.
-            float oldAllocPower = allocEdge.m_AllocatedPower;
-            allocEdge.m_AllocatedPower = allocated;
-            allocEdge.m_Demand = edgeDemand;
-
-            // Flag significant change so ProcessDirtyQueue Step 3 re-enqueues
-            // downstream even when total output (outputDelta) is unchanged.
+            // Track allocation change for Step 3 downstream re-enqueue.
             if (!m_AllocChanged)
             {
-                float allocDelta = allocated - oldAllocPower;
+                float allocDelta = newAlloc - oldAlloc;
                 if (allocDelta < 0.0)
                 {
                     allocDelta = -allocDelta;
@@ -3246,75 +2929,24 @@ class LFPG_ElecGraph
                     m_AllocChanged = true;
                 }
             }
-
-            // v0.7.33 (Bloque D): Three-tier edge state classification.
-            //   Tier 1 (BROWNOUT): zero allocation with positive demand → CRITICAL_LOAD
-            //   Tier 2 (PARTIAL):  getting power but less than demanded → WARNING_LOAD
-            //   Tier 3 (FULL):     fully supplied → POWERED
-            if (allocated < LFPG_PROPAGATION_EPSILON && edgeDemand > LFPG_PROPAGATION_EPSILON)
-            {
-                // Tier 1: BROWNOUT — no power reaching this edge
-                allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_BROWNOUT;
-                allocEdge.m_Flags = allocEdge.m_Flags | LFPG_EDGE_OVERLOADED;
-                // Sprint 4.3 fix: use origIdx (actual array position) for overload mask bit,
-                // not m_EdgeIndex which can be stale after edge removal.
-                if (origIdx >= 0 && origIdx < 31)
-                {
-                    overloadMask = overloadMask | (1 << origIdx);
-                }
-                else if (origIdx >= 31)
-                {
-                    // v0.7.27 (Audit 5): Log when overload info is lost due to int bitmask limit.
-                    string wOvfMsg = "[ElecGraph] OverloadMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId;
-                    LFPG_Util.Warn(wOvfMsg);
-                }
-            }
-            else if (edgeDemand > allocated + LFPG_PROPAGATION_EPSILON)
-            {
-                // Tier 2: PARTIAL — getting power but not full demand
-                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
-                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
-                if (origIdx >= 0 && origIdx < 31)
-                {
-                    warningMask = warningMask | (1 << origIdx);
-                }
-                else if (origIdx >= 31)
-                {
-                    string wWrnMsg = "[ElecGraph] WarningMask overflow: origIdx=" + origIdx.ToString() + " exceeds 31-bit limit for node " + nodeId;
-                    LFPG_Util.Warn(wWrnMsg);
-                }
-            }
-            else
-            {
-                // Tier 3: FULL — demand fully met
-                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_BROWNOUT);
-                allocEdge.m_Flags = allocEdge.m_Flags & (~LFPG_EDGE_OVERLOADED);
-            }
         }
 
-        // Phase 4: Update source node load metrics
+        // Update node load metrics.
         ref LFPG_ElecNode srcNode;
         if (m_Nodes.Find(nodeId, srcNode) && srcNode)
         {
-            if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE)
+            if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE || srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                // v0.9.3: demandArr already contains per-source split demand
-                // (Phase 1 divides by CountPoweredIncoming for PASSTHROUGH targets).
-                // Just sum directly — no additional division needed.
-                // Previous v0.8.3 code divided here too, but that was because
-                // Phase 1 didn't split. Now Phase 1 does, so Phase 4 is simple.
-                float adjustedDemand = 0.0;
-                int adi;
-                for (adi = 0; adi < enabledCount; adi = adi + 1)
+                // LoadRatio: demand / capacity (for inspector display)
+                float capacity = srcNode.m_MaxOutput;
+                if (srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
-                    adjustedDemand = adjustedDemand + demandArr[adi];
+                    capacity = availableOutput;
                 }
 
-                if (srcNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                if (capacity > LFPG_PROPAGATION_EPSILON)
                 {
-                    float rawRatio = adjustedDemand / srcNode.m_MaxOutput;
-                    // v0.7.26 (Audit 4): NaN/infinity guard — clamp to sane range.
-                    // Prevents floating point corruption from propagating to UI/telemetry.
+                    float rawRatio = totalDemand / capacity;
                     if (rawRatio < 0.0)
                     {
                         rawRatio = 0.0;
@@ -3327,39 +2959,6 @@ class LFPG_ElecGraph
                 }
                 else
                 {
-                    // v0.7.26: If MaxOutput is 0 but there IS demand, report overload
-                    if (adjustedDemand > LFPG_PROPAGATION_EPSILON)
-                    {
-                        srcNode.m_LoadRatio = 100.0;
-                    }
-                    else
-                    {
-                        srcNode.m_LoadRatio = 0.0;
-                    }
-                }
-                srcNode.m_OverloadMask = overloadMask;
-                srcNode.m_WarningMask = warningMask;  // v0.7.33 (Bloque D)
-            }
-            else if (srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
-            {
-                // v0.7.40: PASSTHROUGH nodes also need masks so cables FROM the
-                // splitter to downstream devices can show WARNING/CRITICAL colors.
-                // LoadRatio: demand vs available throughput (input power).
-                if (availableOutput > LFPG_PROPAGATION_EPSILON)
-                {
-                    float ptRatio = totalDemand / availableOutput;
-                    if (ptRatio < 0.0)
-                    {
-                        ptRatio = 0.0;
-                    }
-                    if (ptRatio > 100.0)
-                    {
-                        ptRatio = 100.0;
-                    }
-                    srcNode.m_LoadRatio = ptRatio;
-                }
-                else
-                {
                     if (totalDemand > LFPG_PROPAGATION_EPSILON)
                     {
                         srcNode.m_LoadRatio = 100.0;
@@ -3369,8 +2968,7 @@ class LFPG_ElecGraph
                         srcNode.m_LoadRatio = 0.0;
                     }
                 }
-                srcNode.m_OverloadMask = overloadMask;
-                srcNode.m_WarningMask = warningMask;
+                srcNode.m_Overloaded = overloaded;
             }
         }
 
@@ -3380,28 +2978,27 @@ class LFPG_ElecGraph
         #endif
     }
 
-    // Sprint 4.3: Get allocated power for a specific incoming edge.
+    // v1.0: Get allocated power for a specific incoming edge.
+    // If source is overloaded (all-off), returns 0 immediately.
+    // Otherwise returns per-edge allocation, with equal-split fallback for cold-start.
     protected float GetEdgeAllocatedPower(LFPG_ElecEdge inEdge)
     {
         #ifdef SERVER
         if (!inEdge)
             return 0.0;
 
-        // v0.7.37 (Audit 6, R1): Respect brownout flag before any fallback.
-        // An edge in brownout was explicitly denied power by AllocateOutputByPriority.
-        // Without this check, the equal-split fallback below would incorrectly
-        // deliver positive power to a brownout edge during the first warmup pass.
-        if ((inEdge.m_Flags & LFPG_EDGE_BROWNOUT) != 0)
+        ref LFPG_ElecNode srcNode;
+        if (!m_Nodes.Find(inEdge.m_SourceNodeId, srcNode) || !srcNode)
+            return 0.0;
+
+        // v1.0: Source in overload → all downstream gets 0.
+        if (srcNode.m_Overloaded)
             return 0.0;
 
         if (inEdge.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
             return inEdge.m_AllocatedPower;
 
-        // Fallback: equal split (backward compat for first pass / warmup)
-        ref LFPG_ElecNode srcNode;
-        if (!m_Nodes.Find(inEdge.m_SourceNodeId, srcNode) || !srcNode)
-            return 0.0;
-
+        // Fallback: equal split (cold-start / first pass before AllocateOutput runs)
         float srcOutput = srcNode.m_OutputPower;
         if (srcOutput < LFPG_PROPAGATION_EPSILON)
             return 0.0;

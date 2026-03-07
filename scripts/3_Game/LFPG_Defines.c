@@ -60,8 +60,7 @@ enum LFPG_CableState
     POWERED          = 1,   // Connected, owner is active/energized
     RESOLVING        = 2,   // Target entity not yet loaded (network bubble edge)
     DISCONNECTED     = 3,   // Target lost / retry exhausted
-    WARNING_LOAD     = 4,   // High load (Sprint 4.3: active via graph load detection)
-    CRITICAL_LOAD    = 5,   // Near/over overload (Sprint 4.3: active)
+    CRITICAL_LOAD    = 5,   // Overloaded (v1.0: all-off policy, demand > capacity)
     ERROR_SHORT      = 6,   // Short circuit / electrical fault (future)
     ERROR_TOPOLOGY   = 7,   // Loop or invalid route (future)
     BLOCKED_LOGIC    = 8,   // Port/switch blocked (future)
@@ -85,7 +84,6 @@ static const int LFPG_STATE_COLOR_IDLE          = 0xFF7A7F87;  // neutral gray
 static const int LFPG_STATE_COLOR_POWERED       = 0xFF2E9B59;  // green
 static const int LFPG_STATE_COLOR_RESOLVING     = 0xFF6B7A99;  // blue-gray
 static const int LFPG_STATE_COLOR_DISCONNECTED  = 0xFF6A625C;  // broken gray
-static const int LFPG_STATE_COLOR_WARNING       = 0xFFD39B00;  // amber
 static const int LFPG_STATE_COLOR_CRITICAL      = 0xFFE67E22;  // orange
 static const int LFPG_STATE_COLOR_ERROR_SHORT   = 0xFFC94242;  // red
 static const int LFPG_STATE_COLOR_ERROR_TOPO    = 0xFF8A3FFC;  // purple
@@ -152,8 +150,8 @@ static const float LFPG_PREVIEW_LINE_WIDTH     = 3.0;    // v0.7.38 (L1): previe
 // ---- Load calculation (v0.7.8, Sprint 4.3: active in graph propagation) ----
 // LoadRatio = totalDemand / sourceCapacity.
 // These thresholds drive cable visual state on both server (graph) and client (renderer).
-static const float LFPG_LOAD_WARNING_THRESHOLD  = 0.80;   // >= 80% = WARNING
-static const float LFPG_LOAD_CRITICAL_THRESHOLD = 1.00;   // >= 100% = CRITICAL
+// v1.0: WARNING removed — binary overload (all-off when demand > capacity).
+static const float LFPG_LOAD_CRITICAL_THRESHOLD = 1.00;   // >= 100% = OVERLOADED
 
 // Default values (used when device doesn't declare custom values).
 // LFPG devices override via LFPG_GetCapacity / LFPG_GetConsumption.
@@ -279,12 +277,10 @@ static const int LFPG_DIRTY_TOPOLOGY = 1;
 static const int LFPG_DIRTY_INPUT    = 2;
 static const int LFPG_DIRTY_INTERNAL = 4;
 
-// ---- Edge flags (Sprint 4.2+4.3, active — used in propagation) ----
-// Sprint 4.3: OVERLOADED and BROWNOUT now actively set/cleared during propagation.
-// BROWNOUT means the edge was denied power due to priority-based load allocation.
+// ---- Edge flags (v1.0: simplified to ENABLED only) ----
+// v1.0: OVERLOADED and BROWNOUT removed — overload is per-node (m_Overloaded bool),
+// not per-edge. All-off policy: if demand > available, ALL downstream gets 0.
 static const int LFPG_EDGE_ENABLED    = 1;
-static const int LFPG_EDGE_OVERLOADED = 2;
-static const int LFPG_EDGE_BROWNOUT   = 4;
 
 // ---- Propagation budget (Sprint 4.2+4.3, active) ----
 // ProcessDirtyQueue processes at most NODE_BUDGET nodes per tick.

@@ -122,12 +122,8 @@ class LFPG_OwnerWireState
     // v0.7.8: Load ratio from source (0.0-N), synced from server.
     float lastLoadRatio;
 
-    // v0.7.8: Bitmask of overloaded output wires (bit N = wire N overloaded).
-    int lastOverloadMask;
-
-    // v0.7.35 (Fase1 F1.3): Bitmask of warning-level output wires.
-    // Bit N = wire N is at WARNING_LOAD (80%+ capacity but not overloaded).
-    int lastWarningMask;
+    // v1.0: Overloaded state (all-off policy). If true, ALL wires show CRITICAL_LOAD.
+    bool lastOverloaded;
 
     // v0.7.9: Pre-computed wire keys ("ownerId|0", "ownerId|1", etc.)
     // Populated in BuildOwnerWires. Eliminates string concat in CullTick.
@@ -1125,8 +1121,7 @@ class LFPG_CableRenderer
             // v0.7.35 D2: Reset visual state masks on topology change.
             // Old mask bits may map to different wires after add/remove.
             // CullTick or NotifyOwnerVisualChanged will repopulate from SyncVars.
-            st.lastOverloadMask = 0;
-            st.lastWarningMask  = 0;
+            st.lastOverloaded = false;
             st.lastLoadRatio    = 0.0;
 
             // Topology changed: destroy old segments + clear retries for this owner
@@ -1199,8 +1194,7 @@ class LFPG_CableRenderer
 
         st.lastPowered      = IsOwnerActive(ownerObj);
         st.lastLoadRatio     = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
-        st.lastOverloadMask  = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
-        st.lastWarningMask   = LFPG_DeviceAPI.GetWarningMask(ownerObj);
+        st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
 
         // v0.9.1 (H5): Update per-wire cableState immediately.
         // Eliminates 0-2s color delay on JIP and power state transitions.
@@ -1213,22 +1207,10 @@ class LFPG_CableRenderer
                 LFPG_WireSegmentInfo nvcInfo;
                 if (m_WireSegments.Find(nvcKey, nvcInfo) && nvcInfo)
                 {
-                    bool nvcOverloaded = false;
-                    bool nvcWarning = false;
-                    if (nvcInfo.wireIndex >= 0 && nvcInfo.wireIndex <= 30)
-                    {
-                        int nvcBit = 1 << nvcInfo.wireIndex;
-                        nvcOverloaded = ((st.lastOverloadMask & nvcBit) != 0);
-                        nvcWarning = ((st.lastWarningMask & nvcBit) != 0);
-                    }
-
-                    if (nvcOverloaded)
+                    // v1.0: Binary overload — all wires same state.
+                    if (st.lastOverloaded)
                     {
                         nvcInfo.cableState = LFPG_CableState.CRITICAL_LOAD;
-                    }
-                    else if (nvcWarning)
-                    {
-                        nvcInfo.cableState = LFPG_CableState.WARNING_LOAD;
                     }
                     else if (st.lastPowered)
                     {
@@ -1247,8 +1229,7 @@ class LFPG_CableRenderer
         string nvcMsg = "[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId;
         nvcMsg = nvcMsg + " powered=" + st.lastPowered.ToString();
         nvcMsg = nvcMsg + " load=" + st.lastLoadRatio.ToString();
-        nvcMsg = nvcMsg + " overload=" + st.lastOverloadMask.ToString();
-        nvcMsg = nvcMsg + " warning=" + st.lastWarningMask.ToString();
+        nvcMsg = nvcMsg + " overloaded=" + st.lastOverloaded.ToString();
         LFPG_Util.Debug(nvcMsg);
     }
 
@@ -1528,8 +1509,7 @@ class LFPG_CableRenderer
 
         st.lastPowered = IsOwnerActive(ownerObj);
         st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
-        st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
-        st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
+        st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
 
         // v0.7.9: Pre-build wire keys for this owner (used by CullTick)
         st.cachedWireKeys = new array<string>;
@@ -1746,7 +1726,7 @@ class LFPG_CableRenderer
             info.cableState = LFPG_CableState.IDLE;
         }
 
-        // v0.7.8: store wire index for overload mask lookup
+        // Wire index: used for occlusion stagger group and wire key
         info.wireIndex = wireIdx;
         // v0.7.38 (H6): Stable stagger group from wireIndex.
         info.occStaggerGroup = wireIdx % 3;
@@ -1836,10 +1816,9 @@ class LFPG_CableRenderer
                 st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
 
                 // v0.7.8: read overload bitmask from owner
-                st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
+                st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
 
                 // v0.7.35 (F1.3): read warning bitmask from owner
-                st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
 
                 // v0.7.7: Owner early-out.
                 // If the owner entity itself is farther than cull distance + margin,
@@ -2015,28 +1994,10 @@ class LFPG_CableRenderer
                 // Update powered flag
                 info.powered = st.lastPowered;
 
-                // v0.7.38 (C4): Overload/warning bitmask check.
-                // Enforce int is 32-bit signed: 1 << 31 is undefined behavior.
-                // Safe range: bits 0-30 (indices 0-30) = 31 wires per owner.
-                // In practice, LFPG_MAX_EDGES_PER_NODE = 12 so wireIndex <= 11,
-                // well within the safe range. Guard at 30 is defensive.
-                // Full 64-wire support would need dual-mask server-side change.
-                bool wireOverloaded = false;
-                bool wireWarning = false;
-                if (info.wireIndex >= 0 && info.wireIndex <= 30)
-                {
-                    int wireBit = 1 << info.wireIndex;
-                    wireOverloaded = ((st.lastOverloadMask & wireBit) != 0);
-                    wireWarning = ((st.lastWarningMask & wireBit) != 0);
-                }
-
-                if (wireOverloaded)
+                // v1.0: Binary overload — all wires same state.
+                if (st.lastOverloaded)
                 {
                     info.cableState = LFPG_CableState.CRITICAL_LOAD;
-                }
-                else if (wireWarning)
-                {
-                    info.cableState = LFPG_CableState.WARNING_LOAD;
                 }
                 else if (st.lastPowered)
                 {
@@ -2128,9 +2089,6 @@ class LFPG_CableRenderer
 
         if (state == LFPG_CableState.DISCONNECTED)
             return LFPG_STATE_COLOR_DISCONNECTED;
-
-        if (state == LFPG_CableState.WARNING_LOAD)
-            return LFPG_STATE_COLOR_WARNING;
 
         if (state == LFPG_CableState.CRITICAL_LOAD)
             return LFPG_STATE_COLOR_CRITICAL;
@@ -3406,8 +3364,7 @@ class LFPG_CableRenderer
 
             st.lastPowered = IsOwnerActive(ownerObj);
             st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
-            st.lastOverloadMask = LFPG_DeviceAPI.GetOverloadMask(ownerObj);
-            st.lastWarningMask = LFPG_DeviceAPI.GetWarningMask(ownerObj);
+            st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
             BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex);
 
             m_RetryQueue.Remove(wireKey);
