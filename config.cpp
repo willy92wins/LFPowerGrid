@@ -13,13 +13,69 @@ class CfgSlots
         displayName = "Nails";
         ghostIcon = "missing";
     };
+    // v1.1.0: Water Pump slots
+    class Slot_LF_PumpFilter
+        name = "LF_PumpPlate";
+        displayName = "Metal Plate";
+        ghostIcon = "missing";
+    };
+    class Slot_LF_PumpNails
+    {
+        name = "LF_PumpNails";
+        displayName = "Nails";
+        ghostIcon = "missing";
+    };
+};
+
+// =========================================================
+// v1.1.0: Water Pump sounds
+// =========================================================
+
+class CfgSoundShaders
+{
+    // Pump loop: low ambient motor hum while powered
+    class LFPG_WaterPump_Loop_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\data\waterpump\pump", 1 }};
+        volume = 0.3;
+        range = 20;
+        rangeCurve[] = {{ 0, 1 }, { 10, 0.5 }, { 20, 0 }};
+    };
+    // Water dispense: one-shot when drinking/filling/washing
+    class LFPG_WaterPump_Water_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\data\waterpump\water", 1 }};
+        volume = 0.6;
+        range = 10;
+        rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
+    };
+};
+
+class CfgSoundSets
+{
+    // Pump loop — spatial 3D, played by SEffectManager in OnVariablesSynchronized
+    class LFPG_WaterPump_Loop_SoundSet
+    {
+        soundShaders[] = { "LFPG_WaterPump_Loop_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
+    // Water dispense — spatial 3D, played during drink/fill/wash actions (Sprint W2)
+    class LFPG_WaterPump_Water_SoundSet
+    {
+        soundShaders[] = { "LFPG_WaterPump_Water_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
 };
 
 class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -431,10 +487,102 @@ class CfgVehicles
     // =========================================================
     class MetalPlate
     {
-        inventorySlot[] += {"LF_SolarPlate"};
+        inventorySlot[] += {"LF_SolarPlate", "LF_PumpPlate"};
     };
     class Nail
     {
-        inventorySlot[] += {"LF_SolarNails"};
+        inventorySlot[] += {"LF_SolarNails", "LF_PumpNails"};
+    };
+    // v1.1.0: PurificationTablets can go in pump filter slot
+    class PurificationTablets
+    {
+        inventorySlot[] += {"LF_PumpFilter"};
+    };
+
+    // =========================================================
+    // v1.1.0: WATER PUMP (PASSTHROUGH, filter + tank)
+    // =========================================================
+
+    // ---- Water Pump Kit (holdable, different-model deploy like Solar Panel) ----
+    class LF_WaterPump_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PUMP_KIT";
+        descriptionShort = "$STR_LFPG_PUMP_KIT_DESC";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        weight = 5000;
+        itemSize[] = {5, 3};
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
+        carveNavmesh = 1;
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
+    };
+
+    // ---- Water Pump T1 (placed device, PASSTHROUGH 50 u/s, cap 100 u/s) ----
+    class LF_WaterPump : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PUMP_T1";
+        descriptionShort = "$STR_LFPG_PUMP_T1_DESC";
+        model = "\LFPowerGrid\data\waterpump\lf_waterpump.p3d";
+        weight = 12000;
+        itemSize[] = {10, 10};
+        rotationFlags = 17;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        attachments[] = {"LF_PumpFilter", "LF_PumpPlate", "LF_PumpNails"};
+        hiddenSelections[] = {"pump_led"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
+        class GUIInventoryAttachmentsProps
+        {
+            class WaterFilter
+            {
+                name = "Water Filter";
+                description = "";
+                attachmentSlots[] = {"LF_PumpFilter"};
+                icon = "missing";
+            };
+            class UpgradeMaterials
+            {
+                name = "Upgrade Materials";
+                description = "";
+                attachmentSlots[] = {"LF_PumpPlate", "LF_PumpNails"};
+                icon = "missing";
+            };
+        };
+    };
+
+    // ---- Water Pump T2 (upgraded device, PASSTHROUGH 50 u/s, cap 100 u/s + tank 50L) ----
+    class LF_WaterPump_T2 : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PUMP_T2";
+        descriptionShort = "$STR_LFPG_PUMP_T2_DESC";
+        model = "\LFPowerGrid\data\waterpump\lf_waterpump_t2.p3d";
+        weight = 18000;
+        itemSize[] = {10, 10};
+        rotationFlags = 17;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        attachments[] = {"LF_PumpFilter"};
+        hiddenSelections[] = {"pump_led"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
+        class GUIInventoryAttachmentsProps
+        {
+            class WaterFilter
+            {
+                name = "Water Filter";
+                description = "";
+                attachmentSlots[] = {"LF_PumpFilter"};
+                icon = "missing";
+            };
+        };
     };
 };

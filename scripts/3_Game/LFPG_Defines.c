@@ -534,3 +534,32 @@ static const float LFPG_MONITOR_THROUGHPUT   = 70.0;   // u/s max output capacit
 static const float LFPG_MONITOR_CONSUMPTION  = 10.0;   // u/s self-consumption
 static const int   LFPG_MONITOR_MAX_CAMERAS  = 4;      // Sprint B: max cameras per monitor (= OUT ports)
 static const int   LFPG_MONITOR_MAX_OUTPUTS  = 4;      // output ports (output_1..4)
+
+// ---- v1.1.0: Water Pump ----
+static const int   LFPG_PUMP_CHECK_MS                = 60000;     // Timer interval (ms) — checks tablets + tank
+static const float LFPG_PUMP_TABLET_INTERVAL_MS      = 3600000.0; // 1 REAL hour in ms
+static const float LFPG_PUMP_TANK_MAX                = 50.0;      // Max tank capacity (L)
+static const float LFPG_PUMP_TANK_FILL_PER_HOUR      = 2.0;       // L per in-game hour
+static const float LFPG_PUMP_TANK_DRINK_COST         = 0.25;      // L consumed per sip from tank
+static const float LFPG_PUMP_TANK_FILL_COST          = 0.5;       // L consumed per fill cycle from tank
+static const float LFPG_PUMP_TANK_WASH_COST          = 0.5;       // L consumed per hand wash from tank
+static const float LFPG_PUMP_CONSUMPTION             = 50.0;      // u/s LFPG self-consumption
+static const float LFPG_PUMP_CAPACITY                = 100.0;     // u/s max throughput cap (50 self + 50 downstream)
+static const int   LFPG_PUMP_UPGRADE_PLATES          = 10;        // MetalPlate required for T1->T2
+static const int   LFPG_PUMP_UPGRADE_NAILS           = 50;        // Nails required for T1->T2
+
+// ---- Water Pump LED (visual indicator) ----
+static const int    LFPG_PUMP_LED_SELECTION_IDX      = 0;         // hiddenSelections index for pump_led
+static const string LFPG_PUMP_LED_RVMAT_ON           = "\\LFPowerGrid\\data\\waterpump\\lf_pump_led_on.rvmat";
+static const string LFPG_PUMP_LED_RVMAT_OFF          = "\\LFPowerGrid\\data\\waterpump\\lf_pump_led_off.rvmat";
+
+// ---- Water Pump Tank HUD (client-side, Sprint W3) ----
+static const int    LFPG_TANK_HUD_COLOR_CLEAN        = 0xFF3399FF;  // blue (clean water)
+static const int    LFPG_TANK_HUD_COLOR_RIVER        = 0xFF88AA44;  // brown-green (river water)
+static const int    LFPG_TANK_HUD_COLOR_EMPTY        = 0xFF555555;  // grey (empty)
+static const float  LFPG_TANK_HUD_BAR_W_BASE         = 200.0;      // bar width at 1080p
+static const float  LFPG_TANK_HUD_BAR_H_BASE         = 16.0;       // bar height at 1080p
+
+// ---- Water Pump Sound ----
+static const string LFPG_PUMP_LOOP_SOUNDSET           = "LFPG_WaterPump_Loop_SoundSet";
+static const string LFPG_PUMP_WATER_SOUNDSET           = "LFPG_WaterPump_Water_SoundSet";

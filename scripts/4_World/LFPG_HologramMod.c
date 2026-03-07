@@ -74,6 +74,12 @@ modded class Hologram
             {
                 return solarKit.GetDeployedClassname();
             }
+
+            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+            if (pumpKit)
+            {
+                return pumpKit.GetDeployedClassname();
+            }
         }
 
         return super.ProjectionBasedOnParent();
@@ -92,6 +98,12 @@ modded class Hologram
             if (solarKit)
             {
                 return solarKit.GetDeployedClassname();
+            }
+
+            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+            if (pumpKit)
+            {
+                return pumpKit.GetDeployedClassname();
             }
         }
 
@@ -116,8 +128,12 @@ modded class Hologram
             LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
             if (solarKit)
             {
-                // Return existing preview entity without creating a new one.
-                // Kit.OnPlacementComplete handles spawning the real device.
+                return entity_for_placing;
+            }
+
+            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+            if (pumpKit)
+            {
                 return entity_for_placing;
             }
         }
@@ -143,11 +159,29 @@ modded class Hologram
                 {
                     m_Projection.SetPosition(finalPos);
 
-                    // If hologram is floating, snap to ground
                     if (IsFloating())
                     {
                         vector groundPos = SetOnGround(finalPos);
                         m_Projection.SetPosition(groundPos);
+                    }
+                }
+                return;
+            }
+
+            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+            if (pumpKit)
+            {
+                vector pumpPosOffset = pumpKit.GetDeployPositionOffset();
+                vector pumpFinalPos = position + pumpPosOffset;
+
+                if (m_Projection)
+                {
+                    m_Projection.SetPosition(pumpFinalPos);
+
+                    if (IsFloating())
+                    {
+                        vector pumpGroundPos = SetOnGround(pumpFinalPos);
+                        m_Projection.SetPosition(pumpGroundPos);
                     }
                 }
                 return;
@@ -173,6 +207,15 @@ modded class Hologram
                 vector oriOffset = solarKit.GetDeployOrientationOffset();
                 vector result = baseOri + oriOffset;
                 return result;
+            }
+
+            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+            if (pumpKit)
+            {
+                vector pumpBaseOri = super.GetDefaultOrientation();
+                vector pumpOriOffset = pumpKit.GetDeployOrientationOffset();
+                vector pumpResult = pumpBaseOri + pumpOriOffset;
+                return pumpResult;
             }
         }
 
@@ -218,6 +261,10 @@ modded class Hologram
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
 
+        // v1.1.0: Water Pump Kit (different-model, box kit -> pump hologram)
+        if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
+            return true;
+
         return false;
     }
 
@@ -252,8 +299,13 @@ modded class Hologram
         {
             isSolarKit = true;
         }
+        bool isWaterPumpKit = false;
+        if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
+        {
+            isWaterPumpKit = true;
+        }
 
-        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit && !isCameraKit && !isMonitorKit)
+        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit && !isCameraKit && !isMonitorKit && !isWaterPumpKit)
         {
             super.UpdateHologram(timeslice);
             return;
@@ -265,7 +317,7 @@ modded class Hologram
         // Collision bypass is handled by LFPG_IsLFPGKitProjection()
         // because projection model (panel) differs from kit model (box)
         // and vanilla collision checks would produce false positives.
-        if (isSolarKit)
+        if (isSolarKit || isWaterPumpKit)
         {
             super.UpdateHologram(timeslice);
             return;

@@ -62,7 +62,13 @@ modded class ActionConstructor
 		actions.Insert(LFPG_ActionPlacePushButton);
 		actions.Insert(LFPG_ActionTogglePushButton);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (28)");
+        // --- v1.1.0: Water Pump upgrade + water actions ---
+        actions.Insert(LFPG_ActionUpgradeWaterPump);
+        actions.Insert(LFPG_ActionDrinkPump);
+        actions.Insert(LFPG_ActionWashHandsPump);
+        actions.Insert(LFPG_ActionFillPump);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (32)");
     }
 };
 
@@ -88,5 +94,6 @@ modded class Hammer
     {
         super.SetActions();
         AddAction(LFPG_ActionUpgradeSolarPanel);
+        AddAction(LFPG_ActionUpgradeWaterPump);
     }
 };

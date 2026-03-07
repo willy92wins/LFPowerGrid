@@ -112,6 +112,9 @@ class LFPG_NetworkManager
     // Eliminates N per-panel CallLater timers and prevents race conditions.
     protected bool m_SolarHasSun = false;
 
+    // v1.1.0: Water Pump tank fill tracking (in-game hour based)
+    protected int m_TankFillLastHour = -1;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -224,6 +227,10 @@ class LFPG_NetworkManager
         // Seed cached sun state immediately (panels may init before first tick).
         LFPG_ComputeSunState();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
+
+        // v1.1.0: Water Pump tablet + tank timer
+        LFPG_InitTankFillHour();
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
         #endif
     }
 
@@ -3316,4 +3323,151 @@ class LFPG_NetworkManager
         LFPG_Util.Info(msg);
         #endif
     }
+
+    // ===========================
+    // v1.1.0: Water Pump Timer
+    // ===========================
+    // Two sub-systems:
+    //   1. Tablet consumption: real-time (ms), 1 tablet per LFPG_PUMP_TABLET_INTERVAL_MS
+    //   2. Tank fill: in-game hour based, LFPG_PUMP_TANK_FILL_PER_HOUR per hour
+
+    // Seed tank fill hour from world time
+    protected void LFPG_InitTankFillHour()
+    {
+        #ifdef SERVER
+        World world = GetGame().GetWorld();
+        if (!world)
+            return;
+
+        int year = 0;
+        int month = 0;
+        int day = 0;
+        int hour = 0;
+        int minute = 0;
+        world.GetDate(year, month, day, hour, minute);
+        m_TankFillLastHour = hour;
+        #endif
+    }
+
+    // Periodic tick (every LFPG_PUMP_CHECK_MS = 60s)
+    protected void LFPG_TickWaterPumps()
+    {
+        #ifdef SERVER
+        float nowMs = GetGame().GetTime();
+        float thresholdMs = LFPG_PUMP_TABLET_INTERVAL_MS;
+
+        // --- Compute tank fill delta ONCE (shared across all T2 pumps) ---
+        int tankHourDelta = 0;
+        bool doTankFill = false;
+
+        if (m_TankFillLastHour >= 0)
+        {
+            World world = GetGame().GetWorld();
+            if (world)
+            {
+                int year = 0;
+                int month = 0;
+                int day = 0;
+                int hour = 0;
+                int minute = 0;
+                world.GetDate(year, month, day, hour, minute);
+
+                if (hour != m_TankFillLastHour)
+                {
+                    tankHourDelta = hour - m_TankFillLastHour;
+                    if (tankHourDelta < 0)
+                    {
+                        tankHourDelta = tankHourDelta + 24;
+                    }
+                    m_TankFillLastHour = hour;
+                    doTankFill = true;
+                }
+            }
+        }
+
+        float fillAmount = LFPG_PUMP_TANK_FILL_PER_HOUR * tankHourDelta;
+
+        // --- Single iteration: tablet consumption + tank fill ---
+        array<EntityAI> allDevs = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDevs);
+
+        int i;
+        bool isPump;
+        LF_WaterPump pump1;
+        LF_WaterPump_T2 pump2;
+        float elapsed;
+
+        for (i = 0; i < allDevs.Count(); i = i + 1)
+        {
+            // --- T1: tablet consumption only ---
+            isPump = false;
+            pump1 = LF_WaterPump.Cast(allDevs[i]);
+            if (pump1)
+            {
+                isPump = true;
+                elapsed = nowMs - pump1.LFPG_GetTabletLastMs();
+                if (elapsed >= thresholdMs)
+                {
+                    pump1.LFPG_ConsumeFilterTablet();
+                    pump1.LFPG_SetTabletLastMs(nowMs);
+                }
+            }
+
+            // --- T2: tablet consumption + tank fill (separate class) ---
+            if (!isPump)
+            {
+                pump2 = LF_WaterPump_T2.Cast(allDevs[i]);
+                if (pump2)
+                {
+                    // T2 tablet consumption (same logic as T1)
+                    elapsed = nowMs - pump2.LFPG_GetTabletLastMs();
+                    if (elapsed >= thresholdMs)
+                    {
+                        pump2.LFPG_ConsumeFilterTablet();
+                        pump2.LFPG_SetTabletLastMs(nowMs);
+                    }
+
+                    // T2 tank fill (only if hour changed and pump is powered)
+                    if (doTankFill)
+                    {
+                        bool powered = pump2.LFPG_GetPoweredNet();
+                        if (powered)
+                        {
+                            float level = pump2.LFPG_GetTankLevel();
+                            if (level < LFPG_PUMP_TANK_MAX)
+                            {
+                                // Determine incoming water type
+                                int incomingType = LIQUID_RIVERWATER;
+                                if (LFPG_PumpHelper.HasActiveFilter(pump2))
+                                {
+                                    incomingType = LIQUID_CLEANWATER;
+                                }
+
+                                int currentType = pump2.LFPG_GetTankLiquidType();
+
+                                // Mixing rules
+                                if (level < 0.01)
+                                {
+                                    pump2.LFPG_SetTankLiquidType(incomingType);
+                                }
+                                else if (incomingType != currentType)
+                                {
+                                    pump2.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
+                                }
+
+                                level = level + fillAmount;
+                                if (level > LFPG_PUMP_TANK_MAX)
+                                {
+                                    level = LFPG_PUMP_TANK_MAX;
+                                }
+                                pump2.LFPG_SetTankLevel(level);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #endif
+    }
+
 };

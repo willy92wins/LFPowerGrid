@@ -14,7 +14,7 @@
 // Etapa 3: rvmat swap activado en OnVariablesSynchronized.
 //   LED rojo (lf_camera_led_on.rvmat)  cuando m_PoweredNet=true.
 //   LED apagado (lf_camera_led_off.rvmat) cuando m_PoweredNet=false.
-//   Assets en data/camera/ (NO data/cctv/).
+//   Assets en data/cctv/.
 //
 // v0.9.3 (Sync Audit):
 //   S3: m_PoweredNet removed from persistence — derived state.
@@ -24,8 +24,8 @@
 //       ⚠ SAVE WIPE REQUIRED — schema change (field removed from stream).
 // =========================================================
 
-static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\camera\\lf_camera_led_off.rvmat";
-static const string LFPG_CAMERA_RVMAT_ON  = "\\LFPowerGrid\\data\\camera\\lf_camera_led_on.rvmat";
+static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_off.rvmat";
+static const string LFPG_CAMERA_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_on.rvmat";
 
 // ---------------------------------------------------------
 // KIT - patron identico a LF_Splitter_Kit / LF_Combiner_Kit

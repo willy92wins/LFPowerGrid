@@ -70,6 +70,15 @@ FrameWidgetClass LFPG_InspectorRoot {
 					font "gui/fonts/MetronBook"
 					ignorepointer 1
 				}
+				TextWidgetClass TankLine {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					visible 0
+					ignorepointer 1
+				}
 				ImageWidgetClass Separator {
 					hexactpos 1
 					vexactpos 1

@@ -62,6 +62,7 @@ class LFPG_DeviceInspector
     protected TextWidget m_wDeviceType;
     protected TextWidget m_wStatusLine;
     protected TextWidget m_wCapLine;
+    protected TextWidget m_wTankLine;
     protected TextWidget m_wWiresHeader;
     protected ref array<TextWidget> m_wWireSlots;
 
@@ -73,6 +74,8 @@ class LFPG_DeviceInspector
     protected int m_VisibleWireCount;
     // H1 fix: periodic client-side SyncVar refresh
     protected float m_LastClientRefreshMs;
+    // v1.1.0: Tank line offset for T2 pumps
+    protected float m_TankLineOffset;
 
     // ---- Position smoothing (P1-A anti-jitter) ----
     protected float m_SmoothX;
@@ -179,6 +182,7 @@ class LFPG_DeviceInspector
         m_wDeviceType = TextWidget.Cast(m_Root.FindAnyWidget("DeviceType"));
         m_wStatusLine = TextWidget.Cast(m_Root.FindAnyWidget("StatusLine"));
         m_wCapLine = TextWidget.Cast(m_Root.FindAnyWidget("CapLine"));
+        m_wTankLine = TextWidget.Cast(m_Root.FindAnyWidget("TankLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
 
         // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
@@ -258,6 +262,14 @@ class LFPG_DeviceInspector
             m_wCapLine.SetSize(274, 16);
             m_wCapLine.SetColor(ARGB(255, 140, 140, 140));
         }
+        if (m_wTankLine)
+        {
+            m_wTankLine.SetPos(14, 94);
+            m_wTankLine.SetSize(274, 16);
+            m_wTankLine.SetColor(ARGB(255, 51, 153, 255));
+            m_wTankLine.Show(false);
+        }
+        m_TankLineOffset = 0.0;
         if (m_wWiresHeader)
         {
             m_wWiresHeader.SetPos(14, 99);
@@ -308,6 +320,7 @@ class LFPG_DeviceInspector
         m_wDeviceType = null;
         m_wStatusLine = null;
         m_wCapLine = null;
+        m_wTankLine = null;
         m_wWiresHeader = null;
         m_wWireSlots.Clear();
         m_RespWires.Clear();
@@ -616,6 +629,70 @@ class LFPG_DeviceInspector
             m_wCapLine.Show(false);
         }
 
+        // ---- v1.1.0: Tank line (T2 Water Pump only) ----
+        m_TankLineOffset = 0.0;
+        if (m_wTankLine)
+        {
+            LF_WaterPump_T2 t2Pump = LF_WaterPump_T2.Cast(device);
+            if (t2Pump)
+            {
+                float tankLvl = t2Pump.LFPG_GetTankLevel();
+                int tankLiq = t2Pump.LFPG_GetTankLiquidType();
+                bool tankPow = t2Pump.LFPG_GetPoweredNet();
+
+                int tankPct = 0;
+                if (LFPG_PUMP_TANK_MAX > 0.0)
+                {
+                    tankPct = (tankLvl / LFPG_PUMP_TANK_MAX) * 100.0;
+                }
+
+                string tankText = "Tank: ";
+                int tankLvlInt = tankLvl;
+                int tankMaxInt = LFPG_PUMP_TANK_MAX;
+                tankText = tankText + tankLvlInt.ToString() + "L / " + tankMaxInt.ToString() + "L";
+                tankText = tankText + "  (" + tankPct.ToString() + "%)";
+
+                if (!tankPow && tankLvl > 0.01)
+                {
+                    tankText = tankText + "  [OFFLINE]";
+                }
+
+                m_wTankLine.SetText(tankText);
+
+                // Color by liquid type
+                if (tankLvl < 0.01)
+                {
+                    m_wTankLine.SetColor(ARGB(255, 120, 120, 120));
+                }
+                else if (tankLiq == LIQUID_CLEANWATER)
+                {
+                    m_wTankLine.SetColor(ARGB(255, 51, 153, 255));
+                }
+                else
+                {
+                    m_wTankLine.SetColor(ARGB(255, 136, 170, 68));
+                }
+
+                m_wTankLine.Show(true);
+                m_TankLineOffset = 20.0;
+            }
+            else
+            {
+                m_wTankLine.Show(false);
+                m_TankLineOffset = 0.0;
+            }
+        }
+
+        // Reposition separator + wires header with tank offset
+        if (m_wSeparator)
+        {
+            m_wSeparator.SetPos(12, 93 + m_TankLineOffset);
+        }
+        if (m_wWiresHeader)
+        {
+            m_wWiresHeader.SetPos(14, 99 + m_TankLineOffset);
+        }
+
         // ---- Wire section: re-display cached data or show loading ----
         if (m_HasServerData)
         {
@@ -708,8 +785,22 @@ class LFPG_DeviceInspector
         if (m_wSeparator)
         {
             m_wSeparator.Show(true);
+            m_wSeparator.SetPos(12, 93 + m_TankLineOffset);
         }
         m_wWiresHeader.Show(true);
+        m_wWiresHeader.SetPos(14, 99 + m_TankLineOffset);
+
+        // Reposition wire slots with tank offset
+        int ri;
+        for (ri = 0; ri < m_wWireSlots.Count(); ri = ri + 1)
+        {
+            TextWidget rSlot = m_wWireSlots[ri];
+            if (rSlot)
+            {
+                float rY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + m_TankLineOffset + (ri * LFPG_INSPECT_WIRE_ROW_H);
+                rSlot.SetPos(14, rY);
+            }
+        }
 
         int maxShow = m_wWireSlots.Count();
         if (wireCount < maxShow)
@@ -811,6 +902,7 @@ class LFPG_DeviceInspector
     protected void ResizePanelHeight(int wireCount)
     {
         float h = ComputePanelHeight(wireCount);
+        h = h + m_TankLineOffset;
         ApplyPanelSize(h);
     }
 
@@ -818,7 +910,7 @@ class LFPG_DeviceInspector
     // Separator and WiresHeader are hidden, so panel stops after CapLine + padding.
     protected void ResizePanelCompact()
     {
-        ApplyPanelSize(LFPG_INSPECT_COMPACT_H);
+        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset);
     }
 
     // Shared resize implementation: sets panel, background, and accent bar heights.
@@ -870,7 +962,7 @@ class LFPG_DeviceInspector
         float panelH = m_CurrentPanelH;
         if (panelH < 1.0)
         {
-            panelH = ComputePanelHeight(m_VisibleWireCount);
+            panelH = ComputePanelHeight(m_VisibleWireCount) + m_TankLineOffset;
         }
 
         float fScreenW = screenW;
