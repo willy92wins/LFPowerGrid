@@ -3,28 +3,30 @@
 //
 // EXIT STRATEGY: COT DEDICATED SERVER PATTERN
 //
-//   Referencia: COT JMCameraModule.c Server_Leave + Client_Leave
-//   (usado en miles de servidores DayZ con BBP/Expansion/AdminTools)
+//   Referencia: COT JMCameraModule.c (miles de servidores DayZ)
 //
-//   ORDEN CRÍTICO (igual que COT):
-//     1. Server: SelectPlayer(sender, player)  ← PRIMERO
-//     2. Client: SetActive(false) + ObjectDeleteOnClient  ← DESPUÉS
+//   ENTER (server-side):
+//     SelectSpectator(sender, "staticcamera", pos)
+//     → engine crea + trackea la cámara internamente
+//     → RPC CAMERA_LIST_RESPONSE al cliente
 //
-//   Si el cliente destruye la cámara ANTES de que el servidor
-//   llame SelectPlayer, el puntero 0x68 queda dangling.
+//   ENTER (client-side):
+//     Camera.GetCurrentCamera() → obtiene cámara engine-managed
+//     SetActive(true) + SetPosition + SetOrientation
 //
-//   Two-phase exit:
+//   EXIT (client-side):
+//     Phase 1: m_Active=false, overlay off, RPC EXIT_REQUEST → server
+//     Phase 2: WAITING for server CCTV_EXIT_CONFIRM
+//     DoExitCleanup: SetActive(false) + null (NO ObjectDeleteOnClient)
+//       COT: only ObjectDeleteOnClient for custom JMCinematicCamera
+//       staticcamera is engine-managed → engine cleans up via SelectPlayer
 //
-//     Frame N:   OnKeyPress → m_ExitPhase=1
-//                super.OnUpdate: cámara ACTIVA, mods OK
-//                Tick Phase 1: m_Active=false, overlay off.
-//                              RPC CCTV_EXIT → servidor.
-//                              Cámara SIGUE ACTIVA.
+//   EXIT (server-side):
+//     SelectPlayer(sender, player) → engine restaura player cam
+//     RPC EXIT_CONFIRM → client → DoExitCleanup
 //
-//     Frame N+1: Server ya procesó SelectPlayer.
-//                super.OnUpdate: engine tiene puntero correcto.
-//                Tick Phase 2: SetActive(false) +
-//                              ObjectDeleteOnClient + unlock.
+//   KEY: CreateObject("staticcamera") = unmanaged → crash 0x68
+//        SelectSpectator("staticcamera") = engine-managed → cleanup OK
 //
 // ENFORCE SCRIPT RULES:
 //   - No foreach, no ++/--, no ternario, no +=/-=
@@ -56,11 +58,16 @@ class LFPG_CameraViewport
     // ---- Singleton ----
     protected static ref LFPG_CameraViewport s_Instance;
 
-    // ---- Camera (world object — kept alive between sessions) ----
+    // ---- Camera (engine-managed via SelectSpectator) ----
     protected Object    m_ViewCamObj;
     protected bool      m_Active;
     protected float     m_ScanlineOffset;
     protected float     m_ActiveDuration;
+
+    // ---- Player reference (guardada antes de SelectSpectator) ----
+    // GetPlayer() puede retornar null durante spectator mode.
+    // Se usa para enviar RPC CCTV_EXIT al salir.
+    protected PlayerBase m_PlayerRef;
 
     // ---- Camera list + cycling ----
     protected ref array<ref LFPG_CameraListEntry> m_CameraList;
@@ -80,12 +87,16 @@ class LFPG_CameraViewport
     protected float        m_BlinkTimer;
     protected bool         m_RecVisible;
 
-    // ---- Three-phase exit ----
+    // ---- Two-phase exit (COT pattern) ----
+    // ---- Two-phase exit + server confirmation (COT pattern) ----
     // 0 = normal
-    // 1 = exit requested: m_Active=false, camera STAYS ACTIVE at CCTV pos
-    // 2 = camera relocated to player pos (still active), unlock + restore
-    // 3 = SetActive(false) after 2 frames of valid pointer
+    // 1 = exit requested this frame: hide overlay, send RPC EXIT_REQUEST
+    // 2 = waiting for server CCTV_EXIT_CONFIRM (SelectPlayer done)
+    // DoExitCleanup() called from RPC → cleanup camera + set phase=0
     protected int       m_ExitPhase;
+
+    // Timeout for waiting state (safety: force cleanup if server doesn't respond)
+    protected float     m_ExitWaitTimer;
 
     // ---- Inspector cooldown (post-exit) ----
     protected int       m_ExitCooldown;
@@ -100,6 +111,7 @@ class LFPG_CameraViewport
         m_ScanlineOffset = 0.0;
         m_CameraLabel    = "";
         m_ActiveDuration = 0.0;
+        m_PlayerRef      = null;
         m_CameraList     = null;
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
@@ -110,6 +122,7 @@ class LFPG_CameraViewport
         m_BlinkTimer     = 0.0;
         m_RecVisible     = true;
         m_ExitPhase      = 0;
+        m_ExitWaitTimer  = 0.0;
         m_ExitCooldown   = 0;
         m_FocusLocked    = false;
 
@@ -263,6 +276,11 @@ class LFPG_CameraViewport
         m_CameraTotal = entries.Count();
         m_CameraIndex = 0;
 
+        // Guardar referencia al player ANTES de entrar en spectator mode.
+        // Después de SelectSpectator, GetPlayer() puede retornar null.
+        // Se usa en Phase 2 para enviar RPC CCTV_EXIT.
+        m_PlayerRef = p;
+
         // Widgets: NO crear aquí — EnterFromList corre en contexto RPC
         // y CreateWidgets cuelga el engine desde RPC handlers.
         // Verificado: COT, VPP y CableHUD crean widgets desde OnUpdate.
@@ -292,6 +310,17 @@ class LFPG_CameraViewport
         m_ActiveDuration = 0.0;
         m_ExitCooldown   = 0;
         m_ExitPhase      = 0;
+        m_ExitWaitTimer  = 0.0;
+
+        // COT: disable player input during spectator
+        if (m_PlayerRef)
+        {
+            HumanInputController hic = m_PlayerRef.GetInputController();
+            if (hic)
+            {
+                hic.SetDisabled(true);
+            }
+        }
 
         // Solo Show — widgets ya creados arriba (o en sesión anterior)
         if (m_OverlayRoot)
@@ -324,11 +353,11 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // EnterCamera — crear o reutilizar staticcamera.
+    // EnterCamera — obtener cámara engine-managed o reusar para cycling.
     //
-    // Si m_ViewCamObj existe (reutilización entre sesiones o
-    // cycling intra-sesión), solo reposiciona y re-activa.
-    // Si no, crea nuevo world object.
+    // Primera entrada: Camera.GetCurrentCamera() obtiene la cámara que
+    // el engine creó via SelectSpectator (server-side).
+    // Cycling: reposiciona la cámara existente sin recrearla.
     // =========================================================
     protected bool EnterCamera(int index)
     {
@@ -355,30 +384,24 @@ class LFPG_CameraViewport
             return true;
         }
 
-        // Primera entrada: crear world object
-        Print("[CameraViewport] DIAG: CreateObject staticcamera");
-        Object viewCam = GetGame().CreateObject("staticcamera", camPos, true, false, false);
-        if (!viewCam)
+        // Primera entrada: obtener cámara del engine (SelectSpectator server-side).
+        // COT Client_Enter pattern: Camera.GetCurrentCamera() devuelve la cámara
+        // que el engine creó via SelectSpectator. NO usar CreateObject.
+        // CreateObject crea un world object sin tracking → crash 0x68 al salir.
+        Print("[CameraViewport] DIAG: Camera.GetCurrentCamera (SelectSpectator)");
+        Camera currentCam = Camera.GetCurrentCamera();
+        if (!currentCam)
         {
-            LFPG_Util.Error("[CameraViewport] CreateObject staticcamera failed");
+            LFPG_Util.Error("[CameraViewport] Camera.GetCurrentCamera returned null");
             return false;
         }
 
-        viewCam.SetOrientation(camOri);
+        currentCam.SetActive(true);
+        currentCam.SetPosition(camPos);
+        currentCam.SetOrientation(camOri);
+        Print("[CameraViewport] DIAG: Engine camera acquired + positioned OK");
 
-        Camera viewCamTyped = Camera.Cast(viewCam);
-        if (!viewCamTyped)
-        {
-            LFPG_Util.Error("[CameraViewport] staticcamera no casteable a Camera");
-            GetGame().ObjectDeleteOnClient(viewCam);
-            return false;
-        }
-
-        Print("[CameraViewport] DIAG: pre-SetActive(true)");
-        viewCamTyped.SetActive(true);
-        Print("[CameraViewport] DIAG: post-SetActive(true) OK");
-
-        m_ViewCamObj  = viewCam;
+        m_ViewCamObj  = currentCam;
         m_CameraIndex = index;
         return true;
     }
@@ -473,20 +496,40 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // ForceCleanup — ÚNICO lugar donde se hace ObjectDelete.
-    // Solo se llama desde Reset() (shutdown/disconnect).
+    // ForceCleanup — shutdown/disconnect cleanup.
+    // Solo se llama desde Reset().
+    // NO envía RPC — durante disconnect el network no es fiable.
+    // El servidor limpia identities huérfanas automáticamente.
     // =========================================================
     protected void ForceCleanup()
     {
         Print("[CameraViewport] DIAG: ForceCleanup");
         m_Active    = false;
         m_ExitPhase = 0;
+        m_ExitWaitTimer = 0.0;
 
         if (m_ViewCamObj)
         {
-            // Shutdown — ObjectDeleteOnClient para objeto local
-            GetGame().ObjectDeleteOnClient(m_ViewCamObj);
+            Camera forceCleanCam = Camera.Cast(m_ViewCamObj);
+            if (forceCleanCam)
+            {
+                forceCleanCam.SetActive(false);
+            }
+            // No ObjectDeleteOnClient — engine-managed spectator camera
             m_ViewCamObj = null;
+        }
+
+        m_PlayerRef = null;
+
+        // Re-enable input in case we were in spectator mode
+        Human cleanupPlayer = Human.Cast(GetGame().GetPlayer());
+        if (cleanupPlayer)
+        {
+            HumanInputController cleanupHic = cleanupPlayer.GetInputController();
+            if (cleanupHic)
+            {
+                cleanupHic.SetDisabled(false);
+            }
         }
 
         UnlockFocus();
@@ -503,70 +546,89 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
+    // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM.
+    // Server has already called SelectPlayer(sender, player)
+    // → engine updated internal camera pointer.
+    // NOW safe to deactivate and release the spectator camera.
+    //
+    // COT: does NOT call ObjectDeleteOnClient for engine spectator
+    // cameras. Only deletes custom JMCinematicCamera. Engine manages
+    // spectator lifecycle via SelectPlayer.
+    // We follow the same pattern: SetActive(false) + null. No delete.
+    // =========================================================
+    void DoExitCleanup()
+    {
+        Print("[CameraViewport] DIAG: DoExitCleanup — server confirmed");
+
+        if (m_ViewCamObj)
+        {
+            Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
+            if (viewCamTyped)
+            {
+                viewCamTyped.SetActive(false);
+            }
+            // NO ObjectDeleteOnClient — staticcamera is engine-managed.
+            // COT: IsInherited(JMCinematicCamera) check → only deletes custom.
+            // staticcamera ≠ JMCinematicCamera → COT would NOT delete it.
+            // Engine cleans up spectator camera when SelectPlayer restores player.
+            m_ViewCamObj = null;
+        }
+
+        // Re-enable input controller (COT: SetDisabled(false) in Client_Leave)
+        Human localPlayer = Human.Cast(GetGame().GetPlayer());
+        if (localPlayer)
+        {
+            HumanInputController hic = localPlayer.GetInputController();
+            if (hic)
+            {
+                hic.SetDisabled(false);
+            }
+        }
+
+        m_PlayerRef = null;
+
+        UnlockFocus();
+        RestoreHUD();
+
+        m_ExitPhase     = 0;
+        m_ExitWaitTimer = 0.0;
+
+        LFPG_Util.Info("[CameraViewport] DoExitCleanup complete — camera released");
+    }
+
+    // =========================================================
     // Tick — per-frame (runs AFTER super.OnUpdate)
     //
-    // TWO-PHASE KEEP-ALIVE EXIT:
+    // EXIT (COT ROUND-TRIP PATTERN):
+    //   Phase 1: overlay off + RPC EXIT_REQUEST → server
+    //   Phase 2: WAITING for server CCTV_EXIT_CONFIRM
+    //            (server does SelectPlayer before confirming)
+    //   DoExitCleanup: called from RPC → camera cleanup
     //
-    //   Phase 1 (Frame N Tick):
-    //     m_Active=false, overlay off.
-    //     Cámara SIGUE ACTIVA (mods safe en Frame N+1 super.OnUpdate).
-    //
-    //   Phase 2 (Frame N+1 Tick):
-    //     SetActive(false) → engine fallback a player cam.
-    //     UnlockFocus + RestoreHUD.
-    //     m_ViewCamObj SIGUE VIVO — NO ObjectDelete.
-    //     Cero dangling pointers.
-    //
-    //   Frame N+2+ super.OnUpdate:
-    //     Engine usa player cam. Objeto staticcamera en memoria
-    //     pero inactivo. Será reusado en la siguiente sesión CCTV
-    //     o destruido en ForceCleanup (shutdown).
+    //   This guarantees SelectPlayer propagates to client engine
+    //   BEFORE we touch the camera. Zero dangling pointers.
     // =========================================================
     void Tick(float timeslice)
     {
-        // ---- Phase 2: SetActive(false) + ObjectDeleteOnClient ----
-        // COT pattern (proven on thousands of servers):
-        //   SetActive(false) + ObjectDeleteOnClient + null
-        // ObjectDeleteOnClient es correcto para objetos locales
-        // (create_local=true). ObjectDelete intenta propagación
-        // de red innecesaria para objetos que el server no conoce.
-        // ---- Phase 2: destroy camera (server already called SelectPlayer) ----
-        // RPC fue enviado en Phase 1 → el servidor ya llamó SelectPlayer
-        // → el engine ya actualizó su puntero interno de cámara.
-        // Ahora es seguro destruir el objeto local.
+        // ---- Phase 2: waiting for server confirmation ----
+        // DON'T touch camera here. Server is processing SelectPlayer.
+        // DoExitCleanup() will be called from RPC handler.
+        // Timeout safety: if server never responds (5s), force cleanup.
         if (m_ExitPhase == 2)
         {
-            Print("[CameraViewport] DIAG: Phase 2 — SetActive(false) + ObjectDeleteOnClient");
-
-            if (m_ViewCamObj)
+            m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
+            if (m_ExitWaitTimer >= 5.0)
             {
-                Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
-                if (viewCamTyped)
-                {
-                    viewCamTyped.SetActive(false);
-                }
-
-                GetGame().ObjectDeleteOnClient(m_ViewCamObj);
-                m_ViewCamObj = null;
+                LFPG_Util.Warn("[CameraViewport] Exit timeout — forcing cleanup");
+                DoExitCleanup();
             }
-
-            UnlockFocus();
-            RestoreHUD();
-
-            m_ExitPhase = 0;
-            LFPG_Util.Info("[CameraViewport] Phase 2 complete — camera destroyed");
         }
 
-        // ---- Phase 1: hide overlay + send RPC to server ----
-        // Cámara SIGUE ACTIVA → super.OnUpdate de mods ve puntero válido.
-        // RPC CCTV_EXIT → servidor llama SelectPlayer(sender, player).
-        // Phase 2 se ejecuta el frame siguiente, cuando el servidor ya
-        // procesó SelectPlayer y el engine tiene el puntero correcto.
-        // COT hace lo mismo: SelectPlayer en servidor ANTES de que el
-        // cliente destruya la cámara.
+        // ---- Phase 1: send exit request to server ----
+        // Camera STAYS ACTIVE — mods safe in next super.OnUpdate.
         if (m_ExitPhase == 1)
         {
-            Print("[CameraViewport] DIAG: Phase 1 — m_Active=false + RPC CCTV_EXIT");
+            Print("[CameraViewport] DIAG: Phase 1 — m_Active=false + RPC EXIT_REQUEST");
 
             m_Active       = false;
             m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
@@ -581,20 +643,19 @@ class LFPG_CameraViewport
             m_CameraIndex    = 0;
             m_CameraTotal    = 0;
 
-            // RPC al servidor ANTES de destruir la cámara.
-            // COT: servidor hace SelectPlayer PRIMERO, cliente destruye DESPUÉS.
-            PlayerBase exitPlayer = PlayerBase.Cast(GetGame().GetPlayer());
-            if (exitPlayer)
+            // Send EXIT_REQUEST — server will SelectPlayer then send CONFIRM
+            if (m_PlayerRef)
             {
                 ScriptRPC exitRpc = new ScriptRPC();
-                int exitSubId = LFPG_RPC_SubId.CCTV_EXIT;
+                int exitSubId = LFPG_RPC_SubId.CCTV_EXIT_REQUEST;
                 exitRpc.Write(exitSubId);
-                exitRpc.Send(exitPlayer, LFPG_RPC_CHANNEL, true, null);
-                Print("[CameraViewport] DIAG: RPC CCTV_EXIT sent to server");
+                exitRpc.Send(m_PlayerRef, LFPG_RPC_CHANNEL, true, null);
+                Print("[CameraViewport] DIAG: RPC EXIT_REQUEST sent");
             }
 
+            m_ExitWaitTimer = 0.0;
             m_ExitPhase = 2;
-            LFPG_Util.Info("[CameraViewport] Phase 1 complete — RPC sent, camera stays active");
+            LFPG_Util.Info("[CameraViewport] Phase 1 complete — waiting for server confirm");
         }
 
         // ---- Cooldown de inspector ----

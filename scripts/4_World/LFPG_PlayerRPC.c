@@ -10,8 +10,50 @@
 //   RC-07: Reject wiring RPCs during first ~5s startup validation window.
 // =========================================================
 
+// COT pattern: flag on MissionBaseWorld (4_World layer).
+// MissionGameplay (5_Mission) inherits this and overrides ResetGUI.
+// PlayerBase.LFPG_SetSkipOnSelectPlayer propagates flag here.
+modded class MissionBaseWorld
+{
+    protected bool m_LFPG_SkipResetGUI = false;
+
+    void LFPG_SetSkipResetGUI(bool skip)
+    {
+        m_LFPG_SkipResetGUI = skip;
+    }
+};
+
 modded class PlayerBase
 {
+    // COT pattern: prevent vanilla OnSelectPlayer + ResetGUI side effects
+    // during SelectPlayer(sender, NULL). Flag on BOTH PlayerBase AND Mission.
+    // Without Mission flag, ResetGUI crashes when player is null.
+    protected bool m_LFPG_SkipOnSelectPlayer = false;
+
+    void LFPG_SetSkipOnSelectPlayer(bool skip)
+    {
+        m_LFPG_SkipOnSelectPlayer = skip;
+
+        #ifndef SERVER
+        MissionBaseWorld mission = MissionBaseWorld.Cast(GetGame().GetMission());
+        if (mission)
+        {
+            mission.LFPG_SetSkipResetGUI(skip);
+        }
+        #endif
+    }
+
+    override void OnSelectPlayer()
+    {
+        if (m_LFPG_SkipOnSelectPlayer)
+        {
+            m_LFPG_SkipOnSelectPlayer = false;
+            Print("[LF_PowerGrid] OnSelectPlayer skipped (CCTV spectator transition)");
+            return;
+        }
+        super.OnSelectPlayer();
+    }
+
     override void OnRPC(PlayerIdentity sender, int rpc_type, ParamsReadContext ctx)
     {
         super.OnRPC(sender, rpc_type, ctx);
@@ -64,9 +106,9 @@ modded class PlayerBase
         {
             HandleLFPG_RequestCameraList(sender, ctx);
         }
-        else if (subId == LFPG_RPC_SubId.CCTV_EXIT)
+        else if (subId == LFPG_RPC_SubId.CCTV_EXIT_REQUEST)
         {
-            HandleLFPG_CCTVExit(sender);
+            HandleLFPG_CCTVExitRequest(sender);
         }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
@@ -84,6 +126,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.CAMERA_LIST_RESPONSE)
         {
             HandleLFPG_CameraListResponse(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.CCTV_EXIT_CONFIRM)
+        {
+            HandleLFPG_CCTVExitConfirm();
         }
         #endif
     }
@@ -1084,7 +1130,21 @@ modded class PlayerBase
             return;
         }
 
-        // Send CAMERA_LIST_RESPONSE to the requesting player (this = PlayerBase)
+        // COT pattern: engine spectator system for camera lifecycle.
+        // 1. Set skip flag to prevent vanilla OnSelectPlayer side effects
+        // 2. SelectPlayer(sender, NULL) → desasociar player del identity
+        // 3. SelectSpectator(sender, cls, pos) → engine crea+trackea cámara
+        vector firstCamPos = camPositions[0];
+
+        LFPG_SetSkipOnSelectPlayer(true);
+        GetGame().SelectPlayer(sender, null);
+        GetGame().SelectSpectator(sender, "staticcamera", firstCamPos);
+
+        string specLog = "[RequestCameraList] SelectPlayer(null) + SelectSpectator at ";
+        specLog = specLog + firstCamPos.ToString();
+        LFPG_Util.Info(specLog);
+
+        // Send CAMERA_LIST_RESPONSE to the requesting player only (sender).
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.CAMERA_LIST_RESPONSE);
         rpc.Write(camCount);
@@ -1113,20 +1173,19 @@ modded class PlayerBase
             ci = ci + 1;
         }
 
-        rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
 
         string logMsg = "[RequestCameraList] Sent " + camCount.ToString() + " cameras to player";
         LFPG_Util.Info(logMsg);
     }
 
     // =====================================
-    // SERVER: CCTV Exit — restore player camera via SelectPlayer.
-    // COT pattern: server must call SelectPlayer(identity, player)
-    // to force engine to update global camera pointer.
-    // Without this, staticcamera ObjectDeleteOnClient leaves
-    // a dangling pointer at 0x68 that crashes BBP/Expansion/LBmaster.
+    // SERVER: CCTV Exit Request — round-trip RPC.
+    // COT pattern: server calls SelectPlayer FIRST, then sends
+    // confirmation back to client. Client only cleans up camera
+    // AFTER confirmation (guarantees engine pointer updated).
     // =====================================
-    protected void HandleLFPG_CCTVExit(PlayerIdentity sender)
+    protected void HandleLFPG_CCTVExitRequest(PlayerIdentity sender)
     {
         if (!sender)
             return;
@@ -1135,11 +1194,31 @@ modded class PlayerBase
         if (!player)
             return;
 
+        // Restore player camera — engine updates internal pointer
         GetGame().SelectPlayer(sender, player);
 
-        string logMsg = "[CCTV_EXIT] SelectPlayer for ";
+        // Send confirmation back to client — NOW safe to cleanup camera
+        ScriptRPC confirmRpc = new ScriptRPC();
+        int confirmSubId = LFPG_RPC_SubId.CCTV_EXIT_CONFIRM;
+        confirmRpc.Write(confirmSubId);
+        confirmRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+
+        string logMsg = "[CCTV_EXIT] SelectPlayer + confirm sent for ";
         logMsg = logMsg + sender.GetName();
         LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: CCTV Exit Confirmed — server has called SelectPlayer.
+    // NOW safe to cleanup the spectator camera on client side.
+    // =====================================
+    protected void HandleLFPG_CCTVExitConfirm()
+    {
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (vp)
+        {
+            vp.DoExitCleanup();
+        }
     }
 
     // =====================================

@@ -30,6 +30,21 @@ modded class MissionGameplay
     protected bool m_LFPG_SyncRequested   = false;
     protected bool m_LFPG_WidgetsCreated  = false;
 
+    // COT pattern: ResetGUI is called by vanilla OnSelectPlayer.
+    // During SelectPlayer(sender, NULL) this crashes the client.
+    // Flag m_LFPG_SkipResetGUI is inherited from modded MissionBaseWorld (4_World).
+    // LFPG_SetSkipResetGUI() setter also inherited.
+    override void ResetGUI()
+    {
+        if (m_LFPG_SkipResetGUI)
+        {
+            m_LFPG_SkipResetGUI = false;
+            Print("[LF_PowerGrid] ResetGUI skipped (CCTV spectator transition)");
+            return;
+        }
+        super.ResetGUI();
+    }
+
     override void OnInit()
     {
         super.OnInit();

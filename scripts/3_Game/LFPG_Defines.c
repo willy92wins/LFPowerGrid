@@ -238,7 +238,8 @@ enum LFPG_RPC_SubId
 	CAMERA_UNLINK = 14,         // v0.9.0 DEPRECATED — drain-only
 	REQUEST_CAMERA_LIST = 15,   // Sprint B: client requests camera list for a monitor
 	CAMERA_LIST_RESPONSE = 16,  // Sprint B: server sends camera list back to client
-	CCTV_EXIT = 17              // v1.2.0: client requests server to call SelectPlayer (restore player cam)
+	CCTV_EXIT_REQUEST = 17,     // v1.3.0: client requests exit → server does SelectPlayer
+	CCTV_EXIT_CONFIRM = 18      // v1.3.0: server confirms exit → client safe to cleanup
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
