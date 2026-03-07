@@ -35,8 +35,8 @@
 //   - String concat incremental
 // =========================================================
 
-static const float LFPG_CCTV_SCANLINE_SPACING = 5.0;
-static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.32;
+static const float LFPG_CCTV_SCANLINE_SPACING = 8.0;
+static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.15;
 static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;
 static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;
 static const float LFPG_CCTV_VIGNETTE_W       = 55.0;
@@ -46,9 +46,18 @@ static const int   LFPG_CCTV_EXIT_COOLDOWN    = 3;
 
 // Key codes
 static const int   LFPG_KC_ESCAPE = 1;
+static const int   LFPG_KC_W      = 17;
 static const int   LFPG_KC_Q      = 16;
 static const int   LFPG_KC_E      = 18;
+static const int   LFPG_KC_A      = 30;
+static const int   LFPG_KC_S      = 31;
+static const int   LFPG_KC_D      = 32;
 static const int   LFPG_KC_SPACE  = 57;
+
+// Camera pan: slow pan speed, limited angles from base orientation
+static const float LFPG_CCTV_PAN_SPEED     = 30.0;   // degrees per second
+static const float LFPG_CCTV_YAW_LIMIT     = 90.0;   // +/- degrees horizontal
+static const float LFPG_CCTV_PITCH_LIMIT   = 45.0;   // +/- degrees vertical
 
 // Overlay layout
 static const string LFPG_CCTV_LAYOUT = "LFPowerGrid/gui/layouts/LFPG_CCTVMenu.layout";
@@ -89,6 +98,15 @@ class LFPG_CameraViewport
     protected float          m_BlinkTimer;
     protected bool           m_RecVisible;
 
+    // ---- Camera pan (WASD rotation from base orientation) ----
+    protected vector    m_BaseOrientation;  // Original camera orientation
+    protected float     m_YawOffset;        // Current yaw offset from base (-90..+90)
+    protected float     m_PitchOffset;      // Current pitch offset from base (-45..+45)
+    protected bool      m_KeyW;
+    protected bool      m_KeyA;
+    protected bool      m_KeyS;
+    protected bool      m_KeyD;
+
     // ---- Two-phase exit (COT pattern) ----
     // ---- Two-phase exit + server confirmation (COT pattern) ----
     // 0 = normal
@@ -125,6 +143,13 @@ class LFPG_CameraViewport
         m_wTimestamp      = null;
         m_BlinkTimer     = 0.0;
         m_RecVisible     = true;
+        m_BaseOrientation = vector.Zero;
+        m_YawOffset      = 0.0;
+        m_PitchOffset    = 0.0;
+        m_KeyW           = false;
+        m_KeyA           = false;
+        m_KeyS           = false;
+        m_KeyD           = false;
         m_ExitPhase      = 0;
         m_ExitWaitTimer  = 0.0;
         m_ExitCooldown   = 0;
@@ -214,12 +239,12 @@ class LFPG_CameraViewport
         float sh = scrH;
         float scale = sh / 1080.0;
 
-        // Grey-green overlay: very subtle tint for "old camera" effect
-        // Alpha 12 out of 255 ≈ 5% opacity — barely perceptible green wash
+        // Overlay tint disabled — scanlines + vignette give enough camera effect.
+        // Widget kept in layout for future tuning. Alpha=0 = invisible.
         if (m_wGreyOverlay)
         {
-            int overlayColor = ARGB(12, 0, 15, 0);
-            m_wGreyOverlay.SetColor(overlayColor);
+            m_wGreyOverlay.SetColor(ARGB(0, 0, 0, 0));
+            m_wGreyOverlay.Show(false);
         }
 
         // Colors
@@ -415,6 +440,15 @@ class LFPG_CameraViewport
         vector camOri = entry.m_Ori;
         m_CameraLabel = entry.m_Label;
 
+        // Reset pan offsets for new camera view
+        m_BaseOrientation = camOri;
+        m_YawOffset   = 0.0;
+        m_PitchOffset = 0.0;
+        m_KeyW = false;
+        m_KeyA = false;
+        m_KeyS = false;
+        m_KeyD = false;
+
         // Reusar objeto existente (cycling intra-sesión)
         if (m_ViewCamObj)
         {
@@ -449,7 +483,7 @@ class LFPG_CameraViewport
 
     // =========================================================
     // HandleKeyDown — desde MissionGameplay.OnKeyPress.
-    // Solo pone flags. No toca la cámara.
+    // WASD sets held flags. Q/E cycle. SPACE/ESC exit.
     // =========================================================
     bool HandleKeyDown(int key)
     {
@@ -475,7 +509,53 @@ class LFPG_CameraViewport
             return true;
         }
 
+        // WASD pan — track held state
+        if (key == LFPG_KC_W)
+        {
+            m_KeyW = true;
+            return true;
+        }
+        if (key == LFPG_KC_A)
+        {
+            m_KeyA = true;
+            return true;
+        }
+        if (key == LFPG_KC_S)
+        {
+            m_KeyS = true;
+            return true;
+        }
+        if (key == LFPG_KC_D)
+        {
+            m_KeyD = true;
+            return true;
+        }
+
         return false;
+    }
+
+    // =========================================================
+    // HandleKeyUp — desde MissionGameplay.OnKeyRelease.
+    // Clears held state for WASD pan.
+    // =========================================================
+    void HandleKeyUp(int key)
+    {
+        if (key == LFPG_KC_W)
+        {
+            m_KeyW = false;
+        }
+        if (key == LFPG_KC_A)
+        {
+            m_KeyA = false;
+        }
+        if (key == LFPG_KC_S)
+        {
+            m_KeyS = false;
+        }
+        if (key == LFPG_KC_D)
+        {
+            m_KeyD = false;
+        }
     }
 
     // =========================================================
@@ -548,6 +628,12 @@ class LFPG_CameraViewport
         m_Active    = false;
         m_ExitPhase = 0;
         m_ExitWaitTimer = 0.0;
+        m_YawOffset   = 0.0;
+        m_PitchOffset = 0.0;
+        m_KeyW = false;
+        m_KeyA = false;
+        m_KeyS = false;
+        m_KeyD = false;
 
         if (m_ViewCamObj)
         {
@@ -680,6 +766,12 @@ class LFPG_CameraViewport
             m_CameraLabel    = "";
             m_ActiveDuration = 0.0;
             m_ScanlineOffset = 0.0;
+            m_YawOffset      = 0.0;
+            m_PitchOffset    = 0.0;
+            m_KeyW = false;
+            m_KeyA = false;
+            m_KeyS = false;
+            m_KeyD = false;
             m_CameraList     = null;
             m_CameraIndex    = 0;
             m_CameraTotal    = 0;
@@ -756,6 +848,65 @@ class LFPG_CameraViewport
             ts = ts + ":";
             ts = ts + minute.ToStringLen(2);
             m_wTimestamp.SetText(ts);
+        }
+
+        // ---- WASD camera pan ----
+        bool anyPan = false;
+        if (m_KeyA || m_KeyD || m_KeyW || m_KeyS)
+        {
+            anyPan = true;
+        }
+
+        if (anyPan && m_ViewCamObj)
+        {
+            float panStep = LFPG_CCTV_PAN_SPEED * timeslice;
+
+            // A/D = yaw (horizontal). A=left(+yaw), D=right(-yaw)
+            if (m_KeyA)
+            {
+                m_YawOffset = m_YawOffset + panStep;
+            }
+            if (m_KeyD)
+            {
+                m_YawOffset = m_YawOffset - panStep;
+            }
+
+            // W/S = pitch (vertical). W=up(-pitch), S=down(+pitch)
+            // DayZ: positive pitch = look down, negative = look up
+            if (m_KeyW)
+            {
+                m_PitchOffset = m_PitchOffset - panStep;
+            }
+            if (m_KeyS)
+            {
+                m_PitchOffset = m_PitchOffset + panStep;
+            }
+
+            // Clamp to limits
+            if (m_YawOffset > LFPG_CCTV_YAW_LIMIT)
+            {
+                m_YawOffset = LFPG_CCTV_YAW_LIMIT;
+            }
+            if (m_YawOffset < -LFPG_CCTV_YAW_LIMIT)
+            {
+                m_YawOffset = -LFPG_CCTV_YAW_LIMIT;
+            }
+            if (m_PitchOffset > LFPG_CCTV_PITCH_LIMIT)
+            {
+                m_PitchOffset = LFPG_CCTV_PITCH_LIMIT;
+            }
+            if (m_PitchOffset < -LFPG_CCTV_PITCH_LIMIT)
+            {
+                m_PitchOffset = -LFPG_CCTV_PITCH_LIMIT;
+            }
+
+            // Apply: base orientation + offsets
+            // DayZ orientation vector: [yaw, pitch, roll]
+            float newYaw   = m_BaseOrientation[0] + m_YawOffset;
+            float newPitch = m_BaseOrientation[1] + m_PitchOffset;
+            float newRoll  = m_BaseOrientation[2];
+            vector panOri  = Vector(newYaw, newPitch, newRoll);
+            m_ViewCamObj.SetOrientation(panOri);
         }
 
         // ---- Scanlines advance ----

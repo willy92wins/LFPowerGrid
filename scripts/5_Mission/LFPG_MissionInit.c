@@ -77,6 +77,20 @@ modded class MissionGameplay
         super.OnKeyPress(key);
     }
 
+    // =========================================================
+    // OnKeyRelease — clears WASD held state for CCTV pan.
+    // =========================================================
+    override void OnKeyRelease(int key)
+    {
+        LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+        if (vp && vp.IsActive())
+        {
+            vp.HandleKeyUp(key);
+        }
+
+        super.OnKeyRelease(key);
+    }
+
     override void OnUpdate(float timeslice)
     {
         super.OnUpdate(timeslice);
