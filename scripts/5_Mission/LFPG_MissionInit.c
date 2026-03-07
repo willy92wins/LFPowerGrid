@@ -55,7 +55,6 @@ modded class MissionGameplay
         LFPG_CableRenderer.Reset();
         LFPG_WiringClient.Reset();
         LFPG_DeviceInspector.Init();
-        LFPG_TankHUD.Init();
 
         LFPG_CameraViewport.Reset();
 
@@ -184,22 +183,10 @@ modded class MissionGameplay
         if (!skipCameraOps)
         {
             LFPG_DeviceInspector.Tick();
-
-            LFPG_TankHUD tankHUD = LFPG_TankHUD.Get();
-            if (tankHUD)
-            {
-                tankHUD.Tick();
-            }
         }
         else
         {
             LFPG_DeviceInspector.ForceHide();
-
-            LFPG_TankHUD tankHUDHide = LFPG_TankHUD.Get();
-            if (tankHUDHide)
-            {
-                tankHUDHide.Tick();
-            }
         }
 
         // ---- Auto-cancel wiring: cable reel removed from hands ----
@@ -225,7 +212,6 @@ modded class MissionGameplay
     override void OnMissionFinish()
     {
         LFPG_DeviceInspector.Cleanup();
-        LFPG_TankHUD.Cleanup();
 
         LFPG_CameraViewport.Reset();
 

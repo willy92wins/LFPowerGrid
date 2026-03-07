@@ -80,22 +80,6 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         return false;
     }
 
-    override void OnStartServer(ActionData action_data)
-    {
-        super.OnStartServer(action_data);
-
-        // Play water sound
-        Object targetObj = action_data.m_Target.GetObject();
-        if (targetObj)
-        {
-            EntityAI targetEnt = EntityAI.Cast(targetObj);
-            if (targetEnt)
-            {
-                SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, targetEnt.GetPosition());
-            }
-        }
-    }
-
     override void OnStart(ActionData action_data)
     {
         super.OnStart(action_data);
@@ -103,6 +87,19 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         {
             action_data.m_Player.TryHideItemInHands(true);
         }
+
+        // Play water.ogg on client (SEffectManager is client-side only)
+        #ifndef SERVER
+        Object sndTarget = action_data.m_Target.GetObject();
+        if (sndTarget)
+        {
+            EntityAI sndEnt = EntityAI.Cast(sndTarget);
+            if (sndEnt)
+            {
+                SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, sndEnt.GetPosition());
+            }
+        }
+        #endif
     }
 
     override void OnEnd(ActionData action_data)

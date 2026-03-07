@@ -468,7 +468,7 @@ class LF_WaterPump_T2 : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
-        RegisterNetSyncVariableFloat("m_TankLevel", 0.0, 50.0, 6);
+        RegisterNetSyncVariableFloat("m_TankLevel", 0.0, 50.0, 8);
         RegisterNetSyncVariableInt("m_TankLiquidType");
     }
 

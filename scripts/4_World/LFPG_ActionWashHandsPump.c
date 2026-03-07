@@ -134,8 +134,22 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
             }
             pump2.LFPG_SetTankLevel(level);
         }
+    }
 
-        // Play water sound
-        SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, targetEnt.GetPosition());
+    override void OnFinishProgressClient(ActionData action_data)
+    {
+        // SEffectManager is client-side only
+        if (action_data && action_data.m_Target)
+        {
+            Object sndObj = action_data.m_Target.GetObject();
+            if (sndObj)
+            {
+                EntityAI sndEnt = EntityAI.Cast(sndObj);
+                if (sndEnt)
+                {
+                    SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, sndEnt.GetPosition());
+                }
+            }
+        }
     }
 };

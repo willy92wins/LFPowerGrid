@@ -141,12 +141,21 @@ class LFPG_ActionFillPump : ActionContinuousBase
             level = 0.0;
         }
         pump2.LFPG_SetTankLevel(level);
+    }
 
-        // Sound
-        EntityAI ent = EntityAI.Cast(targetObj);
-        if (ent)
+    override void OnFinishProgressClient(ActionData action_data)
+    {
+        if (action_data && action_data.m_Target)
         {
-            SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, ent.GetPosition());
+            Object sndObj = action_data.m_Target.GetObject();
+            if (sndObj)
+            {
+                EntityAI sndEnt = EntityAI.Cast(sndObj);
+                if (sndEnt)
+                {
+                    SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, sndEnt.GetPosition());
+                }
+            }
         }
     }
 };
