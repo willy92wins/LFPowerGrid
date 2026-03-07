@@ -15,6 +15,13 @@ class CfgSlots
     };
     // v1.1.0: Water Pump slots
     class Slot_LF_PumpFilter
+    {
+        name = "LF_PumpFilter";
+        displayName = "Water Filter";
+        ghostIcon = "missing";
+    };
+    class Slot_LF_PumpPlate
+    {
         name = "LF_PumpPlate";
         displayName = "Metal Plate";
         ghostIcon = "missing";
