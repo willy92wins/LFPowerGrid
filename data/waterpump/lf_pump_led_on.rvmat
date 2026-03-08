@@ -1,48 +1,47 @@
-// lf_pump_led_on.rvmat — Pump LED indicator ON (green glow, powered)
-ambient[] = {0.08, 0.25, 0.06, 1.0};
-diffuse[] = {0.15, 0.6, 0.12, 1.0};
-forcedDiffuse[] = {0.0, 0.0, 0.0, 0.0};
-emmisive[] = {0.23, 0.60, 0.19, 1.0};
-specular[] = {0.5, 0.5, 0.5, 1.0};
-specularPower = 80;
-PixelShaderID = "Super";
-VertexShaderID = "Super";
-
+// LF_PowerGrid - WaterPump LED material (ON / powered, green glow)
+// Super shader, 7-stage standard layout (CeilingLight parity).
+// hiddenSelections[0] = "pump_led" -> SetObjectMaterial(0, path).
+// emmisive {0,40,0} -> verde emisivo. SMDI.I=1 -> illumination channel ON.
+ambient[]={0.06,0.25,0.06,1};
+diffuse[]={0.12,0.6,0.12,1};
+forcedDiffuse[]={0,0,0,0};
+emmisive[]={0,40,0,1};
+specular[]={0.5,0.5,0.5,1};
+specularPower=80;
+PixelShaderID="Super";
+VertexShaderID="Super";
 class Stage1
 {
-    texture = "#(argb,8,8,3)color(0.5,0.5,0.5,1.0,nohq)";
-    uvSource = "tex";
-    class uvTransform
-    {
-        aside[] = {1.0, 0.0, 0.0};
-        up[] = {0.0, 1.0, 0.0};
-        dir[] = {0.0, 0.0, 0.0};
-        pos[] = {0.0, 0.0, 0.0};
-    };
+	texture="\LFPowerGrid\data\waterpump\lf_waterpump.paa";
+	uvSource="tex";
 };
-
 class Stage2
 {
-    texture = "#(argb,8,8,3)color(0.5,0.5,0.5,1.0,dt)";
-    uvSource = "tex";
-    class uvTransform
-    {
-        aside[] = {1.0, 0.0, 0.0};
-        up[] = {0.0, 1.0, 0.0};
-        dir[] = {0.0, 0.0, 0.0};
-        pos[] = {0.0, 0.0, 0.0};
-    };
+	texture="#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	uvSource="tex";
 };
-
 class Stage3
 {
-    texture = "#(argb,8,8,3)color(0.1,0.5,0.1,1.0,smdi)";
-    uvSource = "tex";
-    class uvTransform
-    {
-        aside[] = {1.0, 0.0, 0.0};
-        up[] = {0.0, 1.0, 0.0};
-        dir[] = {0.0, 0.0, 0.0};
-        pos[] = {0.0, 0.0, 0.0};
-    };
+	texture="#(argb,8,8,3)color(0,0,0,0,MC)";
+	uvSource="tex";
+};
+class Stage4
+{
+	texture="#(argb,8,8,3)color(1,1,1,1,AS)";
+	uvSource="tex";
+};
+class Stage5
+{
+	texture="#(argb,8,8,3)color(0,0,0,1.0,SMDI)";
+	uvSource="tex";
+};
+class Stage6
+{
+	texture="#(ai,64,64,1)fresnel(1.3,7)";
+	uvSource="none";
+};
+class Stage7
+{
+	texture="\LFPowerGrid\data\waterpump\lf_waterpump.paa";
+	uvSource="tex";
 };

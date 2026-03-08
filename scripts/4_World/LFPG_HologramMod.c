@@ -1,44 +1,26 @@
 // =========================================================
-// LF_PowerGrid - Hologram override for wall/ceiling-aware placement
+// LF_PowerGrid - Hologram override v2.0
 //
-// v0.7.26: Wall placement support for LF_Splitter_Kit.
-// v0.7.36: Fix Enforce compile errors (literal in func params),
-//          force green holo in wall mode, use Math.AbsFloat.
-// v0.7.38 (Fix): All collision/validation overrides now check entity
-//   type directly via LFPG_IsLFPGKitProjection() instead of
-//   relying on m_LFPG_IsWallMode state. Server-side EvaluateCollision
-//   never had wall mode set (UpdateHologram only runs on client),
-//   causing it to fall through to vanilla checks that reject wall
-//   placement. Type-based check works on both client and server.
-// v0.7.47: 3-way surface classification (floor/wall/ceiling).
-//   - Generalized LFPG_IsLFPGKitProjection() to cover all LFPG kits.
-//   - Raw normalY (no abs) enables distinguishing floor from ceiling.
-//   - Ceiling mode: pitch=180 inverts model, yaw from camera direction.
-//   - Only CeilingLight_Kit supports ceiling; Splitter uses vanilla reject.
-// v0.8.0: Solar Panel Kit support (different-model kit).
-//   - ProjectionBasedOnParent() swaps kit box model â panel model.
-//   - Solar panel uses floor-only placement (vanilla super).
-//   - Collision bypass needed because projection model != kit model.
-// v0.8.1: DeployableContainer_Base refactor for Solar Panel Kit.
-// v0.8.2: Combiner Kit support (same-model, floor + wall placement).
-//   - Added GetProjectionName(): returns deployed class for solar kit.
-//   - Added PlaceEntity(): CRITICAL â prevents ghost entity creation.
-//     Without this, ProjectionBasedOnParent causes engine to spawn
-//     a REAL LF_SolarPanel as the preview (runs EEInit, registers,
-//     replicates). PlaceEntity override returns entity_for_placing
-//     as-is, preventing the duplicate creation.
-//   - Added SetProjectionPosition(): applies kit position offset.
-//   - Added GetDefaultOrientation(): applies kit orientation offset.
+// COMPLETE REWRITE: Camera-based placement for ALL LFPG kits.
 //
-// Strategy:
-//   1. Do a forward raycast from the camera
-//   2. If hit surface is a FLOOR (normalY > threshold) -> call super (100% vanilla)
-//   3. If hit surface is a CEILING (normalY < -threshold) -> pitch=180 placement
-//   4. If hit surface is a WALL -> custom position/orient, skip vanilla
+// v2.0 Changes:
+//   - ALL LFPG kits now use camera raycast for positioning
+//     (including floor mode). Vanilla heading-based distance
+//     caused hologram to appear far from where the player looks.
+//   - Position smoothing (lerp) eliminates jitter.
+//   - Orientation smoothing prevents 90-degree yaw jumps when
+//     raycast hits edge geometry between wall components.
+//   - Hysteresis on floor/wall threshold prevents mode flicker
+//     at the transition boundary.
+//   - Scroll-wheel rotation (m_Rotation) supported in ALL modes.
+//   - Different-model kits (Solar, WaterPump) also use camera
+//     raycast for consistent placement feel.
+//   - Ceiling mode preserved for CeilingLight_Kit.
 //
-// This means floor placement is IDENTICAL to vanilla behavior.
-// Wall/ceiling placement uses our forward raycast and bypasses vanilla
-// collision checks that would reject it (angle, floating, etc).
+// Surface classification (with hysteresis):
+//   FLOOR:   normalY > +threshold  (normal points UP)
+//   CEILING: normalY < -threshold  (normal points DOWN)
+//   WALL:    everything between
 //
 // Non-LFPG-kit items always use vanilla (super) behavior.
 // =========================================================
@@ -46,25 +28,48 @@
 modded class Hologram
 {
     // ---- Tuning constants ----
-    static const float LFPG_HOLO_MAX_RANGE      = 3.0;   // max ray distance (m)
-    static const float LFPG_HOLO_WALL_THRESHOLD  = 0.5;   // |normalY| < this = wall
-    static const float LFPG_HOLO_SURFACE_OFFSET  = 0.03;  // offset from wall/ceiling (m)
+    static const float LFPG_HOLO_MAX_RANGE         = 4.0;   // max ray distance (m)
+    static const float LFPG_HOLO_SURFACE_OFFSET     = 0.03;  // offset from wall/ceiling surface (m)
+    static const float LFPG_HOLO_FLOOR_GROUND_SNAP  = 0.05;  // Y offset above ground for floor mode (m)
+
+    // Hysteresis thresholds for surface classification.
+    // ENTER = threshold to ENTER wall mode from floor/ceiling.
+    // EXIT  = threshold to EXIT wall mode back to floor/ceiling.
+    // EXIT > ENTER prevents flickering at the boundary.
+    static const float LFPG_HOLO_ENTER_WALL_THRESHOLD = 0.45;
+    static const float LFPG_HOLO_EXIT_WALL_THRESHOLD  = 0.55;
+
+    // Smoothing factors (higher = snappier, lower = smoother).
+    // Applied as: lerp(previous, target, FACTOR * timeslice)
+    static const float LFPG_HOLO_POS_SMOOTH  = 20.0;
+    static const float LFPG_HOLO_ORI_SMOOTH  = 12.0;
+
+    // Vertical ray range for ground-snap
+    static const float LFPG_HOLO_GROUND_RAY_UP   = 2.0;
+    static const float LFPG_HOLO_GROUND_RAY_DOWN  = 4.0;
+
+    // Minimum horizontal length of hit normal to trust its direction.
+    // Below this, the normal is nearly vertical (edge geometry hit)
+    // and Atan2 becomes unstable => fall back to camera direction.
+    static const float LFPG_HOLO_MIN_HORIZ_NORMAL = 0.2;
 
     // ---- State ----
     protected bool m_LFPG_IsWallMode;
     protected bool m_LFPG_IsLFPGKit;
 
+    // Smoothing state
+    protected vector m_LFPG_SmoothedPos;
+    protected vector m_LFPG_SmoothedOri;
+    protected bool   m_LFPG_HasPreviousState;
+
+    // Hysteresis: tracks whether we were in wall mode last frame
+    protected bool m_LFPG_WasWallMode;
+
     // ============================================
-    // v0.8.1: DeployableContainer_Base hologram overrides
-    //         for different-model kit (Solar Panel)
+    // Different-model kit hologram overrides
+    // (Solar Panel, Water Pump: box kit -> deployed model)
     // ============================================
 
-    // --- ProjectionBasedOnParent ---
-    // When placing a solar panel kit (box model), the hologram
-    // should show the deployed solar panel model instead.
-    // This override is called during Hologram construction to
-    // determine which class to instantiate as the projection entity.
-    // Same-model kits (Splitter, CeilingLight) fall through to super.
     override string ProjectionBasedOnParent()
     {
         if (m_Parent)
@@ -85,11 +90,6 @@ modded class Hologram
         return super.ProjectionBasedOnParent();
     }
 
-    // --- GetProjectionName ---
-    // v0.8.1: Called by Hologram to resolve the projection entity classname.
-    // Must match ProjectionBasedOnParent for different-model kits.
-    // Without this, engine may use the kit classname instead of deployed
-    // classname in certain code paths (e.g. re-creation after LOD change).
     override string GetProjectionName(ItemBase item)
     {
         if (m_Parent)
@@ -110,17 +110,9 @@ modded class Hologram
         return super.GetProjectionName(item);
     }
 
-    // --- PlaceEntity --- (CRITICAL: ghost entity prevention)
-    // v0.8.1: ProjectionBasedOnParent makes the engine create a REAL
-    // entity of the deployed class (LF_SolarPanel) as the hologram preview.
-    // This entity runs EEInit, registers in DeviceRegistry, replicates to
-    // clients, and creates a "ghost" solar panel that exists in the world
-    // but has no physical representation at the placement site.
-    //
-    // PlaceEntity is called when the engine needs the actual entity to place.
-    // By returning entity_for_placing as-is (instead of letting vanilla
-    // create a NEW entity), we prevent the ghost duplication.
-    // The real entity is created by OnPlacementComplete in the kit script.
+    // CRITICAL: Prevents ghost entity creation for different-model kits.
+    // Without this, ProjectionBasedOnParent causes engine to spawn a
+    // REAL entity (runs EEInit, registers, replicates).
     override EntityAI PlaceEntity(EntityAI entity_for_placing)
     {
         if (m_Parent)
@@ -141,10 +133,10 @@ modded class Hologram
         return super.PlaceEntity(entity_for_placing);
     }
 
-    // --- SetProjectionPosition ---
-    // v0.8.1: Applies kit-defined position offset during hologram preview.
-    // Currently offset is "0 0 0" but this allows future adjustment
-    // (e.g. raising panel above ground, centering model pivot).
+    // Position offset for different-model kits.
+    // NOTE: In v2.0, floor positioning is done by our camera raycast
+    // so this only applies when vanilla code paths call SetProjectionPosition
+    // (e.g., during hologram creation before first UpdateHologram tick).
     override void SetProjectionPosition(vector position)
     {
         if (m_Parent)
@@ -152,18 +144,12 @@ modded class Hologram
             LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
             if (solarKit)
             {
-                vector posOffset = solarKit.GetDeployPositionOffset();
-                vector finalPos = position + posOffset;
+                vector solarOffset = solarKit.GetDeployPositionOffset();
+                vector solarFinal = position + solarOffset;
 
                 if (m_Projection)
                 {
-                    m_Projection.SetPosition(finalPos);
-
-                    if (IsFloating())
-                    {
-                        vector groundPos = SetOnGround(finalPos);
-                        m_Projection.SetPosition(groundPos);
-                    }
+                    m_Projection.SetPosition(solarFinal);
                 }
                 return;
             }
@@ -171,18 +157,12 @@ modded class Hologram
             LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
             if (pumpKit)
             {
-                vector pumpPosOffset = pumpKit.GetDeployPositionOffset();
-                vector pumpFinalPos = position + pumpPosOffset;
+                vector pumpOffset = pumpKit.GetDeployPositionOffset();
+                vector pumpFinal = position + pumpOffset;
 
                 if (m_Projection)
                 {
-                    m_Projection.SetPosition(pumpFinalPos);
-
-                    if (IsFloating())
-                    {
-                        vector pumpGroundPos = SetOnGround(pumpFinalPos);
-                        m_Projection.SetPosition(pumpGroundPos);
-                    }
+                    m_Projection.SetPosition(pumpFinal);
                 }
                 return;
             }
@@ -191,11 +171,7 @@ modded class Hologram
         super.SetProjectionPosition(position);
     }
 
-    // --- GetDefaultOrientation ---
-    // v0.8.1: Applies kit-defined orientation offset to hologram.
-    // Useful if the P3D model has a different default facing than expected.
-    // Currently offset is "0 0 0" â adjust in kit script if model appears
-    // rotated (e.g. "0 -90 0" for 90Â° correction).
+    // Orientation offset for different-model kits
     override vector GetDefaultOrientation()
     {
         if (m_Parent)
@@ -203,18 +179,18 @@ modded class Hologram
             LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
             if (solarKit)
             {
-                vector baseOri = super.GetDefaultOrientation();
-                vector oriOffset = solarKit.GetDeployOrientationOffset();
-                vector result = baseOri + oriOffset;
-                return result;
+                vector solarBase = super.GetDefaultOrientation();
+                vector solarOriOff = solarKit.GetDeployOrientationOffset();
+                vector solarResult = solarBase + solarOriOff;
+                return solarResult;
             }
 
             LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
             if (pumpKit)
             {
-                vector pumpBaseOri = super.GetDefaultOrientation();
-                vector pumpOriOffset = pumpKit.GetDeployOrientationOffset();
-                vector pumpResult = pumpBaseOri + pumpOriOffset;
+                vector pumpBase = super.GetDefaultOrientation();
+                vector pumpOriOff = pumpKit.GetDeployOrientationOffset();
+                vector pumpResult = pumpBase + pumpOriOff;
                 return pumpResult;
             }
         }
@@ -226,14 +202,6 @@ modded class Hologram
     // Kit projection detection helper
     // ============================================
 
-    // ---- Helper: check if projection entity is ANY LFPG deployable kit ----
-    // v0.7.47: Generalized from Splitter-only to include all LFPG kits.
-    // v0.8.0: Added Solar Panel Kit. For different-model kits the
-    //   projection entity is the DEPLOYED class (e.g. LF_SolarPanel),
-    //   not the kit class. We check m_Parent for those cases.
-    // Does NOT depend on state flags from UpdateHologram.
-    // Works on server where UpdateHologram may never have run.
-    // Used by all collision/validation overrides.
     protected bool LFPG_IsLFPGKitProjection()
     {
         EntityAI proj = GetProjectionEntity();
@@ -243,39 +211,71 @@ modded class Hologram
         // Same-model kits: projection IS the kit type
         if (proj.IsKindOf("LF_Splitter_Kit"))
             return true;
-
         if (proj.IsKindOf("LF_CeilingLight_Kit"))
             return true;
-
         if (proj.IsKindOf("LF_Combiner_Kit"))
             return true;
-		
-		if (proj.IsKindOf("LF_Camera_Kit"))
+        if (proj.IsKindOf("LF_Camera_Kit"))
             return true;
-
         if (proj.IsKindOf("LF_Monitor_Kit"))
             return true;
-
-        // Different-model kits: projection is deployed type,
-        // check m_Parent to identify kit origin
-        if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
+        if (proj.IsKindOf("LFPG_PushButton_Kit"))
             return true;
 
-        // v1.1.0: Water Pump Kit (different-model, box kit -> pump hologram)
+        // Different-model kits: projection is deployed type
+        if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
+            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
             return true;
 
         return false;
     }
 
+    // ---- Helper: Check which placement modes a kit supports ----
+    // Returns: 0 = floor only, 1 = floor + wall, 2 = floor + wall + ceiling
+    protected int LFPG_GetKitPlacementModes(EntityAI projection)
+    {
+        if (!projection)
+            return 0;
+
+        // CeilingLight supports all three modes
+        if (projection.IsKindOf("LF_CeilingLight_Kit"))
+            return 2;
+
+        // Wall-capable same-model kits
+        if (projection.IsKindOf("LF_Splitter_Kit"))
+            return 1;
+        if (projection.IsKindOf("LF_Combiner_Kit"))
+            return 1;
+        if (projection.IsKindOf("LF_Camera_Kit"))
+            return 1;
+        if (projection.IsKindOf("LF_Monitor_Kit"))
+            return 1;
+        if (projection.IsKindOf("LFPG_PushButton_Kit"))
+            return 1;
+
+        // Different-model kits and everything else: floor only
+        return 0;
+    }
+
+    // ---- Helper: detect if parent is a different-model kit ----
+    protected bool LFPG_IsDifferentModelKit()
+    {
+        if (!m_Parent)
+            return false;
+        if (m_Parent.IsKindOf("LF_SolarPanel_Kit"))
+            return true;
+        if (m_Parent.IsKindOf("LF_WaterPump_Kit"))
+            return true;
+        return false;
+    }
+
     // ============================================
-    // Wall/Ceiling placement (UpdateHologram)
+    // Main placement logic (UpdateHologram)
     // ============================================
 
-    // ---- Main override ----
     override void UpdateHologram(float timeslice)
     {
-        // Identify if this is an LFPG deployable kit
         EntityAI projection = GetProjectionEntity();
         m_LFPG_IsLFPGKit = false;
         m_LFPG_IsWallMode = false;
@@ -286,44 +286,37 @@ modded class Hologram
             return;
         }
 
-        bool isSplitterKit = projection.IsKindOf("LF_Splitter_Kit");
-        bool isCeilingKit  = projection.IsKindOf("LF_CeilingLight_Kit");
-        bool isCombinerKit = projection.IsKindOf("LF_Combiner_Kit");
-		bool isCameraKit  = projection.IsKindOf("LF_Camera_Kit");
-        bool isMonitorKit = projection.IsKindOf("LF_Monitor_Kit");
-
-        // v0.8.0: Solar Panel Kit â different-model kit, check m_Parent.
-        // Floor-only placement: set flag for collision bypass, then vanilla super.
-        bool isSolarKit = false;
-        if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
-        {
-            isSolarKit = true;
-        }
-        bool isWaterPumpKit = false;
-        if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
-        {
-            isWaterPumpKit = true;
-        }
-
-        if (!isSplitterKit && !isCeilingKit && !isCombinerKit && !isSolarKit && !isCameraKit && !isMonitorKit && !isWaterPumpKit)
+        // Detect if this is ANY LFPG kit
+        bool isLFPGKit = LFPG_IsLFPGKitProjection();
+        if (!isLFPGKit)
         {
             super.UpdateHologram(timeslice);
             return;
         }
+
+        // --- Vanilla safety checks (replicated from base UpdateHologram) ---
+        // Without these, placement mode can get stuck or crash.
+        if (!m_Parent)
+        {
+            m_Player.TogglePlacingLocal();
+            return;
+        }
+
+        if (IsRestrictedFromAdvancedPlacing())
+        {
+            m_Player.TogglePlacingLocal();
+            return;
+        }
+
+        if (!GetUpdatePosition())
+            return;
 
         m_LFPG_IsLFPGKit = true;
 
-        // v0.8.0: Solar Panel Kit uses vanilla floor placement only.
-        // Collision bypass is handled by LFPG_IsLFPGKitProjection()
-        // because projection model (panel) differs from kit model (box)
-        // and vanilla collision checks would produce false positives.
-        if (isSolarKit || isWaterPumpKit)
-        {
-            super.UpdateHologram(timeslice);
-            return;
-        }
+        // Get placement capability for this kit
+        int placementModes = LFPG_GetKitPlacementModes(projection);
 
-        // --- Forward raycast to detect wall vs floor vs ceiling ---
+        // --- Camera raycast ---
         PlayerBase player = m_Player;
         if (!player)
         {
@@ -333,18 +326,26 @@ modded class Hologram
 
         vector camPos = GetGame().GetCurrentCameraPosition();
         vector camDir = GetGame().GetCurrentCameraDirection();
+
+        // FIX: Looking-at-sky guard. Vanilla constant LOOKING_TO_SKY = 0.75.
+        // When looking nearly straight up, camera ray goes into sky and misses
+        // everything, causing hologram to jump to max range. Use ground-snap
+        // at player position instead.
+        float lookUpThreshold = 0.75;
+        if (camDir[1] > lookUpThreshold)
+        {
+            vector skyFallbackPos = LFPG_GroundSnap(player.GetPosition());
+            vector skyFallbackOri = LFPG_CalcFloorOrientation();
+            LFPG_ApplySmoothed(skyFallbackPos, skyFallbackOri, timeslice, projection);
+            return;
+        }
         vector rayEnd = camPos + (camDir * LFPG_HOLO_MAX_RANGE);
 
         vector hitPos;
         vector hitNormal;
         int contactComponent;
 
-        // v0.7.38: Exclude projection entity (not player) from raycast.
-        // The hologram sits between camera and wall excluding the player
-        // let the ray hit the hologram itself instead of the wall behind it,
-        // causing the hologram to snap to itself, jitter, and prevent placement.
-        // ObjIntersectFire matches vanilla placement raycasts and has
-        // better coverage of building walls than ObjIntersectGeom.
+        // Raycast: exclude projection entity to avoid self-hit.
         float rayRadius = 0.0;
         set<Object> rayResults = null;
         Object rayWith = null;
@@ -355,102 +356,325 @@ modded class Hologram
 
         if (!hit)
         {
-            // No surface found - vanilla floor logic
-            super.UpdateHologram(timeslice);
+            // No surface hit - project to max range and ground-snap
+            vector noHitPoint = camPos + (camDir * LFPG_HOLO_MAX_RANGE);
+            vector noHitGroundPos = LFPG_GroundSnap(noHitPoint);
+            vector noHitOri = LFPG_CalcFloorOrientation();
+
+            LFPG_ApplySmoothed(noHitGroundPos, noHitOri, timeslice, projection);
             return;
         }
 
-        // v0.7.47: 3-way classification using RAW normalY (no abs).
-        // Floor:   normalY > +threshold  (normal points UP)
-        // Ceiling: normalY < -threshold  (normal points DOWN)
-        // Wall:    everything in between  (normal is ~horizontal)
+        // --- Surface classification with hysteresis ---
         float rawNormalY = hitNormal[1];
 
-        if (rawNormalY >= LFPG_HOLO_WALL_THRESHOLD)
+        // Choose threshold based on previous state (hysteresis)
+        float floorThreshold = LFPG_HOLO_ENTER_WALL_THRESHOLD;
+        float ceilThreshold = LFPG_HOLO_ENTER_WALL_THRESHOLD;
+        if (m_LFPG_WasWallMode)
         {
-            // ================================================================
-            // ---- FLOOR ---- (normal points UP)
-            // Let vanilla handle everything: positioning, collision, validation
-            // ================================================================
-            super.UpdateHologram(timeslice);
+            floorThreshold = LFPG_HOLO_EXIT_WALL_THRESHOLD;
+            ceilThreshold = LFPG_HOLO_EXIT_WALL_THRESHOLD;
+        }
+
+        // ================================================================
+        // FLOOR MODE: normalY > threshold (normal points UP)
+        // ================================================================
+        if (rawNormalY >= floorThreshold)
+        {
+            m_LFPG_WasWallMode = false;
+
+            // Camera-based floor position.
+            // When normal is nearly vertical (normalY > 0.9), the camera
+            // ray hit a flat floor directly — hitPos Y is already accurate.
+            // Skip the expensive ground-snap raycast in that case.
+            vector floorPos;
+            float flatFloorThreshold = 0.9;
+            if (rawNormalY > flatFloorThreshold)
+            {
+                // Pure flat floor: use hitPos directly with small Y offset
+                floorPos = Vector(hitPos[0], hitPos[1] + LFPG_HOLO_FLOOR_GROUND_SNAP, hitPos[2]);
+            }
+            else
+            {
+                // Angled floor (ramp/slope): ground-snap for precision
+                floorPos = LFPG_GroundSnap(hitPos);
+            }
+            vector floorOri = LFPG_CalcFloorOrientation();
+
+            // For different-model kits, apply position offset
+            if (LFPG_IsDifferentModelKit())
+            {
+                floorPos = LFPG_ApplyDiffModelPosOffset(floorPos);
+            }
+
+            LFPG_ApplySmoothed(floorPos, floorOri, timeslice, projection);
             return;
         }
 
-        if (rawNormalY <= -LFPG_HOLO_WALL_THRESHOLD)
+        // ================================================================
+        // CEILING MODE: normalY < -threshold (normal points DOWN)
+        // ================================================================
+        float negCeilThreshold = -1.0 * ceilThreshold;
+        if (rawNormalY <= negCeilThreshold)
         {
-            // ================================================================
-            // ---- CEILING ---- (normal points DOWN)
-            // Only CeilingLight_Kit supports ceiling placement.
-            // Splitter falls through to vanilla (which will reject correct).
-            // ================================================================
-            if (!isCeilingKit)
+            // Only CeilingLight supports ceiling (placementModes == 2)
+            if (placementModes < 2)
             {
-                super.UpdateHologram(timeslice);
+                // Kit doesn't support ceiling: ground-snap below hit point
+                m_LFPG_WasWallMode = false;
+                vector ceilFallPos = LFPG_GroundSnap(hitPos);
+                vector ceilFallOri = LFPG_CalcFloorOrientation();
+                LFPG_ApplySmoothed(ceilFallPos, ceilFallOri, timeslice, projection);
                 return;
             }
 
             m_LFPG_IsWallMode = true;
+            m_LFPG_WasWallMode = true;
 
-            // Position: surface + small offset along normal (pushes down from ceiling)
+            // Position: surface + small offset along normal
             vector ceilPos = hitPos + (hitNormal * LFPG_HOLO_SURFACE_OFFSET);
 
-            // Orientation: yaw from camera horizontal direction, pitch=180 to invert.
-            // Ceiling normal is ~(0,-1,0) so yaw from normal would always be 0.
-            // Camera direction gives the player-controlled facing instead.
+            // Orientation: yaw from camera horizontal direction + scroll, pitch=180
+            float scrollCeil = GetProjectionRotation()[0];
             float ceilYaw = Math.Atan2(camDir[0], camDir[2]) * Math.RAD2DEG;
+            ceilYaw = ceilYaw + scrollCeil;
             float ceilPitch = 180.0;
             vector ceilOri = Vector(ceilYaw, ceilPitch, 0);
 
-            projection.SetPosition(ceilPos);
-            projection.SetOrientation(ceilOri);
+            LFPG_ApplySmoothed(ceilPos, ceilOri, timeslice, projection);
+
             // Double-set: forces physics engine to accept pitch=180
             projection.SetOrientation(projection.GetOrientation());
-
-            bool bNoCeilCollide = false;
-            SetIsColliding(bNoCeilCollide);
             return;
         }
 
         // ================================================================
-        // ---- WALL MODE ---- (|normalY| < threshold, normal is ~horizontal)
-        // From here we do NOT call super - vanilla would reject this.
+        // WALL MODE: |normalY| < threshold (normal is ~horizontal)
         // ================================================================
+
+        // If this kit doesn't support wall placement, ground-snap
+        if (placementModes < 1)
+        {
+            m_LFPG_WasWallMode = false;
+            vector wallFallPos = LFPG_GroundSnap(hitPos);
+            vector wallFallOri = LFPG_CalcFloorOrientation();
+
+            if (LFPG_IsDifferentModelKit())
+            {
+                wallFallPos = LFPG_ApplyDiffModelPosOffset(wallFallPos);
+            }
+
+            LFPG_ApplySmoothed(wallFallPos, wallFallOri, timeslice, projection);
+            return;
+        }
+
         m_LFPG_IsWallMode = true;
+        m_LFPG_WasWallMode = true;
 
         // Position: hit point + small offset along surface normal (away from wall)
-        vector finalPos = hitPos + (hitNormal * LFPG_HOLO_SURFACE_OFFSET);
+        vector wallPos = hitPos + (hitNormal * LFPG_HOLO_SURFACE_OFFSET);
 
-        // Orientation: model faces outward from wall
-        // Yaw from the horizontal component of surface normal
-        float yaw = Math.Atan2(hitNormal[0], hitNormal[2]) * Math.RAD2DEG;
-        vector finalOri = Vector(yaw, 0, 0);
+        // Orientation: model faces outward from wall.
+        // Use HORIZONTAL component of the normal for stable yaw.
+        // When normal is nearly vertical (edge hit), Atan2 is unstable
+        // => fall back to camera direction.
+        float normalHorizLenSq = hitNormal[0] * hitNormal[0] + hitNormal[2] * hitNormal[2];
+        float normalHorizLen = Math.Sqrt(normalHorizLenSq);
+
+        float wallYaw;
+        if (normalHorizLen < LFPG_HOLO_MIN_HORIZ_NORMAL)
+        {
+            // Normal is nearly vertical (edge geometry) - use camera direction
+            wallYaw = Math.Atan2(camDir[0], camDir[2]) * Math.RAD2DEG;
+            // Flip 180: camera points INTO wall, model should face OUT
+            wallYaw = wallYaw + 180.0;
+        }
+        else
+        {
+            wallYaw = Math.Atan2(hitNormal[0], hitNormal[2]) * Math.RAD2DEG;
+        }
+
+        // Apply scroll-wheel rotation
+        float scrollWall = GetProjectionRotation()[0];
+        wallYaw = wallYaw + scrollWall;
+
+        vector wallOri = Vector(wallYaw, 0, 0);
+
+        LFPG_ApplySmoothed(wallPos, wallOri, timeslice, projection);
+    }
+
+    // ============================================
+    // Helper: Calculate floor orientation
+    // Uses DefaultOrientation + scroll-wheel rotation
+    // ============================================
+    protected vector LFPG_CalcFloorOrientation()
+    {
+        vector defOri = GetDefaultOrientation();
+        vector scrollRot = GetProjectionRotation();
+        vector result = defOri + scrollRot;
+
+        // Normalize yaw to [-180, 180]
+        if (result[0] > 180.0)
+        {
+            result[0] = result[0] - 360.0;
+        }
+        if (result[0] < -180.0)
+        {
+            result[0] = result[0] + 360.0;
+        }
+
+        return result;
+    }
+
+    // ============================================
+    // Helper: Ground-snap a position
+    // Casts a vertical ray down from given point.
+    // ============================================
+    protected vector LFPG_GroundSnap(vector pos)
+    {
+        vector rayFrom = Vector(pos[0], pos[1] + LFPG_HOLO_GROUND_RAY_UP, pos[2]);
+        vector rayTo   = Vector(pos[0], pos[1] - LFPG_HOLO_GROUND_RAY_DOWN, pos[2]);
+
+        vector groundHitPos;
+        vector groundHitNormal;
+        int groundComponent;
+        set<Object> groundResults = null;
+        Object groundWith = null;
+
+        EntityAI proj = GetProjectionEntity();
+        bool gSorted = false;
+        bool gGroundOnly = false;
+        float gRadius = 0.0;
+
+        bool groundHit = DayZPhysics.RaycastRV(rayFrom, rayTo, groundHitPos, groundHitNormal, groundComponent, groundResults, groundWith, proj, gSorted, gGroundOnly, ObjIntersectFire, gRadius);
+
+        if (groundHit)
+        {
+            vector snapped = Vector(groundHitPos[0], groundHitPos[1] + LFPG_HOLO_FLOOR_GROUND_SNAP, groundHitPos[2]);
+            return snapped;
+        }
+
+        // Fallback: use engine surface Y
+        float surfaceY = GetGame().SurfaceY(pos[0], pos[2]);
+        vector fallback = Vector(pos[0], surfaceY + LFPG_HOLO_FLOOR_GROUND_SNAP, pos[2]);
+        return fallback;
+    }
+
+    // ============================================
+    // Helper: Apply position offset for different-model kits
+    // ============================================
+    protected vector LFPG_ApplyDiffModelPosOffset(vector pos)
+    {
+        if (!m_Parent)
+            return pos;
+
+        LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
+        if (solarKit)
+        {
+            vector solarOff = solarKit.GetDeployPositionOffset();
+            vector solarOut = pos + solarOff;
+            return solarOut;
+        }
+
+        LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
+        if (pumpKit)
+        {
+            vector pumpOff = pumpKit.GetDeployPositionOffset();
+            vector pumpOut = pos + pumpOff;
+            return pumpOut;
+        }
+
+        return pos;
+    }
+
+    // ============================================
+    // Helper: Apply position and orientation with smoothing
+    // ============================================
+    protected void LFPG_ApplySmoothed(vector targetPos, vector targetOri, float timeslice, EntityAI projection)
+    {
+        vector finalPos;
+        vector finalOri;
+
+        if (m_LFPG_HasPreviousState && timeslice > 0.0)
+        {
+            // --- Smooth position ---
+            float posAlpha = LFPG_HOLO_POS_SMOOTH * timeslice;
+            if (posAlpha > 1.0)
+            {
+                posAlpha = 1.0;
+            }
+            float px = Math.Lerp(m_LFPG_SmoothedPos[0], targetPos[0], posAlpha);
+            float py = Math.Lerp(m_LFPG_SmoothedPos[1], targetPos[1], posAlpha);
+            float pz = Math.Lerp(m_LFPG_SmoothedPos[2], targetPos[2], posAlpha);
+            finalPos = Vector(px, py, pz);
+
+            // --- Smooth orientation with yaw wrap-around ---
+            float prevYaw = m_LFPG_SmoothedOri[0];
+            float tgtYaw  = targetOri[0];
+
+            // Handle wrap-around: if difference > 180, adjust previous
+            float yawDiff = tgtYaw - prevYaw;
+            if (yawDiff > 180.0)
+            {
+                prevYaw = prevYaw + 360.0;
+            }
+            if (yawDiff < -180.0)
+            {
+                prevYaw = prevYaw - 360.0;
+            }
+
+            float oriAlpha = LFPG_HOLO_ORI_SMOOTH * timeslice;
+            if (oriAlpha > 1.0)
+            {
+                oriAlpha = 1.0;
+            }
+            float oy  = Math.Lerp(prevYaw, tgtYaw, oriAlpha);
+            float op  = Math.Lerp(m_LFPG_SmoothedOri[1], targetOri[1], oriAlpha);
+            float orr = Math.Lerp(m_LFPG_SmoothedOri[2], targetOri[2], oriAlpha);
+            finalOri = Vector(oy, op, orr);
+        }
+        else
+        {
+            // First frame: snap directly to target (no smoothing)
+            finalPos = targetPos;
+            finalOri = targetOri;
+            m_LFPG_HasPreviousState = true;
+        }
+
+        // Store smoothed values for next frame
+        m_LFPG_SmoothedPos = finalPos;
+        m_LFPG_SmoothedOri = finalOri;
 
         // Apply to projection entity
         projection.SetPosition(finalPos);
         projection.SetOrientation(finalOri);
 
-        // v0.7.36: Force green hologram â since we skip super.UpdateHologram()
-        // vanilla never calls EvaluateCollision(), leaving the holo color stale.
+        // Force green hologram: since we skip super.UpdateHologram(),
+        // vanilla never calls EvaluateCollision(), leaving color stale.
         // SetIsColliding(false) forces the green (valid) material.
         bool bNoCollide = false;
         SetIsColliding(bNoCollide);
+
+        // FIX: Vanilla calls these every frame in UpdateHologram.
+        // Without RefreshTrigger, the ProjectionTrigger stays at its
+        // initial position and never follows the hologram.
+        // Without RefreshVisual, hologram material (green/red rvmat) is
+        // never applied after the initial constructor call.
+        // Without OnHologramBeingPlaced, projection entities that override
+        // this callback would miss their per-frame logic.
+        RefreshTrigger();
+        RefreshVisual();
+        projection.OnHologramBeingPlaced(m_Player);
     }
 
     // ============================================
     // Collision/validation overrides
+    // All bypass collision for LFPG kits since
+    // our camera raycast handles placement visually.
+    // Works on both client and server (entity-type check).
     // ============================================
 
-    // ---- Main collision gate: action system calls this to allow/block placement ----
-    // v0.7.38 (Fix): Uses entity type check instead of state flags.
-    // On the server, m_LFPG_IsWallMode is never set (UpdateHologram only
-    // runs on client), causing super.IsColliding() to return the stale
-    // value from vanilla EvaluateCollision which rejects wall placement.
-    // By checking entity type directly, this works on both client and server.
-    // Trade-off: floor collision for LFPG kits is also bypassed, but
-    // the client hologram still provides visual feedback, and CanBePlaced
-    // returns true unconditionally for the kits.
-    // v0.7.47: Generalized to all LFPG kits (Splitter + CeilingLight).
-    // v0.8.1: Includes Solar Panel Kit (different-model, m_Parent check).
     override bool IsColliding()
     {
         if (LFPG_IsLFPGKitProjection())
@@ -460,12 +684,6 @@ modded class Hologram
         return super.IsColliding();
     }
 
-    // ---- Server-side collision evaluation: skip all checks for LFPG kits ----
-    // v0.7.38 (Fix): Checks entity type directly instead of m_LFPG_IsWallMode.
-    // Server hologram never runs UpdateHologram, so state flags are unset.
-    // For LFPG kits, always allow â client hologram already validated visually.
-    // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.1: Includes Solar Panel Kit.
     override void EvaluateCollision(ItemBase action_item)
     {
         if (LFPG_IsLFPGKitProjection())
@@ -477,9 +695,6 @@ modded class Hologram
         super.EvaluateCollision(action_item);
     }
 
-    // ---- Angle check: always pass for LFPG kits ----
-    // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.1: Includes Solar Panel Kit.
     override bool IsCollidingAngle()
     {
         if (LFPG_IsLFPGKitProjection())
@@ -489,9 +704,6 @@ modded class Hologram
         return super.IsCollidingAngle();
     }
 
-    // ---- Floating check: LFPG kits can be wall/ceiling-mounted ----
-    // v0.7.47: Generalized to all LFPG kits.
-    // v0.8.1: Includes Solar Panel Kit.
     override bool IsFloating()
     {
         if (LFPG_IsLFPGKitProjection())
