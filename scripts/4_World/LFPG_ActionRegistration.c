@@ -75,7 +75,10 @@ modded class ActionConstructor
         // --- v1.2.0: Sorter Kit placement ---
         actions.Insert(LFPG_ActionPlaceSorter);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (33)");
+        // --- v1.2.0 S4: Sorter panel (interact, no item in hand) ---
+        actions.Insert(LFPG_ActionOpenSorterPanel);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (34)");
     }
 };
 

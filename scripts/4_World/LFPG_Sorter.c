@@ -195,6 +195,7 @@ class LF_Sorter : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
+        AddAction(LFPG_ActionOpenSorterPanel);
     }
 
     override bool CanPutInCargo(EntityAI parent)

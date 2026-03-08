@@ -201,6 +201,18 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // ---- Linked entity (set when opened via RPC, null for mock) ----
     protected string m_ContainerName;
 
+    // ---- S4: Sorter identity for RPCs ----
+    protected int m_SorterNetLow;
+    protected int m_SorterNetHigh;
+
+    // ---- S4: Dest container names per output (6 slots) ----
+    protected string m_DestName0;
+    protected string m_DestName1;
+    protected string m_DestName2;
+    protected string m_DestName3;
+    protected string m_DestName4;
+    protected string m_DestName5;
+
     // =========================================================
     // Constructor
     // =========================================================
@@ -220,6 +232,14 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_FocusLocked = false;
         m_GlowPhase = 0.0;
         m_ContainerName = "Container";
+        m_SorterNetLow = 0;
+        m_SorterNetHigh = 0;
+        m_DestName0 = "";
+        m_DestName1 = "";
+        m_DestName2 = "";
+        m_DestName3 = "";
+        m_DestName4 = "";
+        m_DestName5 = "";
     }
 
     // =========================================================
@@ -257,10 +277,10 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
     // Sprint S1: Open with mock data for testing.
     // Sprint S4: Open with real config JSON from RPC response.
-    static void Open(string configJSON, string containerName)
+    static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         LFPG_SorterUI ui = Get();
-        ui.DoOpen(configJSON, containerName);
+        ui.DoOpen(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
     }
 
     // Sprint S1: Open with mock data (no params).
@@ -269,7 +289,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         LFPG_SorterUI ui = Get();
         ref LFPG_SortConfig mockCfg = LFPG_SortConfig.CreateMock();
         string mockJSON = mockCfg.ToJSON();
-        ui.DoOpen(mockJSON, "Wooden Crate");
+        ui.DoOpen(mockJSON, "Wooden Crate", "", "", "", "", "", "", 0, 0);
     }
 
     static void Close()
@@ -283,14 +303,24 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // =========================================================
     // Internal open/close
     // =========================================================
-    protected void DoOpen(string configJSON, string containerName)
+    protected void DoOpen(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         if (m_IsOpen)
             return;
 
         m_ContainerName = containerName;
+        m_SorterNetLow = netLow;
+        m_SorterNetHigh = netHigh;
         m_SelectedOutput = 0;
         m_ShowFilters = true;
+
+        // Store dest names
+        m_DestName0 = d0;
+        m_DestName1 = d1;
+        m_DestName2 = d2;
+        m_DestName3 = d3;
+        m_DestName4 = d4;
+        m_DestName5 = d5;
 
         // Parse config
         if (configJSON != "")
@@ -325,7 +355,18 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         RefreshViewTabs();
         RefreshFiltersView();
         RefreshTagsPanel();
-        RefreshStatusText(true);  // mock: always powered
+        RefreshStatusText(true);  // server validated powered before sending response
+
+        // S4: Update title with linked container name
+        if (m_wTitle)
+        {
+            string titleText = "SORTER";
+            if (containerName != "")
+            {
+                titleText = titleText + " — " + containerName;
+            }
+            m_wTitle.SetText(titleText);
+        }
 
         LFPG_Util.Info("[SorterUI] Opened for container: " + containerName);
     }
@@ -1242,19 +1283,44 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
     protected void OnSave()
     {
-        // Sprint S1: log JSON to console (RPC in Sprint S4)
         string json = m_Config.ToJSON();
         LFPG_Util.Info("[SorterUI] SAVE config: " + json);
 
-        // TODO Sprint S4: Send CONFIG_SAVE RPC to server
+        // S4: Send CONFIG_SAVE RPC to server
+        #ifndef SERVER
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (player)
+        {
+            ScriptRPC rpc = new ScriptRPC();
+            int subId = LFPG_RPC_SubId.SORTER_CONFIG_SAVE;
+            rpc.Write(subId);
+            rpc.Write(m_SorterNetLow);
+            rpc.Write(m_SorterNetHigh);
+            rpc.Write(json);
+            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        }
+        #endif
     }
 
     protected void OnRequestSort()
     {
-        // Sprint S1: log to console (RPC in Sprint S4)
         LFPG_Util.Info("[SorterUI] REQUEST_SORT triggered");
 
-        // TODO Sprint S4: Send REQUEST_SORT RPC to server
+        // S4: Send REQUEST_SORT RPC to server
+        // NOTE: Server handler (SubId 22) lives in S3 (LFPG_NetworkManager TickSorters).
+        // Until S3 is merged, this RPC is silently dropped by the server.
+        #ifndef SERVER
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (player)
+        {
+            ScriptRPC rpc = new ScriptRPC();
+            int subId = LFPG_RPC_SubId.SORTER_REQUEST_SORT;
+            rpc.Write(subId);
+            rpc.Write(m_SorterNetLow);
+            rpc.Write(m_SorterNetHigh);
+            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        }
+        #endif
     }
 
     protected void OnRemoveRule(int ruleIdx)
@@ -1274,6 +1340,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected void RefreshOutputTabs()
     {
         int i;
+        int outNum = 0;
+        string tabLabel = "";
+        string destN = "";
         for (i = 0; i < 6; i = i + 1)
         {
             ButtonWidget tabBtn = m_wTabOut[i];
@@ -1293,6 +1362,19 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             if (tabTxt)
             {
                 tabTxt.SetColor(txtCol);
+
+                // S4: Show linked indicator (dot) if output has dest
+                outNum = i + 1;
+                destN = GetDestName(i);
+                if (destN != "")
+                {
+                    tabLabel = "O" + outNum.ToString() + " *";
+                }
+                else
+                {
+                    tabLabel = "OUT " + outNum.ToString();
+                }
+                tabTxt.SetText(tabLabel);
             }
         }
     }
@@ -1423,8 +1505,15 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         int ruleCount = outCfg.GetRuleCount();
         bool hasCatchAll = outCfg.m_IsCatchAll;
 
-        // Build text summary of all active rules
+        // S4: Prepend dest container name if available
+        string destInfo = GetDestName(m_SelectedOutput);
         string summary = "";
+        if (destInfo != "")
+        {
+            summary = "  DEST: " + destInfo;
+        }
+
+        // Build text summary of all active rules
         int ri;
         for (ri = 0; ri < ruleCount; ri = ri + 1)
         {
@@ -1449,7 +1538,8 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         }
 
         // Show "no rules" or summary
-        bool showEmpty = (ruleCount == 0 && !hasCatchAll);
+        bool hasDestInfo = (destInfo != "");
+        bool showEmpty = (ruleCount == 0 && !hasCatchAll && !hasDestInfo);
         if (m_wTagsEmpty)
         {
             if (showEmpty)
@@ -1466,6 +1556,10 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 // Resize for multiline content
                 float lineCount = ruleCount;
                 if (hasCatchAll)
+                {
+                    lineCount = lineCount + 1;
+                }
+                if (hasDestInfo)
                 {
                     lineCount = lineCount + 1;
                 }
@@ -1508,6 +1602,19 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // =========================================================
     // Lookup helpers (avoid arrays of string — Enforce limitation)
     // =========================================================
+
+    // S4: Dest container name per output index
+    protected string GetDestName(int idx)
+    {
+        if (idx == 0) return m_DestName0;
+        if (idx == 1) return m_DestName1;
+        if (idx == 2) return m_DestName2;
+        if (idx == 3) return m_DestName3;
+        if (idx == 4) return m_DestName4;
+        if (idx == 5) return m_DestName5;
+        return "";
+    }
+
     protected string GetCategoryLabel(int idx)
     {
         if (idx == 0) return LFPG_SORT_CAT_LABELS_0;

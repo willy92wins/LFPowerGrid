@@ -1,0 +1,1056 @@
+// =========================================================
+// LF_PowerGrid - Sorter Logic (v1.2.0 Sprint S3)
+//
+// Server-side sorting logic used by LFPG_TickSorters
+// (NetworkManager) and SORTER_REQUEST_SORT RPC handler.
+//
+// All methods are static helpers — no state.
+//
+// Functions:
+//   EvaluateItem       — two-pass filter: rules then catch-all
+//   MatchesAnyRule     — OR logic across rules in one output
+//   MatchRule          — single rule evaluation
+//   ResolveCategory    — EntityAI → category string (IsKindOf)
+//   GetItemSlotSize    — CfgVehicles itemSize lookup (area)
+//   ResolveOutputContainer — wire topology → dest container
+//   MoveItemToContainer — server-authoritative inventory move
+//   BinPackCargo       — greedy 2D bin-packing for SORT RPC
+//
+// Enforce Script rules:
+//   No foreach, no ++/--, no ternario, no +=/-=
+//   Variables hoisted before conditionals
+//   Incremental string concat
+// =========================================================
+
+class LFPG_SorterLogic
+{
+    // =========================================================
+    // Sprint S3.1 — Container accessibility guards (4-layer)
+    // =========================================================
+    // Layer 0: VSM (Virtual Storage Module) detection.
+    //          #ifdef VSM compile-time conditional.
+    //          Blocks interaction with VSM containers that are
+    //          closed (items on disk) or processing (batch queue).
+    //          Covers ALL VSM containers including doorless ones
+    //          (SeaChest, WoodenCrate, etc.) that Layer 3 misses.
+    //
+    // Layer 1: CanReceiveItemIntoCargo / CanReleaseCargo (vanilla API).
+    //          CodeLock hooks TentBase here. Any mod that overrides
+    //          these methods is covered automatically.
+    //
+    // Layer 2: CodeLock direct detection WITHOUT compile-time dep.
+    //          FindAttachmentBySlotName("Att_CombinationLock") +
+    //          !IsTakeable() = locked.
+    //
+    // Layer 3: Door animation phase for vanilla furniture.
+    //          Barrel_ColorBase, TentBase, Fence.
+    //          Unknown types → always accessible (no false positives).
+    // =========================================================
+
+    // ---------------------------------------------------------
+    // CanTakeFromContainer: checks if the Sorter can READ items
+    // from this container (source side).
+    // Item param is used for CanReleaseCargo check — can be null
+    // for a general "is accessible" query.
+    // ---------------------------------------------------------
+    static bool CanTakeFromContainer(EntityAI container, EntityAI item)
+    {
+        if (!container)
+            return false;
+
+        // Layer 0: VSM virtual storage detection (compile-time conditional)
+        if (IsVSMBlocked(container))
+            return false;
+
+        // Layer 1: Vanilla API — mods override this
+        if (item)
+        {
+            if (!container.CanReleaseCargo(item))
+                return false;
+        }
+
+        // Layer 2: CodeLock direct detection (no compile dependency)
+        if (HasLockedCodeLock(container))
+            return false;
+
+        // Layer 3: Door animation — if container has a door and it's closed, skip
+        if (IsDoorClosed(container))
+            return false;
+
+        return true;
+    }
+
+    // ---------------------------------------------------------
+    // CanPutIntoContainer: checks if the Sorter can WRITE items
+    // into this container (destination side).
+    // ---------------------------------------------------------
+    static bool CanPutIntoContainer(EntityAI container, EntityAI item)
+    {
+        if (!container)
+            return false;
+
+        // Layer 0: VSM virtual storage detection (compile-time conditional)
+        if (IsVSMBlocked(container))
+            return false;
+
+        // Layer 1: Vanilla API — mods override this
+        if (item)
+        {
+            if (!container.CanReceiveItemIntoCargo(item))
+                return false;
+        }
+
+        // Layer 2: CodeLock direct detection (no compile dependency)
+        if (HasLockedCodeLock(container))
+            return false;
+
+        // Layer 3: Door animation — if container has a door and it's closed, skip
+        if (IsDoorClosed(container))
+            return false;
+
+        return true;
+    }
+
+    // ---------------------------------------------------------
+    // IsVSMBlocked: detects Virtual Storage Module containers.
+    //
+    // Uses #ifdef VSM (compile-time conditional).
+    // VSM defines "VSM" in Scripts/Common/vsm.c.
+    // If VSM is not loaded, this method always returns false
+    // and has ZERO overhead (compiled out entirely).
+    //
+    // When VSM IS loaded, checks:
+    //   1. VSM_IsVirtualStorage() — is this a VSM-managed container?
+    //   2. VSM_IsOpen() — is the container physically open?
+    //   3. VSM_IsProcessing() — is VSM currently restoring/virtualizing?
+    //
+    // A VSM container is only accessible when:
+    //   - It IS a virtual storage AND
+    //   - It IS open (items spawned from disk) AND
+    //   - It is NOT processing (batch restore/virtualize complete)
+    //
+    // Closed VSM containers have empty cargo (items on disk).
+    // Putting items into a closed VSM container would cause them
+    // to be lost when VSM virtualizes on next close cycle, or to
+    // coexist with restored items causing cargo overflow.
+    // ---------------------------------------------------------
+    protected static bool IsVSMBlocked(EntityAI container)
+    {
+        #ifdef VSM
+        ItemBase ib = ItemBase.Cast(container);
+        if (ib)
+        {
+            if (ib.VSM_IsVirtualStorage())
+            {
+                // VSM container: only accessible when open AND not processing
+                if (!ib.VSM_IsOpen())
+                    return true;
+
+                if (ib.VSM_IsProcessing())
+                    return true;
+            }
+        }
+        #endif
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // HasLockedCodeLock: detects a locked CodeLock attachment
+    // WITHOUT referencing the CodeLock class (zero compile-time
+    // dependency on the CodeLock mod).
+    //
+    // Detection logic:
+    //   1. FindAttachmentBySlotName("Att_CombinationLock")
+    //      → null if no lock attached (or slot doesn't exist)
+    //   2. !lockAtt.IsTakeable()
+    //      → CodeLock calls SetTakeable(false) when locking
+    //      → SetTakeable(true) + drop when unlocking
+    //   3. So: attachment exists AND not takeable = LOCKED
+    //
+    // Also checks vanilla CombinationLock which uses the same
+    // slot name and similar lock semantics.
+    // ---------------------------------------------------------
+    protected static bool HasLockedCodeLock(EntityAI container)
+    {
+        if (!container)
+            return false;
+
+        if (!container.GetInventory())
+            return false;
+
+        // CodeLock and vanilla CombinationLock both use this slot
+        EntityAI lockAtt = container.FindAttachmentBySlotName("Att_CombinationLock");
+        if (!lockAtt)
+            return false;
+
+        // When locked: SetTakeable(false). When unlocked: dropped to ground.
+        // If it's still attached and not takeable → locked.
+        if (!lockAtt.IsTakeable())
+            return true;
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // IsDoorClosed: checks common door animation phases on
+    // vanilla DayZ containers and furniture.
+    //
+    // Animation sources checked (in order):
+    //   "Doors"  — barrels, many modded containers
+    //   "Doors1" — double-door containers (left)
+    //   "Doors2" — double-door containers (right)
+    //   "Door"   — some modded furniture
+    //   "lid"    — crates, ammo boxes
+    //
+    // Phase semantics: 0.0 = fully closed, 1.0 = fully open.
+    // We consider < 0.5 as "closed".
+    //
+    // If NONE of these animation sources exist on the model,
+    // the container is treated as always-open (no door to check).
+    // This avoids false positives on containers without doors
+    // (e.g. open shelves, ground stashes, simple crates).
+    // ---------------------------------------------------------
+    protected static bool IsDoorClosed(EntityAI container)
+    {
+        if (!container)
+            return false;
+
+        // Check known container types with door animations.
+        // Only check animation phase for types we KNOW have doors.
+        // Unknown types → treated as always-open (no false positives).
+        float phase;
+
+        // Barrel_ColorBase: "Doors" animation, phase 0=closed, 1=open
+        if (container.IsKindOf("Barrel_ColorBase"))
+        {
+            phase = container.GetAnimationPhase("Doors");
+            if (phase < 0.5)
+                return true;
+        }
+
+        // TentBase: "EntranceO" animation.
+        // CodeLock TentBase.GetDoorAnimState() checks GetAnimationPhase("EntranceO"):
+        //   if truthy (non-zero) → entrance closed → return false (not accessible)
+        if (container.IsKindOf("TentBase"))
+        {
+            phase = container.GetAnimationPhase("EntranceO");
+            if (phase > 0.5)
+                return true;
+        }
+
+        // Fence: gate door. "Doors1" phase 0=closed, 1=open.
+        // Fence with CodeLock blocks CanOpenFence() but we check directly.
+        if (container.IsKindOf("Fence"))
+        {
+            phase = container.GetAnimationPhase("Doors1");
+            if (phase < 0.5)
+                return true;
+        }
+
+        // SeaChest, WoodenCrate, etc: no door animations → always accessible.
+        // Modded containers with custom doors will be caught by Layer 1
+        // (CanReceiveItemIntoCargo) if the mod overrides it.
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // EvaluateItem: returns output index 0-5, or -1 if no match.
+    // Pass 1: outputs with rules (skip catch-all).
+    // Pass 2: first catch-all output wins.
+    // ---------------------------------------------------------
+    static int EvaluateItem(EntityAI item, LFPG_SortConfig config)
+    {
+        if (!item)
+            return -1;
+
+        if (!config)
+            return -1;
+
+        int oi;
+        LFPG_SortOutputConfig outCfg;
+
+        // Pass 1: rule-based outputs (skip catch-all)
+        for (oi = 0; oi < 6; oi = oi + 1)
+        {
+            outCfg = config.GetOutput(oi);
+            if (!outCfg)
+                continue;
+
+            if (outCfg.m_IsCatchAll)
+                continue;
+
+            if (outCfg.GetRuleCount() == 0)
+                continue;
+
+            if (MatchesAnyRule(item, outCfg))
+                return oi;
+        }
+
+        // Pass 2: catch-all outputs (first one wins)
+        for (oi = 0; oi < 6; oi = oi + 1)
+        {
+            outCfg = config.GetOutput(oi);
+            if (!outCfg)
+                continue;
+
+            if (outCfg.m_IsCatchAll)
+                return oi;
+        }
+
+        return -1;
+    }
+
+    // ---------------------------------------------------------
+    // MatchesAnyRule: OR logic — any matching rule returns true.
+    // ---------------------------------------------------------
+    static bool MatchesAnyRule(EntityAI item, LFPG_SortOutputConfig outCfg)
+    {
+        if (!outCfg)
+            return false;
+
+        if (!outCfg.m_Rules)
+            return false;
+
+        int ri;
+        LFPG_SortFilterRule rule;
+
+        for (ri = 0; ri < outCfg.m_Rules.Count(); ri = ri + 1)
+        {
+            rule = outCfg.m_Rules[ri];
+            if (!rule)
+                continue;
+
+            if (MatchRule(item, rule))
+                return true;
+        }
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // MatchRule: evaluates a single filter rule against an item.
+    // ---------------------------------------------------------
+    static bool MatchRule(EntityAI item, LFPG_SortFilterRule rule)
+    {
+        if (!item)
+            return false;
+
+        if (!rule)
+            return false;
+
+        string typeName;
+        string cat;
+        string ruleLower;
+        bool hasHardline;
+        int slotSize;
+        int dashPos;
+        string minStr;
+        string maxStr;
+        int minVal;
+        int maxVal;
+        int remainLen;
+
+        if (rule.m_Type == LFPG_SORT_FILTER_CATEGORY)
+        {
+            cat = ResolveCategory(item);
+            if (cat == rule.m_Value)
+                return true;
+
+            return false;
+        }
+
+        if (rule.m_Type == LFPG_SORT_FILTER_PREFIX)
+        {
+            typeName = item.GetType();
+            typeName.ToLower();
+            ruleLower = rule.m_Value;
+            ruleLower.ToLower();
+
+            if (typeName.IndexOf(ruleLower) == 0)
+                return true;
+
+            return false;
+        }
+
+        if (rule.m_Type == LFPG_SORT_FILTER_CONTAINS)
+        {
+            typeName = item.GetType();
+            typeName.ToLower();
+            ruleLower = rule.m_Value;
+            ruleLower.ToLower();
+
+            if (typeName.IndexOf(ruleLower) >= 0)
+                return true;
+
+            return false;
+        }
+
+        if (rule.m_Type == LFPG_SORT_FILTER_RARITY)
+        {
+            // Requires Expansion-Hardline mod — check if loaded
+            hasHardline = GetGame().ConfigIsExisting("CfgPatches ExpansionHardline");
+            if (!hasHardline)
+                return false;
+
+            // TODO: Implement rarity check when Hardline API is available
+            return false;
+        }
+
+        if (rule.m_Type == LFPG_SORT_FILTER_SLOT)
+        {
+            slotSize = GetItemSlotSize(item);
+
+            // Parse "min-max" from rule.m_Value
+            dashPos = rule.m_Value.IndexOf("-");
+            if (dashPos < 0)
+                return false;
+
+            minStr = rule.m_Value.Substring(0, dashPos);
+            remainLen = rule.m_Value.Length() - dashPos - 1;
+            if (remainLen <= 0)
+                return false;
+
+            maxStr = rule.m_Value.Substring(dashPos + 1, remainLen);
+            minVal = minStr.ToInt();
+            maxVal = maxStr.ToInt();
+
+            if (slotSize >= minVal && slotSize <= maxVal)
+                return true;
+
+            return false;
+        }
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // ResolveCategory: maps EntityAI to category string via
+    // IsKindOf checks. Order matters — first match wins.
+    // ---------------------------------------------------------
+    static string ResolveCategory(EntityAI item)
+    {
+        if (!item)
+            return LFPG_SORT_CAT_MISC;
+
+        if (item.IsWeapon())
+            return LFPG_SORT_CAT_WEAPON;
+
+        if (item.IsKindOf("Magazine_Base"))
+            return LFPG_SORT_CAT_AMMO;
+
+        if (item.IsKindOf("ItemOptics"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+
+        if (item.IsKindOf("ItemSuppressor"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+
+        // Weapon attachments (buttstocks, handguards, etc.)
+        if (item.IsKindOf("ItemGrenade"))
+            return LFPG_SORT_CAT_WEAPON;
+
+        if (item.IsKindOf("Clothing_Base"))
+            return LFPG_SORT_CAT_CLOTHING;
+
+        if (item.IsKindOf("Edible_Base"))
+            return LFPG_SORT_CAT_FOOD;
+
+        if (item.IsKindOf("Bottle_Base"))
+            return LFPG_SORT_CAT_FOOD;
+
+        if (item.IsKindOf("Bandage_Base"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("Morphine"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("Epinephrine"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("Saline"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("BloodBagBase"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("CharcoalTablets"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("Tetracycline"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("PainkillerTablets"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("VitaminBottle"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("DisinfectantSpray"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("IodineTincture"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        if (item.IsKindOf("DisinfectantAlcohol"))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        // Tools
+        if (item.IsKindOf("Toolbox"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Wrench"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Pliers"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Hacksaw"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Hammer"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Shovel"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Hatchet"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Pickaxe"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("SewingKit"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("LeatherSewingKit"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("WhetStone"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Lockpick"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("KitchenKnife"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("HuntingKnife"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("CombatKnife"))
+            return LFPG_SORT_CAT_TOOL;
+
+        if (item.IsKindOf("Duct_Tape"))
+            return LFPG_SORT_CAT_TOOL;
+
+        return LFPG_SORT_CAT_MISC;
+    }
+
+    // ---------------------------------------------------------
+    // GetItemSlotSize: returns area (sizeX * sizeY) from
+    // CfgVehicles itemSize config. Minimum 1.
+    // ---------------------------------------------------------
+    static int GetItemSlotSize(EntityAI item)
+    {
+        if (!item)
+            return 1;
+
+        string cfgPath = "CfgVehicles " + item.GetType() + " itemSize";
+        string pathX;
+        string pathY;
+        int sizeX = 1;
+        int sizeY = 1;
+
+        if (GetGame().ConfigIsExisting(cfgPath))
+        {
+            pathX = cfgPath + " 0";
+            pathY = cfgPath + " 1";
+            sizeX = GetGame().ConfigGetInt(pathX);
+            sizeY = GetGame().ConfigGetInt(pathY);
+        }
+
+        if (sizeX <= 0)
+            sizeX = 1;
+
+        if (sizeY <= 0)
+            sizeY = 1;
+
+        return sizeX * sizeY;
+    }
+
+    // ---------------------------------------------------------
+    // GetItemSlotDimensions: returns sizeX and sizeY via out params.
+    // Used by bin-packing for 2D placement.
+    // ---------------------------------------------------------
+    static void GetItemSlotDimensions(EntityAI item, out int outW, out int outH)
+    {
+        outW = 1;
+        outH = 1;
+
+        if (!item)
+            return;
+
+        string cfgPath = "CfgVehicles " + item.GetType() + " itemSize";
+        string pathX;
+        string pathY;
+
+        if (GetGame().ConfigIsExisting(cfgPath))
+        {
+            pathX = cfgPath + " 0";
+            pathY = cfgPath + " 1";
+            outW = GetGame().ConfigGetInt(pathX);
+            outH = GetGame().ConfigGetInt(pathY);
+        }
+
+        if (outW <= 0)
+            outW = 1;
+
+        if (outH <= 0)
+            outH = 1;
+    }
+
+    // ---------------------------------------------------------
+    // ResolveOutputContainer: given a Sorter and output index,
+    // traverses wire topology to find the destination container.
+    //   output index → output port → wire → target Sorter → its container
+    // Returns null if wire/target missing.
+    // ---------------------------------------------------------
+    static EntityAI ResolveOutputContainer(LF_Sorter sorter, int outputIdx)
+    {
+        if (!sorter)
+            return null;
+
+        // 1. Build port name: output_1 .. output_6
+        int portNum = outputIdx + 1;
+        string portName = "output_" + portNum.ToString();
+
+        // 2. Find wire from this port in Sorter's wire store
+        array<ref LFPG_WireData> wires = sorter.LFPG_GetWires();
+        if (!wires)
+            return null;
+
+        LFPG_WireData targetWire = null;
+        int wi;
+        for (wi = 0; wi < wires.Count(); wi = wi + 1)
+        {
+            if (!wires[wi])
+                continue;
+
+            if (wires[wi].m_SourcePort == portName)
+            {
+                targetWire = wires[wi];
+                break;
+            }
+        }
+
+        if (!targetWire)
+            return null;
+
+        // 3. Resolve target device (another LF_Sorter) by NetworkID
+        EntityAI targetDev = LFPG_DeviceAPI.ResolveByNetworkId(targetWire.m_TargetNetLow, targetWire.m_TargetNetHigh);
+        if (!targetDev)
+            return null;
+
+        LF_Sorter targetSorter = LF_Sorter.Cast(targetDev);
+        if (!targetSorter)
+            return null;
+
+        // 4. Get the target Sorter's linked container
+        return targetSorter.LFPG_GetLinkedContainer();
+    }
+
+    // ---------------------------------------------------------
+    // MoveItemToContainer: server-authoritative inventory move.
+    // Returns true if item was successfully moved.
+    //
+    // Pattern: FindFreeLocationFor → LocationSyncMoveEntity.
+    // Explicit src→dst avoids double-lookup from TakeEntityToInventory.
+    // ---------------------------------------------------------
+    static bool MoveItemToContainer(EntityAI item, EntityAI destContainer)
+    {
+        if (!item)
+            return false;
+
+        if (!destContainer)
+            return false;
+
+        // S3.1: Check destination container is accessible
+        if (!CanPutIntoContainer(destContainer, item))
+            return false;
+
+        GameInventory srcInv = item.GetInventory();
+        if (!srcInv)
+            return false;
+
+        GameInventory destInv = destContainer.GetInventory();
+        if (!destInv)
+            return false;
+
+        // Check if item fits in destination cargo
+        InventoryLocation il_dst = new InventoryLocation;
+        bool fits = destInv.FindFreeLocationFor(item, FindInventoryLocationType.CARGO, il_dst);
+        if (!fits)
+            return false;
+
+        // Read current location
+        InventoryLocation il_src = new InventoryLocation;
+        srcInv.GetCurrentInventoryLocation(il_src);
+
+        // Server-authoritative move: explicit src → dst
+        bool moved = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
+        return moved;
+    }
+
+    // ---------------------------------------------------------
+    // BinPackCargo: rearranges items in a cargo grid using
+    // greedy largest-area-first bin-packing.
+    //
+    // 1. Collect all items and their sizes
+    // 2. Sort by area descending
+    // 3. Create a virtual 2D grid
+    // 4. For each item, scan for first fit (try both orientations)
+    // 5. Move items to their new grid positions
+    //
+    // Returns number of items successfully repositioned.
+    // ---------------------------------------------------------
+    static int BinPackCargo(EntityAI container)
+    {
+        #ifdef SERVER
+        if (!container)
+            return 0;
+
+        // S3.1: Container must be accessible (not locked/closed/virtualized)
+        if (!CanTakeFromContainer(container, null))
+            return 0;
+
+        GameInventory inv = container.GetInventory();
+        if (!inv)
+            return 0;
+
+        CargoBase cargo = inv.GetCargo();
+        if (!cargo)
+            return 0;
+
+        int gridW = cargo.GetWidth();
+        int gridH = cargo.GetHeight();
+        if (gridW <= 0 || gridH <= 0)
+            return 0;
+
+        // --- Phase 1: Collect all items with dimensions ---
+        int totalItems = cargo.GetItemCount();
+        if (totalItems <= 0)
+            return 0;
+
+        ref array<EntityAI> items = new array<EntityAI>;
+        ref array<int> itemWidths = new array<int>;
+        ref array<int> itemHeights = new array<int>;
+        ref array<int> itemAreas = new array<int>;
+
+        int ci;
+        int iw;
+        int ih;
+        EntityAI cItem;
+
+        for (ci = 0; ci < totalItems; ci = ci + 1)
+        {
+            cItem = cargo.GetItem(ci);
+            if (!cItem)
+                continue;
+
+            GetItemSlotDimensions(cItem, iw, ih);
+            items.Insert(cItem);
+            itemWidths.Insert(iw);
+            itemHeights.Insert(ih);
+            itemAreas.Insert(iw * ih);
+        }
+
+        int n = items.Count();
+        if (n <= 0)
+            return 0;
+
+        // --- Phase 2: Sort indices by area descending (insertion sort) ---
+        ref array<int> sortedIdx = new array<int>;
+        int si;
+        for (si = 0; si < n; si = si + 1)
+        {
+            sortedIdx.Insert(si);
+        }
+
+        // Insertion sort — stable, simple, no Enforce issues
+        int j;
+        int keyIdx;
+        int keyArea;
+        for (si = 1; si < n; si = si + 1)
+        {
+            keyIdx = sortedIdx[si];
+            keyArea = itemAreas[keyIdx];
+            j = si - 1;
+
+            while (j >= 0 && itemAreas[sortedIdx[j]] < keyArea)
+            {
+                sortedIdx[j + 1] = sortedIdx[j];
+                j = j - 1;
+            }
+            sortedIdx[j + 1] = keyIdx;
+        }
+
+        // --- Phase 3: Create virtual 2D grid (row-major) ---
+        // grid[row * gridW + col] = true if occupied
+        int gridSize = gridW * gridH;
+        ref array<bool> grid = new array<bool>;
+        int gi;
+        for (gi = 0; gi < gridSize; gi = gi + 1)
+        {
+            grid.Insert(false);
+        }
+
+        // --- Phase 4: Place items greedily ---
+        ref array<int> placedRow = new array<int>;
+        ref array<int> placedCol = new array<int>;
+        ref array<bool> placedFlip = new array<bool>;
+        ref array<bool> placedOk = new array<bool>;
+
+        // Initialize placement arrays
+        for (si = 0; si < n; si = si + 1)
+        {
+            placedRow.Insert(-1);
+            placedCol.Insert(-1);
+            placedFlip.Insert(false);
+            placedOk.Insert(false);
+        }
+
+        int idx;
+        int pw;
+        int ph;
+        bool placed;
+        int row;
+        int col;
+
+        for (si = 0; si < n; si = si + 1)
+        {
+            idx = sortedIdx[si];
+            pw = itemWidths[idx];
+            ph = itemHeights[idx];
+            placed = false;
+
+            // Try original orientation
+            placed = TryPlaceOnGrid(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx);
+            if (placed)
+            {
+                placedFlip[idx] = false;
+                placedOk[idx] = true;
+                MarkGridOccupied(grid, gridW, placedRow[idx], placedCol[idx], pw, ph);
+            }
+
+            // Try rotated orientation if original didn't fit
+            if (!placed && pw != ph)
+            {
+                placed = TryPlaceOnGrid(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx);
+                if (placed)
+                {
+                    placedFlip[idx] = true;
+                    placedOk[idx] = true;
+                    MarkGridOccupied(grid, gridW, placedRow[idx], placedCol[idx], ph, pw);
+                }
+            }
+
+            // Item doesn't fit → stays where it is (placedOk[idx] = false)
+        }
+
+        // --- Phase 5: Move items to their new grid positions ---
+        // Strategy: first move ALL items to ground (clears the cargo grid),
+        // then place each item at its computed position.
+        // This avoids intra-cargo conflicts where item A's target cell
+        // is occupied by item B that hasn't been moved yet.
+        int repositioned = 0;
+        InventoryLocation il_src;
+        InventoryLocation il_ground;
+        InventoryLocation il_dst;
+        bool dropOk;
+        bool placeOk;
+        vector groundPos = container.GetPosition();
+        // Offset slightly above ground to prevent clipping
+        groundPos[1] = groundPos[1] + 0.05;
+
+        // Build identity transform matrix with container position.
+        // SetGround requires vector mat[4] (3×3 rotation + position).
+        // mat[0]=right, mat[1]=up, mat[2]=forward, mat[3]=position.
+        vector groundMat[4];
+        Math3D.MatrixIdentity4(groundMat);
+        groundMat[3] = groundPos;
+
+        // Phase 5a: Move ALL items to ground (clears cargo grid entirely).
+        // We must move ALL items, not just placedOk ones, because unplaced
+        // items sitting at their original positions would block Phase 5b
+        // SetCargo calls. Items that didn't fit (placedOk=false) will stay
+        // on the ground near the container after Phase 5b completes.
+        ref array<bool> movedToGround = new array<bool>;
+        for (si = 0; si < n; si = si + 1)
+        {
+            movedToGround.Insert(false);
+        }
+
+        for (si = 0; si < n; si = si + 1)
+        {
+            cItem = items[si];
+            if (!cItem)
+                continue;
+
+            il_src = new InventoryLocation;
+            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
+
+            // Already on ground? Skip removal
+            if (il_src.GetType() == InventoryLocationType.GROUND)
+            {
+                movedToGround[si] = true;
+                continue;
+            }
+
+            il_ground = new InventoryLocation;
+            il_ground.SetGround(cItem, groundMat);
+
+            dropOk = GameInventory.LocationSyncMoveEntity(il_src, il_ground);
+            if (dropOk)
+            {
+                movedToGround[si] = true;
+            }
+        }
+
+        // Phase 5b: Place items back at computed cargo positions
+        // Process in sorted order (largest first) to match virtual grid
+        for (si = 0; si < n; si = si + 1)
+        {
+            idx = sortedIdx[si];
+
+            if (!placedOk[idx])
+                continue;
+
+            if (!movedToGround[idx])
+                continue;
+
+            cItem = items[idx];
+            if (!cItem)
+                continue;
+
+            il_src = new InventoryLocation;
+            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
+
+            il_dst = new InventoryLocation;
+            il_dst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
+
+            placeOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
+            if (placeOk)
+            {
+                repositioned = repositioned + 1;
+            }
+        }
+
+        // Phase 5c: Fallback for items still on ground.
+        // Items that didn't fit in virtual grid (!placedOk) or whose
+        // SetCargo failed in Phase 5b are still on the ground.
+        // Try to re-insert them using FindFreeLocationFor as best-effort.
+        // If that also fails, item stays on ground near the container.
+        for (si = 0; si < n; si = si + 1)
+        {
+            if (!movedToGround[si])
+                continue;
+
+            cItem = items[si];
+            if (!cItem)
+                continue;
+
+            il_src = new InventoryLocation;
+            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
+
+            // Only try fallback if item is still on ground
+            if (il_src.GetType() != InventoryLocationType.GROUND)
+                continue;
+
+            // Best-effort: let the engine find any free cargo slot
+            il_dst = new InventoryLocation;
+            placeOk = inv.FindFreeLocationFor(cItem, FindInventoryLocationType.CARGO, il_dst);
+            if (placeOk)
+            {
+                GameInventory.LocationSyncMoveEntity(il_src, il_dst);
+            }
+        }
+
+        return repositioned;
+        #else
+        return 0;
+        #endif
+    }
+
+    // ---------------------------------------------------------
+    // TryPlaceOnGrid: scans the virtual grid for a free rect
+    // of size w×h. Returns true if found, sets placedRow/Col.
+    // Scan order: row-major (top-left to bottom-right).
+    // ---------------------------------------------------------
+    protected static bool TryPlaceOnGrid(array<bool> grid, int gridW, int gridH, int itemW, int itemH, array<int> placedRow, array<int> placedCol, int idx)
+    {
+        if (itemW > gridW || itemH > gridH)
+            return false;
+
+        int maxRow = gridH - itemH;
+        int maxCol = gridW - itemW;
+        int row;
+        int col;
+        bool fits;
+        int dr;
+        int dc;
+        int cellIdx;
+
+        for (row = 0; row <= maxRow; row = row + 1)
+        {
+            for (col = 0; col <= maxCol; col = col + 1)
+            {
+                // Check if entire rect is free
+                fits = true;
+                for (dr = 0; dr < itemH; dr = dr + 1)
+                {
+                    for (dc = 0; dc < itemW; dc = dc + 1)
+                    {
+                        cellIdx = (row + dr) * gridW + (col + dc);
+                        if (grid[cellIdx])
+                        {
+                            fits = false;
+                            break;
+                        }
+                    }
+
+                    if (!fits)
+                        break;
+                }
+
+                if (fits)
+                {
+                    placedRow[idx] = row;
+                    placedCol[idx] = col;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
+    // MarkGridOccupied: marks a rect in the virtual grid.
+    // ---------------------------------------------------------
+    protected static void MarkGridOccupied(array<bool> grid, int gridW, int row, int col, int itemW, int itemH)
+    {
+        int dr;
+        int dc;
+        int cellIdx;
+
+        for (dr = 0; dr < itemH; dr = dr + 1)
+        {
+            for (dc = 0; dc < itemW; dc = dc + 1)
+            {
+                cellIdx = (row + dr) * gridW + (col + dc);
+                grid[cellIdx] = true;
+            }
+        }
+    }
+};

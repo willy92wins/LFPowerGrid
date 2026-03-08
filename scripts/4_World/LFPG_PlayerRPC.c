@@ -110,6 +110,14 @@ modded class PlayerBase
         {
             HandleLFPG_CCTVExitRequest(sender);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_REQUEST)
+        {
+            HandleLFPG_SorterConfigRequest(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_SAVE)
+        {
+            HandleLFPG_SorterConfigSave(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -130,6 +138,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.CCTV_EXIT_CONFIRM)
         {
             HandleLFPG_CCTVExitConfirm();
+        }
+        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_RESPONSE)
+        {
+            HandleLFPG_SorterConfigResponse(ctx);
         }
         #endif
     }
@@ -1892,5 +1904,314 @@ modded class PlayerBase
         }
 
         LFPG_DeviceInspector.OnInspectResponse(deviceId, wires);
+    }
+
+    // =====================================
+    // SERVER: Sorter CONFIG_REQUEST (SubId 19)
+    // Client requests Sorter config for UI panel.
+    // Resolves filterJSON, container name, and 6 dest names.
+    // =====================================
+    protected void HandleLFPG_SorterConfigRequest(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+
+        // Resolve sorter by NetworkID
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        if (!devEnt)
+        {
+            LFPG_Util.Warn("[SorterConfigRequest] entity not found");
+            return;
+        }
+
+        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        if (!sorter)
+        {
+            LFPG_Util.Warn("[SorterConfigRequest] entity is not LF_Sorter");
+            return;
+        }
+
+        // Proximity check (match ActionCondition distance)
+        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+        {
+            LFPG_Util.Warn("[SorterConfigRequest] player too far");
+            return;
+        }
+
+        // Ruined check
+        if (sorter.IsRuined())
+        {
+            LFPG_Util.Warn("[SorterConfigRequest] sorter is ruined");
+            return;
+        }
+
+        // Powered check
+        if (!sorter.LFPG_IsPowered())
+        {
+            LFPG_SendClientMsg(this, "Sorter has no power.");
+            return;
+        }
+
+        // Gather payload: filterJSON
+        string filterJSON = sorter.LFPG_GetFilterJSON();
+
+        // Resolve linked container name
+        string containerName = "";
+        EntityAI linkedCont = sorter.LFPG_GetLinkedContainer();
+        if (linkedCont)
+        {
+            containerName = linkedCont.GetType();
+        }
+
+        // Resolve dest container names via wire topology (6 outputs)
+        // For each output port, find the wire, follow to target Sorter,
+        // then get that Sorter's linked container type name.
+        // Hoist all loop variables before the loop (Enforce Script).
+        string destName0 = "";
+        string destName1 = "";
+        string destName2 = "";
+        string destName3 = "";
+        string destName4 = "";
+        string destName5 = "";
+
+        array<ref LFPG_WireData> wires = sorter.LFPG_GetWires();
+        if (wires)
+        {
+            int wi = 0;
+            int wCount = wires.Count();
+            int oi = 0;
+            string portName = "";
+            int portNum = 0;
+            EntityAI targetEnt = null;
+            LF_Sorter targetSorter = null;
+            EntityAI destCont = null;
+            string resolvedName = "";
+            LFPG_WireData wd = null;
+
+            for (oi = 0; oi < 6; oi = oi + 1)
+            {
+                portNum = oi + 1;
+                portName = "output_" + portNum.ToString();
+                resolvedName = "";
+
+                for (wi = 0; wi < wCount; wi = wi + 1)
+                {
+                    wd = wires[wi];
+                    if (!wd)
+                        continue;
+
+                    if (wd.m_SourcePort != portName)
+                        continue;
+
+                    // Found wire for this output port — resolve target
+                    targetEnt = LFPG_DeviceAPI.ResolveByNetworkId(wd.m_TargetNetLow, wd.m_TargetNetHigh);
+                    if (!targetEnt)
+                    {
+                        // Fallback: try DeviceRegistry by ID
+                        targetEnt = LFPG_DeviceRegistry.Get().FindById(wd.m_TargetDeviceId);
+                    }
+                    if (!targetEnt)
+                        break;
+
+                    targetSorter = LF_Sorter.Cast(targetEnt);
+                    if (!targetSorter)
+                        break;
+
+                    destCont = targetSorter.LFPG_GetLinkedContainer();
+                    if (destCont)
+                    {
+                        resolvedName = destCont.GetType();
+                    }
+                    break;
+                }
+
+                // Assign to the correct dest slot
+                if (oi == 0) { destName0 = resolvedName; }
+                else if (oi == 1) { destName1 = resolvedName; }
+                else if (oi == 2) { destName2 = resolvedName; }
+                else if (oi == 3) { destName3 = resolvedName; }
+                else if (oi == 4) { destName4 = resolvedName; }
+                else if (oi == 5) { destName5 = resolvedName; }
+            }
+        }
+
+        // Build and send CONFIG_RESPONSE
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write((int)LFPG_RPC_SubId.SORTER_CONFIG_RESPONSE);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
+        rpc.Write(filterJSON);
+        rpc.Write(containerName);
+        rpc.Write(destName0);
+        rpc.Write(destName1);
+        rpc.Write(destName2);
+        rpc.Write(destName3);
+        rpc.Write(destName4);
+        rpc.Write(destName5);
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
+
+        string logMsg = "[SorterConfigRequest] Sent config for ";
+        logMsg = logMsg + sorter.LFPG_GetDeviceId();
+        logMsg = logMsg + " container=" + containerName;
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // SERVER: Sorter CONFIG_SAVE (SubId 21)
+    // Client saves updated filterJSON.
+    // =====================================
+    protected void HandleLFPG_SorterConfigSave(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int netLow = 0;
+        int netHigh = 0;
+        string filterJSON = "";
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+        if (!ctx.Read(filterJSON))
+            return;
+
+        // Input hardening: reject oversized JSON
+        if (filterJSON.Length() > 4096)
+        {
+            LFPG_Util.Warn("[SorterConfigSave] rejected: JSON too large (" + filterJSON.Length().ToString() + ")");
+            return;
+        }
+
+        // Resolve sorter
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        if (!devEnt)
+        {
+            LFPG_Util.Warn("[SorterConfigSave] entity not found");
+            return;
+        }
+
+        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        if (!sorter)
+        {
+            LFPG_Util.Warn("[SorterConfigSave] entity is not LF_Sorter");
+            return;
+        }
+
+        // Proximity check (match ActionCondition distance)
+        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+        {
+            LFPG_Util.Warn("[SorterConfigSave] player too far");
+            return;
+        }
+
+        // Powered check — don't allow config changes on unpowered device
+        if (!sorter.LFPG_IsPowered())
+        {
+            LFPG_Util.Warn("[SorterConfigSave] sorter not powered");
+            return;
+        }
+
+        // Store config (LFPG_SetFilterJSON has #ifdef SERVER guard internally)
+        sorter.LFPG_SetFilterJSON(filterJSON);
+
+        string logMsg = "[SorterConfigSave] Updated config for ";
+        logMsg = logMsg + sorter.LFPG_GetDeviceId();
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Sorter CONFIG_RESPONSE (SubId 20)
+    // Server sends config payload → open SorterUI.
+    // =====================================
+    protected void HandleLFPG_SorterConfigResponse(ParamsReadContext ctx)
+    {
+        int netLow = 0;
+        int netHigh = 0;
+        string filterJSON = "";
+        string containerName = "";
+        string destName0 = "";
+        string destName1 = "";
+        string destName2 = "";
+        string destName3 = "";
+        string destName4 = "";
+        string destName5 = "";
+
+        if (!ctx.Read(netLow))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read netLow FAIL");
+            return;
+        }
+        if (!ctx.Read(netHigh))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read netHigh FAIL");
+            return;
+        }
+        if (!ctx.Read(filterJSON))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read filterJSON FAIL");
+            return;
+        }
+        if (!ctx.Read(containerName))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read containerName FAIL");
+            return;
+        }
+        if (!ctx.Read(destName0))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName0 FAIL");
+            return;
+        }
+        if (!ctx.Read(destName1))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName1 FAIL");
+            return;
+        }
+        if (!ctx.Read(destName2))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName2 FAIL");
+            return;
+        }
+        if (!ctx.Read(destName3))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName3 FAIL");
+            return;
+        }
+        if (!ctx.Read(destName4))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName4 FAIL");
+            return;
+        }
+        if (!ctx.Read(destName5))
+        {
+            LFPG_Util.Warn("[SorterConfigResponse] read destName5 FAIL");
+            return;
+        }
+
+        // Open the Sorter UI with full data
+        LFPG_SorterUI.Open(filterJSON, containerName, destName0, destName1, destName2, destName3, destName4, destName5, netLow, netHigh);
+
+        string logMsg = "[SorterConfigResponse] Opened UI, container=" + containerName;
+        LFPG_Util.Info(logMsg);
     }
 };

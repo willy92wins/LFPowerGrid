@@ -237,7 +237,11 @@ enum LFPG_RPC_SubId
 	REQUEST_CAMERA_LIST = 15,   // Sprint B: client requests camera list for a monitor
 	CAMERA_LIST_RESPONSE = 16,  // Sprint B: server sends camera list back to client
 	CCTV_EXIT_REQUEST = 17,     // v1.3.0: client requests exit → server does SelectPlayer
-	CCTV_EXIT_CONFIRM = 18      // v1.3.0: server confirms exit → client safe to cleanup
+	CCTV_EXIT_CONFIRM = 18,     // v1.3.0: server confirms exit → client safe to cleanup
+	SORTER_CONFIG_REQUEST  = 19,  // S4: client requests Sorter config for UI
+	SORTER_CONFIG_RESPONSE = 20,  // S4: server sends filterJSON + container names
+	SORTER_CONFIG_SAVE     = 21,  // S4: client saves updated filterJSON
+	SORTER_REQUEST_SORT    = 22   // S3: client requests manual sort (BinPack)
 };
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----

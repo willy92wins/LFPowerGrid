@@ -101,8 +101,8 @@ class CfgMods
         hidePicture = 0;
         name = "LFPowerGrid";
         prefix = "LFPowerGrid";
-        credits = "";
-        author = "LF";
+        credits = "Extanator";
+        author = "Return";
         authorID = "0";
         version = "1.2.0";
         type = "mod";

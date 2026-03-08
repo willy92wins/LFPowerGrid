@@ -115,6 +115,9 @@ class LFPG_NetworkManager
     // v1.1.0: Water Pump tank fill tracking (in-game hour based)
     protected float m_TankFillLastMs = -1.0;
 
+    // v1.2.0 (Sprint S3): Sorter round-robin cursor
+    protected int m_SorterCursor = 0;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -231,6 +234,9 @@ class LFPG_NetworkManager
         // v1.1.0: Water Pump tablet + tank timer
         LFPG_InitTankFillTime();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
+
+        // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
         #endif
     }
 
@@ -3444,6 +3450,214 @@ class LFPG_NetworkManager
                 }
             }
         }
+        #endif
+    }
+
+    // ===========================
+    // v1.2.0 (Sprint S3): Sorter Tick
+    // ===========================
+    // Round-robin batch processing. Each tick processes up to
+    // LFPG_SORTER_BATCH_SIZE Sorters. Each Sorter moves up to
+    // LFPG_SORTER_ITEMS_PER_TICK items from its linked container
+    // to downstream containers based on filter rules.
+    //
+    // Pattern: identical to CheckDeviceMovement round-robin.
+    // Timer: 5000ms (LFPG_SORTER_TICK_MS).
+
+    protected void LFPG_TickSorters()
+    {
+        #ifdef SERVER
+        // 1. Collect all LF_Sorter devices from registry
+        array<EntityAI> allDevs = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDevs);
+
+        ref array<LF_Sorter> sorters = new array<LF_Sorter>;
+        int di;
+        LF_Sorter sCast;
+        for (di = 0; di < allDevs.Count(); di = di + 1)
+        {
+            sCast = LF_Sorter.Cast(allDevs[di]);
+            if (sCast)
+            {
+                sorters.Insert(sCast);
+            }
+        }
+
+        int total = sorters.Count();
+        if (total == 0)
+        {
+            m_SorterCursor = 0;
+            return;
+        }
+
+        // Wrap cursor
+        if (m_SorterCursor >= total)
+        {
+            m_SorterCursor = 0;
+        }
+
+        // 2. Determine batch range
+        int batchEnd = m_SorterCursor + LFPG_SORTER_BATCH_SIZE;
+        if (batchEnd > total)
+        {
+            batchEnd = total;
+        }
+
+        // 3. Process batch
+        int bi;
+        LF_Sorter sorter;
+        EntityAI inputContainer;
+        CargoBase inputCargo;
+        LFPG_SortConfig filterConfig;
+        int itemCount;
+        int moved;
+        int evaluated;
+        int ci;
+        int outputIdx;
+        EntityAI destContainer;
+        EntityAI sortItem;
+        bool moveResult;
+        ref array<EntityAI> candidateItems;
+
+        for (bi = m_SorterCursor; bi < batchEnd; bi = bi + 1)
+        {
+            sorter = sorters[bi];
+            if (!sorter)
+                continue;
+
+            // Must be powered
+            if (!sorter.LFPG_IsPowered())
+                continue;
+
+            // Must have filter config
+            filterConfig = sorter.LFPG_GetFilterConfig();
+            if (!filterConfig)
+                continue;
+
+            // Must have linked container
+            inputContainer = sorter.LFPG_GetLinkedContainer();
+            if (!inputContainer)
+                continue;
+
+            // S3.1: Source container must be accessible (not locked/closed/virtualized)
+            if (!LFPG_SorterLogic.CanTakeFromContainer(inputContainer, null))
+                continue;
+
+            // Must have cargo
+            if (!inputContainer.GetInventory())
+                continue;
+
+            inputCargo = inputContainer.GetInventory().GetCargo();
+            if (!inputCargo)
+                continue;
+
+            itemCount = inputCargo.GetItemCount();
+            if (itemCount <= 0)
+                continue;
+
+            // Collect items into temporary array to avoid index mutation
+            // during moves (removing from cargo shifts indices)
+            candidateItems = new array<EntityAI>;
+            for (ci = 0; ci < itemCount; ci = ci + 1)
+            {
+                sortItem = inputCargo.GetItem(ci);
+                if (sortItem)
+                {
+                    candidateItems.Insert(sortItem);
+                }
+            }
+
+            // Process items (up to rate limit)
+            // Two caps: moved items (ITEMS_PER_TICK) and total evaluations (MAX_EVAL).
+            // MAX_EVAL prevents unbounded iteration when items match rules
+            // but can't be moved (no wire, dest full, etc.).
+            moved = 0;
+            evaluated = 0;
+            for (ci = 0; ci < candidateItems.Count(); ci = ci + 1)
+            {
+                if (moved >= LFPG_SORTER_ITEMS_PER_TICK)
+                    break;
+
+                if (evaluated >= LFPG_SORTER_MAX_EVAL)
+                    break;
+
+                sortItem = candidateItems[ci];
+                if (!sortItem)
+                    continue;
+
+                evaluated = evaluated + 1;
+
+                // Per-item source release check — some mods block
+                // specific items from being released from containers
+                if (!inputContainer.CanReleaseCargo(sortItem))
+                    continue;
+
+                // Evaluate filter rules
+                outputIdx = LFPG_SorterLogic.EvaluateItem(sortItem, filterConfig);
+                if (outputIdx < 0)
+                    continue;
+
+                // Resolve destination container via wire topology
+                destContainer = LFPG_SorterLogic.ResolveOutputContainer(sorter, outputIdx);
+                if (!destContainer)
+                    continue;
+
+                // Skip if destination is same as source
+                if (destContainer == inputContainer)
+                    continue;
+
+                // Move item
+                moveResult = LFPG_SorterLogic.MoveItemToContainer(sortItem, destContainer);
+                if (moveResult)
+                {
+                    moved = moved + 1;
+                }
+            }
+        }
+
+        // 4. Advance cursor
+        m_SorterCursor = batchEnd;
+        if (m_SorterCursor >= total)
+        {
+            m_SorterCursor = 0;
+        }
+        #endif
+    }
+
+    // ===========================
+    // v1.2.0 (Sprint S3): Sorter Bin-Pack (RPC handler)
+    // ===========================
+    // Called by PlayerRPC after validating proximity + type.
+    // Sorter already resolved and validated upstream.
+
+    void HandleSorterRequestSort(LF_Sorter sorter)
+    {
+        #ifdef SERVER
+        if (!sorter)
+        {
+            LFPG_Util.Warn("[Sorter] REQUEST_SORT: null sorter");
+            return;
+        }
+
+        // Must be powered
+        if (!sorter.LFPG_IsPowered())
+        {
+            LFPG_Util.Debug("[Sorter] REQUEST_SORT: sorter not powered");
+            return;
+        }
+
+        // Resolve container
+        EntityAI container = sorter.LFPG_GetLinkedContainer();
+        if (!container)
+        {
+            LFPG_Util.Warn("[Sorter] REQUEST_SORT: no linked container");
+            return;
+        }
+
+        // Bin-pack
+        int moved = LFPG_SorterLogic.BinPackCargo(container);
+        string sortLog = "[Sorter] BinPack complete: repositioned " + moved.ToString() + " items";
+        LFPG_Util.Info(sortLog);
         #endif
     }
 
