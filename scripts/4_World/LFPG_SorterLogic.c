@@ -257,10 +257,13 @@ class LFPG_SorterLogic
 
     // ---------------------------------------------------------
     // EvaluateItem: returns output index 0-5, or -1 if no match.
-    // Pass 1: outputs with rules (skip catch-all).
-    // Pass 2: first catch-all output wins.
+    // Pass 1: outputs with rules (skip catch-all, skip wireless).
+    // Pass 2: first catch-all output WITH wire wins.
+    // hasWireMask: bitmask where bit N = output N has wire.
+    //   Bits: output_1=1, output_2=2, output_3=4, output_4=8, output_5=16, output_6=32
+    //   Pass 63 (all bits set) to evaluate without wire filtering.
     // ---------------------------------------------------------
-    static int EvaluateItem(EntityAI item, LFPG_SortConfig config)
+    static int EvaluateItem(EntityAI item, LFPG_SortConfig config, int hasWireMask)
     {
         if (!item)
             return -1;
@@ -270,33 +273,64 @@ class LFPG_SorterLogic
 
         int oi;
         LFPG_SortOutputConfig outCfg;
+        int bitCheck;
 
-        // Pass 1: rule-based outputs (skip catch-all)
+        // Pass 1: rule-based outputs (skip catch-all, skip wireless)
+        bitCheck = 1;
         for (oi = 0; oi < 6; oi = oi + 1)
         {
+            if ((hasWireMask & bitCheck) == 0)
+            {
+                bitCheck = bitCheck * 2;
+                continue;
+            }
+
             outCfg = config.GetOutput(oi);
             if (!outCfg)
+            {
+                bitCheck = bitCheck * 2;
                 continue;
+            }
 
             if (outCfg.m_IsCatchAll)
+            {
+                bitCheck = bitCheck * 2;
                 continue;
+            }
 
             if (outCfg.GetRuleCount() == 0)
+            {
+                bitCheck = bitCheck * 2;
                 continue;
+            }
 
             if (MatchesAnyRule(item, outCfg))
                 return oi;
+
+            bitCheck = bitCheck * 2;
         }
 
-        // Pass 2: catch-all outputs (first one wins)
+        // Pass 2: catch-all outputs WITH wire (first one wins)
+        bitCheck = 1;
         for (oi = 0; oi < 6; oi = oi + 1)
         {
+            if ((hasWireMask & bitCheck) == 0)
+            {
+                bitCheck = bitCheck * 2;
+                continue;
+            }
+
             outCfg = config.GetOutput(oi);
             if (!outCfg)
+            {
+                bitCheck = bitCheck * 2;
                 continue;
+            }
 
             if (outCfg.m_IsCatchAll)
                 return oi;
+
+            bitCheck = bitCheck * 2;
         }
 
         return -1;
@@ -389,7 +423,8 @@ class LFPG_SorterLogic
 
         if (rule.m_Type == LFPG_SORT_FILTER_RARITY)
         {
-            // Requires Expansion-Hardline mod — check if loaded
+            // S-006: RARITY stub — not exposed in UI (no button creates type 3 rules).
+            // Safe as-is. When implemented, requires Expansion-Hardline mod.
             hasHardline = GetGame().ConfigIsExisting("CfgPatches ExpansionHardline");
             if (!hasHardline)
                 return false;
@@ -426,27 +461,95 @@ class LFPG_SorterLogic
     }
 
     // ---------------------------------------------------------
+    // Category cache: typeName → category string.
+    // Avoids repeated IsKindOf chains for items of the same type.
+    protected static ref map<string, string> s_CategoryCache;
+
+    // ---------------------------------------------------------
     // ResolveCategory: maps EntityAI to category string via
     // IsKindOf checks. Order matters — first match wins.
+    // Cached per typeName for O(1) amortized lookups.
     // ---------------------------------------------------------
     static string ResolveCategory(EntityAI item)
     {
         if (!item)
             return LFPG_SORT_CAT_MISC;
 
+        // Init cache on first call
+        if (!s_CategoryCache)
+        {
+            s_CategoryCache = new map<string, string>;
+        }
+
+        string typeName = item.GetType();
+        if (s_CategoryCache.Contains(typeName))
+        {
+            return s_CategoryCache.Get(typeName);
+        }
+
+        string result = ResolveCategoryUncached(item);
+        s_CategoryCache.Set(typeName, result);
+        return result;
+    }
+
+    // ---------------------------------------------------------
+    // ResolveCategoryUncached: actual IsKindOf chain.
+    // Called once per typeName, result is cached.
+    // ---------------------------------------------------------
+    protected static string ResolveCategoryUncached(EntityAI item)
+    {
         if (item.IsWeapon())
             return LFPG_SORT_CAT_WEAPON;
 
         if (item.IsKindOf("Magazine_Base"))
             return LFPG_SORT_CAT_AMMO;
 
+        // Weapon attachments — optics, suppressors, buttstocks, handguards, etc.
         if (item.IsKindOf("ItemOptics"))
             return LFPG_SORT_CAT_ATTACHMENT;
 
         if (item.IsKindOf("ItemSuppressor"))
             return LFPG_SORT_CAT_ATTACHMENT;
 
-        // Weapon attachments (buttstocks, handguards, etc.)
+        // E11: Expanded attachment coverage — common vanilla weapon parts
+        // that inherit directly from Inventory_Base (no shared base class).
+        // Buttstocks
+        if (item.IsKindOf("M4_OEBttstck"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_WoodBttstck"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_FoldingBttstck"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_PlasticBttstck"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("Fal_OeBttstck"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        // Handguards
+        if (item.IsKindOf("M4_RISHndgrd"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("M4_PlasticHndgrd"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_WoodHndgrd"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_RailHndgrd"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("AK_PlasticHndgrd"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        // Bayonets
+        if (item.IsKindOf("Bayonet_Mosin"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("Bayonet_AK"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("Bayonet_SKS"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        // Wraps/lights
+        if (item.IsKindOf("GhillieSuit_ColorBase"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("UniversalLight"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        if (item.IsKindOf("TLRLight"))
+            return LFPG_SORT_CAT_ATTACHMENT;
+
         if (item.IsKindOf("ItemGrenade"))
             return LFPG_SORT_CAT_WEAPON;
 

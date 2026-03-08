@@ -600,42 +600,42 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 					}
-					FrameWidgetClass TagsPanel {
-						hexactpos 1
-						vexactpos 1
-						hexactsize 1
-						vexactsize 1
-						{
-							ImageWidgetClass TagsBg {
-								hexactpos 1
-								vexactpos 1
-								hexactsize 1
-								vexactsize 1
-								stretch 1
-								ignorepointer 1
-							}
-							TextWidgetClass LblTags {
-								hexactpos 1
-								vexactpos 1
-								hexactsize 1
-								vexactsize 1
-								font "gui/fonts/Metron"
-								ignorepointer 1
-							}
-							TextWidgetClass TagsEmpty {
-								hexactpos 1
-								vexactpos 1
-								hexactsize 1
-								vexactsize 1
-								font "gui/fonts/MetronBook"
-								ignorepointer 1
-							}
-							WrapSpacerWidgetClass TagsWrap {
-								hexactpos 1
-								vexactpos 1
-								hexactsize 1
-								vexactsize 1
-							}
+				}
+				FrameWidgetClass TagsPanel {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass TagsBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						TextWidgetClass LblTags {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						TextWidgetClass TagsEmpty {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						WrapSpacerWidgetClass TagsWrap {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
 						}
 					}
 				}

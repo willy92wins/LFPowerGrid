@@ -241,7 +241,8 @@ enum LFPG_RPC_SubId
 	SORTER_CONFIG_REQUEST  = 19,  // S4: client requests Sorter config for UI
 	SORTER_CONFIG_RESPONSE = 20,  // S4: server sends filterJSON + container names
 	SORTER_CONFIG_SAVE     = 21,  // S4: client saves updated filterJSON
-	SORTER_REQUEST_SORT    = 22   // S3: client requests manual sort (BinPack)
+	SORTER_REQUEST_SORT    = 22,  // S3: client requests manual sort (BinPack)
+	SORTER_SAVE_ACK        = 23   // S5: server confirms config save success/fail
 };
 
 // ---- Sorter tick constants (Sprint S3) ----

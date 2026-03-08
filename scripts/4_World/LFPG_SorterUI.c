@@ -194,6 +194,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected bool m_ShowFilters;       // true=FILTROS, false=CONTENEDOR
     protected bool m_FocusLocked;
     protected float m_GlowPhase;        // glow pulse animation
+    protected float m_SaveFeedbackTimer; // H4: save feedback countdown (seconds)
 
     // ---- Data model ----
     protected ref LFPG_SortConfig m_Config;
@@ -231,6 +232,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_ShowFilters = true;
         m_FocusLocked = false;
         m_GlowPhase = 0.0;
+        m_SaveFeedbackTimer = 0.0;
         m_ContainerName = "Container";
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
@@ -1105,6 +1107,17 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             }
         }
 
+        // H4: Save feedback timer — revert status to ONLINE after countdown
+        if (m_SaveFeedbackTimer > 0.0)
+        {
+            m_SaveFeedbackTimer = m_SaveFeedbackTimer - timeslice;
+            if (m_SaveFeedbackTimer <= 0.0)
+            {
+                m_SaveFeedbackTimer = 0.0;
+                RefreshStatusText(true);
+            }
+        }
+
         return false;
     }
 
@@ -1304,6 +1317,13 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     {
         string json = m_Config.ToJSON();
         LFPG_Util.Info("[SorterUI] SAVE config: " + json);
+
+        // H4: Immediate feedback
+        if (m_wStatus)
+        {
+            m_wStatus.SetText("SAVING...");
+            m_wStatus.SetColor(LFPG_SORT_COL_ORANGE);
+        }
 
         // S4: Send CONFIG_SAVE RPC to server
         #ifndef SERVER
@@ -1615,6 +1635,29 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             m_wStatus.SetText("OFFLINE");
             m_wStatus.SetColor(LFPG_SORT_COL_RED);
         }
+    }
+
+    // H4: Server ACK for config save — show feedback for 2.5 seconds
+    static void OnSaveAck(bool success)
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_IsOpen)
+            return;
+        if (!s_Instance.m_wStatus)
+            return;
+
+        if (success)
+        {
+            s_Instance.m_wStatus.SetText("SAVED");
+            s_Instance.m_wStatus.SetColor(LFPG_SORT_COL_GREEN);
+        }
+        else
+        {
+            s_Instance.m_wStatus.SetText("ERROR");
+            s_Instance.m_wStatus.SetColor(LFPG_SORT_COL_RED);
+        }
+        s_Instance.m_SaveFeedbackTimer = 2.5;
     }
 
     // =========================================================

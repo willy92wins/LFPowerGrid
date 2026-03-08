@@ -147,6 +147,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterConfigResponse(ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_SAVE_ACK)
+        {
+            HandleLFPG_SorterSaveAck(ctx);
+        }
         #endif
     }
 
@@ -2139,6 +2143,14 @@ modded class PlayerBase
         // Store config (LFPG_SetFilterJSON has #ifdef SERVER guard internally)
         sorter.LFPG_SetFilterJSON(filterJSON);
 
+        // H4: Send ACK back to client
+        ScriptRPC ackRpc = new ScriptRPC();
+        int ackSubId = LFPG_RPC_SubId.SORTER_SAVE_ACK;
+        bool ackOk = true;
+        ackRpc.Write(ackSubId);
+        ackRpc.Write(ackOk);
+        ackRpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
+
         string logMsg = "[SorterConfigSave] Updated config for ";
         logMsg = logMsg + sorter.LFPG_GetDeviceId();
         LFPG_Util.Info(logMsg);
@@ -2267,5 +2279,18 @@ modded class PlayerBase
 
         string logMsg = "[SorterConfigResponse] Opened UI, container=" + containerName;
         LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Sorter SAVE_ACK (SubId 23)
+    // Server confirms config save result.
+    // =====================================
+    protected void HandleLFPG_SorterSaveAck(ParamsReadContext ctx)
+    {
+        bool success = false;
+        if (!ctx.Read(success))
+            return;
+
+        LFPG_SorterUI.OnSaveAck(success);
     }
 };

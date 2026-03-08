@@ -3535,6 +3535,10 @@ class LFPG_NetworkManager
         EntityAI destContainer;
         EntityAI sortItem;
         bool moveResult;
+        int hasWireMask;
+        int portBit;
+        int pi;
+        EntityAI wireCheck;
 
         for (bi = m_SorterCursor; bi < batchEnd; bi = bi + 1)
         {
@@ -3580,6 +3584,19 @@ class LFPG_NetworkManager
             if (itemCount <= 0)
                 continue;
 
+            // E14: Build wire mask once per sorter — skip wireless outputs in eval
+            hasWireMask = 0;
+            portBit = 1;
+            for (pi = 0; pi < 6; pi = pi + 1)
+            {
+                wireCheck = LFPG_SorterLogic.ResolveOutputContainer(sorter, pi);
+                if (wireCheck)
+                {
+                    hasWireMask = hasWireMask | portBit;
+                }
+                portBit = portBit * 2;
+            }
+
             // Collect items into reusable cache to avoid index mutation
             // during moves (removing from cargo shifts indices)
             m_SorterItemCache.Clear();
@@ -3618,7 +3635,7 @@ class LFPG_NetworkManager
                     continue;
 
                 // Evaluate filter rules
-                outputIdx = LFPG_SorterLogic.EvaluateItem(sortItem, filterConfig);
+                outputIdx = LFPG_SorterLogic.EvaluateItem(sortItem, filterConfig, hasWireMask);
                 if (outputIdx < 0)
                     continue;
 
