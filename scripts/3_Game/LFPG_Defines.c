@@ -244,6 +244,12 @@ enum LFPG_RPC_SubId
 	SORTER_REQUEST_SORT    = 22   // S3: client requests manual sort (BinPack)
 };
 
+// ---- Sorter tick constants (Sprint S3) ----
+static const int LFPG_SORTER_TICK_MS        = 5000;   // 5s between sorter ticks
+static const int LFPG_SORTER_ITEMS_PER_TICK = 3;      // max items moved per sorter per tick
+static const int LFPG_SORTER_BATCH_SIZE     = 8;      // max sorters processed per tick
+static const int LFPG_SORTER_MAX_EVAL       = 20;     // max rule evaluations per sorter per tick
+
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
 // Interval between telemetry log dumps (ms).
 // 5000ms = every 5 seconds when active. Low overhead: only increments counters per-frame,

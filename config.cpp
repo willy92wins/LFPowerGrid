@@ -640,7 +640,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_SorterKit";
         descriptionShort = "$STR_LFPG_SorterKit_Desc";
-        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
+        model = "\LFPowerGrid\data\sorter\lf_sorter.p3d";
         weight = 3000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
@@ -660,7 +660,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_Sorter";
         descriptionShort = "$STR_LFPG_Sorter_Desc";
-        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
+        model = "\LFPowerGrid\data\sorter\lf_sorter.p3d";
         weight = 5000;
         itemSize[] = {3, 3};
         rotationFlags = 17;

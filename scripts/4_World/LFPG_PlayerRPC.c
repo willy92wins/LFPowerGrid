@@ -118,6 +118,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterConfigSave(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_REQUEST_SORT)
+        {
+            HandleLFPG_SorterRequestSort(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -2138,6 +2142,56 @@ modded class PlayerBase
         string logMsg = "[SorterConfigSave] Updated config for ";
         logMsg = logMsg + sorter.LFPG_GetDeviceId();
         LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // SERVER: Sorter REQUEST_SORT (SubId 22)
+    // Client requests manual sort (BinPack).
+    // Resolves Sorter, validates, delegates to NetworkManager.
+    // =====================================
+    protected void HandleLFPG_SorterRequestSort(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+
+        // Resolve sorter
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        if (!devEnt)
+        {
+            LFPG_Util.Warn("[SorterRequestSort] entity not found");
+            return;
+        }
+
+        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        if (!sorter)
+        {
+            LFPG_Util.Warn("[SorterRequestSort] entity is not LF_Sorter");
+            return;
+        }
+
+        // Proximity check
+        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+        {
+            LFPG_Util.Warn("[SorterRequestSort] player too far");
+            return;
+        }
+
+        // Delegate to NetworkManager (handles powered + container checks)
+        LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter);
     }
 
     // =====================================

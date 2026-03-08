@@ -1307,8 +1307,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         LFPG_Util.Info("[SorterUI] REQUEST_SORT triggered");
 
         // S4: Send REQUEST_SORT RPC to server
-        // NOTE: Server handler (SubId 22) lives in S3 (LFPG_NetworkManager TickSorters).
-        // Until S3 is merged, this RPC is silently dropped by the server.
+        // Server handler: PlayerRPC dispatches to NetworkManager.HandleSorterRequestSort
         #ifndef SERVER
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (player)
