@@ -206,7 +206,7 @@ class LF_WaterPump : Inventory_Base
         if (m_PoweredNet && !m_PumpLoopSound)
         {
             m_PumpLoopSound = SEffectManager.PlaySound(LFPG_PUMP_LOOP_SOUNDSET, GetPosition());
-            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(true); }
+            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(false); }
         }
         if (!m_PoweredNet && m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
         if (m_DeviceId != "")
@@ -559,7 +559,7 @@ class LF_WaterPump_T2 : Inventory_Base
         if (m_PoweredNet && !m_PumpLoopSound)
         {
             m_PumpLoopSound = SEffectManager.PlaySound(LFPG_PUMP_LOOP_SOUNDSET, GetPosition());
-            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(true); }
+            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(false); }
         }
         if (!m_PoweredNet && m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
         if (m_DeviceId != "")
