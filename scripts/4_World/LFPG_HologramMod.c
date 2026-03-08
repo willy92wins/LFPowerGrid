@@ -85,6 +85,12 @@ modded class Hologram
             {
                 return pumpKit.GetDeployedClassname();
             }
+
+            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+            if (furnaceKit)
+            {
+                return furnaceKit.GetDeployedClassname();
+            }
         }
 
         return super.ProjectionBasedOnParent();
@@ -104,6 +110,12 @@ modded class Hologram
             if (pumpKit)
             {
                 return pumpKit.GetDeployedClassname();
+            }
+
+            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+            if (furnaceKit)
+            {
+                return furnaceKit.GetDeployedClassname();
             }
         }
 
@@ -125,6 +137,12 @@ modded class Hologram
 
             LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
             if (pumpKit)
+            {
+                return entity_for_placing;
+            }
+
+            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+            if (furnaceKit)
             {
                 return entity_for_placing;
             }
@@ -166,6 +184,19 @@ modded class Hologram
                 }
                 return;
             }
+
+            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+            if (furnaceKit)
+            {
+                vector furnaceOffset = furnaceKit.GetDeployPositionOffset();
+                vector furnaceFinal = position + furnaceOffset;
+
+                if (m_Projection)
+                {
+                    m_Projection.SetPosition(furnaceFinal);
+                }
+                return;
+            }
         }
 
         super.SetProjectionPosition(position);
@@ -192,6 +223,15 @@ modded class Hologram
                 vector pumpOriOff = pumpKit.GetDeployOrientationOffset();
                 vector pumpResult = pumpBase + pumpOriOff;
                 return pumpResult;
+            }
+
+            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+            if (furnaceKit)
+            {
+                vector furnaceBase = super.GetDefaultOrientation();
+                vector furnaceOriOff = furnaceKit.GetDeployOrientationOffset();
+                vector furnaceResult = furnaceBase + furnaceOriOff;
+                return furnaceResult;
             }
         }
 
@@ -226,6 +266,8 @@ modded class Hologram
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
+            return true;
+        if (m_Parent && m_Parent.IsKindOf("LF_Furnace_Kit"))
             return true;
 
         return false;
@@ -266,6 +308,8 @@ modded class Hologram
         if (m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent.IsKindOf("LF_WaterPump_Kit"))
+            return true;
+        if (m_Parent.IsKindOf("LF_Furnace_Kit"))
             return true;
         return false;
     }
@@ -583,6 +627,14 @@ modded class Hologram
             vector pumpOff = pumpKit.GetDeployPositionOffset();
             vector pumpOut = pos + pumpOff;
             return pumpOut;
+        }
+
+        LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
+        if (furnaceKit)
+        {
+            vector furnaceOff = furnaceKit.GetDeployPositionOffset();
+            vector furnaceOut = pos + furnaceOff;
+            return furnaceOut;
         }
 
         return pos;

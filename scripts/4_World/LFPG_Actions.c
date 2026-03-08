@@ -18,12 +18,12 @@
 //   devices. Fixes waypoint placement failure in building interiors.
 //
 // Per-port scroll actions:
-//   Port0..Port5: aim at device with CableReel -> shows each
+//   Port0..Port6: aim at device with CableReel -> shows each
 //                 port with label + connection status.
 //   PlaceWaypoint: terrain during session
 //   CancelWiring:  terrain during session
 //   CutWires:      source with Pliers
-//   CutPort0..5:   per-port cut with Pliers
+//   CutPort0..6:   per-port cut with Pliers
 //   ToggleSource:  LFPG generators
 //   DebugStatus:   any device with CableReel
 // =========================================================
@@ -422,7 +422,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
 };
 
 // ---------------------------------------------------------
-// Port subclasses (index 0..5 = max 6 ports per device)
+// Port subclasses (index 0..6 = max 7 ports per device)
 // ---------------------------------------------------------
 class ActionLFPG_Port0 : ActionLFPG_PortBase
 {
@@ -452,6 +452,11 @@ class ActionLFPG_Port4 : ActionLFPG_PortBase
 class ActionLFPG_Port5 : ActionLFPG_PortBase
 {
     void ActionLFPG_Port5() { m_PortIndex = 5; }
+};
+
+class ActionLFPG_Port6 : ActionLFPG_PortBase
+{
+    void ActionLFPG_Port6() { m_PortIndex = 6; }
 };
 
 // ---------------------------------------------------------
@@ -848,6 +853,11 @@ class ActionLFPG_CutPort4 : ActionLFPG_CutPortBase
 class ActionLFPG_CutPort5 : ActionLFPG_CutPortBase
 {
     void ActionLFPG_CutPort5() { m_PortIndex = 5; }
+};
+
+class ActionLFPG_CutPort6 : ActionLFPG_CutPortBase
+{
+    void ActionLFPG_CutPort6() { m_PortIndex = 6; }
 };
 
 // ---------------------------------------------------------

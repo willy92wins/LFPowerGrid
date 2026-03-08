@@ -563,3 +563,8 @@ static const float  LFPG_TANK_HUD_BAR_H_BASE         = 16.0;       // bar height
 // ---- Water Pump Sound ----
 static const string LFPG_PUMP_LOOP_SOUNDSET           = "LFPG_WaterPump_Loop_SoundSet";
 static const string LFPG_PUMP_WATER_SOUNDSET           = "LFPG_WaterPump_Water_SoundSet";
+
+// ---- v1.2.0: Furnace (Incinerator SOURCE) ----
+static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output while burning
+static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
+static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns

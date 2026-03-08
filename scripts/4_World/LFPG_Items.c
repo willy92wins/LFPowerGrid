@@ -39,13 +39,14 @@ class LF_CableReel : CableReel
         AddAction(ActionTakeItem);
         AddAction(ActionTakeItemToHands);
 
-        // Per-port actions (max 6 ports per device)
+        // Per-port actions (max 7 ports per device)
         AddAction(ActionLFPG_Port0);
         AddAction(ActionLFPG_Port1);
         AddAction(ActionLFPG_Port2);
         AddAction(ActionLFPG_Port3);
         AddAction(ActionLFPG_Port4);
         AddAction(ActionLFPG_Port5);
+        AddAction(ActionLFPG_Port6);
 
         // Session actions (terrain)
         AddAction(ActionLFPG_PlaceWaypoint);
@@ -57,7 +58,7 @@ class LF_CableReel : CableReel
         if (!s_SetActionsLogged)
         {
             s_SetActionsLogged = true;
-            LFPG_Util.Info("[Items] LF_CableReel.SetActions v" + LFPG_VERSION_STR + " (11 actions)");
+            LFPG_Util.Info("[Items] LF_CableReel.SetActions v" + LFPG_VERSION_STR + " (12 actions)");
         }
     }
 

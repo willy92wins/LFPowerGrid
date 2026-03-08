@@ -83,7 +83,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -104,7 +104,7 @@ class CfgMods
         credits = "";
         author = "LF";
         authorID = "0";
-        version = "0.9.2";
+        version = "1.2.0";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
@@ -592,5 +592,44 @@ class CfgVehicles
                 icon = "missing";
             };
         };
+    };
+
+    // =========================================================
+    // v1.2.0: FURNACE (SOURCE, burns items for power)
+    // =========================================================
+
+    // ---- Furnace Kit (holdable, different-model deploy) ----
+    class LF_Furnace_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_FURNACE_KIT";
+        descriptionShort = "$STR_LFPG_FURNACE_KIT_DESC";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        weight = 8000;
+        itemSize[] = {5, 3};
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
+        carveNavmesh = 1;
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
+    };
+
+    // ---- Furnace (placed device, SOURCE 50 u/s) ----
+    class LF_Furnace : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_FURNACE";
+        descriptionShort = "$STR_LFPG_FURNACE_DESC";
+        model = "\LFPowerGrid\data\furnace\Furnace.p3d";
+        weight = 25000;
+        itemSize[] = {10, 10};
+        rotationFlags = 17;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {"body"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\furnace\Furnace.paa"};
     };
 };

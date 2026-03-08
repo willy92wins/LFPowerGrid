@@ -9,6 +9,8 @@
 // v0.8.2:  Added LFPG_ActionPlaceCombiner for Combiner Kit deployment.
 // v0.9.2:  Sprint B — Replaced ActionViewCamera/CycleCamera/UnlinkCamera
 //          with single ActionWatchMonitor (RPC-based camera list + in-viewport cycling).
+// v1.2.0:  Sprint S0 (Sorter prereq) — Added ActionLFPG_Port6 + CutPort6
+//          to support 7-port devices (1 IN + 6 OUT).
 //
 // IMPORTANT:
 //  - Actions MUST be registered in ActionConstructor::RegisterActions()
@@ -28,6 +30,7 @@ modded class ActionConstructor
         actions.Insert(ActionLFPG_Port3);
         actions.Insert(ActionLFPG_Port4);
         actions.Insert(ActionLFPG_Port5);
+        actions.Insert(ActionLFPG_Port6);
 
         // --- LF_PowerGrid session + utility ---
         actions.Insert(ActionLFPG_PlaceWaypoint);
@@ -39,6 +42,7 @@ modded class ActionConstructor
         actions.Insert(ActionLFPG_CutPort3);
         actions.Insert(ActionLFPG_CutPort4);
         actions.Insert(ActionLFPG_CutPort5);
+        actions.Insert(ActionLFPG_CutPort6);
         actions.Insert(ActionLFPG_ToggleSource);
         actions.Insert(ActionLFPG_DebugStatus);
 
@@ -68,7 +72,7 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionWashHandsPump);
         actions.Insert(LFPG_ActionFillPump);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (30)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (32)");
     }
 };
 
@@ -84,6 +88,7 @@ modded class Pliers
         AddAction(ActionLFPG_CutPort3);
         AddAction(ActionLFPG_CutPort4);
         AddAction(ActionLFPG_CutPort5);
+        AddAction(ActionLFPG_CutPort6);
     }
 };
 
