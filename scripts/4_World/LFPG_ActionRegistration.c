@@ -68,7 +68,7 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionWashHandsPump);
         actions.Insert(LFPG_ActionFillPump);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (32)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (30)");
     }
 };
 
