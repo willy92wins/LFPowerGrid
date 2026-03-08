@@ -137,6 +137,14 @@ class LFPG_SortFilterRule
                 continue;
             if (ch == "\\")
                 continue;
+            if (ch == "{")
+                continue;
+            if (ch == "}")
+                continue;
+            if (ch == "[")
+                continue;
+            if (ch == "]")
+                continue;
             result = result + ch;
         }
 
@@ -367,19 +375,29 @@ class LFPG_SortConfig
                 if (rArrEnd >= 0 && rArrEnd < ruleStart)
                     break;
 
-                // Parse "t":N
+                // Parse "t":N (supports multi-digit types)
                 int tStart = IndexOfFrom(json, ruleStart, "\"t\":");
                 if (tStart < 0)
                     break;
                 int tValStart = tStart + 4;
-                string tChar = json.Substring(tValStart, 1);
-                int ruleType = tChar.ToInt();
+                if (tValStart >= jsonLen)
+                    break;
+                int tEnd = IndexOfFrom(json, tValStart, ",");
+                if (tEnd < 0)
+                    break;
+                int tLen = tEnd - tValStart;
+                if (tLen <= 0)
+                    break;
+                string tStr = json.Substring(tValStart, tLen);
+                int ruleType = tStr.ToInt();
 
                 // Parse "v":"..."
                 int vStart = IndexOfFrom(json, tValStart, "\"v\":\"");
                 if (vStart < 0)
                     break;
                 int vValStart = vStart + 5;
+                if (vValStart >= jsonLen)
+                    break;
                 int vEnd = IndexOfFrom(json, vValStart, "\"");
                 if (vEnd < 0)
                     break;

@@ -57,6 +57,7 @@ modded class MissionGameplay
         LFPG_DeviceInspector.Init();
 
         LFPG_CameraViewport.Reset();
+        LFPG_SorterUI.Cleanup();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
@@ -214,6 +215,7 @@ modded class MissionGameplay
         LFPG_DeviceInspector.Cleanup();
 
         LFPG_CameraViewport.Reset();
+        LFPG_SorterUI.Cleanup();
 
         super.OnMissionFinish();
     }

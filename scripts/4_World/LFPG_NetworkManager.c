@@ -118,6 +118,12 @@ class LFPG_NetworkManager
     // v1.2.0 (Sprint S3): Sorter round-robin cursor
     protected int m_SorterCursor = 0;
 
+    // v1.2.0 (Sprint S5): Dedicated sorter registry — avoids iterating all devices
+    protected ref array<LF_Sorter> m_RegisteredSorters;
+
+    // v1.2.0 (Sprint S5): Reusable item cache for TickSorters (GC reduction)
+    protected ref array<EntityAI> m_SorterItemCache;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -186,6 +192,10 @@ class LFPG_NetworkManager
         m_DeferredBroadcastLFPG = new array<EntityAI>;
         m_DeferredBroadcastVanillaIds = new array<string>;
         m_DeferredBroadcastVanillaObjs = new array<EntityAI>;
+
+        // v1.2.0: Always allocate (Register/Unregister not guarded with #ifdef)
+        m_RegisteredSorters = new array<LF_Sorter>;
+        m_SorterItemCache = new array<EntityAI>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -3464,26 +3474,34 @@ class LFPG_NetworkManager
     // Pattern: identical to CheckDeviceMovement round-robin.
     // Timer: 5000ms (LFPG_SORTER_TICK_MS).
 
+    // v1.2.0 (Sprint S5): Dedicated registry — avoids iterating all devices.
+    // Called from LF_Sorter.EEInit / EEDelete / EEKilled.
+    void RegisterSorter(LF_Sorter sorter)
+    {
+        if (!sorter)
+            return;
+        if (m_RegisteredSorters.Find(sorter) < 0)
+        {
+            m_RegisteredSorters.Insert(sorter);
+        }
+    }
+
+    void UnregisterSorter(LF_Sorter sorter)
+    {
+        if (!sorter)
+            return;
+        int idx = m_RegisteredSorters.Find(sorter);
+        if (idx >= 0)
+        {
+            m_RegisteredSorters.Remove(idx);
+        }
+    }
+
     protected void LFPG_TickSorters()
     {
         #ifdef SERVER
-        // 1. Collect all LF_Sorter devices from registry
-        array<EntityAI> allDevs = new array<EntityAI>;
-        LFPG_DeviceRegistry.Get().GetAll(allDevs);
-
-        ref array<LF_Sorter> sorters = new array<LF_Sorter>;
-        int di;
-        LF_Sorter sCast;
-        for (di = 0; di < allDevs.Count(); di = di + 1)
-        {
-            sCast = LF_Sorter.Cast(allDevs[di]);
-            if (sCast)
-            {
-                sorters.Insert(sCast);
-            }
-        }
-
-        int total = sorters.Count();
+        // 1. Use dedicated registry (no GetAll + Cast filtering)
+        int total = m_RegisteredSorters.Count();
         if (total == 0)
         {
             m_SorterCursor = 0;
@@ -3517,16 +3535,23 @@ class LFPG_NetworkManager
         EntityAI destContainer;
         EntityAI sortItem;
         bool moveResult;
-        ref array<EntityAI> candidateItems;
 
         for (bi = m_SorterCursor; bi < batchEnd; bi = bi + 1)
         {
-            sorter = sorters[bi];
+            // Safety: array may shrink if sorter destroyed externally
+            if (bi >= m_RegisteredSorters.Count())
+                break;
+
+            sorter = m_RegisteredSorters[bi];
             if (!sorter)
                 continue;
 
             // Must be powered
             if (!sorter.LFPG_IsPowered())
+                continue;
+
+            // Must not be ruined
+            if (sorter.IsRuined())
                 continue;
 
             // Must have filter config
@@ -3555,15 +3580,15 @@ class LFPG_NetworkManager
             if (itemCount <= 0)
                 continue;
 
-            // Collect items into temporary array to avoid index mutation
+            // Collect items into reusable cache to avoid index mutation
             // during moves (removing from cargo shifts indices)
-            candidateItems = new array<EntityAI>;
+            m_SorterItemCache.Clear();
             for (ci = 0; ci < itemCount; ci = ci + 1)
             {
                 sortItem = inputCargo.GetItem(ci);
                 if (sortItem)
                 {
-                    candidateItems.Insert(sortItem);
+                    m_SorterItemCache.Insert(sortItem);
                 }
             }
 
@@ -3573,7 +3598,7 @@ class LFPG_NetworkManager
             // but can't be moved (no wire, dest full, etc.).
             moved = 0;
             evaluated = 0;
-            for (ci = 0; ci < candidateItems.Count(); ci = ci + 1)
+            for (ci = 0; ci < m_SorterItemCache.Count(); ci = ci + 1)
             {
                 if (moved >= LFPG_SORTER_ITEMS_PER_TICK)
                     break;
@@ -3581,7 +3606,7 @@ class LFPG_NetworkManager
                 if (evaluated >= LFPG_SORTER_MAX_EVAL)
                     break;
 
-                sortItem = candidateItems[ci];
+                sortItem = m_SorterItemCache[ci];
                 if (!sortItem)
                     continue;
 

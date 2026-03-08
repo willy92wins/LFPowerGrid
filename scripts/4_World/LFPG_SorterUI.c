@@ -258,7 +258,12 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     {
         if (s_Instance)
         {
-            s_Instance.DoClose();
+            // Lightweight reset: do NOT call DoClose/HideCursor.
+            // OnInit: input system is fresh (no prior Disable/Focus to undo).
+            // OnMissionFinish: input system is about to be destroyed.
+            // Normal close (ESC) uses DoClose which handles input properly.
+            s_Instance.m_IsOpen = false;
+            s_Instance.m_FocusLocked = false;
             s_Instance.DestroyWidgets();
         }
         s_Instance = null;
@@ -393,6 +398,13 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected void ShowCursor()
     {
         #ifndef SERVER
+        // Block all player actions while panel is open
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            mission.PlayerControlDisable(INPUT_EXCLUDE_ALL);
+        }
+
         UIManager uiMgr = GetGame().GetUIManager();
         if (uiMgr)
         {
@@ -428,6 +440,13 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 inp.ChangeGameFocus(-1);
             }
             m_FocusLocked = false;
+        }
+
+        // Re-enable player actions
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            mission.PlayerControlEnable(true);
         }
         #endif
     }

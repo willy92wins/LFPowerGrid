@@ -46,6 +46,10 @@
 // Proximity scan radius for container association
 static const float LFPG_SORTER_LINK_RADIUS = 3.0;
 
+// LED rvmat paths (hiddenSelections[0] = "sorter_led")
+static const string LFPG_SORTER_RVMAT_OFF = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_off.rvmat";
+static const string LFPG_SORTER_RVMAT_ON  = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_on.rvmat";
+
 // ---------------------------------------------------------
 // KIT: deployable item that spawns the actual Sorter
 // Uses splitter model as placeholder (Sprint S5 = real model).
@@ -116,7 +120,8 @@ class LF_Sorter_Kit : Inventory_Base
                 sorterObj.LFPG_LinkNearestContainer(finalPos);
             }
 
-            LFPG_Util.Info("[Sorter_Kit] Deployed LF_Sorter at " + finalPos.ToString());
+            string deployMsg = "[Sorter_Kit] Deployed LF_Sorter at " + finalPos.ToString();
+            LFPG_Util.Info(deployMsg);
             GetGame().ObjectDelete(this);
         }
         else
@@ -237,7 +242,72 @@ class LF_Sorter : Inventory_Base
         LFPG_TryRegister();
 
         #ifdef SERVER
+        LFPG_NetworkManager.Get().RegisterSorter(this);
         LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
+
+        // Post-restart re-link: if we had a container link but the
+        // NetworkIDs are stale (entity no longer resolves), re-scan
+        // by proximity to restore the association.
+        EntityAI existCheck;
+        int rLow;
+        int rHigh;
+        string rKey;
+        string relinkMsg;
+        bool isValidContainer;
+        Man manGuard;
+        CargoBase cargoGuard;
+        if (m_LinkedContainerLow != 0 || m_LinkedContainerHigh != 0)
+        {
+            existCheck = LFPG_DeviceAPI.ResolveByNetworkId(m_LinkedContainerLow, m_LinkedContainerHigh);
+
+            // Validate: after restart, recycled IDs could resolve to a
+            // completely different entity (player, generator, etc.).
+            // Apply same filters as LinkNearestContainer.
+            isValidContainer = false;
+            if (existCheck)
+            {
+                manGuard = Man.Cast(existCheck);
+                if (!manGuard && !LFPG_DeviceAPI.IsElectricDevice(existCheck))
+                {
+                    if (existCheck.GetInventory())
+                    {
+                        cargoGuard = existCheck.GetInventory().GetCargo();
+                        if (cargoGuard)
+                        {
+                            isValidContainer = true;
+                        }
+                    }
+                }
+            }
+
+            if (!isValidContainer)
+            {
+                // IDs are stale or resolved to non-container — re-link by proximity
+                m_LinkedContainerLow = 0;
+                m_LinkedContainerHigh = 0;
+                LFPG_LinkNearestContainer(GetPosition());
+                relinkMsg = "[LF_Sorter] Post-restart re-link attempted at " + GetPosition().ToString();
+                LFPG_Util.Info(relinkMsg);
+            }
+            else
+            {
+                // Container still exists — register in uniqueness map
+                // Use CURRENT NetworkID (may differ from persisted after restart)
+                rLow = 0;
+                rHigh = 0;
+                existCheck.GetNetworkID(rLow, rHigh);
+                rKey = rLow.ToString() + ":" + rHigh.ToString();
+                s_ContainerMap.Set(rKey, this);
+
+                // Update stored IDs to current
+                if (rLow != m_LinkedContainerLow || rHigh != m_LinkedContainerHigh)
+                {
+                    m_LinkedContainerLow = rLow;
+                    m_LinkedContainerHigh = rHigh;
+                    SetSynchDirty();
+                }
+            }
+        }
         #endif
     }
 
@@ -246,6 +316,7 @@ class LF_Sorter : Inventory_Base
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSorter(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -262,6 +333,7 @@ class LF_Sorter : Inventory_Base
         m_LFPG_Deleting = true;
 
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSorter(this);
         UnregisterContainer();
         #endif
 
@@ -295,6 +367,16 @@ class LF_Sorter : Inventory_Base
         LFPG_TryRegister();
 
         #ifndef SERVER
+        // LED swap: sorter_led = hiddenSelections[0] in config.cpp
+        if (m_PoweredNet)
+        {
+            SetObjectMaterial(0, LFPG_SORTER_RVMAT_ON);
+        }
+        else
+        {
+            SetObjectMaterial(0, LFPG_SORTER_RVMAT_OFF);
+        }
+
         if (m_DeviceId != "")
         {
             LFPG_CableRenderer r = LFPG_CableRenderer.Get();
@@ -438,7 +520,21 @@ class LF_Sorter : Inventory_Base
         if (m_LinkedContainerLow == 0 && m_LinkedContainerHigh == 0)
             return null;
 
-        return LFPG_DeviceAPI.ResolveByNetworkId(m_LinkedContainerLow, m_LinkedContainerHigh);
+        EntityAI resolved = LFPG_DeviceAPI.ResolveByNetworkId(m_LinkedContainerLow, m_LinkedContainerHigh);
+        if (!resolved)
+        {
+            // Container destroyed or despawned — auto-cleanup
+            #ifdef SERVER
+            UnregisterContainer();
+            m_LinkedContainerLow = 0;
+            m_LinkedContainerHigh = 0;
+            SetSynchDirty();
+            string warnMsg = "[LF_Sorter] Linked container no longer exists — cleared stale reference";
+            LFPG_Util.Warn(warnMsg);
+            #endif
+            return null;
+        }
+        return resolved;
     }
 
     // Unregister from uniqueness map
@@ -826,12 +922,10 @@ class LF_Sorter : Inventory_Base
             return false;
         }
 
-        // Re-register container uniqueness on load
-        if (m_LinkedContainerLow != 0 || m_LinkedContainerHigh != 0)
-        {
-            string cKey = m_LinkedContainerLow.ToString() + ":" + m_LinkedContainerHigh.ToString();
-            s_ContainerMap.Set(cKey, this);
-        }
+        // NOTE: Do NOT register in s_ContainerMap here.
+        // After server restart, NetworkIDs are regenerated — the persisted
+        // IDs are stale and would contaminate the uniqueness map.
+        // LFPG_GetLinkedContainer auto-cleans stale IDs on first access.
 
         string wiresJson;
         if (!ctx.Read(wiresJson))

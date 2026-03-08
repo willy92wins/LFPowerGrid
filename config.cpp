@@ -667,5 +667,8 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+        hiddenSelections[] = { "sorter_led" };
+        hiddenSelectionsTextures[] = { "\LFPowerGrid\data\sorter\textures\led_co.paa" };
+        hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\sorter\materials\lf_sorter_led_off.rvmat" };
     };
 };

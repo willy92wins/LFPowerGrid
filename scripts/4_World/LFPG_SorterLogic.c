@@ -550,33 +550,14 @@ class LFPG_SorterLogic
     // ---------------------------------------------------------
     // GetItemSlotSize: returns area (sizeX * sizeY) from
     // CfgVehicles itemSize config. Minimum 1.
+    // Delegates to GetItemSlotDimensions to avoid code duplication.
     // ---------------------------------------------------------
     static int GetItemSlotSize(EntityAI item)
     {
-        if (!item)
-            return 1;
-
-        string cfgPath = "CfgVehicles " + item.GetType() + " itemSize";
-        string pathX;
-        string pathY;
-        int sizeX = 1;
-        int sizeY = 1;
-
-        if (GetGame().ConfigIsExisting(cfgPath))
-        {
-            pathX = cfgPath + " 0";
-            pathY = cfgPath + " 1";
-            sizeX = GetGame().ConfigGetInt(pathX);
-            sizeY = GetGame().ConfigGetInt(pathY);
-        }
-
-        if (sizeX <= 0)
-            sizeX = 1;
-
-        if (sizeY <= 0)
-            sizeY = 1;
-
-        return sizeX * sizeY;
+        int w;
+        int h;
+        GetItemSlotDimensions(item, w, h);
+        return w * h;
     }
 
     // ---------------------------------------------------------
@@ -897,6 +878,9 @@ class LFPG_SorterLogic
             if (!cItem)
                 continue;
 
+            if (!cItem.GetInventory())
+                continue;
+
             il_src = new InventoryLocation;
             cItem.GetInventory().GetCurrentInventoryLocation(il_src);
 
@@ -933,6 +917,9 @@ class LFPG_SorterLogic
             if (!cItem)
                 continue;
 
+            if (!cItem.GetInventory())
+                continue;
+
             il_src = new InventoryLocation;
             cItem.GetInventory().GetCurrentInventoryLocation(il_src);
 
@@ -958,6 +945,9 @@ class LFPG_SorterLogic
 
             cItem = items[si];
             if (!cItem)
+                continue;
+
+            if (!cItem.GetInventory())
                 continue;
 
             il_src = new InventoryLocation;

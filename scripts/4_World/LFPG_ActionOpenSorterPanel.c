@@ -52,12 +52,6 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
         if (!targetObj.IsKindOf(sorterType))
             return false;
 
-        // Distance check (squared for performance)
-        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), targetObj.GetPosition());
-        float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-        if (distSq > maxDistSq)
-            return false;
-
         LF_Sorter sorter = LF_Sorter.Cast(targetObj);
         if (!sorter)
             return false;
