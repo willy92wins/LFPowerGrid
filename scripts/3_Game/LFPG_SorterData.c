@@ -66,14 +66,6 @@ class LFPG_SortFilterRule
         m_Value = "";
     }
 
-    static LFPG_SortFilterRule Create(int ruleType, string ruleValue)
-    {
-        ref LFPG_SortFilterRule r = new LFPG_SortFilterRule();
-        r.m_Type = ruleType;
-        r.m_Value = ruleValue;
-        return r;
-    }
-
     // Check for duplicate: same type + same value
     bool Equals(int otherType, string otherValue)
     {
@@ -185,7 +177,9 @@ class LFPG_SortOutputConfig
                 return false;
         }
 
-        ref LFPG_SortFilterRule rule = LFPG_SortFilterRule.Create(ruleType, safeValue);
+        LFPG_SortFilterRule rule = new LFPG_SortFilterRule();
+        rule.m_Type = ruleType;
+        rule.m_Value = safeValue;
         m_Rules.Insert(rule);
         return true;
     }
@@ -289,7 +283,7 @@ class LFPG_SortConfig
                 json = json + ",";
             }
 
-            ref LFPG_SortOutputConfig outCfg = m_Outputs[oi];
+            LFPG_SortOutputConfig outCfg = m_Outputs[oi];
             json = json + "{\"r\":[";
 
             int ri;
@@ -299,7 +293,7 @@ class LFPG_SortConfig
                 {
                     json = json + ",";
                 }
-                ref LFPG_SortFilterRule rule = outCfg.m_Rules[ri];
+                LFPG_SortFilterRule rule = outCfg.m_Rules[ri];
                 json = json + "{\"t\":";
                 json = json + rule.m_Type.ToString();
                 json = json + ",\"v\":\"";
@@ -462,33 +456,4 @@ class LFPG_SortConfig
         return true;
     }
 
-    // ---- Create mock config for testing ----
-    static LFPG_SortConfig CreateMock()
-    {
-        LFPG_SortConfig cfg = new LFPG_SortConfig();
-
-        // Output 1: Weapons + Ammo
-        LFPG_SortOutputConfig out0 = cfg.GetOutput(0);
-        if (out0)
-        {
-            out0.AddRule(LFPG_SORT_FILTER_CATEGORY, LFPG_SORT_CAT_WEAPON);
-            out0.AddRule(LFPG_SORT_FILTER_CATEGORY, LFPG_SORT_CAT_AMMO);
-        }
-
-        // Output 2: Prefix M4
-        LFPG_SortOutputConfig out1 = cfg.GetOutput(1);
-        if (out1)
-        {
-            out1.AddRule(LFPG_SORT_FILTER_PREFIX, "M4");
-        }
-
-        // Output 6: Catch-all
-        LFPG_SortOutputConfig out5 = cfg.GetOutput(5);
-        if (out5)
-        {
-            out5.m_IsCatchAll = true;
-        }
-
-        return cfg;
-    }
 };

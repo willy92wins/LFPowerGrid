@@ -294,8 +294,15 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     static void OpenMock()
     {
         LFPG_SorterUI ui = Get();
-        ref LFPG_SortConfig mockCfg = LFPG_SortConfig.CreateMock();
-        string mockJSON = mockCfg.ToJSON();
+        // Hardcoded mock JSON: output 0 = WEAPON+AMMO, output 1 = prefix M4, output 5 = catch-all
+        string mockJSON = "{\"o\":[";
+        mockJSON = mockJSON + "{\"r\":[{\"t\":0,\"v\":\"WEAPON\"},{\"t\":0,\"v\":\"AMMO\"}],\"ca\":false},";
+        mockJSON = mockJSON + "{\"r\":[{\"t\":1,\"v\":\"M4\"}],\"ca\":false},";
+        mockJSON = mockJSON + "{\"r\":[],\"ca\":false},";
+        mockJSON = mockJSON + "{\"r\":[],\"ca\":false},";
+        mockJSON = mockJSON + "{\"r\":[],\"ca\":false},";
+        mockJSON = mockJSON + "{\"r\":[],\"ca\":true}";
+        mockJSON = mockJSON + "]}";
         ui.DoOpen(mockJSON, "Wooden Crate", "", "", "", "", "", "", 0, 0);
     }
 
@@ -1065,7 +1072,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // =========================================================
     // Event: OnUpdate (per-frame animation)
     // =========================================================
-    override bool OnUpdate(Widget w, float timeslice)
+    bool OnUpdate(Widget w, float timeslice)
     {
         if (!m_IsOpen)
             return false;
