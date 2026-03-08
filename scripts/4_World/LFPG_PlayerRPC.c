@@ -2140,16 +2140,21 @@ modded class PlayerBase
             return;
         }
 
-        // Store config (LFPG_SetFilterJSON has #ifdef SERVER guard internally)
-        sorter.LFPG_SetFilterJSON(filterJSON);
+        // Store config — returns false if JSON is malformed (M3 validation)
+        bool saveOk = sorter.LFPG_SetFilterJSON(filterJSON);
 
         // H4: Send ACK back to client
         ScriptRPC ackRpc = new ScriptRPC();
         int ackSubId = LFPG_RPC_SubId.SORTER_SAVE_ACK;
-        bool ackOk = true;
         ackRpc.Write(ackSubId);
-        ackRpc.Write(ackOk);
+        ackRpc.Write(saveOk);
         ackRpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
+
+        if (!saveOk)
+        {
+            LFPG_Util.Warn("[SorterConfigSave] rejected malformed JSON from client");
+            return;
+        }
 
         string logMsg = "[SorterConfigSave] Updated config for ";
         logMsg = logMsg + sorter.LFPG_GetDeviceId();

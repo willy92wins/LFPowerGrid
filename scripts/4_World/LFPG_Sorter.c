@@ -578,7 +578,7 @@ class LF_Sorter : Inventory_Base
         return m_FilterJSON;
     }
 
-    void LFPG_SetFilterJSON(string json)
+    bool LFPG_SetFilterJSON(string json)
     {
         #ifdef SERVER
         // M3: Validate JSON before persisting — reject malformed input
@@ -587,7 +587,7 @@ class LF_Sorter : Inventory_Base
         if (!parseOk)
         {
             LFPG_Util.Warn("[LF_Sorter] SetFilterJSON rejected: malformed JSON");
-            return;
+            return false;
         }
 
         m_FilterJSON = json;
@@ -595,6 +595,9 @@ class LF_Sorter : Inventory_Base
         // Note: m_FilterJSON is NOT a SyncVar — too large (up to 2048 bytes).
         // Client receives config via RPC (Sprint S4 CONFIG_REQUEST).
         // Persistence handled by OnStoreSave writing m_FilterJSON directly.
+        return true;
+        #else
+        return false;
         #endif
     }
 

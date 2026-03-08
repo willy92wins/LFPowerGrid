@@ -3597,6 +3597,10 @@ class LFPG_NetworkManager
                 portBit = portBit * 2;
             }
 
+            // No outputs have wires — nothing to sort
+            if (hasWireMask == 0)
+                continue;
+
             // Collect items into reusable cache to avoid index mutation
             // during moves (removing from cargo shifts indices)
             m_SorterItemCache.Clear();

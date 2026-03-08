@@ -634,7 +634,6 @@ class CfgVehicles
     };
 
     // ---- Sorter Kit (holdable, deployable) ----
-    class Inventory_Base;
     class LF_Sorter_Kit : Inventory_Base
     {
         scope = 2;
