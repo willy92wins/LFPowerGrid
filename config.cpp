@@ -328,8 +328,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         hiddenSelections[] = { "cam_led" };
-        hiddenSelectionsTextures[] = { "\LFPowerGrid\data\camera\lf_camera_led.paa" };
-        hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\camera\lf_camera_led_off.rvmat" };
+        hiddenSelectionsTextures[] = { "\LFPowerGrid\data\cctv\lf_camera_led.paa" };
+        hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\cctv\lf_camera_led_off.rvmat" };
     };
 
     // ---- Monitor Kit (holdable, deployable) ----
