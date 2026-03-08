@@ -34,50 +34,6 @@ class CfgSlots
     };
 };
 
-// =========================================================
-// v1.1.0: Water Pump sounds
-// =========================================================
-
-class CfgSoundShaders
-{
-    // Pump loop: low ambient motor hum while powered
-    class LFPG_WaterPump_Loop_Shader
-    {
-        samples[] = {{ "\LFPowerGrid\data\waterpump\pump", 1 }};
-        volume = 0.3;
-        range = 20;
-        rangeCurve[] = {{ 0, 1 }, { 10, 0.5 }, { 20, 0 }};
-    };
-    // Water dispense: one-shot when drinking/filling/washing
-    class LFPG_WaterPump_Water_Shader
-    {
-        samples[] = {{ "\LFPowerGrid\data\waterpump\water", 1 }};
-        volume = 0.6;
-        range = 10;
-        rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
-    };
-};
-
-class CfgSoundSets
-{
-    // Pump loop — spatial 3D, played by SEffectManager in OnVariablesSynchronized
-    class LFPG_WaterPump_Loop_SoundSet
-    {
-        soundShaders[] = { "LFPG_WaterPump_Loop_Shader" };
-        volumeFactor = 1;
-        frequencyFactor = 1;
-        spatial = 1;
-    };
-    // Water dispense — spatial 3D, played during drink/fill/wash actions (Sprint W2)
-    class LFPG_WaterPump_Water_SoundSet
-    {
-        soundShaders[] = { "LFPG_WaterPump_Water_Shader" };
-        volumeFactor = 1;
-        frequencyFactor = 1;
-        spatial = 1;
-    };
-};
-
 class CfgPatches
 {
     class LFPowerGrid
@@ -510,22 +466,21 @@ class CfgVehicles
     // v1.1.0: WATER PUMP (PASSTHROUGH, filter + tank)
     // =========================================================
 
-    // ---- Water Pump Kit (holdable, different-model deploy like Solar Panel) ----
+    // ---- Water Pump Kit (holdable, deployable, same-model) ----
     class LF_WaterPump_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_KIT";
         descriptionShort = "$STR_LFPG_PUMP_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        model = "\LFPowerGrid\data\waterpump\lf_waterpump.p3d";
         weight = 5000;
-        itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
+        itemSize[] = {4, 4};
+        rotationFlags = 17;
+        isDeployable = 1;
         carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
     };
 
     // ---- Water Pump T1 (placed device, PASSTHROUGH 50 u/s, cap 100 u/s) ----

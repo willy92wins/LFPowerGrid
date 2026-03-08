@@ -100,4 +100,36 @@ class LFPG_PumpHelper
         t2.LFPG_SetTankLevel(level);
         #endif
     }
+    // v1.1.0: Server-side power verification via graph edge data.
+    // Guards against stale m_PoweredNet SyncVar during graph timing gaps.
+    // Returns true if actual power is flowing to the device.
+    // On client, falls back to m_PoweredNet SyncVar.
+    static bool VerifyPowered(EntityAI device)
+    {
+        if (!device)
+            return false;
+
+        #ifdef SERVER
+        string devId = LFPG_DeviceAPI.GetDeviceId(device);
+        if (devId == "")
+            return false;
+
+        LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
+        if (!graph)
+            return false;
+
+        return graph.VerifyPassthroughPowered(devId);
+        #else
+        // Client: trust SyncVar (no graph access)
+        LF_WaterPump pump1 = LF_WaterPump.Cast(device);
+        if (pump1)
+            return pump1.LFPG_GetPoweredNet();
+
+        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(device);
+        if (pump2)
+            return pump2.LFPG_GetPoweredNet();
+
+        return false;
+        #endif
+    }
 };

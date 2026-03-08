@@ -1,37 +1,20 @@
 // =========================================================
-// LF_PowerGrid - Fill Container from Water Pump T2 Tank (v1.1.0 Sprint W3)
+// LF_PowerGrid - Fill Container from Water Pump T2 Tank (v1.1.1)
 //
 // Only appears on T2 when UNPOWERED (vanilla fill covers powered case).
-// [FIX-18] Registered on TARGET (T2), not on item.
-// [FIX-7] liquidType determined ONCE in CB, not mid-fill.
+// Uses CAContinuousRepeat + manual liquid transfer per cycle.
+// CAContinuousFill does NOT work here because our vanilla overrides
+// return LIQUID_NONE when unpowered, blocking the internal transfer.
+//
+// Each cycle transfers up to LFPG_PUMP_FILL_PER_CYCLE from tank to container.
+// Tank decrements proportionally to actual amount transferred.
 // =========================================================
 
 class LFPG_ActionFillPumpCB : ActionContinuousBaseCB
 {
     override void CreateActionComponent()
     {
-        // Determine liquid type once at start (FIX-7)
-        int liquidType = LIQUID_RIVERWATER;
-
-        if (m_ActionData && m_ActionData.m_Target)
-        {
-            Object obj = m_ActionData.m_Target.GetObject();
-            if (obj)
-            {
-                LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(obj);
-                if (pump2)
-                {
-                    EntityAI ent = EntityAI.Cast(obj);
-                    if (ent)
-                    {
-                        int tankLiq = pump2.LFPG_GetTankLiquidType();
-                        liquidType = LFPG_PumpHelper.DetermineLiquidType(ent, false, tankLiq);
-                    }
-                }
-            }
-        }
-
-        m_ActionData.m_ActionComponent = new CAContinuousFill(UAQuantityConsumed.FILL_LIQUID, liquidType);
+        m_ActionData.m_ActionComponent = new CAContinuousRepeat(UATimeSpent.WASH_HANDS);
     }
 };
 
@@ -67,7 +50,8 @@ class LFPG_ActionFillPump : ActionContinuousBase
             return false;
 
         // Only when NOT powered (vanilla fill covers powered case)
-        if (pump2.LFPG_GetPoweredNet())
+        EntityAI pumpEnt = EntityAI.Cast(targetObj);
+        if (pumpEnt && LFPG_PumpHelper.VerifyPowered(pumpEnt))
             return false;
 
         // Tank must have water
@@ -81,16 +65,17 @@ class LFPG_ActionFillPump : ActionContinuousBase
         if (itemQty >= itemMax)
             return false;
 
-        // Determine liquid type for container check
-        EntityAI ent = EntityAI.Cast(targetObj);
-        if (!ent)
+        // Verify item can accept water (prevents filling non-liquid items)
+        int tankLiq = pump2.LFPG_GetTankLiquidType();
+        int checkType = LIQUID_RIVERWATER;
+        if (tankLiq > 0)
+        {
+            checkType = tankLiq;
+        }
+        if (!Liquid.CanFillContainer(item, checkType))
             return false;
 
-        int tankLiq = pump2.LFPG_GetTankLiquidType();
-        int liquidType = LFPG_PumpHelper.DetermineLiquidType(ent, false, tankLiq);
-
-        bool canFill = Liquid.CanFillContainer(item, liquidType);
-        return canFill;
+        return true;
     }
 
     override bool ActionConditionContinue(ActionData action_data)
@@ -112,8 +97,9 @@ class LFPG_ActionFillPump : ActionContinuousBase
             return false;
 
         // Stop if container full
-        float itemQty = action_data.m_MainItem.GetQuantity();
-        float itemMax = action_data.m_MainItem.GetQuantityMax();
+        ItemBase mainItem = action_data.m_MainItem;
+        float itemQty = mainItem.GetQuantity();
+        float itemMax = mainItem.GetQuantityMax();
         if (itemQty >= itemMax)
             return false;
 
@@ -133,14 +119,58 @@ class LFPG_ActionFillPump : ActionContinuousBase
         if (!pump2)
             return;
 
-        // Decrement tank per fill cycle [FIX-2]
-        float level = pump2.LFPG_GetTankLevel();
-        level = level - LFPG_PUMP_TANK_FILL_COST;
-        if (level < 0.0)
+        ItemBase fillItem = action_data.m_MainItem;
+        if (!fillItem)
+            return;
+
+        // How much space the container has
+        float itemQty = fillItem.GetQuantity();
+        float itemMax = fillItem.GetQuantityMax();
+        float spaceLeft = itemMax - itemQty;
+        if (spaceLeft <= 0.0)
+            return;
+
+        // How much tank has
+        float tankLvl = pump2.LFPG_GetTankLevel();
+        if (tankLvl <= 0.0)
+            return;
+
+        // Transfer amount: min of (space in bottle, tank available, max per cycle)
+        // LFPG_PUMP_TANK_FILL_COST = 0.5L = 500ml per cycle
+        float transferMl = LFPG_PUMP_TANK_FILL_COST * 1000.0;
+        if (transferMl > spaceLeft)
         {
-            level = 0.0;
+            transferMl = spaceLeft;
         }
-        pump2.LFPG_SetTankLevel(level);
+        float transferL = transferMl / 1000.0;
+        if (transferL > tankLvl)
+        {
+            transferL = tankLvl;
+            transferMl = transferL * 1000.0;
+        }
+
+        if (transferMl <= 0.0)
+            return;
+
+        // Determine liquid type from tank
+        EntityAI targetEnt = EntityAI.Cast(targetObj);
+        int tankLiq = pump2.LFPG_GetTankLiquidType();
+        int liquidType = LIQUID_RIVERWATER;
+        if (targetEnt)
+        {
+            liquidType = LFPG_PumpHelper.DetermineLiquidType(targetEnt, false, tankLiq);
+        }
+
+        // Transfer liquid to container
+        Liquid.FillContainerEnviro(fillItem, liquidType, transferMl);
+
+        // Decrement tank proportionally
+        float newTankLvl = tankLvl - transferL;
+        if (newTankLvl < 0.0)
+        {
+            newTankLvl = 0.0;
+        }
+        pump2.LFPG_SetTankLevel(newTankLvl);
     }
 
     override void OnFinishProgressClient(ActionData action_data)

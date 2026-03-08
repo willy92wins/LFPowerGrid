@@ -1585,6 +1585,46 @@ class LFPG_ElecGraph
         return m_EdgesVisitedThisEpoch;
     }
 
+    // v1.1.0: Independent verification of PASSTHROUGH power state.
+    // Recalculates inputSum from edge allocations, not from cached m_Powered.
+    // Used by water pump actions to guard against stale SyncVar state.
+    bool VerifyPassthroughPowered(string nodeId)
+    {
+        #ifdef SERVER
+        ref LFPG_ElecNode node;
+        if (!m_Nodes.Find(nodeId, node) || !node)
+            return false;
+
+        if (node.m_DeviceType != LFPG_DeviceType.PASSTHROUGH)
+            return node.m_Powered;
+
+        float inputSum = 0.0;
+        ref array<ref LFPG_ElecEdge> inEdges;
+        if (m_Incoming.Find(nodeId, inEdges) && inEdges)
+        {
+            int ei;
+            for (ei = 0; ei < inEdges.Count(); ei = ei + 1)
+            {
+                ref LFPG_ElecEdge edge = inEdges[ei];
+                if (!edge)
+                    continue;
+                if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                    continue;
+                inputSum = inputSum + edge.m_AllocatedPower;
+            }
+        }
+
+        if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+        {
+            return (inputSum + LFPG_PROPAGATION_EPSILON >= node.m_Consumption);
+        }
+
+        return (inputSum > LFPG_PROPAGATION_EPSILON);
+        #else
+        return false;
+        #endif
+    }
+
     // ===========================
     // Bulk rebuild helpers
     // ===========================
@@ -1940,7 +1980,14 @@ class LFPG_ElecGraph
                     else
                     {
                         // Zero self-consumption (Splitter pattern) → pass everything
-                        newPowered = true;
+                        // v1.1.0: Only powered if actually receiving input.
+                        // Previously unconditionally set newPowered=true, causing
+                        // downstream devices to briefly see stale powered state
+                        // via SyncVar before dirty queue propagated fully.
+                        if (inputSum > LFPG_PROPAGATION_EPSILON)
+                        {
+                            newPowered = true;
+                        }
                         newOutput = inputSum;
                     }
 

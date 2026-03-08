@@ -60,13 +60,15 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
         LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
         if (pump1)
         {
-            return pump1.LFPG_GetPoweredNet();
+            EntityAI ent1 = EntityAI.Cast(targetObj);
+            return LFPG_PumpHelper.VerifyPowered(ent1);
         }
 
         LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
         if (pump2)
         {
-            if (pump2.LFPG_GetPoweredNet())
+            EntityAI ent2 = EntityAI.Cast(targetObj);
+            if (LFPG_PumpHelper.VerifyPowered(ent2))
                 return true;
 
             float tankLvl = pump2.LFPG_GetTankLevel();
@@ -99,12 +101,23 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
 
         if (pump1)
         {
-            powered = pump1.LFPG_GetPoweredNet();
+            powered = LFPG_PumpHelper.VerifyPowered(targetEnt);
         }
         if (pump2)
         {
-            powered = pump2.LFPG_GetPoweredNet();
+            powered = LFPG_PumpHelper.VerifyPowered(targetEnt);
             tankLiquidType = pump2.LFPG_GetTankLiquidType();
+        }
+
+        // Server-side authority: abort if no valid water source
+        if (pump1 && !powered)
+            return;
+
+        if (pump2 && !powered)
+        {
+            float srvTankLvl = pump2.LFPG_GetTankLevel();
+            if (srvTankLvl <= 0.0)
+                return;
         }
 
         int liquidType = LFPG_PumpHelper.DetermineLiquidType(targetEnt, powered, tankLiquidType);

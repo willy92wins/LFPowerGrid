@@ -646,21 +646,49 @@ class LFPG_DeviceInspector
                     tankPct = (tankLvl / LFPG_PUMP_TANK_MAX) * 100.0;
                 }
 
-                string tankText = "Tank: ";
                 int tankLvlInt = tankLvl;
                 int tankMaxInt = LFPG_PUMP_TANK_MAX;
+
+                string tankText = "Tank: ";
                 tankText = tankText + tankLvlInt.ToString() + "L / " + tankMaxInt.ToString() + "L";
                 tankText = tankText + "  (" + tankPct.ToString() + "%)";
 
-                if (!tankPow && tankLvl > 0.01)
+                // Status indicator
+                bool isFull = false;
+                if (tankLvl >= LFPG_PUMP_TANK_MAX - 0.1)
+                {
+                    isFull = true;
+                }
+
+                if (tankPow && !isFull)
+                {
+                    tankText = tankText + "  >> FILLING";
+                }
+                else if (tankPow && isFull)
+                {
+                    tankText = tankText + "  -- FULL";
+                }
+                else if (!tankPow && tankLvl > 0.01)
                 {
                     tankText = tankText + "  [OFFLINE]";
+                }
+                else if (!tankPow && tankLvl < 0.01)
+                {
+                    tankText = tankText + "  [EMPTY]";
                 }
 
                 m_wTankLine.SetText(tankText);
 
-                // Color by liquid type
-                if (tankLvl < 0.01)
+                // Color: filling=cyan, full=green, offline=yellow, empty=grey
+                if (tankPow && !isFull)
+                {
+                    m_wTankLine.SetColor(ARGB(255, 50, 200, 220));
+                }
+                else if (tankPow && isFull)
+                {
+                    m_wTankLine.SetColor(ARGB(255, 46, 155, 89));
+                }
+                else if (tankLvl < 0.01)
                 {
                     m_wTankLine.SetColor(ARGB(255, 120, 120, 120));
                 }

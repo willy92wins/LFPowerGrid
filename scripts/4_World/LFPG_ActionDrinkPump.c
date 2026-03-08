@@ -16,6 +16,9 @@ class LFPG_ActionDrinkPumpCB : ActionContinuousBaseCB
 
 class LFPG_ActionDrinkPump : ActionContinuousBase
 {
+    // Client-side sound ref (static OK — only 1 local player)
+    protected static EffectSound m_DrinkSound;
+
     void LFPG_ActionDrinkPump()
     {
         m_CallbackClass = LFPG_ActionDrinkPumpCB;
@@ -58,18 +61,20 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         if (!targetObj)
             return false;
 
-        // T1 check
+        // T1 check: requires verified power
         LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
         if (pump1)
         {
-            return pump1.LFPG_GetPoweredNet();
+            EntityAI ent1 = EntityAI.Cast(targetObj);
+            return LFPG_PumpHelper.VerifyPowered(ent1);
         }
 
-        // T2 check: powered OR tank > 0
+        // T2 check: verified power OR tank > 0
         LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
         if (pump2)
         {
-            if (pump2.LFPG_GetPoweredNet())
+            EntityAI ent2 = EntityAI.Cast(targetObj);
+            if (LFPG_PumpHelper.VerifyPowered(ent2))
                 return true;
 
             float tankLvl = pump2.LFPG_GetTankLevel();
@@ -88,15 +93,24 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
             action_data.m_Player.TryHideItemInHands(true);
         }
 
-        // Play water.ogg on client (SEffectManager is client-side only)
         #ifndef SERVER
+        // Stop any previous sound
+        if (m_DrinkSound)
+        {
+            m_DrinkSound.SoundStop();
+            m_DrinkSound = null;
+        }
         Object sndTarget = action_data.m_Target.GetObject();
         if (sndTarget)
         {
             EntityAI sndEnt = EntityAI.Cast(sndTarget);
             if (sndEnt)
             {
-                SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, sndEnt.GetPosition());
+                m_DrinkSound = SEffectManager.PlaySound(LFPG_PUMP_WATER_SOUNDSET, sndEnt.GetPosition());
+                if (m_DrinkSound)
+                {
+                    m_DrinkSound.SetAutodestroy(false);
+                }
             }
         }
         #endif
@@ -108,6 +122,15 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         {
             action_data.m_Player.TryHideItemInHands(false);
         }
+
+        #ifndef SERVER
+        if (m_DrinkSound)
+        {
+            m_DrinkSound.SoundStop();
+            m_DrinkSound = null;
+        }
+        #endif
+
         super.OnEnd(action_data);
     }
 
@@ -126,22 +149,34 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         bool powered = false;
         int tankLiquidType = 0;
 
+        EntityAI targetEnt = EntityAI.Cast(targetObj);
+        if (!targetEnt)
+            return;
+
         LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
         LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
 
         if (pump1)
         {
-            powered = pump1.LFPG_GetPoweredNet();
+            powered = LFPG_PumpHelper.VerifyPowered(targetEnt);
         }
         if (pump2)
         {
-            powered = pump2.LFPG_GetPoweredNet();
+            powered = LFPG_PumpHelper.VerifyPowered(targetEnt);
             tankLiquidType = pump2.LFPG_GetTankLiquidType();
         }
 
-        EntityAI targetEnt = EntityAI.Cast(targetObj);
-        if (!targetEnt)
+        // Server-side authority: abort if no valid water source
+        // T1: requires power (no tank). T2: requires power OR tank > 0.
+        if (pump1 && !powered)
             return;
+
+        if (pump2 && !powered)
+        {
+            float srvTankLvl = pump2.LFPG_GetTankLevel();
+            if (srvTankLvl <= 0.0)
+                return;
+        }
 
         int liquidType = LFPG_PumpHelper.DetermineLiquidType(targetEnt, powered, tankLiquidType);
 

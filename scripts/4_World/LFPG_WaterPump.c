@@ -336,19 +336,19 @@ class LF_WaterPump : Inventory_Base
         return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
     }
 
-    // ---- Vanilla water overrides (gated by m_PoweredNet) ----
+    // ---- Vanilla water overrides (server: graph-verified, client: SyncVar) ----
     override int GetLiquidSourceType()
     {
-        if (!m_PoweredNet) return LIQUID_NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this)) return LIQUID_NONE;
         if (LFPG_HasActiveFilter()) return LIQUID_CLEANWATER;
         return LIQUID_RIVERWATER;
     }
     override int GetWaterSourceObjectType()
     {
-        if (!m_PoweredNet) return EWaterSourceObjectType.NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this)) return EWaterSourceObjectType.NONE;
         return EWaterSourceObjectType.WELL;
     }
-    override bool IsWell() { return m_PoweredNet; }
+    override bool IsWell() { return LFPG_PumpHelper.VerifyPowered(this); }
     override float GetLiquidThroughputCoef() { return LIQUID_THROUGHPUT_WELL; }
 
     // ---- Wire ownership API ----
@@ -721,19 +721,19 @@ class LF_WaterPump_T2 : Inventory_Base
         return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
     }
 
-    // ---- Vanilla water overrides (GATE BY m_PoweredNet ONLY) ----
+    // ---- Vanilla water overrides (server: graph-verified, client: SyncVar) ----
     override int GetLiquidSourceType()
     {
-        if (!m_PoweredNet) return LIQUID_NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this)) return LIQUID_NONE;
         if (LFPG_HasActiveFilter()) return LIQUID_CLEANWATER;
         return LIQUID_RIVERWATER;
     }
     override int GetWaterSourceObjectType()
     {
-        if (!m_PoweredNet) return EWaterSourceObjectType.NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this)) return EWaterSourceObjectType.NONE;
         return EWaterSourceObjectType.WELL;
     }
-    override bool IsWell() { return m_PoweredNet; }
+    override bool IsWell() { return LFPG_PumpHelper.VerifyPowered(this); }
     override float GetLiquidThroughputCoef() { return LIQUID_THROUGHPUT_WELL; }
 
     // ---- Wire ownership API ----

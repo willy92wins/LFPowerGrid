@@ -113,7 +113,7 @@ class LFPG_NetworkManager
     protected bool m_SolarHasSun = false;
 
     // v1.1.0: Water Pump tank fill tracking (in-game hour based)
-    protected int m_TankFillLastHour = -1;
+    protected float m_TankFillLastMs = -1.0;
 
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
@@ -229,7 +229,7 @@ class LFPG_NetworkManager
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
 
         // v1.1.0: Water Pump tablet + tank timer
-        LFPG_InitTankFillHour();
+        LFPG_InitTankFillTime();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
         #endif
     }
@@ -3332,20 +3332,10 @@ class LFPG_NetworkManager
     //   2. Tank fill: in-game hour based, LFPG_PUMP_TANK_FILL_PER_HOUR per hour
 
     // Seed tank fill hour from world time
-    protected void LFPG_InitTankFillHour()
+    protected void LFPG_InitTankFillTime()
     {
         #ifdef SERVER
-        World world = GetGame().GetWorld();
-        if (!world)
-            return;
-
-        int year = 0;
-        int month = 0;
-        int day = 0;
-        int hour = 0;
-        int minute = 0;
-        world.GetDate(year, month, day, hour, minute);
-        m_TankFillLastHour = hour;
+        m_TankFillLastMs = GetGame().GetTime();
         #endif
     }
 
@@ -3356,36 +3346,23 @@ class LFPG_NetworkManager
         float nowMs = GetGame().GetTime();
         float thresholdMs = LFPG_PUMP_TABLET_INTERVAL_MS;
 
-        // --- Compute tank fill delta ONCE (shared across all T2 pumps) ---
-        int tankHourDelta = 0;
+        // --- Compute tank fill amount from real elapsed ms ---
+        float fillAmount = 0.0;
         bool doTankFill = false;
 
-        if (m_TankFillLastHour >= 0)
+        if (m_TankFillLastMs >= 0.0)
         {
-            World world = GetGame().GetWorld();
-            if (world)
+            float elapsedFillMs = nowMs - m_TankFillLastMs;
+            if (elapsedFillMs > 0.0)
             {
-                int year = 0;
-                int month = 0;
-                int day = 0;
-                int hour = 0;
-                int minute = 0;
-                world.GetDate(year, month, day, hour, minute);
-
-                if (hour != m_TankFillLastHour)
+                fillAmount = (elapsedFillMs / 3600000.0) * LFPG_PUMP_TANK_FILL_PER_HOUR;
+                m_TankFillLastMs = nowMs;
+                if (fillAmount > 0.001)
                 {
-                    tankHourDelta = hour - m_TankFillLastHour;
-                    if (tankHourDelta < 0)
-                    {
-                        tankHourDelta = tankHourDelta + 24;
-                    }
-                    m_TankFillLastHour = hour;
                     doTankFill = true;
                 }
             }
         }
-
-        float fillAmount = LFPG_PUMP_TANK_FILL_PER_HOUR * tankHourDelta;
 
         // --- Single iteration: tablet consumption + tank fill ---
         array<EntityAI> allDevs = new array<EntityAI>;
