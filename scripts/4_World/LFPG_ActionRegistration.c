@@ -72,7 +72,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionWashHandsPump);
         actions.Insert(LFPG_ActionFillPump);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (32)");
+        // --- v1.2.0: Sorter Kit placement ---
+        actions.Insert(LFPG_ActionPlaceSorter);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (33)");
     }
 };
 

@@ -1,0 +1,769 @@
+FrameWidgetClass SorterRoot {
+	size 1 1
+	hexactpos 0
+	vexactpos 0
+	hexactsize 0
+	vexactsize 0
+	visible 0
+	{
+		ImageWidgetClass ModalOverlay {
+			size 1 1
+			hexactpos 0
+			vexactpos 0
+			hexactsize 0
+			vexactsize 0
+			stretch 1
+		}
+		FrameWidgetClass SorterPanel {
+			hexactpos 1
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			{
+				ImageWidgetClass PanelGlow {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+				ImageWidgetClass PanelBg {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+				ImageWidgetClass HeaderBg {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+				TextWidgetClass HeaderTitle {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/Metron"
+					ignorepointer 1
+				}
+				TextWidgetClass StatusText {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/MetronBook"
+					ignorepointer 1
+				}
+				ButtonWidgetClass BtnSort {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass BtnSortText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut0 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut0Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut1 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut1Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut2 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut2Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut3 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut3Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut4 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut4Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabOut5 {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabOut5Text {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabFilters {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabFiltersText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass TabContView {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass TabContViewText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				FrameWidgetClass FiltersView {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass LblCategories {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						ButtonWidgetClass CatBtn0 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn0Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn1 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn1Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn2 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn2Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn3 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn3Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn4 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn4Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn5 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn5Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn6 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn6Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass CatBtn7 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass CatBtn7Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ImageWidgetClass SepCat {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						TextWidgetClass LblPrefix {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						EditBoxWidgetClass EditPrefix {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+						}
+						TextWidgetClass PlhPrefix {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						ButtonWidgetClass BtnPrefixAdd {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass BtnPrefixAddText {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									ignorepointer 1
+								}
+							}
+						}
+						TextWidgetClass LblContains {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						EditBoxWidgetClass EditContains {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+						}
+						TextWidgetClass PlhContains {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						ButtonWidgetClass BtnContainsAdd {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass BtnContainsAddText {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									ignorepointer 1
+								}
+							}
+						}
+						ImageWidgetClass SepSlot {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						TextWidgetClass LblSlot {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						ButtonWidgetClass SlotPre0 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass SlotPre0Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass SlotPre1 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass SlotPre1Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass SlotPre2 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass SlotPre2Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						ButtonWidgetClass SlotPre3 {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass SlotPre3Text {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+						EditBoxWidgetClass EditSlotMin {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+						}
+						TextWidgetClass LblSlotDash {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						EditBoxWidgetClass EditSlotMax {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+						}
+						ButtonWidgetClass BtnSlotAdd {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass BtnSlotAddText {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									ignorepointer 1
+								}
+							}
+						}
+						ImageWidgetClass SepCatchAll {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						ButtonWidgetClass BtnCatchAll {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								TextWidgetClass BtnCatchAllText {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+					}
+					FrameWidgetClass TagsPanel {
+						hexactpos 1
+						vexactpos 1
+						hexactsize 1
+						vexactsize 1
+						{
+							ImageWidgetClass TagsBg {
+								hexactpos 1
+								vexactpos 1
+								hexactsize 1
+								vexactsize 1
+								stretch 1
+								ignorepointer 1
+							}
+							TextWidgetClass LblTags {
+								hexactpos 1
+								vexactpos 1
+								hexactsize 1
+								vexactsize 1
+								font "gui/fonts/Metron"
+								ignorepointer 1
+							}
+							TextWidgetClass TagsEmpty {
+								hexactpos 1
+								vexactpos 1
+								hexactsize 1
+								vexactsize 1
+								font "gui/fonts/MetronBook"
+								ignorepointer 1
+							}
+							WrapSpacerWidgetClass TagsWrap {
+								hexactpos 1
+								vexactpos 1
+								hexactsize 1
+								vexactsize 1
+							}
+						}
+					}
+				}
+				FrameWidgetClass ContainerView {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					visible 0
+					{
+						ImageWidgetClass GridBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						TextWidgetClass GridTitle {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						TextWidgetClass GridInfo {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						FrameWidgetClass GridArea {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+						}
+					}
+				}
+				ImageWidgetClass FooterSep {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+				ButtonWidgetClass BtnClearOut {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass BtnClearOutText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass BtnResetAll {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass BtnResetAllText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass BtnSave {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass BtnSaveText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+					}
+				}
+				ButtonWidgetClass BtnClose {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						TextWidgetClass BtnCloseText {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+					}
+				}
+				ImageWidgetClass ScanlineOverlay {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+			}
+		}
+	}
+}

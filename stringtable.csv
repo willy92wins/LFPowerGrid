@@ -71,3 +71,7 @@
 "STR_LFPG_ACTION_TOGGLE_FURNACE","Toggle Furnace","Toggle Furnace","Encender/Apagar Horno","Ofen umschalten","Переключить печь"
 "STR_LFPG_ACTION_FURNACE_ON","Turn On Furnace","Turn On Furnace","Encender Horno","Ofen einschalten","Включить печь"
 "STR_LFPG_ACTION_FURNACE_OFF","Turn Off Furnace","Turn Off Furnace","Apagar Horno","Ofen ausschalten","Выключить печь"
+"STR_LFPG_SorterKit","Sorter Kit","Sorter Kit","Kit Clasificador","Sortierer-Kit","Набор сортировщика"
+"STR_LFPG_SorterKit_Desc","An automated item sorter. Place near a container to link.","An automated item sorter. Place near a container to link.","Un clasificador automatico de items. Colocar cerca de un contenedor.","Ein automatischer Gegenstandssortierer. In der Naehe eines Behaelters platzieren.","Автоматический сортировщик предметов. Размещайте рядом с контейнером."
+"STR_LFPG_Sorter","Power Sorter","Power Sorter","Clasificador Electrico","Stromsortierer","Электросортировщик"
+"STR_LFPG_Sorter_Desc","Sorts items from its linked container to downstream containers based on filter rules. Requires power.","Sorts items from its linked container to downstream containers based on filter rules. Requires power.","Clasifica items del contenedor vinculado a contenedores conectados segun reglas de filtro. Requiere electricidad.","Sortiert Gegenstaende aus dem verknuepften Behaelter in nachgeschaltete Behaelter basierend auf Filterregeln. Benoetigt Strom.","Сортирует предметы из связанного контейнера в подключённые контейнеры по правилам фильтрации. Требуется питание."

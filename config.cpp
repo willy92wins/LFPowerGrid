@@ -83,7 +83,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -631,5 +631,41 @@ class CfgVehicles
         isDeployable = 0;
         hiddenSelections[] = {"body"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\furnace\Furnace.paa"};
+    };
+
+    // ---- Sorter Kit (holdable, deployable) ----
+    class Inventory_Base;
+    class LF_Sorter_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SorterKit";
+        descriptionShort = "$STR_LFPG_SorterKit_Desc";
+        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
+        weight = 3000;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"zbytek"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {""};
+    };
+
+    // ---- Sorter (placed device, PASSTHROUGH 5 u/s) ----
+    class LF_Sorter : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Sorter";
+        descriptionShort = "$STR_LFPG_Sorter_Desc";
+        model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
+        weight = 5000;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
     };
 };
