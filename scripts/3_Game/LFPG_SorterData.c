@@ -66,7 +66,7 @@ class LFPG_SortFilterRule
         m_Value = "";
     }
 
-    static ref LFPG_SortFilterRule Create(int ruleType, string ruleValue)
+    static LFPG_SortFilterRule Create(int ruleType, string ruleValue)
     {
         ref LFPG_SortFilterRule r = new LFPG_SortFilterRule();
         r.m_Type = ruleType;
@@ -463,9 +463,9 @@ class LFPG_SortConfig
     }
 
     // ---- Create mock config for testing ----
-    static ref LFPG_SortConfig CreateMock()
+    static LFPG_SortConfig CreateMock()
     {
-        ref LFPG_SortConfig cfg = new LFPG_SortConfig();
+        LFPG_SortConfig cfg = new LFPG_SortConfig();
 
         // Output 1: Weapons + Ammo
         LFPG_SortOutputConfig out0 = cfg.GetOutput(0);
