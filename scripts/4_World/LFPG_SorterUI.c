@@ -214,6 +214,11 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // ---- Tags flash (U1) ----
     protected float m_TagsFlashTimer;
 
+    // ---- Hover tracking (E3: cursor polling) ----
+    protected ButtonWidget m_HoveredBtn;
+    protected float m_PanelScreenX;
+    protected float m_PanelScreenY;
+
     // ---- Deferred creation (avoid CreateWidgets from RPC context) ----
     protected bool m_PendingOpen;
 
@@ -258,6 +263,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_ResetConfirmActive = false;
         m_ResetConfirmTimer = 0.0;
         m_TagsFlashTimer = 0.0;
+        m_HoveredBtn = null;
+        m_PanelScreenX = 0.0;
+        m_PanelScreenY = 0.0;
         m_ContainerName = "Container";
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
@@ -445,6 +453,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             m_wBtnResetAllText.SetText("RESET ALL");
         }
         SetBtnBgColor(m_wBtnResetAll, LFPG_SORT_COL_RED);
+        m_HoveredBtn = null;
 
         // Show cursor + lock game focus
         ShowCursor();
@@ -710,6 +719,8 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         GetScreenSize(scrW, scrH);
         float px = (scrW - LFPG_SORT_PANEL_W) * 0.5;
         float py = (scrH - LFPG_SORT_PANEL_H) * 0.5;
+        m_PanelScreenX = px;
+        m_PanelScreenY = py;
 
         // Modal overlay: fullscreen dark
         // Layout defines size 1 1 (proportional, 100% of parent root).
@@ -1213,131 +1224,6 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         return false;
     }
 
-    // =========================================================
-    // Event: OnMouseEnter / OnMouseLeave (E3: hover feedback)
-    // =========================================================
-    override bool OnMouseEnter(Widget w, int x, int y)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        // Only brighten buttons whose resting color is BTN_NORMAL.
-        // Active buttons (green/blue/orange) should NOT get the dark hover.
-        ButtonWidget btn = ButtonWidget.Cast(w);
-        if (btn)
-        {
-            int restCol = GetButtonRestoreColor(btn);
-            if (restCol == LFPG_SORT_COL_BTN_NORMAL)
-            {
-                SetBtnBgColor(btn, LFPG_SORT_COL_BTN_HOVER);
-            }
-        }
-
-        return false;
-    }
-
-    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        ButtonWidget btn = ButtonWidget.Cast(w);
-        if (btn)
-        {
-            // Restore correct color based on state
-            int restoreCol = GetButtonRestoreColor(btn);
-            SetBtnBgColor(btn, restoreCol);
-        }
-
-        return false;
-    }
-
-    // Determine the correct resting color for a button
-    protected int GetButtonRestoreColor(ButtonWidget btn)
-    {
-        if (!btn)
-            return LFPG_SORT_COL_BTN_NORMAL;
-
-        // Output tabs
-        int oi;
-        for (oi = 0; oi < 6; oi = oi + 1)
-        {
-            if (btn == m_wTabOut[oi])
-            {
-                if (oi == m_SelectedOutput)
-                    return LFPG_SORT_COL_GREEN;
-                return LFPG_SORT_COL_BTN_NORMAL;
-            }
-        }
-
-        // View tabs
-        if (btn == m_wTabFilters)
-        {
-            if (m_ShowFilters)
-                return LFPG_SORT_COL_GREEN;
-            return LFPG_SORT_COL_BTN_NORMAL;
-        }
-        if (btn == m_wTabContView)
-        {
-            if (!m_ShowFilters)
-                return LFPG_SORT_COL_GREEN;
-            return LFPG_SORT_COL_BTN_NORMAL;
-        }
-
-        // Category buttons
-        LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
-        if (outCfg)
-        {
-            int ci;
-            for (ci = 0; ci < 8; ci = ci + 1)
-            {
-                if (btn == m_wCatBtn[ci])
-                {
-                    string catVal = GetCategoryValue(ci);
-                    if (outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catVal))
-                        return LFPG_SORT_COL_GREEN;
-                    return LFPG_SORT_COL_BTN_NORMAL;
-                }
-            }
-
-            // Slot presets
-            int si;
-            for (si = 0; si < 4; si = si + 1)
-            {
-                if (btn == m_wSlotPre[si])
-                {
-                    string slotVal = GetSlotPresetValue(si);
-                    if (outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotVal))
-                        return LFPG_SORT_COL_BLUE;
-                    return LFPG_SORT_COL_BTN_NORMAL;
-                }
-            }
-
-            // Catch-all
-            if (btn == m_wBtnCatchAll)
-            {
-                if (outCfg.m_IsCatchAll)
-                    return LFPG_SORT_COL_ORANGE;
-                return LFPG_SORT_COL_BTN_NORMAL;
-            }
-        }
-
-        // Special buttons
-        if (btn == m_wBtnSort)
-            return LFPG_SORT_COL_BLUE;
-        if (btn == m_wBtnSave)
-            return LFPG_SORT_COL_GREEN;
-        if (btn == m_wBtnResetAll)
-        {
-            if (m_ResetConfirmActive)
-                return LFPG_SORT_COL_ORANGE;
-            return LFPG_SORT_COL_RED;
-        }
-        if (btn == m_wBtnPrefixAdd || btn == m_wBtnContainsAdd || btn == m_wBtnSlotAdd)
-            return LFPG_SORT_COL_GREEN;
-
-        return LFPG_SORT_COL_BTN_NORMAL;
-    }
 
     // =========================================================
     // Event: OnUpdate (per-frame animation)
@@ -1373,6 +1259,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 m_wScanlines.SetAlpha(0.06);
             }
         }
+
+        // E3: Cursor-based hover polling
+        PollHover();
 
         // ESC key check
         if (GetGame().GetInput())
@@ -1435,6 +1324,337 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     }
 
     // =========================================================
+
+    // =========================================================
+    // E3: Hover via cursor polling (OnMouseEnter not available)
+    // Called from OnUpdate. Checks cursor against button bounds.
+    // Only applies hover to BTN_NORMAL buttons (not active ones).
+    // =========================================================
+    protected void PollHover()
+    {
+        int mx = 0;
+        int my = 0;
+        GetMousePos(mx, my);
+
+        // Relative to panel
+        float relX = mx - m_PanelScreenX;
+        float relY = my - m_PanelScreenY;
+
+        // Early-out: cursor outside panel
+        if (relX < 0.0)
+        {
+            ClearHover();
+            return;
+        }
+        if (relY < 0.0)
+        {
+            ClearHover();
+            return;
+        }
+        if (relX > LFPG_SORT_PANEL_W)
+        {
+            ClearHover();
+            return;
+        }
+        if (relY > LFPG_SORT_PANEL_H)
+        {
+            ClearHover();
+            return;
+        }
+
+        // FiltersView offset for nested buttons
+        float fvOffX = 0.0;
+        float fvOffY = 0.0;
+        if (m_wFiltersView)
+        {
+            m_wFiltersView.GetPos(fvOffX, fvOffY);
+        }
+
+        // Check all buttons. First match wins (buttons don't overlap).
+        ButtonWidget hitBtn = null;
+        int oi;
+        int ci;
+        int si;
+
+        // Header: BtnSort (direct child of panel)
+        if (IsCursorInBtn(m_wBtnSort, relX, relY, 0.0, 0.0))
+        {
+            hitBtn = m_wBtnSort;
+        }
+
+        // Output tabs (direct children of panel)
+        if (!hitBtn)
+        {
+            for (oi = 0; oi < 6; oi = oi + 1)
+            {
+                if (IsCursorInBtn(m_wTabOut[oi], relX, relY, 0.0, 0.0))
+                {
+                    hitBtn = m_wTabOut[oi];
+                    break;
+                }
+            }
+        }
+
+        // View tabs (direct children of panel)
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wTabFilters, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wTabFilters;
+            }
+        }
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wTabContView, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wTabContView;
+            }
+        }
+
+        // Category buttons (children of FiltersView)
+        if (!hitBtn && m_ShowFilters)
+        {
+            for (ci = 0; ci < 8; ci = ci + 1)
+            {
+                if (IsCursorInBtn(m_wCatBtn[ci], relX, relY, fvOffX, fvOffY))
+                {
+                    hitBtn = m_wCatBtn[ci];
+                    break;
+                }
+            }
+        }
+
+        // Slot presets (children of FiltersView)
+        if (!hitBtn && m_ShowFilters)
+        {
+            for (si = 0; si < 4; si = si + 1)
+            {
+                if (IsCursorInBtn(m_wSlotPre[si], relX, relY, fvOffX, fvOffY))
+                {
+                    hitBtn = m_wSlotPre[si];
+                    break;
+                }
+            }
+        }
+
+        // Add buttons (children of FiltersView)
+        if (!hitBtn && m_ShowFilters)
+        {
+            if (IsCursorInBtn(m_wBtnPrefixAdd, relX, relY, fvOffX, fvOffY))
+            {
+                hitBtn = m_wBtnPrefixAdd;
+            }
+        }
+        if (!hitBtn && m_ShowFilters)
+        {
+            if (IsCursorInBtn(m_wBtnContainsAdd, relX, relY, fvOffX, fvOffY))
+            {
+                hitBtn = m_wBtnContainsAdd;
+            }
+        }
+        if (!hitBtn && m_ShowFilters)
+        {
+            if (IsCursorInBtn(m_wBtnSlotAdd, relX, relY, fvOffX, fvOffY))
+            {
+                hitBtn = m_wBtnSlotAdd;
+            }
+        }
+        if (!hitBtn && m_ShowFilters)
+        {
+            if (IsCursorInBtn(m_wBtnCatchAll, relX, relY, fvOffX, fvOffY))
+            {
+                hitBtn = m_wBtnCatchAll;
+            }
+        }
+
+        // Footer buttons (direct children of panel)
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wBtnClearOut, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wBtnClearOut;
+            }
+        }
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wBtnResetAll, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wBtnResetAll;
+            }
+        }
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wBtnSave, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wBtnSave;
+            }
+        }
+        if (!hitBtn)
+        {
+            if (IsCursorInBtn(m_wBtnClose, relX, relY, 0.0, 0.0))
+            {
+                hitBtn = m_wBtnClose;
+            }
+        }
+
+        // Apply hover state change
+        ApplyHover(hitBtn);
+    }
+
+    protected bool IsCursorInBtn(ButtonWidget btn, float curX, float curY, float parentOffX, float parentOffY)
+    {
+        if (!btn)
+            return false;
+
+        float bx = 0.0;
+        float by = 0.0;
+        float bw = 0.0;
+        float bh = 0.0;
+        btn.GetPos(bx, by);
+        btn.GetSize(bw, bh);
+        bx = bx + parentOffX;
+        by = by + parentOffY;
+
+        if (curX < bx)
+            return false;
+        if (curY < by)
+            return false;
+        if (curX > bx + bw)
+            return false;
+        if (curY > by + bh)
+            return false;
+        return true;
+    }
+
+    protected void ApplyHover(ButtonWidget newBtn)
+    {
+        // No change
+        if (newBtn == m_HoveredBtn)
+            return;
+
+        // Restore previous hovered button
+        if (m_HoveredBtn)
+        {
+            int restoreCol = GetBtnBaseColor(m_HoveredBtn);
+            SetBtnBgColor(m_HoveredBtn, restoreCol);
+        }
+
+        m_HoveredBtn = newBtn;
+
+        // Apply hover to new button (only if base color is BTN_NORMAL)
+        if (m_HoveredBtn)
+        {
+            int baseCol = GetBtnBaseColor(m_HoveredBtn);
+            if (baseCol == LFPG_SORT_COL_BTN_NORMAL)
+            {
+                SetBtnBgColor(m_HoveredBtn, LFPG_SORT_COL_BTN_HOVER);
+            }
+        }
+    }
+
+    protected void ClearHover()
+    {
+        if (m_HoveredBtn)
+        {
+            int restoreCol = GetBtnBaseColor(m_HoveredBtn);
+            SetBtnBgColor(m_HoveredBtn, restoreCol);
+            m_HoveredBtn = null;
+        }
+    }
+
+    // Returns the non-hovered color a button should have based on state
+    protected int GetBtnBaseColor(ButtonWidget btn)
+    {
+        if (!btn)
+            return LFPG_SORT_COL_BTN_NORMAL;
+
+        int oi;
+        int ci;
+        int si;
+        string catVal = "";
+        string slotVal = "";
+        LFPG_SortOutputConfig outCfg = null;
+
+        // Output tabs
+        for (oi = 0; oi < 6; oi = oi + 1)
+        {
+            if (btn == m_wTabOut[oi])
+            {
+                if (oi == m_SelectedOutput)
+                    return LFPG_SORT_COL_GREEN;
+                return LFPG_SORT_COL_BTN_NORMAL;
+            }
+        }
+
+        // View tabs
+        if (btn == m_wTabFilters)
+        {
+            if (m_ShowFilters)
+                return LFPG_SORT_COL_GREEN;
+            return LFPG_SORT_COL_BTN_NORMAL;
+        }
+        if (btn == m_wTabContView)
+        {
+            if (!m_ShowFilters)
+                return LFPG_SORT_COL_GREEN;
+            return LFPG_SORT_COL_BTN_NORMAL;
+        }
+
+        // Category buttons
+        outCfg = m_Config.GetOutput(m_SelectedOutput);
+        if (outCfg)
+        {
+            for (ci = 0; ci < 8; ci = ci + 1)
+            {
+                if (btn == m_wCatBtn[ci])
+                {
+                    catVal = GetCategoryValue(ci);
+                    if (outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catVal))
+                        return LFPG_SORT_COL_GREEN;
+                    return LFPG_SORT_COL_BTN_NORMAL;
+                }
+            }
+
+            for (si = 0; si < 4; si = si + 1)
+            {
+                if (btn == m_wSlotPre[si])
+                {
+                    slotVal = GetSlotPresetValue(si);
+                    if (outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotVal))
+                        return LFPG_SORT_COL_BLUE;
+                    return LFPG_SORT_COL_BTN_NORMAL;
+                }
+            }
+
+            if (btn == m_wBtnCatchAll)
+            {
+                if (outCfg.m_IsCatchAll)
+                    return LFPG_SORT_COL_ORANGE;
+                return LFPG_SORT_COL_BTN_NORMAL;
+            }
+        }
+
+        // Special buttons
+        if (btn == m_wBtnSort)
+            return LFPG_SORT_COL_BLUE;
+        if (btn == m_wBtnSave)
+            return LFPG_SORT_COL_GREEN;
+        if (btn == m_wBtnResetAll)
+        {
+            if (m_ResetConfirmActive)
+                return LFPG_SORT_COL_ORANGE;
+            return LFPG_SORT_COL_RED;
+        }
+        if (btn == m_wBtnPrefixAdd)
+            return LFPG_SORT_COL_GREEN;
+        if (btn == m_wBtnContainsAdd)
+            return LFPG_SORT_COL_GREEN;
+        if (btn == m_wBtnSlotAdd)
+            return LFPG_SORT_COL_GREEN;
+
+        return LFPG_SORT_COL_BTN_NORMAL;
+    }
+
     // Action handlers
     // =========================================================
     protected void SelectOutput(int idx)
@@ -1715,10 +1935,15 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // M7: Submit active EditBox on Enter key
     protected void TrySubmitActiveEdit()
     {
+        string pVal = "";
+        string cVal = "";
+        string sMin = "";
+        string sMax = "";
+
         // Check PREFIX
         if (m_wEditPrefix)
         {
-            string pVal = m_wEditPrefix.GetText();
+            pVal = m_wEditPrefix.GetText();
             if (pVal != "")
             {
                 OnAddPrefix();
@@ -1729,7 +1954,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         // Check CONTAINS
         if (m_wEditContains)
         {
-            string cVal = m_wEditContains.GetText();
+            cVal = m_wEditContains.GetText();
             if (cVal != "")
             {
                 OnAddContains();
@@ -1740,9 +1965,14 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         // Check SLOT custom
         if (m_wEditSlotMin && m_wEditSlotMax)
         {
-            string sMin = m_wEditSlotMin.GetText();
-            string sMax = m_wEditSlotMax.GetText();
-            if (sMin != "" || sMax != "")
+            sMin = m_wEditSlotMin.GetText();
+            sMax = m_wEditSlotMax.GetText();
+            if (sMin != "")
+            {
+                OnAddSlotCustom();
+                return;
+            }
+            if (sMax != "")
             {
                 OnAddSlotCustom();
                 return;

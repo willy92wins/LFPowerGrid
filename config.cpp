@@ -83,7 +83,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -669,5 +669,45 @@ class CfgVehicles
         hiddenSelections[] = { "sorter_led" };
         hiddenSelectionsTextures[] = { "\LFPowerGrid\data\sorter\textures\led_co.paa" };
         hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\sorter\materials\lf_sorter_led_off.rvmat" };
+    };
+
+    // =========================================================
+    // v1.4.0: SEARCHLIGHT (CONSUMER, directional light)
+    // =========================================================
+
+    // ---- Searchlight Kit (holdable, deployable, same-model) ----
+    class LF_Searchlight_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SearchlightKit";
+        descriptionShort = "$STR_LFPG_SearchlightKit_Desc";
+        model = "\LFPowerGrid\data\searchlight\lf_searchlight.p3d";
+        weight = 4000;
+        itemSize[] = {4, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Searchlight (placed device) ----
+    class LF_Searchlight : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Searchlight";
+        descriptionShort = "$STR_LFPG_Searchlight_Desc";
+        model = "\LFPowerGrid\data\searchlight\lf_searchlight.p3d";
+        weight = 5000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = { "lens_glow" };
+        hiddenSelectionsTextures[] = { "" };
+        hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\searchlight\lf_searchlight_lens_off.rvmat" };
     };
 };

@@ -3007,4 +3007,44 @@ class LFPG_ElecGraph
         }
         #endif
     }
+
+    // =========================================================
+    // Port-level power query (v1.3.1)
+    //
+    // Returns true if any incoming edge targeting the given port
+    // on the given device has allocated power > 0 this epoch.
+    //
+    // Used by devices that need per-port awareness (e.g., RaidAlarm
+    // Station uses input_2 as a trigger port distinct from the
+    // always-on power feed on input_1).
+    //
+    // Safe to call from LFPG_SetPowered or any server-side context
+    // after ProcessDirtyQueue has run for the current epoch.
+    // =========================================================
+    bool IsPortReceivingPower(string deviceId, string portName)
+    {
+        ref array<ref LFPG_ElecEdge> inEdges;
+        if (!m_Incoming.Find(deviceId, inEdges))
+            return false;
+
+        if (!inEdges)
+            return false;
+
+        int i;
+        int count = inEdges.Count();
+        for (i = 0; i < count; i = i + 1)
+        {
+            ref LFPG_ElecEdge edge = inEdges[i];
+            if (!edge)
+                continue;
+
+            if (edge.m_TargetPort != portName)
+                continue;
+
+            if (edge.m_AllocatedPower > 0.0)
+                return true;
+        }
+
+        return false;
+    }
 };

@@ -82,7 +82,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionToggleFurnace);
         actions.Insert(LFPG_ActionFeedFurnace);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (36)");
+        // --- v1.4.0: Searchlight Kit placement ---
+        actions.Insert(LFPG_ActionPlaceSearchlight);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (37)");
     }
 };
 

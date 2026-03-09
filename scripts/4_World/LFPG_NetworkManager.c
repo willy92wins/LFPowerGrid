@@ -641,6 +641,18 @@ class LFPG_NetworkManager
         return m_Graph;
     }
 
+    // v1.3.1: Port-level power query.
+    // Returns true if any incoming edge targeting the given port
+    // on the given device has allocated power > 0.
+    // Convenience wrapper around ElecGraph.IsPortReceivingPower().
+    bool IsPortReceivingPower(string deviceId, string portName)
+    {
+        if (!m_Graph)
+            return false;
+
+        return m_Graph.IsPortReceivingPower(deviceId, portName);
+    }
+
     // ===========================
     // Reverse index: "targetId|port" -> wire count + owner list
     // O(1) lookup instead of full scan.

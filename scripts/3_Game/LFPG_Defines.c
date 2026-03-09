@@ -242,7 +242,12 @@ enum LFPG_RPC_SubId
 	SORTER_CONFIG_RESPONSE = 20,  // S4: server sends filterJSON + container names
 	SORTER_CONFIG_SAVE     = 21,  // S4: client saves updated filterJSON
 	SORTER_REQUEST_SORT    = 22,  // S3: client requests manual sort (BinPack)
-	SORTER_SAVE_ACK        = 23   // S5: server confirms config save success/fail
+	SORTER_SAVE_ACK        = 23,  // S5: server confirms config save success/fail
+	SEARCHLIGHT_AIM            = 24,  // v1.4.0: Client→Server: yaw+pitch
+	SEARCHLIGHT_ENTER          = 25,  // v1.4.0: Client→Server: request enter spectator
+	SEARCHLIGHT_ENTER_CONFIRM  = 26,  // v1.4.0: Server→Client: confirm + send yaw/pitch
+	SEARCHLIGHT_EXIT_REQUEST   = 27,  // v1.4.0: Client→Server: request exit
+	SEARCHLIGHT_EXIT_CONFIRM   = 28   // v1.4.0: Server→Client: confirm exit
 };
 
 // ---- Sorter tick constants (Sprint S3) ----
@@ -579,3 +584,17 @@ static const string LFPG_PUMP_WATER_SOUNDSET           = "LFPG_WaterPump_Water_S
 static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output while burning
 static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
 static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns
+
+// ---- v1.4.0: Searchlight (CONSUMER) ----
+static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s
+static const float LFPG_SEARCHLIGHT_YAW_MIN           = -120.0;  // degrees
+static const float LFPG_SEARCHLIGHT_YAW_MAX           = 120.0;   // degrees
+static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -10.0;   // degrees
+static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 45.0;    // degrees
+static const float LFPG_SEARCHLIGHT_PAN_SPEED         = 30.0;    // degrees per second
+static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 100.0;   // ms between aim RPCs
+static const float LFPG_SEARCHLIGHT_CAM_BEHIND_M      = 2.0;     // spectator offset behind beam
+static const float LFPG_SEARCHLIGHT_CAM_UP_M          = 0.3;     // spectator offset above
+static const float LFPG_SEARCHLIGHT_EXIT_TIMEOUT_S    = 5.0;     // force cleanup timeout
+static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // raycast range
+
