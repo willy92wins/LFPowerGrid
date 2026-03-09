@@ -180,8 +180,9 @@ class LF_Camera : Inventory_Base
         {
             // LFPG_Util.GenerateDeviceId es la funcion correcta del codebase.
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-            SetSynchDirty();
         }
+        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
+        SetSynchDirty();
         #endif
 
         LFPG_UpdateDeviceIdString();
