@@ -79,6 +79,11 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (vp && vp.IsActive())
             return false;
 
+        // v1.4.0: block if searchlight spectator is active
+        LFPG_SearchlightController slCtrl = LFPG_SearchlightController.Get();
+        if (slCtrl && slCtrl.IsActive())
+            return false;
+
         return true;
     }
 

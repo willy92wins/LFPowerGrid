@@ -204,7 +204,7 @@ class LFPG_SearchlightController
             m_wHintText.SetPos(hintX, hintY);
             m_wHintText.SetSize(hintW, labelH);
             m_wHintText.SetColor(whiteColor);
-            m_wHintText.SetText("WASD: Aim  |  ESC: Exit");
+            m_wHintText.SetText("WASD: Aim  |  SPACE/ESC: Exit");
         }
 
         // Crosshair: center of screen
@@ -295,8 +295,9 @@ class LFPG_SearchlightController
         // Position camera behind the beam
         PositionCamera();
 
-        // Lock input
+        // Lock input + hide vanilla HUD
         LockFocus();
+        HideHUD();
         if (m_PlayerRef)
         {
             HumanInputController hic = m_PlayerRef.GetInputController();
@@ -316,7 +317,7 @@ class LFPG_SearchlightController
 
         if (p)
         {
-            p.MessageStatus("[LFPG] Searchlight: WASD=Aim  ESC=Exit");
+            p.MessageStatus("[LFPG] Searchlight: WASD=Aim  SPACE/ESC=Exit");
         }
 
         LFPG_Util.Info("[SearchlightCtrl] Entered spectator mode");
@@ -363,7 +364,7 @@ class LFPG_SearchlightController
         if (!m_Active)
             return false;
 
-        if (key == LFPG_KC_ESCAPE)
+        if (key == LFPG_KC_ESCAPE || key == LFPG_KC_SPACE)
         {
             m_ExitPhase = 1;
             return true;
@@ -602,6 +603,7 @@ class LFPG_SearchlightController
         m_PlayerRef = null;
 
         UnlockFocus();
+        RestoreHUD();
 
         if (m_HudRoot)
             m_HudRoot.Show(false);
@@ -649,6 +651,7 @@ class LFPG_SearchlightController
         }
 
         UnlockFocus();
+        RestoreHUD();
         DestroyWidgets();
 
         m_ActiveDuration = 0.0;
@@ -667,8 +670,16 @@ class LFPG_SearchlightController
         if (m_FocusLocked)
             return;
         m_FocusLocked = true;
-        GetGame().GetInput().ChangeGameFocus(1);
-        GetGame().GetUIManager().ShowUICursor(false);
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            inp.ChangeGameFocus(1);
+        }
+        UIManager uiMgr = GetGame().GetUIManager();
+        if (uiMgr)
+        {
+            uiMgr.ShowUICursor(false);
+        }
     }
 
     protected void UnlockFocus()
@@ -676,6 +687,40 @@ class LFPG_SearchlightController
         if (!m_FocusLocked)
             return;
         m_FocusLocked = false;
-        GetGame().GetInput().ChangeGameFocus(-1);
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            inp.ChangeGameFocus(-1);
+        }
+    }
+
+    // ---- Hide/Restore vanilla HUD (pattern: CameraViewport) ----
+    // Without HideHUD, player sees health bar + quickbar in spectator mode.
+    protected void HideHUD()
+    {
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            Hud hud = mission.GetHud();
+            if (hud)
+            {
+                hud.ShowHudPlayer(false);
+                hud.ShowQuickbarPlayer(false);
+            }
+        }
+    }
+
+    protected void RestoreHUD()
+    {
+        Mission mission = GetGame().GetMission();
+        if (mission)
+        {
+            Hud hud = mission.GetHud();
+            if (hud)
+            {
+                hud.ShowHudPlayer(true);
+                hud.ShowQuickbarPlayer(true);
+            }
+        }
     }
 };

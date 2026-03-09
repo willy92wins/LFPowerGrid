@@ -1298,6 +1298,12 @@ modded class PlayerBase
         if (!sender)
             return;
 
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            LFPG_SendClientMsg(this, "Too fast! Wait a moment.");
+            return;
+        }
+
         int netLow = 0;
         int netHigh = 0;
         if (!ctx.Read(netLow))

@@ -230,6 +230,7 @@ class LF_Searchlight : Inventory_Base
 
         #ifndef SERVER
         DestroyAllLights();
+        LFPG_SearchlightController.Reset();
         #endif
 
         super.EEKilled(killer);
@@ -242,6 +243,7 @@ class LF_Searchlight : Inventory_Base
 
         #ifndef SERVER
         DestroyAllLights();
+        LFPG_SearchlightController.Reset();
         #endif
 
         super.EEDelete(parent);
