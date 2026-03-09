@@ -1333,11 +1333,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
     // =========================================================
     // E3: Hover via cursor polling (OnMouseEnter not available)
-    // Called from DoTick. Checks cursor against button bounds.
+    // Called from OnUpdate. Checks cursor against button bounds.
     // Only applies hover to BTN_NORMAL buttons (not active ones).
-    // Wrapped in #ifndef SERVER: GetMousePos is client-only native.
     // =========================================================
-    #ifndef SERVER
     protected void PollHover()
     {
         int mx = 0;
@@ -1662,7 +1660,6 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         return LFPG_SORT_COL_BTN_NORMAL;
     }
-    #endif
 
     // Action handlers
     // =========================================================
