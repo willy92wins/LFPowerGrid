@@ -224,8 +224,13 @@ class LF_Furnace : Inventory_Base
 
         fuel = w * h * qty;
 
+        // Guard: GetInventory() can be null on entities mid-deletion
+        GameInventory inv = item.GetInventory();
+        if (!inv)
+            return fuel;
+
         // Recurse into cargo (items inside containers)
-        CargoBase cargo = item.GetInventory().GetCargo();
+        CargoBase cargo = inv.GetCargo();
         if (cargo)
         {
             int cargoCount = cargo.GetItemCount();
@@ -238,11 +243,11 @@ class LF_Furnace : Inventory_Base
         }
 
         // Recurse into attachments (clothing, magazines on weapons, etc.)
-        int attCount = item.GetInventory().AttachmentCount();
+        int attCount = inv.AttachmentCount();
         int ai = 0;
         for (ai = 0; ai < attCount; ai = ai + 1)
         {
-            EntityAI att = item.GetInventory().GetAttachmentFromIndex(ai);
+            EntityAI att = inv.GetAttachmentFromIndex(ai);
             fuel = fuel + LFPG_CalcFuelRecursive(att);
         }
 
@@ -278,33 +283,42 @@ class LF_Furnace : Inventory_Base
         if (m_LFPG_Deleting)
             return;
 
+        // Defense: if timer leaked while source is off, clean up and exit
         if (!m_SourceOn)
+        {
+            LFPG_StopBurnTimer();
             return;
+        }
 
+        // Consume one unit of fuel
         if (m_FuelCurrent > 0)
         {
             m_FuelCurrent = m_FuelCurrent - 1;
-            SetSynchDirty();
         }
 
+        // Check exhaustion
         if (m_FuelCurrent <= 0)
         {
             m_FuelCurrent = 0;
             m_SourceOn = false;
-            SetSynchDirty();
+            LFPG_StopBurnTimer();
             if (m_DeviceId != "")
             {
                 LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
             }
             LFPG_Util.Info("[LF_Furnace] Fuel exhausted, auto-off. id=" + m_DeviceId);
         }
+
+        // Single dirty for all state changes in this tick
+        SetSynchDirty();
         #endif
     }
 
-    // ---- Start burn timer ----
+    // ---- Start burn timer (idempotent: removes any existing timer first) ----
     void LFPG_StartBurnTimer()
     {
         #ifdef SERVER
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_BurnTick);
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_BurnTick, LFPG_FURNACE_BURN_INTERVAL_MS, true);
         #endif
     }

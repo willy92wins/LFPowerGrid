@@ -44,12 +44,14 @@ static const int LFPG_SORT_COL_SEPARATOR    = 0x99334059;  // 153,51,64,89
 static const int LFPG_SORT_COL_MODAL        = 0x99000000;  // 153,0,0,0
 static const int LFPG_SORT_COL_TAGS_BG      = 0xCC0A0F18;  // 204,10,15,24
 static const int LFPG_SORT_COL_WHITE        = 0xFFF2F2F2;  // 255,242,242,242
+static const int LFPG_SORT_COL_BTN_HOVER    = 0xFF2E3D50;  // 255,46,61,80
+static const int LFPG_SORT_COL_EDIT_BG      = 0xFF1A2233;  // 255,26,34,51
 
 // ---------------------------------------------------------
 // Layout dimensions (pixels, based on 1080p reference)
 // ---------------------------------------------------------
 static const float LFPG_SORT_PANEL_W   = 680.0;
-static const float LFPG_SORT_PANEL_H   = 720.0;
+static const float LFPG_SORT_PANEL_H   = 600.0;
 static const float LFPG_SORT_HEADER_H  = 48.0;
 static const float LFPG_SORT_TAB_H     = 30.0;
 static const float LFPG_SORT_FOOTER_H  = 44.0;
@@ -188,6 +190,15 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected ButtonWidget m_wBtnClose;
     protected TextWidget m_wBtnCloseText;
 
+    // ---- Accent bar (M1) ----
+    protected ImageWidget m_wAccentBar;
+
+    // ---- EditBox backgrounds (E1) ----
+    protected ImageWidget m_wEditPrefixBg;
+    protected ImageWidget m_wEditContainsBg;
+    protected ImageWidget m_wEditSlotMinBg;
+    protected ImageWidget m_wEditSlotMaxBg;
+
     // ---- State ----
     protected bool m_IsOpen;
     protected int m_SelectedOutput;     // 0-5
@@ -195,6 +206,13 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected bool m_FocusLocked;
     protected float m_GlowPhase;        // glow pulse animation
     protected float m_SaveFeedbackTimer; // H4: save feedback countdown (seconds)
+
+    // ---- Reset confirmation (M5) ----
+    protected bool m_ResetConfirmActive;
+    protected float m_ResetConfirmTimer;
+
+    // ---- Tags flash (U1) ----
+    protected float m_TagsFlashTimer;
 
     // ---- Deferred creation (avoid CreateWidgets from RPC context) ----
     protected bool m_PendingOpen;
@@ -237,6 +255,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_GlowPhase = 0.0;
         m_SaveFeedbackTimer = 0.0;
         m_PendingOpen = false;
+        m_ResetConfirmActive = false;
+        m_ResetConfirmTimer = 0.0;
+        m_TagsFlashTimer = 0.0;
         m_ContainerName = "Container";
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
@@ -412,6 +433,18 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         m_IsOpen = true;
         m_Root.Show(true);
+
+        // Reset transient state
+        m_ResetConfirmActive = false;
+        m_ResetConfirmTimer = 0.0;
+        m_TagsFlashTimer = 0.0;
+
+        // M5: Ensure RESET ALL button shows correct text on reopen
+        if (m_wBtnResetAllText)
+        {
+            m_wBtnResetAllText.SetText("RESET ALL");
+        }
+        SetBtnBgColor(m_wBtnResetAll, LFPG_SORT_COL_RED);
 
         // Show cursor + lock game focus
         ShowCursor();
@@ -655,6 +688,15 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_wBtnSaveText = TextWidget.Cast(m_Root.FindAnyWidget("BtnSaveText"));
         m_wBtnClose = ButtonWidget.Cast(m_Root.FindAnyWidget("BtnClose"));
         m_wBtnCloseText = TextWidget.Cast(m_Root.FindAnyWidget("BtnCloseText"));
+
+        // Accent bar (M1)
+        m_wAccentBar = ImageWidget.Cast(m_Root.FindAnyWidget("AccentBar"));
+
+        // EditBox backgrounds (E1)
+        m_wEditPrefixBg = ImageWidget.Cast(m_Root.FindAnyWidget("EditPrefixBg"));
+        m_wEditContainsBg = ImageWidget.Cast(m_Root.FindAnyWidget("EditContainsBg"));
+        m_wEditSlotMinBg = ImageWidget.Cast(m_Root.FindAnyWidget("EditSlotMinBg"));
+        m_wEditSlotMaxBg = ImageWidget.Cast(m_Root.FindAnyWidget("EditSlotMaxBg"));
     }
 
     // =========================================================
@@ -691,6 +733,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         // Panel background
         SetupImage(m_wPanelBg, 0, 0, LFPG_SORT_PANEL_W, LFPG_SORT_PANEL_H, LFPG_SORT_COL_PANEL_BG);
+
+        // Accent bar (M1): green left edge
+        SetupImage(m_wAccentBar, 0, 0, 3, LFPG_SORT_PANEL_H, LFPG_SORT_COL_GREEN);
 
         // Header background
         SetupImage(m_wHeaderBg, 0, 0, LFPG_SORT_PANEL_W, LFPG_SORT_HEADER_H, LFPG_SORT_COL_HEADER_BG);
@@ -772,6 +817,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         float editW = 240.0;
         float editH = 26.0;
         float addBtnW = 36.0;
+        SetupImage(m_wEditPrefixBg, LFPG_SORT_PAD, secY, editW, editH, LFPG_SORT_COL_EDIT_BG);
         SetupEditBox(m_wEditPrefix, LFPG_SORT_PAD, secY, editW, editH);
         SetupText(m_wPlhPrefix, LFPG_SORT_PAD + 6, secY + 3, editW - 12, 20, LFPG_SORT_COL_TEXT_DIM, "Type prefix...");
         float addX = LFPG_SORT_PAD + editW + 4;
@@ -782,6 +828,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         SetupText(m_wLblContains, LFPG_SORT_PAD, secY, 80, 18, LFPG_SORT_COL_TEXT_DIM, "CONTAINS");
         secY = secY + 20.0;
 
+        SetupImage(m_wEditContainsBg, LFPG_SORT_PAD, secY, editW, editH, LFPG_SORT_COL_EDIT_BG);
         SetupEditBox(m_wEditContains, LFPG_SORT_PAD, secY, editW, editH);
         SetupText(m_wPlhContains, LFPG_SORT_PAD + 6, secY + 3, editW - 12, 20, LFPG_SORT_COL_TEXT_DIM, "Type substring...");
         SetupButton(m_wBtnContainsAdd, m_wBtnContainsAddText, addX, secY, addBtnW, editH, LFPG_SORT_COL_GREEN, LFPG_SORT_COL_WHITE, "+");
@@ -810,10 +857,12 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         // Custom min-max
         float slotEditW = 50.0;
+        SetupImage(m_wEditSlotMinBg, LFPG_SORT_PAD, secY, slotEditW, editH, LFPG_SORT_COL_EDIT_BG);
         SetupEditBox(m_wEditSlotMin, LFPG_SORT_PAD, secY, slotEditW, editH);
         float dashX = LFPG_SORT_PAD + slotEditW + 4;
         SetupText(m_wLblSlotDash, dashX, secY + 3, 14, 20, LFPG_SORT_COL_TEXT, "-");
         float maxEditX = dashX + 16;
+        SetupImage(m_wEditSlotMaxBg, maxEditX, secY, slotEditW, editH, LFPG_SORT_COL_EDIT_BG);
         SetupEditBox(m_wEditSlotMax, maxEditX, secY, slotEditW, editH);
         float slotAddX = maxEditX + slotEditW + 4;
         SetupButton(m_wBtnSlotAdd, m_wBtnSlotAddText, slotAddX, secY, addBtnW, editH, LFPG_SORT_COL_GREEN, LFPG_SORT_COL_WHITE, "+");
@@ -862,7 +911,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         SetupImage(m_wScanlines, 0, 0, LFPG_SORT_PANEL_W, LFPG_SORT_PANEL_H, LFPG_SORT_COL_GREEN_DIM);
         if (m_wScanlines)
         {
-            m_wScanlines.SetAlpha(0.03);
+            m_wScanlines.SetAlpha(0.06);
         }
 
         // ---- Footer ----
@@ -1165,6 +1214,132 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     }
 
     // =========================================================
+    // Event: OnMouseEnter / OnMouseLeave (E3: hover feedback)
+    // =========================================================
+    override bool OnMouseEnter(Widget w, int x, int y)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        // Only brighten buttons whose resting color is BTN_NORMAL.
+        // Active buttons (green/blue/orange) should NOT get the dark hover.
+        ButtonWidget btn = ButtonWidget.Cast(w);
+        if (btn)
+        {
+            int restCol = GetButtonRestoreColor(btn);
+            if (restCol == LFPG_SORT_COL_BTN_NORMAL)
+            {
+                SetBtnBgColor(btn, LFPG_SORT_COL_BTN_HOVER);
+            }
+        }
+
+        return false;
+    }
+
+    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        ButtonWidget btn = ButtonWidget.Cast(w);
+        if (btn)
+        {
+            // Restore correct color based on state
+            int restoreCol = GetButtonRestoreColor(btn);
+            SetBtnBgColor(btn, restoreCol);
+        }
+
+        return false;
+    }
+
+    // Determine the correct resting color for a button
+    protected int GetButtonRestoreColor(ButtonWidget btn)
+    {
+        if (!btn)
+            return LFPG_SORT_COL_BTN_NORMAL;
+
+        // Output tabs
+        int oi;
+        for (oi = 0; oi < 6; oi = oi + 1)
+        {
+            if (btn == m_wTabOut[oi])
+            {
+                if (oi == m_SelectedOutput)
+                    return LFPG_SORT_COL_GREEN;
+                return LFPG_SORT_COL_BTN_NORMAL;
+            }
+        }
+
+        // View tabs
+        if (btn == m_wTabFilters)
+        {
+            if (m_ShowFilters)
+                return LFPG_SORT_COL_GREEN;
+            return LFPG_SORT_COL_BTN_NORMAL;
+        }
+        if (btn == m_wTabContView)
+        {
+            if (!m_ShowFilters)
+                return LFPG_SORT_COL_GREEN;
+            return LFPG_SORT_COL_BTN_NORMAL;
+        }
+
+        // Category buttons
+        LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
+        if (outCfg)
+        {
+            int ci;
+            for (ci = 0; ci < 8; ci = ci + 1)
+            {
+                if (btn == m_wCatBtn[ci])
+                {
+                    string catVal = GetCategoryValue(ci);
+                    if (outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catVal))
+                        return LFPG_SORT_COL_GREEN;
+                    return LFPG_SORT_COL_BTN_NORMAL;
+                }
+            }
+
+            // Slot presets
+            int si;
+            for (si = 0; si < 4; si = si + 1)
+            {
+                if (btn == m_wSlotPre[si])
+                {
+                    string slotVal = GetSlotPresetValue(si);
+                    if (outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotVal))
+                        return LFPG_SORT_COL_BLUE;
+                    return LFPG_SORT_COL_BTN_NORMAL;
+                }
+            }
+
+            // Catch-all
+            if (btn == m_wBtnCatchAll)
+            {
+                if (outCfg.m_IsCatchAll)
+                    return LFPG_SORT_COL_ORANGE;
+                return LFPG_SORT_COL_BTN_NORMAL;
+            }
+        }
+
+        // Special buttons
+        if (btn == m_wBtnSort)
+            return LFPG_SORT_COL_BLUE;
+        if (btn == m_wBtnSave)
+            return LFPG_SORT_COL_GREEN;
+        if (btn == m_wBtnResetAll)
+        {
+            if (m_ResetConfirmActive)
+                return LFPG_SORT_COL_ORANGE;
+            return LFPG_SORT_COL_RED;
+        }
+        if (btn == m_wBtnPrefixAdd || btn == m_wBtnContainsAdd || btn == m_wBtnSlotAdd)
+            return LFPG_SORT_COL_GREEN;
+
+        return LFPG_SORT_COL_BTN_NORMAL;
+    }
+
+    // =========================================================
     // Event: OnUpdate (per-frame animation)
     // =========================================================
     override bool OnUpdate(Widget w, float timeslice)
@@ -1181,21 +1356,21 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         if (m_wPanelGlow)
         {
-            float glowAlpha = 0.08 + 0.04 * Math.Sin(m_GlowPhase);
+            float glowAlpha = 0.15 + 0.10 * Math.Sin(m_GlowPhase);
             m_wPanelGlow.SetAlpha(glowAlpha);
         }
 
-        // Scanline subtle flicker
+        // Scanline subtle flicker (E6: increased visibility)
         if (m_wScanlines)
         {
             float flickChance = Math.RandomFloat01();
             if (flickChance < 0.03)
             {
-                m_wScanlines.SetAlpha(0.06);
+                m_wScanlines.SetAlpha(0.12);
             }
             else
             {
-                m_wScanlines.SetAlpha(0.03);
+                m_wScanlines.SetAlpha(0.06);
             }
         }
 
@@ -1207,6 +1382,12 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 DoClose();
                 return true;
             }
+
+            // M7: Enter key submits active EditBox
+            if (GetGame().GetInput().LocalPress("UAUISelect", false))
+            {
+                TrySubmitActiveEdit();
+            }
         }
 
         // H4: Save feedback timer — revert status to ONLINE after countdown
@@ -1217,6 +1398,36 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             {
                 m_SaveFeedbackTimer = 0.0;
                 RefreshStatusText(true);
+            }
+        }
+
+        // M5: Reset confirmation timeout
+        if (m_ResetConfirmActive)
+        {
+            m_ResetConfirmTimer = m_ResetConfirmTimer - timeslice;
+            if (m_ResetConfirmTimer <= 0.0)
+            {
+                m_ResetConfirmActive = false;
+                m_ResetConfirmTimer = 0.0;
+                if (m_wBtnResetAllText)
+                {
+                    m_wBtnResetAllText.SetText("RESET ALL");
+                }
+                SetBtnBgColor(m_wBtnResetAll, LFPG_SORT_COL_RED);
+            }
+        }
+
+        // U1: Tags flash on rule add
+        if (m_TagsFlashTimer > 0.0)
+        {
+            m_TagsFlashTimer = m_TagsFlashTimer - timeslice;
+            if (m_TagsFlashTimer <= 0.0)
+            {
+                m_TagsFlashTimer = 0.0;
+                if (m_wTagsBg)
+                {
+                    m_wTagsBg.SetColor(LFPG_SORT_COL_TAGS_BG);
+                }
             }
         }
 
@@ -1265,6 +1476,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         RefreshFiltersView();
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnToggleSlotPreset(int presetIdx)
@@ -1295,6 +1507,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         RefreshFiltersView();
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnAddPrefix()
@@ -1318,6 +1531,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         }
 
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnAddContains()
@@ -1341,6 +1555,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         }
 
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnAddSlotCustom()
@@ -1376,6 +1591,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         RefreshFiltersView();
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnToggleCatchAll()
@@ -1395,6 +1611,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
         RefreshFiltersView();
         RefreshTagsPanel();
+        FlashTagsPanel();
     }
 
     protected void OnClearOutput()
@@ -1410,7 +1627,28 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
     protected void OnResetAll()
     {
+        // M5: Two-click confirmation
+        if (!m_ResetConfirmActive)
+        {
+            m_ResetConfirmActive = true;
+            m_ResetConfirmTimer = 3.0;
+            if (m_wBtnResetAllText)
+            {
+                m_wBtnResetAllText.SetText("CONFIRM?");
+            }
+            SetBtnBgColor(m_wBtnResetAll, LFPG_SORT_COL_ORANGE);
+            return;
+        }
+
+        // Second click: actually reset
+        m_ResetConfirmActive = false;
+        m_ResetConfirmTimer = 0.0;
         m_Config.ResetAll();
+        if (m_wBtnResetAllText)
+        {
+            m_wBtnResetAllText.SetText("RESET ALL");
+        }
+        SetBtnBgColor(m_wBtnResetAll, LFPG_SORT_COL_RED);
         RefreshFiltersView();
         RefreshTagsPanel();
     }
@@ -1474,6 +1712,54 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         RefreshTagsPanel();
     }
 
+    // M7: Submit active EditBox on Enter key
+    protected void TrySubmitActiveEdit()
+    {
+        // Check PREFIX
+        if (m_wEditPrefix)
+        {
+            string pVal = m_wEditPrefix.GetText();
+            if (pVal != "")
+            {
+                OnAddPrefix();
+                return;
+            }
+        }
+
+        // Check CONTAINS
+        if (m_wEditContains)
+        {
+            string cVal = m_wEditContains.GetText();
+            if (cVal != "")
+            {
+                OnAddContains();
+                return;
+            }
+        }
+
+        // Check SLOT custom
+        if (m_wEditSlotMin && m_wEditSlotMax)
+        {
+            string sMin = m_wEditSlotMin.GetText();
+            string sMax = m_wEditSlotMax.GetText();
+            if (sMin != "" || sMax != "")
+            {
+                OnAddSlotCustom();
+                return;
+            }
+        }
+    }
+
+    // U1: Visual flash on the tags panel
+    protected void FlashTagsPanel()
+    {
+        m_TagsFlashTimer = 0.4;
+        if (m_wTagsBg)
+        {
+            m_wTagsBg.SetColor(LFPG_SORT_COL_GREEN_DIM);
+        }
+    }
+
     // =========================================================
     // UI refresh methods
     // =========================================================
@@ -1483,6 +1769,10 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         int outNum = 0;
         string tabLabel = "";
         string destN = "";
+        LFPG_SortOutputConfig tabCfg = null;
+        int tabRules = 0;
+        bool tabCatchAll = false;
+        bool hasContent = false;
         for (i = 0; i < 6; i = i + 1)
         {
             ButtonWidget tabBtn = m_wTabOut[i];
@@ -1503,12 +1793,31 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             {
                 tabTxt.SetColor(txtCol);
 
-                // S4: Show linked indicator (dot) if output has dest
+                // E4: Show indicators for rules and linked dest
                 outNum = i + 1;
                 destN = GetDestName(i);
+                tabCfg = m_Config.GetOutput(i);
+                tabRules = 0;
+                tabCatchAll = false;
+                if (tabCfg)
+                {
+                    tabRules = tabCfg.GetRuleCount();
+                    tabCatchAll = tabCfg.m_IsCatchAll;
+                }
+
+                hasContent = false;
+                if (tabRules > 0 || tabCatchAll)
+                {
+                    hasContent = true;
+                }
+
                 if (destN != "")
                 {
                     tabLabel = "O" + outNum.ToString() + " *";
+                }
+                else if (hasContent)
+                {
+                    tabLabel = "O" + outNum.ToString() + " +";
                 }
                 else
                 {

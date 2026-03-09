@@ -36,6 +36,14 @@ FrameWidgetClass SorterRoot {
 					stretch 1
 					ignorepointer 1
 				}
+				ImageWidgetClass AccentBar {
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
 				ImageWidgetClass HeaderBg {
 					hexactpos 1
 					vexactpos 1
@@ -532,6 +540,14 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/Metron"
 							ignorepointer 1
 						}
+						ImageWidgetClass EditPrefixBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
 						EditBoxWidgetClass EditPrefix {
 							hexactpos 1
 							vexactpos 1
@@ -579,6 +595,14 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/Metron"
+							ignorepointer 1
+						}
+						ImageWidgetClass EditContainsBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditContains {
@@ -742,6 +766,14 @@ FrameWidgetClass SorterRoot {
 								}
 							}
 						}
+						ImageWidgetClass EditSlotMinBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
 						EditBoxWidgetClass EditSlotMin {
 							hexactpos 1
 							vexactpos 1
@@ -755,6 +787,14 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
+							ignorepointer 1
+						}
+						ImageWidgetClass EditSlotMaxBg {
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditSlotMax {
