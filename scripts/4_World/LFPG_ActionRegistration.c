@@ -85,7 +85,10 @@ modded class ActionConstructor
         // --- v1.4.0: Searchlight Kit placement ---
         actions.Insert(LFPG_ActionPlaceSearchlight);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (37)");
+        // --- v1.4.0: Searchlight operate (spectator control) ---
+        actions.Insert(LFPG_ActionOperateSearchlight);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (38)");
     }
 };
 

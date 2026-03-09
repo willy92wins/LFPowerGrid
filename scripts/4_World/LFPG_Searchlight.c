@@ -143,6 +143,11 @@ class LF_Searchlight : Inventory_Base
     protected ScriptedLightBase m_LightHalo;
     protected ScriptedLightBase m_LightSplash;
 
+    // ---- Client: track previous aim to skip redundant reattach ----
+    protected float m_PrevAimYaw;
+    protected float m_PrevAimPitch;
+    protected bool  m_PrevSplashHit;
+
     // ============================================
     // Constructor — SyncVar registration
     // MUST be constructor, NOT EEInit.
@@ -276,6 +281,8 @@ class LF_Searchlight : Inventory_Base
         if (m_PoweredNet && !hasLights)
         {
             CreateAllLights();
+            ApplyOrientation();
+            UpdateSplashFromSync();
         }
         else if (!m_PoweredNet && hasLights)
         {
@@ -283,7 +290,8 @@ class LF_Searchlight : Inventory_Base
         }
         else if (m_PoweredNet && hasLights)
         {
-            // Phase 2: ApplyOrientation + UpdateSplashFromSync here
+            ApplyOrientation();
+            UpdateSplashFromSync();
         }
 
         // Rvmat swap: lens_glow = hiddenSelections[0]
@@ -395,6 +403,122 @@ class LF_Searchlight : Inventory_Base
     }
 
     // ============================================
+    // Client: apply light orientation from SyncVars
+    // ============================================
+    protected void ApplyOrientation()
+    {
+        #ifndef SERVER
+        if (!m_LightBeamCore)
+            return;
+
+        // Skip if aim hasn't changed (avoid DetachFromParent+AttachOnObject churn)
+        float yawDiff = m_AimYaw - m_PrevAimYaw;
+        float pitchDiff = m_AimPitch - m_PrevAimPitch;
+        if (yawDiff < 0.01 && yawDiff > -0.01 && pitchDiff < 0.01 && pitchDiff > -0.01)
+            return;
+
+        m_PrevAimYaw   = m_AimYaw;
+        m_PrevAimPitch = m_AimPitch;
+
+        // Compute beam direction from yaw/pitch
+        float yawRad = m_AimYaw * Math.DEG2RAD;
+        float pitchRad = m_AimPitch * Math.DEG2RAD;
+        float cosPitch = Math.Cos(pitchRad);
+
+        float dirX = Math.Sin(yawRad) * cosPitch;
+        float dirY = Math.Sin(pitchRad);
+        float dirZ = Math.Cos(yawRad) * cosPitch;
+
+        vector beamDir = Vector(dirX, dirY, dirZ);
+        beamDir.Normalize();
+        vector beamOri = beamDir.VectorToAngles();
+
+        vector mpStart = GetMemoryPointPos("beamStart");
+
+        if (m_LightBeamCore)
+        {
+            m_LightBeamCore.DetachFromParent();
+            m_LightBeamCore.AttachOnObject(this, mpStart, beamOri);
+        }
+        if (m_LightBeamSpill)
+        {
+            m_LightBeamSpill.DetachFromParent();
+            m_LightBeamSpill.AttachOnObject(this, mpStart, beamOri);
+        }
+        // Halo (PointLight) stays at fixed lens position — no reattach needed
+        #endif
+    }
+
+    // ============================================
+    // Client: update splash light from SyncVars
+    // ============================================
+    protected void UpdateSplashFromSync()
+    {
+        #ifndef SERVER
+        if (!m_LightSplash)
+            return;
+
+        if (m_SplashHit)
+        {
+            // Audit H3: splash must have no parent for world-space SetPosition
+            Object splashParent = m_LightSplash.GetAttachmentParent();
+            if (splashParent)
+            {
+                m_LightSplash.DetachFromParent();
+            }
+            vector splashPos = Vector(m_SplashX, m_SplashY, m_SplashZ);
+            m_LightSplash.SetPosition(splashPos);
+            m_LightSplash.SetEnabled(true);
+        }
+        else
+        {
+            m_LightSplash.SetEnabled(false);
+        }
+        #endif
+    }
+
+    // ============================================
+    // Server: aim setters (called from PlayerRPC)
+    // ============================================
+    float LFPG_GetAimYaw()
+    {
+        return m_AimYaw;
+    }
+
+    float LFPG_GetAimPitch()
+    {
+        return m_AimPitch;
+    }
+
+    void LFPG_SetAim(float yaw, float pitch)
+    {
+        #ifdef SERVER
+        m_AimYaw   = yaw;
+        m_AimPitch = pitch;
+        // NOTE: caller (HandleSearchlightAim) calls SetSynchDirty once after SetSplash
+        #endif
+    }
+
+    void LFPG_SetSplash(bool hit, float sx, float sy, float sz)
+    {
+        #ifdef SERVER
+        m_SplashHit = hit;
+        m_SplashX   = sx;
+        m_SplashY   = sy;
+        m_SplashZ   = sz;
+        // NOTE: caller (HandleSearchlightAim) calls SetSynchDirty once after this
+        #endif
+    }
+
+    // Batch sync: called once after SetAim + SetSplash
+    void LFPG_FlushSyncVars()
+    {
+        #ifdef SERVER
+        SetSynchDirty();
+        #endif
+    }
+
+    // ============================================
     // Persistence — CONSUMER: ids + yaw/pitch
     // NO m_PoweredNet (derived state).
     // NO m_Overloaded, m_SplashHit/X/Y/Z (transient).
@@ -454,7 +578,7 @@ class LF_Searchlight : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
-        // Phase 2: AddAction(LFPG_ActionOperateSearchlight);
+        AddAction(LFPG_ActionOperateSearchlight);
     }
 
     // Safety: bloquea CompEM vanilla

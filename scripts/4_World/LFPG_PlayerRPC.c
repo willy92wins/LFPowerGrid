@@ -122,6 +122,18 @@ modded class PlayerBase
         {
             HandleLFPG_SorterRequestSort(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_AIM)
+        {
+            HandleLFPG_SearchlightAim(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER)
+        {
+            HandleLFPG_SearchlightEnter(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT_REQUEST)
+        {
+            HandleLFPG_SearchlightExitRequest(sender);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -150,6 +162,14 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.SORTER_SAVE_ACK)
         {
             HandleLFPG_SorterSaveAck(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM)
+        {
+            HandleLFPG_SearchlightEnterConfirm(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM)
+        {
+            HandleLFPG_SearchlightExitConfirm();
         }
         #endif
     }
@@ -1266,6 +1286,230 @@ modded class PlayerBase
         if (vp)
         {
             vp.DoExitCleanup();
+        }
+    }
+
+    // =====================================
+    // SERVER: Searchlight Enter — validate, spectator, confirm
+    // Pattern: HandleLFPG_RequestCameraList (COT enter)
+    // =====================================
+    protected void HandleLFPG_SearchlightEnter(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+
+        // Resolve searchlight by NetworkID
+        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        if (!slObj)
+        {
+            LFPG_Util.Warn("[Searchlight_Enter] Cannot resolve NetworkID");
+            return;
+        }
+
+        LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+        if (!sl)
+        {
+            LFPG_Util.Warn("[Searchlight_Enter] Object is not LF_Searchlight");
+            return;
+        }
+
+        if (!sl.LFPG_IsPowered())
+        {
+            LFPG_SendClientMsg(this, "Searchlight is not powered.");
+            return;
+        }
+
+        // Server-side distance validation (anti-exploit)
+        PlayerBase playerCheck = PlayerBase.Cast(sender.GetPlayer());
+        if (playerCheck)
+        {
+            float distSq = LFPG_WorldUtil.DistSq(playerCheck.GetPosition(), sl.GetPosition());
+            float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+            if (distSq > maxDistSq)
+            {
+                LFPG_Util.Warn("[Searchlight_Enter] Distance check failed");
+                return;
+            }
+        }
+
+        // COT pattern: SelectPlayer(null) + SelectSpectator
+        vector slPos = sl.GetPosition();
+        float slY = slPos[1] + 0.83;
+        vector spectatorPos = Vector(slPos[0], slY, slPos[2]);
+
+        LFPG_SetSkipOnSelectPlayer(true);
+        GetGame().SelectPlayer(sender, null);
+        GetGame().SelectSpectator(sender, "staticcamera", spectatorPos);
+
+        // Send ENTER_CONFIRM with current yaw/pitch
+        float curYaw = sl.LFPG_GetAimYaw();
+        float curPitch = sl.LFPG_GetAimPitch();
+
+        ScriptRPC rpc = new ScriptRPC();
+        int confirmSubId = LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM;
+        rpc.Write(confirmSubId);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
+        rpc.Write(curYaw);
+        rpc.Write(curPitch);
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
+
+        string logMsg = "[Searchlight_Enter] SelectSpectator at ";
+        logMsg = logMsg + spectatorPos.ToString();
+        logMsg = logMsg + " yaw=" + curYaw.ToString();
+        logMsg = logMsg + " pitch=" + curPitch.ToString();
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // SERVER: Searchlight Aim — receive yaw/pitch, update SyncVars, splash raycast
+    // =====================================
+    protected void HandleLFPG_SearchlightAim(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        int netLow = 0;
+        int netHigh = 0;
+        float aimYaw = 0.0;
+        float aimPitch = 0.0;
+
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+        if (!ctx.Read(aimYaw))
+            return;
+        if (!ctx.Read(aimPitch))
+            return;
+
+        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        if (!slObj)
+            return;
+
+        LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+        if (!sl)
+            return;
+
+        // Clamp server-side (anti-cheat)
+        if (aimYaw < LFPG_SEARCHLIGHT_YAW_MIN)
+            aimYaw = LFPG_SEARCHLIGHT_YAW_MIN;
+        if (aimYaw > LFPG_SEARCHLIGHT_YAW_MAX)
+            aimYaw = LFPG_SEARCHLIGHT_YAW_MAX;
+        if (aimPitch < LFPG_SEARCHLIGHT_PITCH_MIN)
+            aimPitch = LFPG_SEARCHLIGHT_PITCH_MIN;
+        if (aimPitch > LFPG_SEARCHLIGHT_PITCH_MAX)
+            aimPitch = LFPG_SEARCHLIGHT_PITCH_MAX;
+
+        // Write SyncVars
+        sl.LFPG_SetAim(aimYaw, aimPitch);
+
+        // Splash raycast
+        vector beamStart = sl.ModelToWorld(sl.GetMemoryPointPos("beamStart"));
+        float yawRad = aimYaw * Math.DEG2RAD;
+        float pitchRad = aimPitch * Math.DEG2RAD;
+        float cosPitch = Math.Cos(pitchRad);
+        float dirX = Math.Sin(yawRad) * cosPitch;
+        float dirY = Math.Sin(pitchRad);
+        float dirZ = Math.Cos(yawRad) * cosPitch;
+
+        float rayToX = beamStart[0] + dirX * LFPG_SEARCHLIGHT_SPLASH_RANGE_M;
+        float rayToY = beamStart[1] + dirY * LFPG_SEARCHLIGHT_SPLASH_RANGE_M;
+        float rayToZ = beamStart[2] + dirZ * LFPG_SEARCHLIGHT_SPLASH_RANGE_M;
+        vector rayTo = Vector(rayToX, rayToY, rayToZ);
+
+        vector hitPos;
+        vector hitNormal;
+        int hitComp;
+        set<Object> hitResults = null;
+        Object hitWith = null;
+        bool sorted = false;
+        bool groundOnly = false;
+        float radius = 0.0;
+
+        bool hit = DayZPhysics.RaycastRV(beamStart, rayTo, hitPos, hitNormal, hitComp, hitResults, hitWith, sl, sorted, groundOnly, ObjIntersectFire, radius);
+
+        if (hit)
+        {
+            float splashY = hitPos[1] + 0.05;
+            sl.LFPG_SetSplash(true, hitPos[0], splashY, hitPos[2]);
+        }
+        else
+        {
+            sl.LFPG_SetSplash(false, 0.0, 0.0, 0.0);
+        }
+
+        // Single SetSynchDirty for aim + splash (batched)
+        sl.LFPG_FlushSyncVars();
+    }
+
+    // =====================================
+    // SERVER: Searchlight Exit Request — round-trip RPC
+    // Pattern: HandleLFPG_CCTVExitRequest
+    // =====================================
+    protected void HandleLFPG_SearchlightExitRequest(PlayerIdentity sender)
+    {
+        if (!sender)
+            return;
+
+        PlayerBase player = PlayerBase.Cast(sender.GetPlayer());
+        if (!player)
+            return;
+
+        GetGame().SelectPlayer(sender, player);
+
+        ScriptRPC confirmRpc = new ScriptRPC();
+        int confirmSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM;
+        confirmRpc.Write(confirmSubId);
+        confirmRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+
+        string logMsg = "[Searchlight_Exit] SelectPlayer + confirm sent for ";
+        logMsg = logMsg + sender.GetName();
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Searchlight Enter Confirmed
+    // =====================================
+    protected void HandleLFPG_SearchlightEnterConfirm(ParamsReadContext ctx)
+    {
+        int netLow = 0;
+        int netHigh = 0;
+        float yaw = 0.0;
+        float pitch = 0.0;
+
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+        if (!ctx.Read(yaw))
+            return;
+        if (!ctx.Read(pitch))
+            return;
+
+        LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
+        if (ctrl)
+        {
+            ctrl.Enter(netLow, netHigh, yaw, pitch);
+        }
+    }
+
+    // =====================================
+    // CLIENT: Searchlight Exit Confirmed
+    // =====================================
+    protected void HandleLFPG_SearchlightExitConfirm()
+    {
+        LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
+        if (ctrl)
+        {
+            ctrl.DoExitCleanup();
         }
     }
 
