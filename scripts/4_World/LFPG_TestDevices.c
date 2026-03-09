@@ -154,7 +154,6 @@ class LF_TestGenerator : PowerGenerator
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-            SetSynchDirty();
         }
         #endif
 

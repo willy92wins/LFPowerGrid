@@ -159,7 +159,6 @@ class LF_WaterPump : Inventory_Base
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-
         }
         // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
         SetSynchDirty();
@@ -514,7 +513,6 @@ class LF_WaterPump_T2 : Inventory_Base
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-
         }
         // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
         SetSynchDirty();

@@ -2388,7 +2388,6 @@ class LFPG_NetworkManager
     {
         #ifdef SERVER
         int ownersPruned = 0;
-        int sourcesQueued = 0;
 
         // Step 1: Resolve all vanilla wire endpoints FIRST.
         // After restart, vanilla devices aren't in DeviceRegistry.
@@ -2555,34 +2554,19 @@ class LFPG_NetworkManager
                 ownersPruned = ownersPruned + 1;
                 BroadcastOwnerWires(all[i]);
             }
-
-            string devId = LFPG_DeviceAPI.GetDeviceId(all[i]);
-            if (LFPG_DeviceAPI.IsSource(all[i]) && LFPG_DeviceAPI.GetSourceOn(all[i]))
-            {
-                RequestPropagate(devId);
-                sourcesQueued = sourcesQueued + 1;
-            }
         }
 
         // Clear cache after all prune calls are done
         m_CachedValidIds = null;
 
-        // Step 5: Propagate from vanilla sources
-        int vk;
-        for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
-        {
-            string vId = m_VanillaWires.GetKey(vk);
-            EntityAI vObj = LFPG_DeviceRegistry.Get().FindById(vId);
-            if (!vObj) continue;
+        // v0.9.3 (Audit): Removed RequestPropagate loops from steps 4+5.
+        // These called RequestPropagate on every active source, but the
+        // graph is rebuilt from scratch in step 6 (RebuildFromWires clears
+        // m_DirtyQueue). MarkSourcesDirty then re-marks all sources dirty
+        // on the NEW graph. The old RequestPropagate calls were pure dead
+        // work: RefreshSourceState + MarkNodeDirty → all discarded.
 
-            if (LFPG_DeviceAPI.IsEnergySource(vObj))
-            {
-                RequestPropagate(vId);
-                sourcesQueued = sourcesQueued + 1;
-            }
-        }
-
-        string shDoneMsg = "SelfHeal: done. pruned=" + ownersPruned.ToString() + " propagated=" + sourcesQueued.ToString();
+        string shDoneMsg = "SelfHeal: done. pruned=" + ownersPruned.ToString();
         LFPG_Util.Debug(shDoneMsg);
 
         // Full rebuild of indexes on self-heal (authoritative baseline)

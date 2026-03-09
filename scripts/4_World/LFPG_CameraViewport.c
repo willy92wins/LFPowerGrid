@@ -42,6 +42,12 @@ static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;
 static const float LFPG_CCTV_VIGNETTE_W       = 55.0;
 static const float LFPG_CCTV_MAX_DURATION_S   = 120.0;
 
+// Forward offset (meters) from model center to clear the lens geometry.
+// The spectator camera spawns at GetPosition() = model center; the lens
+// protrudes forward from there. This pushes the viewpoint past the lens.
+// Tune this value if the lens is still visible or the view is too far out.
+static const float LFPG_CCTV_LENS_OFFSET_M    = 0.2;
+
 static const int   LFPG_CCTV_EXIT_COOLDOWN    = 3;
 
 // Key codes
@@ -59,7 +65,6 @@ static const float LFPG_CCTV_PAN_SPEED     = 30.0;   // degrees per second
 static const float LFPG_CCTV_YAW_LIMIT     = 90.0;   // +/- degrees horizontal
 static const float LFPG_CCTV_PITCH_LIMIT   = 45.0;   // +/- degrees vertical
 
-// Overlay layout
 static const string LFPG_CCTV_LAYOUT = "LFPowerGrid/gui/layouts/LFPG_CCTVMenu.layout";
 
 class LFPG_CameraViewport
@@ -440,6 +445,18 @@ class LFPG_CameraViewport
         vector camOri = entry.m_Ori;
         m_CameraLabel = entry.m_Label;
 
+        // Offset position forward along camera look direction
+        // to prevent the lens model from appearing in front of the view.
+        // camOri already has the +90 yaw correction (server-side) so
+        // yaw=0 means looking North(+Z). Forward = (sin(yaw), 0, cos(yaw)).
+        float yawRad = camOri[0] * Math.DEG2RAD;
+        float fwdX = Math.Sin(yawRad) * LFPG_CCTV_LENS_OFFSET_M;
+        float fwdZ = Math.Cos(yawRad) * LFPG_CCTV_LENS_OFFSET_M;
+        float oX = camPos[0] + fwdX;
+        float oY = camPos[1];
+        float oZ = camPos[2] + fwdZ;
+        vector viewPos = Vector(oX, oY, oZ);
+
         // Reset pan offsets for new camera view
         m_BaseOrientation = camOri;
         m_YawOffset   = 0.0;
@@ -452,7 +469,7 @@ class LFPG_CameraViewport
         // Reusar objeto existente (cycling intra-sesión)
         if (m_ViewCamObj)
         {
-            m_ViewCamObj.SetPosition(camPos);
+            m_ViewCamObj.SetPosition(viewPos);
             m_ViewCamObj.SetOrientation(camOri);
             m_CameraIndex = index;
             Print("[CameraViewport] DIAG: Reused existing camera object");
@@ -472,7 +489,7 @@ class LFPG_CameraViewport
         }
 
         currentCam.SetActive(true);
-        currentCam.SetPosition(camPos);
+        currentCam.SetPosition(viewPos);
         currentCam.SetOrientation(camOri);
         Print("[CameraViewport] DIAG: Engine camera acquired + positioned OK");
 
