@@ -324,27 +324,26 @@ class LF_Searchlight : Inventory_Base
         beamDir.Normalize();
         vector beamOri = beamDir.VectorToAngles();
 
-        m_LightBeamCore = LFPG_SearchlightBeamCore.Cast(
-            ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, "0 0 0")
-        );
+        ScriptedLightBase tmpLight;
+
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, "0 0 0");
+        m_LightBeamCore = LFPG_SearchlightBeamCore.Cast(tmpLight);
         if (m_LightBeamCore)
         {
             m_LightBeamCore.AttachOnObject(this, mpStart, beamOri);
         }
 
         // BeamSpill: same attachment as core (wider cone)
-        m_LightBeamSpill = LFPG_SearchlightBeamSpill.Cast(
-            ScriptedLightBase.CreateLight(LFPG_SearchlightBeamSpill, "0 0 0")
-        );
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamSpill, "0 0 0");
+        m_LightBeamSpill = LFPG_SearchlightBeamSpill.Cast(tmpLight);
         if (m_LightBeamSpill)
         {
             m_LightBeamSpill.AttachOnObject(this, mpStart, beamOri);
         }
 
         // Halo: glow at lens center (no orientation needed)
-        m_LightHalo = LFPG_SearchlightHalo.Cast(
-            ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, "0 0 0")
-        );
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, "0 0 0");
+        m_LightHalo = LFPG_SearchlightHalo.Cast(tmpLight);
         if (m_LightHalo)
         {
             m_LightHalo.AttachOnObject(this, mpStart, "0 0 0");
@@ -353,9 +352,8 @@ class LF_Searchlight : Inventory_Base
         // Splash: Phase 1 = positioned at beamStart + some forward offset (static)
         // Phase 2 will reposition via SyncVars from server raycast.
         // For now, place it ahead of the beam at ground level as a placeholder.
-        m_LightSplash = LFPG_SearchlightSplash.Cast(
-            ScriptedLightBase.CreateLight(LFPG_SearchlightSplash, "0 0 0")
-        );
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightSplash, "0 0 0");
+        m_LightSplash = LFPG_SearchlightSplash.Cast(tmpLight);
         if (m_LightSplash)
         {
             // Phase 1: attach near beamEnd (1m forward)
