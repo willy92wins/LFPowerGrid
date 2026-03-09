@@ -2613,7 +2613,21 @@ class LFPG_NetworkManager
             m_Graph.PopulateAllNodeElecStates();
             m_Graph.MarkSourcesDirty();
             m_WarmupActive = true;
-            string shWarmMsg = "[SelfHeal] Graph warmup: rebuilt + populated + sources dirty (warmup budget active)";
+
+            // v0.9.3 (Audit Fix #4): Immediate flush after graph warmup.
+            // Without this, the first propagation tick is delayed until the
+            // next TickPropagation call (100ms). PostBulkRebuildAndPropagate
+            // already does this (line ~618) but ValidateAllWiresAndPropagate
+            // did not — causing a 100ms+ blackout window where consumers stay
+            // unpowered and cables show IDLE after restart.
+            // Flushing here ensures SyncNodeToEntity runs in the same frame
+            // as the rebuild, so DayZ SyncVar batching delivers correct state
+            // to clients without visible flicker.
+            int flushBudget = LFPG_PROPAGATE_WARMUP_BUDGET;
+            int flushEdge = LFPG_PROPAGATE_EDGE_WARMUP_BUDGET;
+            m_Graph.ProcessDirtyQueue(flushBudget, flushEdge);
+
+            string shWarmMsg = "[SelfHeal] Graph warmup: rebuilt + populated + sources dirty + flushed (warmup budget active)";
             LFPG_Util.Info(shWarmMsg);
         }
 

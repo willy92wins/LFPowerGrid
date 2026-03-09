@@ -78,8 +78,11 @@ class LF_TestGenerator : PowerGenerator
     // When OnVarSync tries SwitchOn but CompEM fails (fuel/sparkplug not
     // yet synced), we schedule retries up to LFPG_COMPEM_RETRY_MAX times.
     protected int m_LFPG_CompEMRetries = 0;
-    static const int LFPG_COMPEM_RETRY_MAX = 3;
-    static const int LFPG_COMPEM_RETRY_MS = 1500;
+    // v0.9.3 (Audit): Increased from 3/1500 to 8/2000.
+    // On loaded servers, sparkplug/fuel attachment replication to client
+    // can take >5s. Previous 4.5s window was insufficient.
+    static const int LFPG_COMPEM_RETRY_MAX = 8;
+    static const int LFPG_COMPEM_RETRY_MS = 2000;
 
     // v0.7.30: Per-device position polling removed.
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
@@ -188,6 +191,13 @@ class LF_TestGenerator : PowerGenerator
         if (m_SourceOn)
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
+        // v0.9.3 (Audit Fix #2): Force SyncVar replication after persistence load.
+        // For persisted devices (m_DeviceIdLow/High != 0), the conditional
+        // SetSynchDirty above is never reached. DayZ engine SHOULD send
+        // all SyncVars when an entity enters a client's bubble, but this
+        // is not guaranteed across all engine versions. Without this,
+        // the client may never receive m_SourceOn=true after restart.
+        SetSynchDirty();
         #endif
     }
 
@@ -449,6 +459,15 @@ class LF_TestGenerator : PowerGenerator
                 bool emWorking = emSync.IsWorking();
                 if (m_SourceOn && !emWorking)
                 {
+                    // v0.9.3 (Audit Fix #1): Reset retry counter on every OnVarSync
+                    // that detects desync. Each SyncVar update is a signal that server
+                    // state has progressed — attachments (sparkplug/fuel) may have
+                    // replicated since the last failed attempt. Without this reset,
+                    // once LFPG_COMPEM_RETRY_MAX is reached the only recovery path
+                    // is another OnVarSync where SwitchOn succeeds on the first try.
+                    // With the reset, every OnVarSync gets a fresh batch of retries.
+                    m_LFPG_CompEMRetries = 0;
+
                     emSync.SwitchOn();
 
                     // v0.9.1 (H3): Check if SwitchOn actually succeeded.
@@ -655,6 +674,13 @@ class LF_TestGenerator : PowerGenerator
     }
 
     // v0.7.27: Uses centralized sparkplug validation
+    // v0.9.3 (Audit Fix #3): Sparkplug check moved to server-only.
+    // On client, m_SourceOn is a SyncVar set exclusively by the server
+    // after sparkplug validation. Re-checking on client introduces a
+    // race condition with attachment replication — sparkplug may not
+    // have synced yet, causing false-negative that makes cables grey.
+    // Consistent with v0.7.47 pattern: OnSwitchOn/OnWorkStart/OnWork
+    // already have sparkplug validation as #ifdef SERVER only.
     bool LFPG_GetSourceOn()
     {
         if (!m_SourceOn)
@@ -662,10 +688,12 @@ class LF_TestGenerator : PowerGenerator
             return false;
         }
 
+        #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
             return false;
         }
+        #endif
 
         return true;
     }
@@ -1083,8 +1111,11 @@ class LF_TestLamp : Spotlight
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
             LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-            SetSynchDirty();
         }
+        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
+        // Ensures clients receive m_DeviceIdLow/High and m_PoweredNet even
+        // if engine doesn't send automatic SyncVar burst for persisted entities.
+        SetSynchDirty();
         #endif
 
         LFPG_UpdateDeviceIdString();
