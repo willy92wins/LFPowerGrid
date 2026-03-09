@@ -60,7 +60,7 @@ static const float LFPG_SORT_PAD       = 12.0;
 static const string LFPG_SORT_LAYOUT = "LFPowerGrid/gui/layouts/LF_Sorter.layout";
 
 // Procedural 1x1 white texture (tinted via SetColor)
-static const string LFPG_SORT_PROC_TEX = "#(argb,1,1,3)color(1,1,1,1,ca)";
+static const string LFPG_SORT_PROC_TEX = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
 // Category labels (8 total, indexed 0-7)
 static const string LFPG_SORT_CAT_LABELS_0 = "WEAPON";
@@ -196,6 +196,9 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     protected float m_GlowPhase;        // glow pulse animation
     protected float m_SaveFeedbackTimer; // H4: save feedback countdown (seconds)
 
+    // ---- Deferred creation (avoid CreateWidgets from RPC context) ----
+    protected bool m_PendingOpen;
+
     // ---- Data model ----
     protected ref LFPG_SortConfig m_Config;
 
@@ -233,6 +236,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         m_FocusLocked = false;
         m_GlowPhase = 0.0;
         m_SaveFeedbackTimer = 0.0;
+        m_PendingOpen = false;
         m_ContainerName = "Container";
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
@@ -266,6 +270,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             // Normal close (ESC) uses DoClose which handles input properly.
             s_Instance.m_IsOpen = false;
             s_Instance.m_FocusLocked = false;
+            s_Instance.m_PendingOpen = false;
             s_Instance.DestroyWidgets();
         }
         s_Instance = null;
@@ -276,6 +281,41 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         if (!s_Instance)
             return false;
         return s_Instance.m_IsOpen;
+    }
+
+    // =========================================================
+    // Deferred widget creation (called from MissionGameplay.OnUpdate)
+    //
+    // CreateWidgets MUST run in OnUpdate context, not RPC context.
+    // Same pattern as LFPG_CameraViewport.InitWidgets.
+    // =========================================================
+    static bool NeedsDeferredCreate()
+    {
+        if (!s_Instance)
+            return false;
+        return s_Instance.m_PendingOpen;
+    }
+
+    static void FinishDeferredCreate()
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_PendingOpen)
+            return;
+
+        s_Instance.m_PendingOpen = false;
+
+        // Create widgets in safe OnUpdate context
+        s_Instance.CreateWidgets();
+
+        if (!s_Instance.m_Root)
+        {
+            LFPG_Util.Error("[SorterUI] Deferred CreateWidgets failed");
+            return;
+        }
+
+        // Complete the open sequence that was deferred
+        s_Instance.CompleteOpen();
     }
 
     // =========================================================
@@ -346,15 +386,27 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             m_Config.ResetAll();
         }
 
-        // Create widgets if first time
-        if (!m_Root)
+        // Widgets already created (second+ open): complete immediately
+        if (m_Root)
         {
-            CreateWidgets();
+            CompleteOpen();
+            return;
         }
 
+        // First open: defer CreateWidgets to MissionGameplay.OnUpdate
+        // context. CreateWidgets from RPC context produces corrupt
+        // widget trees (partial render: black bg + green square).
+        m_PendingOpen = true;
+        LFPG_Util.Info("[SorterUI] Deferred open — waiting for OnUpdate context");
+    }
+
+    // Called from FinishDeferredCreate (OnUpdate context) or
+    // directly from DoOpen when widgets already exist.
+    protected void CompleteOpen()
+    {
         if (!m_Root)
         {
-            LFPG_Util.Error("[SorterUI] Failed to create widgets");
+            LFPG_Util.Error("[SorterUI] CompleteOpen called without m_Root");
             return;
         }
 
@@ -375,14 +427,14 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         if (m_wTitle)
         {
             string titleText = "SORTER";
-            if (containerName != "")
+            if (m_ContainerName != "")
             {
-                titleText = titleText + " — " + containerName;
+                titleText = titleText + " — " + m_ContainerName;
             }
             m_wTitle.SetText(titleText);
         }
 
-        LFPG_Util.Info("[SorterUI] Opened for container: " + containerName);
+        LFPG_Util.Info("[SorterUI] Opened for container: " + m_ContainerName);
     }
 
     protected void DoClose()
@@ -618,7 +670,14 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
         float py = (scrH - LFPG_SORT_PANEL_H) * 0.5;
 
         // Modal overlay: fullscreen dark
-        SetupImage(m_wModalOverlay, 0, 0, scrW, scrH, LFPG_SORT_COL_MODAL);
+        // Layout defines size 1 1 (proportional, 100% of parent root).
+        // Do NOT call SetPos/SetSize — pixel values in proportional mode
+        // create an oversized widget. Only load texture + tint.
+        if (m_wModalOverlay)
+        {
+            m_wModalOverlay.LoadImageFile(0, LFPG_SORT_PROC_TEX);
+            m_wModalOverlay.SetColor(LFPG_SORT_COL_MODAL);
+        }
 
         // Panel container
         if (m_Panel)
@@ -857,12 +916,48 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             return;
         btn.SetPos(x, y);
         btn.SetSize(w, h);
-        btn.SetColor(bgColor);
+
+        // Find BG ImageWidget child (first child, inserted by layout)
+        // and load procedural texture + tint. This gives buttons a
+        // visible solid-color background — ButtonWidget.SetColor alone
+        // does NOT render a visible fill without a style or image.
+        Widget child = btn.GetChildren();
+        while (child)
+        {
+            ImageWidget bgImg = ImageWidget.Cast(child);
+            if (bgImg)
+            {
+                bgImg.LoadImageFile(0, LFPG_SORT_PROC_TEX);
+                bgImg.SetColor(bgColor);
+                break;
+            }
+            child = child.GetSibling();
+        }
 
         if (btnText)
         {
             btnText.SetColor(textColor);
             btnText.SetText(label);
+        }
+    }
+
+    // Helper: re-color a button's BG ImageWidget child.
+    // Used by Refresh methods for dynamic state changes
+    // (selected tab, active filter, etc.)
+    protected void SetBtnBgColor(ButtonWidget btn, int color)
+    {
+        if (!btn)
+            return;
+        Widget child = btn.GetChildren();
+        while (child)
+        {
+            ImageWidget bgImg = ImageWidget.Cast(child);
+            if (bgImg)
+            {
+                bgImg.SetColor(color);
+                return;
+            }
+            child = child.GetSibling();
         }
     }
 
@@ -1072,7 +1167,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
     // =========================================================
     // Event: OnUpdate (per-frame animation)
     // =========================================================
-    bool OnUpdate(Widget w, float timeslice)
+    override bool OnUpdate(Widget w, float timeslice)
     {
         if (!m_IsOpen)
             return false;
@@ -1402,7 +1497,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 txtCol = LFPG_SORT_COL_WHITE;
             }
 
-            tabBtn.SetColor(bgCol);
+            SetBtnBgColor(tabBtn, bgCol);
             TextWidget tabTxt = m_wTabOutText[i];
             if (tabTxt)
             {
@@ -1436,7 +1531,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 fBg = LFPG_SORT_COL_GREEN;
                 fTxt = LFPG_SORT_COL_WHITE;
             }
-            m_wTabFilters.SetColor(fBg);
+            SetBtnBgColor(m_wTabFilters, fBg);
             if (m_wTabFiltersText)
             {
                 m_wTabFiltersText.SetColor(fTxt);
@@ -1453,7 +1548,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 cBg = LFPG_SORT_COL_GREEN;
                 cTxt = LFPG_SORT_COL_WHITE;
             }
-            m_wTabContView.SetColor(cBg);
+            SetBtnBgColor(m_wTabContView, cBg);
             if (m_wTabContViewText)
             {
                 m_wTabContViewText.SetColor(cTxt);
@@ -1492,7 +1587,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             }
             if (m_wCatBtn[ci])
             {
-                m_wCatBtn[ci].SetColor(catBgCol);
+                SetBtnBgColor(m_wCatBtn[ci], catBgCol);
             }
             if (m_wCatBtnText[ci])
             {
@@ -1515,7 +1610,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             }
             if (m_wSlotPre[si])
             {
-                m_wSlotPre[si].SetColor(slotBgCol);
+                SetBtnBgColor(m_wSlotPre[si], slotBgCol);
             }
             if (m_wSlotPreText[si])
             {
@@ -1533,7 +1628,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 caCol = LFPG_SORT_COL_ORANGE;
                 caTxtCol = LFPG_SORT_COL_WHITE;
             }
-            m_wBtnCatchAll.SetColor(caCol);
+            SetBtnBgColor(m_wBtnCatchAll, caCol);
             if (m_wBtnCatchAllText)
             {
                 m_wBtnCatchAllText.SetColor(caTxtCol);

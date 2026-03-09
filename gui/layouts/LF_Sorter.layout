@@ -66,6 +66,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass BtnSortBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass BtnSortText {
 							size 1 1
 							hexactpos 0
@@ -83,6 +92,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut0Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut0Text {
 							size 1 1
 							hexactpos 0
@@ -100,6 +118,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut1Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut1Text {
 							size 1 1
 							hexactpos 0
@@ -117,6 +144,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut2Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut2Text {
 							size 1 1
 							hexactpos 0
@@ -134,6 +170,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut3Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut3Text {
 							size 1 1
 							hexactpos 0
@@ -151,6 +196,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut4Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut4Text {
 							size 1 1
 							hexactpos 0
@@ -168,6 +222,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabOut5Bg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabOut5Text {
 							size 1 1
 							hexactpos 0
@@ -185,6 +248,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabFiltersBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabFiltersText {
 							size 1 1
 							hexactpos 0
@@ -202,6 +274,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabContViewBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass TabContViewText {
 							size 1 1
 							hexactpos 0
@@ -233,6 +314,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn0Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn0Text {
 									size 1 1
 									hexactpos 0
@@ -250,6 +340,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn1Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn1Text {
 									size 1 1
 									hexactpos 0
@@ -267,6 +366,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn2Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn2Text {
 									size 1 1
 									hexactpos 0
@@ -284,6 +392,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn3Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn3Text {
 									size 1 1
 									hexactpos 0
@@ -301,6 +418,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn4Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn4Text {
 									size 1 1
 									hexactpos 0
@@ -318,6 +444,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn5Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn5Text {
 									size 1 1
 									hexactpos 0
@@ -335,6 +470,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn6Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn6Text {
 									size 1 1
 									hexactpos 0
@@ -352,6 +496,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass CatBtn7Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass CatBtn7Text {
 									size 1 1
 									hexactpos 0
@@ -400,6 +553,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass BtnPrefixAddBg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass BtnPrefixAddText {
 									size 1 1
 									hexactpos 0
@@ -440,6 +602,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass BtnContainsAddBg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass BtnContainsAddText {
 									size 1 1
 									hexactpos 0
@@ -473,6 +644,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass SlotPre0Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass SlotPre0Text {
 									size 1 1
 									hexactpos 0
@@ -490,6 +670,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass SlotPre1Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass SlotPre1Text {
 									size 1 1
 									hexactpos 0
@@ -507,6 +696,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass SlotPre2Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass SlotPre2Text {
 									size 1 1
 									hexactpos 0
@@ -524,6 +722,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass SlotPre3Bg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass SlotPre3Text {
 									size 1 1
 									hexactpos 0
@@ -563,6 +770,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass BtnSlotAddBg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass BtnSlotAddText {
 									size 1 1
 									hexactpos 0
@@ -588,6 +804,15 @@ FrameWidgetClass SorterRoot {
 							hexactsize 1
 							vexactsize 1
 							{
+								ImageWidgetClass BtnCatchAllBg {
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
 								TextWidgetClass BtnCatchAllText {
 									size 1 1
 									hexactpos 0
@@ -693,6 +918,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass BtnClearOutBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass BtnClearOutText {
 							size 1 1
 							hexactpos 0
@@ -710,6 +944,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass BtnResetAllBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass BtnResetAllText {
 							size 1 1
 							hexactpos 0
@@ -727,6 +970,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass BtnSaveBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass BtnSaveText {
 							size 1 1
 							hexactpos 0
@@ -744,6 +996,15 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass BtnCloseBg {
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+						}
 						TextWidgetClass BtnCloseText {
 							size 1 1
 							hexactpos 0

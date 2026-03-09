@@ -1,23 +1,22 @@
-// LF_PowerGrid - WaterPump LED material (ON / powered, green glow)
-// Super shader, 7-stage standard layout (CeilingLight parity).
-// hiddenSelections[0] = "pump_led" -> SetObjectMaterial(0, path).
-// emmisive {0,40,0} -> verde emisivo. SMDI.I=1 -> illumination channel ON.
-ambient[]={0.06,0.25,0.06,1};
-diffuse[]={0.12,0.6,0.12,1};
-forcedDiffuse[]={0,0,0,0};
+// LF_PowerGrid - WaterPump LED material (ON)
+// Super shader 7-stage. forcedDiffuse + emmisive for visible glow.
+// Stage1 = procedural white CO so emmisive has bright pixels to multiply.
+ambient[]={0.05,0.05,0.05,1};
+diffuse[]={0.0,0.3,0.0,1};
+forcedDiffuse[]={0.0,0.8,0.0,1};
 emmisive[]={0,40,0,1};
-specular[]={0.5,0.5,0.5,1};
-specularPower=80;
+specular[]={0.15,0.15,0.15,1};
+specularPower=50;
 PixelShaderID="Super";
 VertexShaderID="Super";
 class Stage1
 {
-	texture="\LFPowerGrid\data\waterpump\lf_waterpump.paa";
+	texture="#(argb,8,8,3)color(1,1,1,1,CO)";
 	uvSource="tex";
 };
 class Stage2
 {
-	texture="#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	texture="#(argb,8,8,3)color(0.5,0.5,1,1,NOHQ)";
 	uvSource="tex";
 };
 class Stage3
@@ -32,7 +31,7 @@ class Stage4
 };
 class Stage5
 {
-	texture="#(argb,8,8,3)color(0,0,0,1.0,SMDI)";
+	texture="#(argb,8,8,3)color(1,0,0,1,SMDI)";
 	uvSource="tex";
 };
 class Stage6
@@ -42,6 +41,6 @@ class Stage6
 };
 class Stage7
 {
-	texture="\LFPowerGrid\data\waterpump\lf_waterpump.paa";
+	texture="#(argb,8,8,3)color(0,0,0,1,NOHQ)";
 	uvSource="tex";
 };

@@ -202,7 +202,7 @@ class LFPG_DeviceInspector
         }
 
         // Background images: position + size + texture + color
-        string procTex = "#(argb,1,1,3)color(1,1,1,1,ca)";
+        string procTex = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
         ImageWidget imgBg = ImageWidget.Cast(m_Root.FindAnyWidget("PanelBg"));
         m_wPanelBg = imgBg;

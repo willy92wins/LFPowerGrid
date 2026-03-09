@@ -37,32 +37,36 @@ class LF_WaterPump_Kit : DeployableContainer_Base
     {
         super.OnPlacementComplete(player, position, orientation);
 
-        if (!GetGame().IsDedicatedServer())
-            return;
+        #ifdef SERVER
+        vector finalPos = position;
+        vector finalOri = orientation;
 
-        PlayerBase pb = PlayerBase.Cast(player);
-        if (!pb)
-            return;
-
-        LF_WaterPump pump = LF_WaterPump.Cast(GetGame().CreateObject(GetDeployedClassname(), pb.GetLocalProjectionPosition(), false));
-
-        if (!pump)
-        {
-            LFPG_Util.Error("[WaterPump_Kit] Failed to create LF_WaterPump! Kit preserved.");
-            pb.MessageStatus("[LFPG] Water Pump placement failed. Kit preserved.");
-            return;
-        }
-
-        pump.SetPosition(position);
-        pump.SetOrientation(orientation);
-
-        SetIsDeploySound(true);
-
-        string tLog = "[WaterPump_Kit] Deployed LF_WaterPump at pos=" + position.ToString();
-        tLog = tLog + " ori=" + orientation.ToString();
+        string tLog = "[WaterPump_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=" + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        this.DeleteSafe();
+        EntityAI pump = GetGame().CreateObjectEx("LF_WaterPump", finalPos, ECE_CREATEPHYSICS);
+        if (pump)
+        {
+            pump.SetPosition(finalPos);
+            pump.SetOrientation(finalOri);
+            pump.Update();
+
+            string deployMsg = "[WaterPump_Kit] Deployed LF_WaterPump at " + finalPos.ToString();
+            LFPG_Util.Info(deployMsg);
+            GetGame().ObjectDelete(this);
+        }
+        else
+        {
+            LFPG_Util.Error("[WaterPump_Kit] Failed to create LF_WaterPump! Kit preserved.");
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                pb.MessageStatus("[LFPG] Water Pump placement failed. Kit preserved.");
+            }
+        }
+        #endif
     }
 
     override bool IsBasebuildingKit()

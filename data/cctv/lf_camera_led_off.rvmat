@@ -1,10 +1,7 @@
-// LF_PowerGrid - Camera LED material (OFF / sin alimentacion)
-// Super shader, 7-stage standard layout (patron DayZ-Samples).
-// hiddenSelections[0] = "cam_led" -> SetObjectMaterial(0, path) swapa este.
-// emmisive RGB=0 -> sin brillo. SMDI.I=0 -> illumination channel OFF.
-// Todos los demas valores IDENTICOS al ON para evitar pop visual en swap.
+// LF_PowerGrid - Camera LED material (OFF)
+// Super shader 7-stage. No emissive, dark appearance.
 ambient[]={0.3,0.3,0.3,1};
-diffuse[]={0.6,0.6,0.6,1};
+diffuse[]={0.4,0.4,0.4,1};
 forcedDiffuse[]={0,0,0,0};
 emmisive[]={0,0,0,1};
 specular[]={0.1,0.1,0.1,1};
@@ -18,7 +15,7 @@ class Stage1
 };
 class Stage2
 {
-	texture="#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	texture="#(argb,8,8,3)color(0.5,0.5,1,1,NOHQ)";
 	uvSource="tex";
 };
 class Stage3

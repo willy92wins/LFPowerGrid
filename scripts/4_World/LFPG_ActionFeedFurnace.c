@@ -1,25 +1,33 @@
 // =========================================================
-// LF_PowerGrid - Action: Feed Furnace (v1.2.0)
+// LF_PowerGrid - Action: Feed Furnace (v1.2.1)
 //
 // Destroys the item in hand and converts it to fuel.
 // Fuel = inventory squares calculated recursively
 // (item + cargo + attachments at any depth).
 //
-// Base: ActionSingleUseBase (item in hand, CCINonRuined)
+// Base: ActionInteractBase (CCINone — no item restriction)
+//   DayZ only evaluates ActionSingleUseBase from the ITEM's
+//   action list, not the target's. Since Feed is registered
+//   on LF_Furnace (the target), it MUST be ActionInteractBase
+//   so the ActionManager finds it in the target's interact list.
+//   Item-in-hand is resolved manually via player.GetItemInHands().
+//
 // Target: LF_Furnace
 // Registered on TARGET (LF_Furnace.SetActions) so that
 // ANY non-ruined item in hand triggers the action.
 //
 // Filtered items (ActionCondition rejects):
+//   - Empty hands (no item)
+//   - Ruined items
 //   - LF_CableReel (wiring tool, not fuel)
-//   - Any class containing "_Kit" from LFPG (deployment kits)
+//   - Any LFPG kit class (deployment kits)
 //   - Items with itemSize 0 in either dimension
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
 //   via actions.Insert(LFPG_ActionFeedFurnace).
 // =========================================================
 
-class LFPG_ActionFeedFurnace : ActionSingleUseBase
+class LFPG_ActionFeedFurnace : ActionInteractBase
 {
     void LFPG_ActionFeedFurnace()
     {
@@ -30,7 +38,7 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
 
     override void CreateConditionComponents()
     {
-        m_ConditionItem   = new CCINonRuined;
+        m_ConditionItem   = new CCINone;
         m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
     }
 
@@ -42,7 +50,14 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
         if (!target)
             return false;
 
-        if (!item)
+        // Resolve item from player hands (ActionInteractBase does not
+        // populate the item param reliably for target-registered actions)
+        ItemBase handItem = player.GetItemInHands();
+        if (!handItem)
+            return false;
+
+        // Must not be ruined (manual check — replaces CCINonRuined)
+        if (handItem.IsRuined())
             return false;
 
         Object targetObj = target.GetObject();
@@ -61,11 +76,11 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
             return false;
 
         // Filter: CableReel is a wiring tool, not fuel
-        if (item.IsKindOf("LF_CableReel"))
+        if (handItem.IsKindOf("LF_CableReel"))
             return false;
 
         // Filter: LFPG kit items (Splitter_Kit, SolarPanel_Kit, etc.)
-        string itemType = item.GetType();
+        string itemType = handItem.GetType();
         if (LFPG_IsLFPGKit(itemType))
             return false;
 
@@ -117,8 +132,18 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
         if (!furnace)
             return;
 
-        ItemBase feedItem = action_data.m_MainItem;
+        // Resolve item from player hands (ActionInteractBase does not
+        // set m_MainItem for target-registered actions)
+        PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
+        if (!pb)
+            return;
+
+        ItemBase feedItem = pb.GetItemInHands();
         if (!feedItem)
+            return;
+
+        // Re-validate: item could have changed between condition check and execute
+        if (feedItem.IsRuined())
             return;
 
         // Calculate fuel recursively (item + all contents)
@@ -126,11 +151,7 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
 
         if (fuelToAdd <= 0)
         {
-            PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Item has no fuel value.");
-            }
+            pb.MessageStatus("[LFPG] Item has no fuel value.");
             return;
         }
 
@@ -139,11 +160,7 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
         int fuelAfter = fuelCur + fuelToAdd;
         if (fuelAfter > LFPG_FURNACE_MAX_FUEL)
         {
-            PlayerBase pbFull = PlayerBase.Cast(action_data.m_Player);
-            if (pbFull)
-            {
-                pbFull.MessageStatus("[LFPG] Furnace fuel full. Item preserved.");
-            }
+            pb.MessageStatus("[LFPG] Furnace fuel full. Item preserved.");
             return;
         }
 
@@ -154,15 +171,11 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
         GetGame().ObjectDelete(feedItem);
 
         // Log
-        PlayerBase pbLog = PlayerBase.Cast(action_data.m_Player);
         string playerName = "unknown";
-        if (pbLog)
+        PlayerIdentity identity = pb.GetIdentity();
+        if (identity)
         {
-            PlayerIdentity identity = pbLog.GetIdentity();
-            if (identity)
-            {
-                playerName = identity.GetName();
-            }
+            playerName = identity.GetName();
         }
         LFPG_Util.Info("[ActionFeedFurnace] Player=" + playerName + " fed +" + fuelToAdd.ToString() + " fuel. total=" + fuelAfter.ToString());
     }
@@ -188,6 +201,8 @@ class LFPG_ActionFeedFurnace : ActionSingleUseBase
         if (typeName == "LF_Furnace_Kit")
             return true;
         if (typeName == "LFPG_PushButton_Kit")
+            return true;
+        if (typeName == "LF_Sorter_Kit")
             return true;
 
         return false;

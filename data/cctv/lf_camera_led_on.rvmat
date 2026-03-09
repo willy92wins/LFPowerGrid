@@ -1,24 +1,22 @@
-// LF_PowerGrid - Camera LED material (ON / con alimentacion)
-// Super shader, 7-stage standard layout (patron DayZ-Samples).
-// hiddenSelections[0] = "cam_led" -> SetObjectMaterial(0, path) swapa este.
-// emmisive {40,0,0} -> rojo emisivo. SMDI.I=1 -> illumination channel ON.
-// Todos los demas valores IDENTICOS al OFF para evitar pop visual en swap.
-ambient[]={0.3,0.3,0.3,1};
-diffuse[]={0.6,0.6,0.6,1};
-forcedDiffuse[]={0,0,0,0};
+// LF_PowerGrid - Camera LED material (ON)
+// Super shader 7-stage. forcedDiffuse + emmisive for visible glow.
+// Stage1 = procedural white CO so emmisive has bright pixels to multiply.
+ambient[]={0.05,0.05,0.05,1};
+diffuse[]={0.3,0.0,0.0,1};
+forcedDiffuse[]={0.8,0.0,0.0,1};
 emmisive[]={40,0,0,1};
-specular[]={0.1,0.1,0.1,1};
-specularPower=30;
+specular[]={0.15,0.15,0.15,1};
+specularPower=50;
 PixelShaderID="Super";
 VertexShaderID="Super";
 class Stage1
 {
-	texture="\LFPowerGrid\data\cctv\lf_camera_led.paa";
+	texture="#(argb,8,8,3)color(1,1,1,1,CO)";
 	uvSource="tex";
 };
 class Stage2
 {
-	texture="#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	texture="#(argb,8,8,3)color(0.5,0.5,1,1,NOHQ)";
 	uvSource="tex";
 };
 class Stage3
@@ -33,7 +31,7 @@ class Stage4
 };
 class Stage5
 {
-	texture="#(argb,8,8,3)color(0,0,0,1.0,SMDI)";
+	texture="#(argb,8,8,3)color(1,0,0,1,SMDI)";
 	uvSource="tex";
 };
 class Stage6
@@ -43,6 +41,6 @@ class Stage6
 };
 class Stage7
 {
-	texture="\LFPowerGrid\data\cctv\lf_camera_led.paa";
+	texture="#(argb,8,8,3)color(0,0,0,1,NOHQ)";
 	uvSource="tex";
 };

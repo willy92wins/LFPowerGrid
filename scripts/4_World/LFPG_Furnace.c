@@ -50,31 +50,36 @@ class LF_Furnace_Kit : DeployableContainer_Base
     {
         super.OnPlacementComplete(player, position, orientation);
 
-        if (!GetGame().IsDedicatedServer())
-            return;
+        #ifdef SERVER
+        vector finalPos = position;
+        vector finalOri = orientation;
 
-        PlayerBase pb = PlayerBase.Cast(player);
-        if (!pb)
-            return;
+        string tLog = "[Furnace_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        LFPG_Util.Info(tLog);
 
-        LF_Furnace furnace = LF_Furnace.Cast(GetGame().CreateObject(GetDeployedClassname(), pb.GetLocalProjectionPosition(), false));
+        EntityAI furnace = GetGame().CreateObjectEx("LF_Furnace", finalPos, ECE_CREATEPHYSICS);
+        if (furnace)
+        {
+            furnace.SetPosition(finalPos);
+            furnace.SetOrientation(finalOri);
+            furnace.Update();
 
-        if (!furnace)
+            string deployMsg = "[Furnace_Kit] Deployed LF_Furnace at " + finalPos.ToString();
+            LFPG_Util.Info(deployMsg);
+            GetGame().ObjectDelete(this);
+        }
+        else
         {
             LFPG_Util.Error("[Furnace_Kit] Failed to create LF_Furnace! Kit preserved.");
-            pb.MessageStatus("[LFPG] Furnace placement failed. Kit preserved.");
-            return;
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                pb.MessageStatus("[LFPG] Furnace placement failed. Kit preserved.");
+            }
         }
-
-        furnace.SetPosition(position);
-        furnace.SetOrientation(orientation);
-
-        SetIsDeploySound(true);
-
-        LFPG_Util.Info("[Furnace_Kit] Deployed LF_Furnace at pos=" + position.ToString() + " ori=" + orientation.ToString());
-
-        // Delete kit only on successful spawn
-        this.DeleteSafe();
+        #endif
     }
 
     override bool IsBasebuildingKit()

@@ -127,6 +127,14 @@ modded class MissionGameplay
             }
         }
 
+        // ---- SorterUI deferred widget creation (same pattern as CCTV) ----
+        // CreateWidgets from RPC context produces corrupt widget trees.
+        // DoOpen stores params + sets pending flag; we finish here.
+        if (LFPG_SorterUI.NeedsDeferredCreate())
+        {
+            LFPG_SorterUI.FinishDeferredCreate();
+        }
+
         // ---- Wiring session lifecycle ----
         LFPG_WiringClient wc = LFPG_WiringClient.Get();
         bool isActive = wc.IsActive();
