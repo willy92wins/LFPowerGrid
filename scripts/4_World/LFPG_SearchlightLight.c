@@ -29,7 +29,7 @@ class LFPG_SearchlightBeamCore : SpotLightBase
     {
         SetVisibleDuringDaylight(false);
         SetRadiusTo(80.0);
-        SetSpotLightAngle(8.0);
+        SetSpotLightAngle(14.0);
         SetCastShadow(true);
 
         // DancingShadows OFF (Audit H1)
@@ -59,7 +59,7 @@ class LFPG_SearchlightBeamSpill : SpotLightBase
     {
         SetVisibleDuringDaylight(false);
         SetRadiusTo(50.0);
-        SetSpotLightAngle(25.0);
+        SetSpotLightAngle(35.0);
         SetCastShadow(false);
 
         // Minimal flicker

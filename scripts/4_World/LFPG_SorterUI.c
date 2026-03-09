@@ -1240,6 +1240,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
     protected void DoTick(float timeslice)
     {
+        #ifndef SERVER
         // Glow pulse
         m_GlowPhase = m_GlowPhase + timeslice * 2.5;
         if (m_GlowPhase > 6.283)
@@ -1325,6 +1326,7 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 }
             }
         }
+        #endif
     }
 
     // =========================================================

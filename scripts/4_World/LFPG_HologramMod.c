@@ -261,8 +261,8 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LFPG_PushButton_Kit"))
             return true;
-
-        // Different-model kits: projection is deployed type
+        if (proj.IsKindOf("LF_Searchlight_Kit"))
+            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
