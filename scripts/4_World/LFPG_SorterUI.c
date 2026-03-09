@@ -1226,14 +1226,21 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
 
 
     // =========================================================
-    // Event: OnUpdate (per-frame animation)
+    // Per-frame tick (called from MissionGameplay.OnUpdate)
+    // ScriptedWidgetEventHandler does NOT have OnUpdate.
     // =========================================================
-    override bool OnUpdate(Widget w, float timeslice)
+    static void Tick(float timeslice)
     {
-        if (!m_IsOpen)
-            return false;
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_IsOpen)
+            return;
+        s_Instance.DoTick(timeslice);
+    }
 
-        // Glow pulse: alpha = 0.65 + 0.35 * sin(phase)
+    protected void DoTick(float timeslice)
+    {
+        // Glow pulse
         m_GlowPhase = m_GlowPhase + timeslice * 2.5;
         if (m_GlowPhase > 6.283)
         {
@@ -1269,7 +1276,6 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
             if (GetGame().GetInput().LocalPress("UAUIBack", false))
             {
                 DoClose();
-                return true;
             }
 
             // M7: Enter key submits active EditBox
@@ -1319,8 +1325,6 @@ class LFPG_SorterUI : ScriptedWidgetEventHandler
                 }
             }
         }
-
-        return false;
     }
 
     // =========================================================

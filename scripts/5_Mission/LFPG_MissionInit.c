@@ -135,6 +135,9 @@ modded class MissionGameplay
             LFPG_SorterUI.FinishDeferredCreate();
         }
 
+        // ---- SorterUI per-frame tick (animations, hover, input) ----
+        LFPG_SorterUI.Tick(timeslice);
+
         // ---- Wiring session lifecycle ----
         LFPG_WiringClient wc = LFPG_WiringClient.Get();
         bool isActive = wc.IsActive();
