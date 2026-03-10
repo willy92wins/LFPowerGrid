@@ -1,0 +1,63 @@
+// =========================================================
+// LF_PowerGrid — Sorter Tag Chip prefab (Dabs MVC)
+// Used as item in ObservableCollection<ref LFPG_SorterTagView>
+// Renders inside WrapSpacerWidget "TagsList"
+// =========================================================
+FrameWidgetClass TagRoot {
+	size 1 24
+	hexactpos 0
+	vexactpos 0
+	hexactsize 0
+	vexactsize 1
+	scriptclass "LFPG_SorterTagView"
+	{
+		ImageWidgetClass TagBg {
+			position 0 0
+			size 1 1
+			hexactpos 0
+			vexactpos 0
+			hexactsize 0
+			vexactsize 0
+			stretch 1
+			ignorepointer 1
+		}
+		TextWidgetClass TagLabel {
+			scriptclass "ViewBinding"
+			position 8 0
+			size 0.75 1
+			hexactpos 1
+			vexactpos 0
+			hexactsize 0
+			vexactsize 0
+			font "gui/fonts/Metron"
+			"text valign" center
+			ignorepointer 1
+		}
+		ButtonWidgetClass BtnRemove {
+			position 0.82 2
+			size 18 20
+			hexactpos 0
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			{
+				TextWidgetClass BtnRemoveText {
+					position 0 0
+					size 1 1
+					hexactpos 0
+					vexactpos 0
+					hexactsize 0
+					vexactsize 0
+					font "gui/fonts/Metron"
+					"text halign" center
+					"text valign" center
+					text "x"
+					ignorepointer 1
+				}
+				ScriptParamsClass {
+					Relay_Command "BtnRemove"
+				}
+			}
+		}
+	}
+}

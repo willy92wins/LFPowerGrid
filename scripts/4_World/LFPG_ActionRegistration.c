@@ -88,7 +88,12 @@ modded class ActionConstructor
         // --- v1.4.0: Searchlight operate (spectator control) ---
         actions.Insert(LFPG_ActionOperateSearchlight);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (38)");
+        // --- v1.5.0: Motion Sensor actions ---
+        actions.Insert(LFPG_ActionPlaceMotionSensor);
+        actions.Insert(LFPG_ActionCycleDetectMode);
+        actions.Insert(LFPG_ActionPairSensor);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (41)");
     }
 };
 

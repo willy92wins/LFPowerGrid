@@ -83,7 +83,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -710,5 +710,59 @@ class CfgVehicles
         hiddenSelections[] = { "lens_glow" };
         hiddenSelectionsTextures[] = { "" };
         hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\searchlight\lf_searchlight_lens_off.rvmat" };
+    };
+
+    // =========================================================
+    // v1.5.0: MOTION SENSOR (PASSTHROUGH, gated by detection)
+    // =========================================================
+
+    // ---- MotionSensor Kit (holdable, deployable, same-model) ----
+    class LFPG_MotionSensor_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_MotionSensorKit";
+        descriptionShort = "$STR_LFPG_MotionSensorKit_Desc";
+        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        weight = 600;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- MotionSensor (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
+    class LFPG_MotionSensor : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_MotionSensor";
+        descriptionShort = "$STR_LFPG_MotionSensor_Desc";
+        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        weight = 800;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"led_indicator"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat"};
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 100;
+                    };
+                };
+            };
+        };
     };
 };

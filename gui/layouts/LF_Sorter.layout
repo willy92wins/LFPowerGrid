@@ -1,3 +1,9 @@
+// =========================================================
+// LF_PowerGrid — Sorter UI v2.0 (Dabs MVC)
+// Main layout — 720x560px panel centered at 1080p
+// scriptclass "ViewBinding" enables auto-binding
+// Relay_Command routes button clicks to controller methods
+// =========================================================
 FrameWidgetClass SorterRoot {
 	size 1 1
 	hexactpos 0
@@ -5,30 +11,35 @@ FrameWidgetClass SorterRoot {
 	hexactsize 0
 	vexactsize 0
 	visible 0
+	scriptclass "LFPG_SorterView"
 	{
+		// ── Modal overlay (fullscreen, click-to-close) ──
 		ImageWidgetClass ModalOverlay {
+			position 0 0
 			size 1 1
 			hexactpos 0
 			vexactpos 0
 			hexactsize 0
 			vexactsize 0
 			stretch 1
+			color 0 0 0 0.65
 		}
+
+		// ── Main panel (centered) ──
 		FrameWidgetClass SorterPanel {
+			halign center_ref
+			valign center_ref
+			position 0 0
+			size 720 560
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
 			{
-				ImageWidgetClass PanelGlow {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					stretch 1
-					ignorepointer 1
-				}
+				// Panel background
 				ImageWidgetClass PanelBg {
+					position 0 0
+					size 720 560
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -36,7 +47,11 @@ FrameWidgetClass SorterRoot {
 					stretch 1
 					ignorepointer 1
 				}
-				ImageWidgetClass AccentBar {
+
+				// Accent line (top, 2px)
+				ImageWidgetClass AccentLine {
+					position 0 0
+					size 720 2
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -44,271 +59,33 @@ FrameWidgetClass SorterRoot {
 					stretch 1
 					ignorepointer 1
 				}
-				ImageWidgetClass HeaderBg {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					stretch 1
-					ignorepointer 1
-				}
-				TextWidgetClass HeaderTitle {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					font "gui/fonts/Metron"
-					ignorepointer 1
-				}
-				TextWidgetClass StatusText {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					font "gui/fonts/MetronBook"
-					ignorepointer 1
-				}
-				ButtonWidgetClass BtnSort {
+
+				// ════════════════════════════════
+				// HEADER (y=2, h=42)
+				// ════════════════════════════════
+				FrameWidgetClass HeaderFrame {
+					position 0 2
+					size 720 42
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
-						ImageWidgetClass BtnSortBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
+						ImageWidgetClass HeaderBg {
+							position 0 0
+							size 720 42
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
 							stretch 1
 							ignorepointer 1
 						}
-						TextWidgetClass BtnSortText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/Metron"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut0 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut0Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut0Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut1 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut1Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut1Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut2 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut2Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut2Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut3 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut3Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut3Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut4 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut4Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut4Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabOut5 {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabOut5Bg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabOut5Text {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabFilters {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabFiltersBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabFiltersText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass TabContView {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TabContViewBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass TabContViewText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				FrameWidgetClass FiltersView {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						TextWidgetClass LblCategories {
+
+						TextWidgetClass HeaderTitle {
+							scriptclass "ViewBinding"
+							position 14 9
+							size 200 24
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -316,13 +93,41 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/Metron"
 							ignorepointer 1
 						}
-						ButtonWidgetClass CatBtn0 {
+
+						TextWidgetClass StatusText {
+							scriptclass "ViewBinding"
+							position 520 12
+							size 80 18
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							"text halign" right
+							ignorepointer 1
+						}
+
+						ImageWidgetClass StatusDot {
+							position 506 18
+							size 6 6
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+
+						ButtonWidgetClass BtnSort {
+							position 610 6
+							size 96 30
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn0Bg {
+								ImageWidgetClass BtnSortBg {
+									position 0 0
 									size 1 1
 									hexactpos 0
 									vexactpos 0
@@ -331,200 +136,487 @@ FrameWidgetClass SorterRoot {
 									stretch 1
 									ignorepointer 1
 								}
-								TextWidgetClass CatBtn0Text {
+								TextWidgetClass BtnSortText {
+									position 0 0
 									size 1 1
 									hexactpos 0
 									vexactpos 0
 									hexactsize 0
 									vexactsize 0
-									font "gui/fonts/MetronBook"
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									text "SORT NOW"
 									ignorepointer 1
 								}
+								ScriptParamsClass {
+									Relay_Command "BtnSort"
+								}
+							}
+						}
+					}
+				}
+
+				// ════════════════════════════════
+				// TAB BAR (y=44, h=30)
+				// ════════════════════════════════
+				FrameWidgetClass TabBar {
+					position 0 44
+					size 720 30
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass TabBarBg {
+							position 0 0
+							size 720 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+
+						// Output tabs: 6 × 80px = 480px
+						ButtonWidgetClass TabOut0 {
+							position 0 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut0Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut0Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut0"
+								}
+							}
+						}
+						ButtonWidgetClass TabOut1 {
+							position 80 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut1Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut1Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut1"
+								}
+							}
+						}
+						ButtonWidgetClass TabOut2 {
+							position 160 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut2Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut2Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut2"
+								}
+							}
+						}
+						ButtonWidgetClass TabOut3 {
+							position 240 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut3Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut3Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut3"
+								}
+							}
+						}
+						ButtonWidgetClass TabOut4 {
+							position 320 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut4Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut4Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut4"
+								}
+							}
+						}
+						ButtonWidgetClass TabOut5 {
+							position 400 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabOut5Bg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabOut5Text {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabOut5"
+								}
+							}
+						}
+
+						// View toggle: RULES / PREVIEW (right side)
+						ButtonWidgetClass TabRules {
+							position 560 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabRulesBg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabRulesText {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									text "RULES"
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabRules"
+								}
+							}
+						}
+						ButtonWidgetClass TabPreview {
+							position 640 0
+							size 80 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass TabPreviewBg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass TabPreviewText {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									text "PREVIEW"
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "TabPreview"
+								}
+							}
+						}
+
+						// Separator line between out tabs and view tabs
+						ImageWidgetClass TabSep {
+							position 480 4
+							size 1 22
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+					}
+				}
+
+				// ════════════════════════════════
+				// BODY (y=74, h=442)
+				// Split: left 400px controls, right 320px rules/preview
+				// ════════════════════════════════
+
+				// ── LEFT COLUMN: Filter Controls ──
+				FrameWidgetClass FiltersPanel {
+					position 0 74
+					size 400 442
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					clipchildren 1
+					{
+						// CATEGORIES label
+						TextWidgetClass LblCategory {
+							position 14 8
+							size 120 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							text "CATEGORY"
+							ignorepointer 1
+						}
+
+						// 8 category buttons in 4x2 grid
+						ButtonWidgetClass CatBtn0 {
+							position 14 26
+							size 90 26
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass CatBtn0Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn0Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn0" }
 							}
 						}
 						ButtonWidgetClass CatBtn1 {
+							position 108 26
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn1Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn1Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn1Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn1Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn1" }
 							}
 						}
 						ButtonWidgetClass CatBtn2 {
+							position 202 26
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn2Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn2Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn2Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn2Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn2" }
 							}
 						}
 						ButtonWidgetClass CatBtn3 {
+							position 296 26
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn3Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn3Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn3Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn3Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn3" }
 							}
 						}
 						ButtonWidgetClass CatBtn4 {
+							position 14 56
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn4Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn4Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn4Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn4Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn4" }
 							}
 						}
 						ButtonWidgetClass CatBtn5 {
+							position 108 56
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn5Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn5Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn5Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn5Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn5" }
 							}
 						}
 						ButtonWidgetClass CatBtn6 {
+							position 202 56
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn6Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn6Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn6Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn6Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn6" }
 							}
 						}
 						ButtonWidgetClass CatBtn7 {
+							position 296 56
+							size 90 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass CatBtn7Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass CatBtn7Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass CatBtn7Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass CatBtn7Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "CatBtn7" }
 							}
 						}
+
+						// Separator
 						ImageWidgetClass SepCat {
+							position 14 90
+							size 372 1
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -532,15 +624,22 @@ FrameWidgetClass SorterRoot {
 							stretch 1
 							ignorepointer 1
 						}
+
+						// PREFIX
 						TextWidgetClass LblPrefix {
+							position 14 98
+							size 120 14
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/Metron"
+							text "NAME PREFIX"
 							ignorepointer 1
 						}
 						ImageWidgetClass EditPrefixBg {
+							position 14 116
+							size 286 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -549,55 +648,44 @@ FrameWidgetClass SorterRoot {
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditPrefix {
+							scriptclass "ViewBinding"
+							position 14 116
+							size 286 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
-						}
-						TextWidgetClass PlhPrefix {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
 						}
 						ButtonWidgetClass BtnPrefixAdd {
+							position 304 116
+							size 36 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass BtnPrefixAddBg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass BtnPrefixAddText {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/Metron"
-									ignorepointer 1
-								}
+								ImageWidgetClass BtnPrefixAddBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnPrefixAddText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "+" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnPrefixAdd" }
 							}
 						}
+
+						// CONTAINS
 						TextWidgetClass LblContains {
+							position 14 152
+							size 120 14
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/Metron"
+							text "NAME CONTAINS"
 							ignorepointer 1
 						}
 						ImageWidgetClass EditContainsBg {
+							position 14 170
+							size 286 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -606,47 +694,33 @@ FrameWidgetClass SorterRoot {
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditContains {
+							scriptclass "ViewBinding"
+							position 14 170
+							size 286 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
-						}
-						TextWidgetClass PlhContains {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
 						}
 						ButtonWidgetClass BtnContainsAdd {
+							position 304 170
+							size 36 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass BtnContainsAddBg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass BtnContainsAddText {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/Metron"
-									ignorepointer 1
-								}
+								ImageWidgetClass BtnContainsAddBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnContainsAddText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "+" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnContainsAdd" }
 							}
 						}
+
+						// Separator
 						ImageWidgetClass SepSlot {
+							position 14 208
+							size 372 1
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -654,119 +728,78 @@ FrameWidgetClass SorterRoot {
 							stretch 1
 							ignorepointer 1
 						}
+
+						// SLOT SIZE
 						TextWidgetClass LblSlot {
+							position 14 216
+							size 100 14
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/Metron"
+							text "SLOT SIZE"
 							ignorepointer 1
 						}
+
+						// 4 slot preset buttons
 						ButtonWidgetClass SlotPre0 {
+							position 14 234
+							size 68 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass SlotPre0Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass SlotPre0Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass SlotPre0Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass SlotPre0Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "SlotPre0" }
 							}
 						}
 						ButtonWidgetClass SlotPre1 {
+							position 86 234
+							size 68 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass SlotPre1Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass SlotPre1Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass SlotPre1Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass SlotPre1Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "SlotPre1" }
 							}
 						}
 						ButtonWidgetClass SlotPre2 {
+							position 158 234
+							size 68 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass SlotPre2Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass SlotPre2Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass SlotPre2Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass SlotPre2Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "SlotPre2" }
 							}
 						}
 						ButtonWidgetClass SlotPre3 {
+							position 230 234
+							size 68 26
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass SlotPre3Bg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass SlotPre3Text {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/MetronBook"
-									ignorepointer 1
-								}
+								ImageWidgetClass SlotPre3Bg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass SlotPre3Text { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "SlotPre3" }
 							}
 						}
+
+						// Custom slot min-max
 						ImageWidgetClass EditSlotMinBg {
+							position 14 268
+							size 52 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -775,6 +808,9 @@ FrameWidgetClass SorterRoot {
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditSlotMin {
+							scriptclass "ViewBinding"
+							position 14 268
+							size 52 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -782,14 +818,20 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/MetronBook"
 						}
 						TextWidgetClass LblSlotDash {
+							position 70 272
+							size 14 20
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
+							text "-"
+							"text halign" center
 							ignorepointer 1
 						}
 						ImageWidgetClass EditSlotMaxBg {
+							position 88 268
+							size 52 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -798,6 +840,9 @@ FrameWidgetClass SorterRoot {
 							ignorepointer 1
 						}
 						EditBoxWidgetClass EditSlotMax {
+							scriptclass "ViewBinding"
+							position 88 268
+							size 52 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -805,32 +850,23 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/MetronBook"
 						}
 						ButtonWidgetClass BtnSlotAdd {
+							position 146 268
+							size 36 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass BtnSlotAddBg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-								}
-								TextWidgetClass BtnSlotAddText {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/Metron"
-									ignorepointer 1
-								}
+								ImageWidgetClass BtnSlotAddBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnSlotAddText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "+" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnSlotAdd" }
 							}
 						}
+
+						// Separator
 						ImageWidgetClass SepCatchAll {
+							position 14 306
+							size 372 1
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -838,27 +874,195 @@ FrameWidgetClass SorterRoot {
 							stretch 1
 							ignorepointer 1
 						}
+
+						// CATCH-ALL
 						ButtonWidgetClass BtnCatchAll {
+							position 14 316
+							size 130 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							{
-								ImageWidgetClass BtnCatchAllBg {
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
+								ImageWidgetClass BtnCatchAllBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnCatchAllText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "CATCH-ALL" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnCatchAll" }
+							}
+						}
+					}
+				}
+
+				// ── Column separator ──
+				ImageWidgetClass ColumnSep {
+					position 400 74
+					size 1 442
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+				}
+
+				// ── RIGHT COLUMN: Rules View ──
+				FrameWidgetClass RulesPanel {
+					position 401 74
+					size 319 442
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					clipchildren 1
+					{
+						ImageWidgetClass RulesPanelBg {
+							position 0 0
+							size 319 442
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+
+						// Header
+						TextWidgetClass LblActiveRules {
+							position 12 8
+							size 120 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							text "ACTIVE RULES"
+							ignorepointer 1
+						}
+						TextWidgetClass RuleCount {
+							scriptclass "ViewBinding"
+							position 240 8
+							size 60 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							"text halign" right
+							ignorepointer 1
+						}
+
+						// Dest indicator
+						FrameWidgetClass DestIndicator {
+							position 12 28
+							size 295 32
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							visible 0
+							{
+								ImageWidgetClass DestIndicatorBg {
+									position 0 0
+									size 295 32
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
 									stretch 1
 									ignorepointer 1
 								}
-								TextWidgetClass BtnCatchAllText {
-									size 1 1
-									hexactpos 0
+								TextWidgetClass DestLabel {
+									position 8 2
+									size 50 12
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
+									font "gui/fonts/Metron"
+									text "DEST"
+									ignorepointer 1
+								}
+								TextWidgetClass DestName {
+									scriptclass "ViewBinding"
+									position 8 15
+									size 280 16
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
+									font "gui/fonts/MetronBook"
+									ignorepointer 1
+								}
+							}
+						}
+
+						// Tags area (WrapSpacer for ObservableCollection)
+						ScrollWidgetClass TagsScroll {
+							position 8 66
+							size 303 340
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							"v scrollbar" 1
+							"scrollbar width" 5
+							{
+								WrapSpacerWidgetClass TagsList {
+									scriptclass "ViewBinding"
+									position 0 0
+									size 295 1
+									hexactpos 1
 									vexactpos 0
-									hexactsize 0
+									hexactsize 1
 									vexactsize 0
+									Padding 3
+									Margin 3
+									"Size To Content V" 1
+								}
+							}
+						}
+
+						// Empty state
+						TextWidgetClass TagsEmpty {
+							position 12 180
+							size 295 40
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							text "No rules on this output"
+							ignorepointer 1
+						}
+
+						// Match count footer
+						FrameWidgetClass MatchFooter {
+							position 0 410
+							size 319 32
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass MatchFooterBg {
+									position 0 0
+									size 319 32
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass MatchCount {
+									scriptclass "ViewBinding"
+									position 12 8
+									size 160 16
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
 									font "gui/fonts/MetronBook"
 									ignorepointer 1
 								}
@@ -866,52 +1070,21 @@ FrameWidgetClass SorterRoot {
 						}
 					}
 				}
-				FrameWidgetClass TagsPanel {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass TagsBg {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass LblTags {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							font "gui/fonts/Metron"
-							ignorepointer 1
-						}
-						TextWidgetClass TagsEmpty {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-						WrapSpacerWidgetClass TagsWrap {
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-						}
-					}
-				}
-				FrameWidgetClass ContainerView {
+
+				// ── RIGHT COLUMN: Preview View (hidden by default) ──
+				FrameWidgetClass PreviewPanel {
+					position 401 74
+					size 319 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					visible 0
+					clipchildren 1
 					{
-						ImageWidgetClass GridBg {
+						ImageWidgetClass PreviewPanelBg {
+							position 0 0
+							size 319 442
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -919,150 +1092,161 @@ FrameWidgetClass SorterRoot {
 							stretch 1
 							ignorepointer 1
 						}
-						TextWidgetClass GridTitle {
+
+						// Header
+						TextWidgetClass LblPreview {
+							position 12 8
+							size 120 14
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/Metron"
+							text "MATCH PREVIEW"
 							ignorepointer 1
 						}
-						TextWidgetClass GridInfo {
+						TextWidgetClass PreviewCount {
+							scriptclass "ViewBinding"
+							position 240 8
+							size 60 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							"text halign" right
+							ignorepointer 1
+						}
+
+						// Preview rows (GridSpacer for ObservableCollection)
+						ScrollWidgetClass PreviewScroll {
+							position 0 28
+							size 319 414
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							"v scrollbar" 1
+							"scrollbar width" 5
+							{
+								GridSpacerWidgetClass PreviewItems {
+									scriptclass "ViewBinding"
+									position 0 0
+									size 310 1
+									hexactpos 1
+									vexactpos 0
+									hexactsize 1
+									vexactsize 0
+									Columns 1
+									Padding 1
+									"Size To Content V" 1
+								}
+							}
+						}
+
+						// Empty state
+						TextWidgetClass PreviewEmpty {
+							position 12 200
+							size 295 40
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							text "No matches"
 							ignorepointer 1
 						}
-						FrameWidgetClass GridArea {
+					}
+				}
+
+				// ════════════════════════════════
+				// FOOTER (y=516, h=44)
+				// ════════════════════════════════
+				FrameWidgetClass FooterFrame {
+					position 0 516
+					size 720 44
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass FooterBg {
+							position 0 0
+							size 720 44
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
-							ignorepointer 1
-						}
-					}
-				}
-				ImageWidgetClass FooterSep {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					stretch 1
-					ignorepointer 1
-				}
-				ButtonWidgetClass BtnClearOut {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass BtnClearOutBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
 							stretch 1
 							ignorepointer 1
 						}
-						TextWidgetClass BtnClearOutText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass BtnResetAll {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass BtnResetAllBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
+						ImageWidgetClass FooterSep {
+							position 0 0
+							size 720 1
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
 							stretch 1
 							ignorepointer 1
 						}
-						TextWidgetClass BtnResetAllText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/MetronBook"
-							ignorepointer 1
+
+						ButtonWidgetClass BtnClearOut {
+							position 12 8
+							size 110 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnClearOutBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnClearOutText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center text "Clear Output" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnClearOut" }
+							}
+						}
+						ButtonWidgetClass BtnResetAll {
+							position 130 8
+							size 110 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnResetAllBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnResetAllText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center text "Reset All" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnResetAll" }
+							}
+						}
+
+						ButtonWidgetClass BtnSave {
+							position 548 8
+							size 90 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnSaveBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnSaveText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "SAVE" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnSave" }
+							}
+						}
+						ButtonWidgetClass BtnClose {
+							position 646 8
+							size 62 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnCloseBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 }
+								TextWidgetClass BtnCloseText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/MetronBook" "text halign" center "text valign" center text "Close" ignorepointer 1 }
+								ScriptParamsClass { Relay_Command "BtnClose" }
+							}
 						}
 					}
-				}
-				ButtonWidgetClass BtnSave {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass BtnSaveBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass BtnSaveText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/Metron"
-							ignorepointer 1
-						}
-					}
-				}
-				ButtonWidgetClass BtnClose {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					{
-						ImageWidgetClass BtnCloseBg {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							stretch 1
-							ignorepointer 1
-						}
-						TextWidgetClass BtnCloseText {
-							size 1 1
-							hexactpos 0
-							vexactpos 0
-							hexactsize 0
-							vexactsize 0
-							font "gui/fonts/Metron"
-							ignorepointer 1
-						}
-					}
-				}
-				ImageWidgetClass ScanlineOverlay {
-					hexactpos 1
-					vexactpos 1
-					hexactsize 1
-					vexactsize 1
-					stretch 1
-					ignorepointer 1
 				}
 			}
 		}

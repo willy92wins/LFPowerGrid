@@ -124,6 +124,9 @@ class LFPG_NetworkManager
     // v1.2.0 (Sprint S5): Reusable item cache for TickSorters (GC reduction)
     protected ref array<EntityAI> m_SorterItemCache;
 
+    // v1.5.0: Motion Sensor dedicated registry
+    protected ref array<LFPG_MotionSensor> m_RegisteredSensors;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -196,6 +199,7 @@ class LFPG_NetworkManager
         // v1.2.0: Always allocate (Register/Unregister not guarded with #ifdef)
         m_RegisteredSorters = new array<LF_Sorter>;
         m_SorterItemCache = new array<EntityAI>;
+        m_RegisteredSensors = new array<LFPG_MotionSensor>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -247,6 +251,9 @@ class LFPG_NetworkManager
 
         // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
+
+        // v1.5.0: Motion Sensor tick — scan for nearby players
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickMotionSensors, LFPG_SENSOR_TICK_MS, bTrue);
         #endif
     }
 
@@ -3714,6 +3721,76 @@ class LFPG_NetworkManager
         int moved = LFPG_SorterLogic.BinPackCargo(container);
         string sortLog = "[Sorter] BinPack complete: repositioned " + moved.ToString() + " items";
         LFPG_Util.Info(sortLog);
+        #endif
+    }
+
+    // ===========================
+    // v1.5.0: Motion Sensor Registration + Tick
+    // ===========================
+
+    void RegisterMotionSensor(LFPG_MotionSensor sensor)
+    {
+        if (!sensor)
+            return;
+        if (m_RegisteredSensors.Find(sensor) < 0)
+        {
+            m_RegisteredSensors.Insert(sensor);
+        }
+    }
+
+    void UnregisterMotionSensor(LFPG_MotionSensor sensor)
+    {
+        if (!sensor)
+            return;
+        int idx = m_RegisteredSensors.Find(sensor);
+        if (idx >= 0)
+        {
+            m_RegisteredSensors.Remove(idx);
+        }
+    }
+
+    // Centralized motion sensor tick.
+    // Iterates ALL registered sensors each tick (no batching — sensor count
+    // is expected to be small, and the expensive work is gated behind
+    // powered-check + distance-check + early-exit).
+    protected void LFPG_TickMotionSensors()
+    {
+        #ifdef SERVER
+        int total = m_RegisteredSensors.Count();
+        if (total == 0)
+            return;
+
+        int i;
+        int changed = 0;
+        LFPG_MotionSensor sensor;
+
+        for (i = 0; i < total; i = i + 1)
+        {
+            // Safety: array may shrink if sensor destroyed mid-tick
+            if (i >= m_RegisteredSensors.Count())
+                break;
+
+            sensor = m_RegisteredSensors[i];
+            if (!sensor)
+                continue;
+
+            bool stateChanged = sensor.LFPG_EvaluateDetection();
+            if (stateChanged)
+            {
+                string sensorId = sensor.LFPG_GetDeviceId();
+                if (sensorId != "")
+                {
+                    RequestPropagate(sensorId);
+                }
+                changed = changed + 1;
+            }
+        }
+
+        if (changed > 0)
+        {
+            string tickMsg = "[MotionSensor] Tick: " + changed.ToString() + " sensors changed state";
+            LFPG_Util.Debug(tickMsg);
+        }
         #endif
     }
 
