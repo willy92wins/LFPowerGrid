@@ -3760,9 +3760,15 @@ class LFPG_NetworkManager
         if (total == 0)
             return;
 
+        // Fetch player list ONCE for all sensors (BUG1 fix)
+        array<Man> players = new array<Man>;
+        GetGame().GetPlayers(players);
+
         int i;
         int changed = 0;
         LFPG_MotionSensor sensor;
+        bool stateChanged;
+        string sensorId;
 
         for (i = 0; i < total; i = i + 1)
         {
@@ -3774,10 +3780,10 @@ class LFPG_NetworkManager
             if (!sensor)
                 continue;
 
-            bool stateChanged = sensor.LFPG_EvaluateDetection();
+            stateChanged = sensor.LFPG_EvaluateDetection(players);
             if (stateChanged)
             {
-                string sensorId = sensor.LFPG_GetDeviceId();
+                sensorId = sensor.LFPG_GetDeviceId();
                 if (sensorId != "")
                 {
                     RequestPropagate(sensorId);

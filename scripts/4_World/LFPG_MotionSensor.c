@@ -181,12 +181,16 @@ class LFPG_MotionSensor : Inventory_Base
     // ---- Deletion guard ----
     protected bool m_LFPG_Deleting = false;
 
+    // ---- Reusable raycast result set (avoids alloc per LOS check) ----
+    protected ref set<Object> m_RayResults;
+
     // ============================================
     // Constructor - SyncVars en constructor, NO EEInit
     // ============================================
     void LFPG_MotionSensor()
     {
         m_Wires = new array<ref LFPG_WireData>;
+        m_RayResults = new set<Object>;
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
@@ -453,8 +457,9 @@ class LFPG_MotionSensor : Inventory_Base
     }
 
     // Called by LFPG_TickMotionSensors in NetworkManager (server only).
+    // Receives shared player list to avoid N GetPlayers() calls per tick.
     // Returns true if gate state changed (needs propagation).
-    bool LFPG_EvaluateDetection()
+    bool LFPG_EvaluateDetection(array<Man> players)
     {
         #ifdef SERVER
         // Only scan if powered — unpowered sensor cannot detect
@@ -474,12 +479,7 @@ class LFPG_MotionSensor : Inventory_Base
         vector sensorEye = sensorPos;
         sensorEye[1] = sensorEye[1] + 0.5;
 
-        float rangeSq = LFPG_SENSOR_RANGE_M * LFPG_SENSOR_RANGE_M;
         bool detected = false;
-
-        // Get all players on server
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
 
         int i;
         int pCount = players.Count();
@@ -507,10 +507,10 @@ class LFPG_MotionSensor : Inventory_Base
             if (!pb)
                 continue;
 
-            // 1. Distance check (squared, no sqrt)
+            // 1. Distance check (squared, no sqrt — precomputed constant)
             playerPos = pb.GetPosition();
             distSq = LFPG_WorldUtil.DistSq(sensorPos, playerPos);
-            if (distSq > rangeSq)
+            if (distSq > LFPG_SENSOR_RANGE_SQ)
                 continue;
 
             // 2. Group filter BEFORE raycast (cheaper than ray)
@@ -522,7 +522,7 @@ class LFPG_MotionSensor : Inventory_Base
             playerCenter = playerPos;
             playerCenter[1] = playerCenter[1] + 1.0;
 
-            hasLOS = LFPG_CheckLineOfSight(sensorEye, playerCenter, this);
+            hasLOS = LFPG_CheckLineOfSight(sensorEye, playerCenter);
             if (!hasLOS)
                 continue;
 
@@ -593,19 +593,20 @@ class LFPG_MotionSensor : Inventory_Base
 
     // Line-of-sight check: raycast from sensor to player.
     // Returns true if no geometry blocks the path.
-    protected bool LFPG_CheckLineOfSight(vector from, vector to, Object ignoreObj)
+    // Uses m_RayResults member to avoid allocation per call.
+    protected bool LFPG_CheckLineOfSight(vector from, vector to)
     {
         #ifdef SERVER
         vector hitPos;
         vector hitNormal;
         int contactComponent;
-        set<Object> rayResults = new set<Object>;
+        m_RayResults.Clear();
         Object hitWith = null;
         bool bSorted = true;
         bool bGround = false;
         float rayRadius = 0.02;
 
-        bool hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, rayResults, hitWith, ignoreObj, bSorted, bGround, ObjIntersectFire, rayRadius);
+        bool hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, m_RayResults, hitWith, this, bSorted, bGround, ObjIntersectFire, rayRadius);
 
         if (!hit)
         {

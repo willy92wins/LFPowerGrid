@@ -259,6 +259,7 @@ static const int LFPG_SORTER_MAX_EVAL       = 20;     // max rule evaluations pe
 // ---- Motion Sensor tick constants (v1.5.0) ----
 static const int   LFPG_SENSOR_TICK_MS      = 3000;   // 3s between scan ticks
 static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres)
+static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
 
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
