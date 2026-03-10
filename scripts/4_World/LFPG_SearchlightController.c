@@ -160,7 +160,7 @@ class LFPG_SearchlightController
         if (p)
         {
             ScriptRPC rpc = new ScriptRPC();
-            int subId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT;
+            int subId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_REQUEST;
             rpc.Write(subId);
             rpc.Write(m_TargetNetLow);
             rpc.Write(m_TargetNetHigh);

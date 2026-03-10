@@ -130,7 +130,7 @@ modded class PlayerBase
         {
             HandleLFPG_SearchlightEnter(sender, ctx);
         }
-        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT)
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT_REQUEST)
         {
             HandleLFPG_SearchlightExit(sender, ctx);
         }
