@@ -40,10 +40,10 @@ static const int LFPG_SENSOR_MODE_TEAM  = 1;
 static const int LFPG_SENSOR_MODE_ENEMY = 2;
 static const int LFPG_SENSOR_MODE_COUNT = 3;
 
-// LED rvmat paths
-static const string LFPG_SENSOR_RVMAT_OFF   = "\\LFPowerGrid\\data\\sensor\\materials\\sensor_led_off.rvmat";
-static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\sensor\\materials\\sensor_led_green.rvmat";
-static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\sensor\\materials\\sensor_led_red.rvmat";
+// LED rvmat paths (placeholder — reuse button rvmats until sensor-specific assets exist)
+static const string LFPG_SENSOR_RVMAT_OFF   = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
+static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
+static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 
 // ---------------------------------------------------------
 // KIT - same-model deploy pattern (Splitter/PushButton parity)
