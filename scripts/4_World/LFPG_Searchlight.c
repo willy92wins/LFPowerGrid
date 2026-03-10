@@ -165,9 +165,9 @@ class LF_Searchlight : Inventory_Base
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
 
-        // v1.5.0: grab system — yaw full 360° ([-180,180]), pitch +-120
+        // v1.5.1: yaw full 360, pitch +-45
         RegisterNetSyncVariableFloat("m_AimYaw", -180.0, 180.0, 9);
-        RegisterNetSyncVariableFloat("m_AimPitch", -120.0, 120.0, 8);
+        RegisterNetSyncVariableFloat("m_AimPitch", -45.0, 45.0, 7);
 
         // Phase 2: splash SyncVars
         RegisterNetSyncVariableBool("m_SplashHit");

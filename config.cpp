@@ -711,7 +711,7 @@ class CfgVehicles
         hiddenSelectionsTextures[] = { "" };
         hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\searchlight\lf_searchlight_lens_off.rvmat" };
     };
-
+	
     // =========================================================
     // v1.5.0: MOTION SENSOR (PASSTHROUGH, gated by detection)
     // =========================================================

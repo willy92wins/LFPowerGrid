@@ -591,18 +591,12 @@ static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output w
 static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
 static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns
 
-// ---- v1.4.0: Searchlight (CONSUMER) ----
+// ---- v1.5.1: Searchlight (CONSUMER, grab system) ----
 static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s
-static const float LFPG_SEARCHLIGHT_YAW_MIN           = -120.0;  // degrees
-static const float LFPG_SEARCHLIGHT_YAW_MAX           = 120.0;   // degrees
-static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -10.0;   // degrees
-static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 45.0;    // degrees
-static const float LFPG_SEARCHLIGHT_PAN_SPEED         = 30.0;    // degrees per second
-static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 100.0;   // ms between aim RPCs
-static const float LFPG_SEARCHLIGHT_CAM_BEHIND_M      = 2.0;     // spectator offset behind beam
-static const float LFPG_SEARCHLIGHT_CAM_UP_M          = 0.3;     // spectator offset above
-static const float LFPG_SEARCHLIGHT_EXIT_TIMEOUT_S    = 5.0;     // force cleanup timeout
-static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // raycast range
-static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 5.0;     // auto-exit if player walks beyond this
-static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 3.0;     // degrees per scroll tick (pitch adjust)
+static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -45.0;   // degrees (scroll down)
+static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 45.0;    // degrees (scroll up)
+static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 0.5;     // degrees per scroll tick (slow)
+static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 150.0;   // ms between aim RPCs
+static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 2.5;     // auto-exit distance
+static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // server raycast range
 
