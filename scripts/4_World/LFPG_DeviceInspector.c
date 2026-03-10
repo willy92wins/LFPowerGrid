@@ -375,8 +375,8 @@ class LFPG_DeviceInspector
             return;
         }
 
-        // ---- Condition 4: Raycast to device under cursor ----
-        EntityAI target = LFPG_ActionRaycast.GetCursorTargetDevice(player);
+        // ---- Condition 4: Raycast to device under cursor (with proximity fallback) ----
+        EntityAI target = LFPG_ActionRaycast.GetCursorTargetDeviceWithProximity(player);
         if (!target)
         {
             inst.HidePanel();
@@ -736,30 +736,57 @@ class LFPG_DeviceInspector
                 bool fuelOn = furnaceDevice.LFPG_GetSourceOn();
                 int fuelMax = LFPG_FURNACE_MAX_FUEL;
 
-                // Time remaining calculation
+                // Time remaining calculation (Days + Hours only for compact display)
                 int totalSec = fuelCur * 30;
                 int fuelDays = totalSec / 86400;
                 int fuelHours = (totalSec % 86400) / 3600;
-                int fuelMins = (totalSec % 3600) / 60;
 
+                // Fuel percentage
+                float fuelPctF = 0.0;
+                if (fuelMax > 0)
+                {
+                    fuelPctF = (fuelCur * 100.0) / fuelMax;
+                }
+                int fuelPctW = Math.Floor(fuelPctF);
+                float fuelPctFrac = fuelPctF - fuelPctW;
+                int fuelPctT = Math.Round(fuelPctFrac * 10.0);
+                if (fuelPctT >= 10)
+                {
+                    fuelPctW = fuelPctW + 1;
+                    fuelPctT = 0;
+                }
+
+                // Line 1: "Fuel: 500/2880 (17.3%) | 4D 3H (-2/m)"
+                // Compact format to fit 274px widget width.
                 string fuelText = "Fuel: ";
                 fuelText = fuelText + fuelCur.ToString() + "/" + fuelMax.ToString();
-                fuelText = fuelText + "  |  " + fuelDays.ToString() + "D " + fuelHours.ToString() + "H " + fuelMins.ToString() + "M";
+                fuelText = fuelText + " (" + fuelPctW.ToString() + "." + fuelPctT.ToString() + "%)";
+                fuelText = fuelText + " | " + fuelDays.ToString() + "D " + fuelHours.ToString() + "H";
 
-                // Status indicator
+                // Append burn rate only when burning
                 if (fuelOn && fuelCur > 0)
                 {
-                    fuelText = fuelText + "  >> BURNING";
+                    float burnPerMin = 60000.0 / LFPG_FURNACE_BURN_INTERVAL_MS;
+                    int burnPMWhole = Math.Floor(burnPerMin);
+                    fuelText = fuelText + " (-" + burnPMWhole.ToString() + "/m)";
+                }
+
+                // Status: color indicates state.
+                // Burning = cyan (burn rate suffix already visible).
+                // Off with fuel = yellow with [OFF] tag.
+                // Empty = grey with [EMPTY] tag.
+                if (fuelOn && fuelCur > 0)
+                {
                     m_wFuelLine.SetColor(ARGB(255, 50, 200, 220));
                 }
                 else if (!fuelOn && fuelCur > 0)
                 {
-                    fuelText = fuelText + "  [OFF]";
+                    fuelText = fuelText + " [OFF]";
                     m_wFuelLine.SetColor(ARGB(255, 230, 200, 50));
                 }
                 else
                 {
-                    fuelText = fuelText + "  [EMPTY]";
+                    fuelText = fuelText + " [EMPTY]";
                     m_wFuelLine.SetColor(ARGB(255, 120, 120, 120));
                 }
 

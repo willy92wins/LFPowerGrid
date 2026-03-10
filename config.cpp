@@ -501,8 +501,8 @@ class CfgVehicles
     {
         inventorySlot[] += {"LF_SolarNails", "LF_PumpNails"};
     };
-    // v1.1.0: PurificationTablets can go in pump filter slot
-    class PurificationTablets
+    // v1.1.0: GasMask_Filter (vanilla NBC filter) can go in pump filter slot
+    class GasMask_Filter
     {
         inventorySlot[] += {"LF_PumpFilter"};
     };

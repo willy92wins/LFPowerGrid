@@ -130,9 +130,9 @@ modded class PlayerBase
         {
             HandleLFPG_SearchlightEnter(sender, ctx);
         }
-        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT_REQUEST)
+        else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT)
         {
-            HandleLFPG_SearchlightExitRequest(sender);
+            HandleLFPG_SearchlightExit(sender, ctx);
         }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
@@ -1290,8 +1290,8 @@ modded class PlayerBase
     }
 
     // =====================================
-    // SERVER: Searchlight Enter — validate, spectator, confirm
-    // Pattern: HandleLFPG_RequestCameraList (COT enter)
+    // SERVER: Searchlight Enter — validate, mark operator, confirm
+    // v1.5.0: No COT, no spectator. Player stays in normal mode.
     // =====================================
     protected void HandleLFPG_SearchlightEnter(PlayerIdentity sender, ParamsReadContext ctx)
     {
@@ -1332,27 +1332,31 @@ modded class PlayerBase
             return;
         }
 
-        // Server-side distance validation (anti-exploit)
-        PlayerBase playerCheck = PlayerBase.Cast(sender.GetPlayer());
-        if (playerCheck)
+        // Block if already operated by someone else
+        if (sl.LFPG_HasOperator())
         {
-            float distSq = LFPG_WorldUtil.DistSq(playerCheck.GetPosition(), sl.GetPosition());
-            float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-            if (distSq > maxDistSq)
-            {
-                LFPG_Util.Warn("[Searchlight_Enter] Distance check failed");
-                return;
-            }
+            LFPG_SendClientMsg(this, "Searchlight is already being operated.");
+            return;
         }
 
-        // COT pattern: SelectPlayer(null) + SelectSpectator
-        vector slPos = sl.GetPosition();
-        float slY = slPos[1] + 0.83;
-        vector spectatorPos = Vector(slPos[0], slY, slPos[2]);
+        // Server-side distance validation (anti-exploit)
+        PlayerBase playerCheck = PlayerBase.Cast(sender.GetPlayer());
+        if (!playerCheck)
+            return;
 
-        LFPG_SetSkipOnSelectPlayer(true);
-        GetGame().SelectPlayer(sender, null);
-        GetGame().SelectSpectator(sender, "staticcamera", spectatorPos);
+        float distSq = LFPG_WorldUtil.DistSq(playerCheck.GetPosition(), sl.GetPosition());
+        float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        if (distSq > maxDistSq)
+        {
+            LFPG_Util.Warn("[Searchlight_Enter] Distance check failed");
+            return;
+        }
+
+        // Mark operator on the searchlight (using PLAYER's NetworkID)
+        int playerNetLow  = 0;
+        int playerNetHigh = 0;
+        playerCheck.GetNetworkID(playerNetLow, playerNetHigh);
+        sl.LFPG_SetOperator(playerNetLow, playerNetHigh);
 
         // Send ENTER_CONFIRM with current yaw/pitch
         float curYaw = sl.LFPG_GetAimYaw();
@@ -1367,9 +1371,8 @@ modded class PlayerBase
         rpc.Write(curPitch);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
 
-        string logMsg = "[Searchlight_Enter] SelectSpectator at ";
-        logMsg = logMsg + spectatorPos.ToString();
-        logMsg = logMsg + " yaw=" + curYaw.ToString();
+        string logMsg = "[Searchlight_Enter] Grab confirmed yaw=";
+        logMsg = logMsg + curYaw.ToString();
         logMsg = logMsg + " pitch=" + curPitch.ToString();
         LFPG_Util.Info(logMsg);
     }
@@ -1404,11 +1407,27 @@ modded class PlayerBase
         if (!sl)
             return;
 
-        // Clamp server-side (anti-cheat)
-        if (aimYaw < LFPG_SEARCHLIGHT_YAW_MIN)
-            aimYaw = LFPG_SEARCHLIGHT_YAW_MIN;
-        if (aimYaw > LFPG_SEARCHLIGHT_YAW_MAX)
-            aimYaw = LFPG_SEARCHLIGHT_YAW_MAX;
+        // v1.5.0: Validate sender is the current operator (anti-cheat)
+        PlayerBase aimPlayer = PlayerBase.Cast(sender.GetPlayer());
+        if (!aimPlayer)
+            return;
+        int aimPlayerNetLow  = 0;
+        int aimPlayerNetHigh = 0;
+        aimPlayer.GetNetworkID(aimPlayerNetLow, aimPlayerNetHigh);
+        if (!sl.LFPG_IsOperator(aimPlayerNetLow, aimPlayerNetHigh))
+            return;
+
+        // Server-side validation (anti-cheat)
+        // Yaw: normalize to [-180, 180] (no clamp — full 360 rotation)
+        while (aimYaw > 180.0)
+        {
+            aimYaw = aimYaw - 360.0;
+        }
+        while (aimYaw < -180.0)
+        {
+            aimYaw = aimYaw + 360.0;
+        }
+        // Pitch: clamp to allowed range
         if (aimPitch < LFPG_SEARCHLIGHT_PITCH_MIN)
             aimPitch = LFPG_SEARCHLIGHT_PITCH_MIN;
         if (aimPitch > LFPG_SEARCHLIGHT_PITCH_MAX)
@@ -1417,9 +1436,12 @@ modded class PlayerBase
         // Write SyncVars
         sl.LFPG_SetAim(aimYaw, aimPitch);
 
-        // Splash raycast
+        // Splash raycast — beam direction in WORLD space.
+        // aimYaw is LOCAL to searchlight, must add BASE yaw for world direction.
+        // NOT GetOrientation()[0] which changes with SetOrientation.
         vector beamStart = sl.ModelToWorld(sl.GetMemoryPointPos("beamStart"));
-        float yawRad = aimYaw * Math.DEG2RAD;
+        float worldYaw = sl.LFPG_GetBaseYaw() + aimYaw;
+        float yawRad = worldYaw * Math.DEG2RAD;
         float pitchRad = aimPitch * Math.DEG2RAD;
         float cosPitch = Math.Cos(pitchRad);
         float dirX = Math.Sin(yawRad) * cosPitch;
@@ -1457,26 +1479,53 @@ modded class PlayerBase
     }
 
     // =====================================
-    // SERVER: Searchlight Exit Request — round-trip RPC
-    // Pattern: HandleLFPG_CCTVExitRequest
+    // SERVER: Searchlight Exit — clear operator, send confirm
+    // v1.5.0: No COT round-trip. Simple cleanup.
     // =====================================
-    protected void HandleLFPG_SearchlightExitRequest(PlayerIdentity sender)
+    protected void HandleLFPG_SearchlightExit(PlayerIdentity sender, ParamsReadContext ctx)
     {
         if (!sender)
             return;
 
-        PlayerBase player = PlayerBase.Cast(sender.GetPlayer());
-        if (!player)
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
             return;
 
-        GetGame().SelectPlayer(sender, player);
+        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        if (slObj)
+        {
+            LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+            if (sl)
+            {
+                // Validate sender is the current operator (anti-cheat)
+                PlayerBase exitPlayer = PlayerBase.Cast(sender.GetPlayer());
+                if (exitPlayer)
+                {
+                    int exitNetLow  = 0;
+                    int exitNetHigh = 0;
+                    exitPlayer.GetNetworkID(exitNetLow, exitNetHigh);
+                    if (sl.LFPG_IsOperator(exitNetLow, exitNetHigh))
+                    {
+                        sl.LFPG_ClearOperator();
+                    }
+                }
+            }
+        }
 
-        ScriptRPC confirmRpc = new ScriptRPC();
-        int confirmSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM;
-        confirmRpc.Write(confirmSubId);
-        confirmRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+        // Send EXIT_CONFIRM to client (in case client-side cleanup hasn't happened)
+        PlayerBase player = PlayerBase.Cast(sender.GetPlayer());
+        if (player)
+        {
+            ScriptRPC confirmRpc = new ScriptRPC();
+            int confirmSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM;
+            confirmRpc.Write(confirmSubId);
+            confirmRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+        }
 
-        string logMsg = "[Searchlight_Exit] SelectPlayer + confirm sent for ";
+        string logMsg = "[Searchlight_Exit] Operator released for ";
         logMsg = logMsg + sender.GetName();
         LFPG_Util.Info(logMsg);
     }
@@ -1508,14 +1557,14 @@ modded class PlayerBase
     }
 
     // =====================================
-    // CLIENT: Searchlight Exit Confirmed
+    // CLIENT: Searchlight Exit Confirmed (server-initiated kick)
     // =====================================
     protected void HandleLFPG_SearchlightExitConfirm()
     {
         LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
         if (ctrl)
         {
-            ctrl.DoExitCleanup();
+            ctrl.DoCleanup();
         }
     }
 

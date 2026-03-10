@@ -39,7 +39,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
     override void CreateConditionComponents()
     {
         m_ConditionItem   = new CCINone;
-        m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
+        m_ConditionTarget = new CCTObject(LFPG_INTERACT_DIST_M);
     }
 
     override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
@@ -110,6 +110,25 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         int fuelCur = furnace.LFPG_GetFuelCurrent();
         if (fuelCur >= LFPG_FURNACE_MAX_FUEL)
             return false;
+
+        // Dynamic text: show fuel percentage
+        int fuelMax = LFPG_FURNACE_MAX_FUEL;
+        float feedPctF = 0.0;
+        if (fuelMax > 0)
+        {
+            feedPctF = (fuelCur * 100.0) / fuelMax;
+        }
+        int feedPctWhole = Math.Floor(feedPctF);
+        float feedPctFrac = feedPctF - feedPctWhole;
+        int feedPctTenths = Math.Round(feedPctFrac * 10.0);
+        if (feedPctTenths >= 10)
+        {
+            feedPctWhole = feedPctWhole + 1;
+            feedPctTenths = 0;
+        }
+        string feedLabel = Widget.TranslateString("#STR_LFPG_ACTION_FEED_FURNACE");
+        string feedPct = " (" + feedPctWhole.ToString() + "." + feedPctTenths.ToString() + "%)";
+        m_Text = feedLabel + feedPct;
 
         return true;
     }

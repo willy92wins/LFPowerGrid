@@ -553,7 +553,7 @@ static const int   LFPG_MONITOR_MAX_OUTPUTS  = 4;      // output ports (output_1
 
 // ---- v1.1.0: Water Pump ----
 static const int   LFPG_PUMP_CHECK_MS                = 60000;     // Timer interval (ms) — checks tablets + tank
-static const float LFPG_PUMP_TABLET_INTERVAL_MS      = 3600000.0; // 1 REAL hour in ms
+static const float LFPG_PUMP_FILTER_INTERVAL_MS      = 1800000.0; // 30 min in ms (degrade 1 qty unit per interval → 2%/h → 50h total)
 static const float LFPG_PUMP_TANK_MAX                = 50.0;      // Max tank capacity (L)
 static const float LFPG_PUMP_TANK_FILL_PER_HOUR      = 2.0;       // L per REAL hour (not in-game)
 static const float LFPG_PUMP_TANK_DRINK_COST         = 0.25;      // L consumed per sip from tank

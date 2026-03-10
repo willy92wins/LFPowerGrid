@@ -16,7 +16,7 @@
 //   3. DeviceLifecycle.OnDeviceKilled (cuts wires, cleans graph)
 //   4. Delete T1
 //   5. Create T2 at same pos/ori
-//   6. Transfer filter tablets (if any) to T2
+//   6. Transfer NBC filter (GasMask_Filter, if any) to T2
 //
 // ENFORCE SCRIPT NOTES:
 //   - No ternary operators
@@ -173,10 +173,10 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             t2.SetOrientation(ori);
             t2.Update();
 
-            // Transfer filter tablets to T2
+            // Transfer NBC filter to T2
             if (filterQty > 0)
             {
-                EntityAI newFilter = t2.GetInventory().CreateAttachment("PurificationTablets");
+                EntityAI newFilter = t2.GetInventory().CreateAttachment("GasMask_Filter");
                 if (newFilter)
                 {
                     ItemBase newFilterItem = ItemBase.Cast(newFilter);

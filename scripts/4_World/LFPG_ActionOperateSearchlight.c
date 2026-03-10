@@ -1,17 +1,14 @@
 // =========================================================
-// LF_PowerGrid - Action: Operate Searchlight (v1.4.0)
+// LF_PowerGrid - Action: Operate Searchlight (v1.5.0)
 //
-// Appears when looking at a powered LF_Searchlight without
-// item in hand and controller not already active.
+// Toggle action on LF_Searchlight (CCINone, CCTCursor).
+//   - If NOT grabbing: "Operate Searchlight" -> sends ENTER RPC
+//   - If already grabbing THIS searchlight: "Release Searchlight" -> local exit
 //
-// Pattern: LFPG_ActionWatchMonitor (CCINone, RPC on OnExecuteClient).
+// Appears when player looks at a powered searchlight within
+// interact distance. No item required (bare hands).
 //
-// Flow:
-//   Client: send RPC SEARCHLIGHT_ENTER(netLow, netHigh)
-//   Server: validate + SelectSpectator + ENTER_CONFIRM(yaw, pitch)
-//   Client: SearchlightController.Enter()
-//
-// Register in LF_Searchlight.SetActions() and ActionRegistration.
+// Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
 
 class LFPG_ActionOperateSearchlight : ActionInteractBase
@@ -45,11 +42,6 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (!targetObj.IsKindOf(slType))
             return false;
 
-        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), targetObj.GetPosition());
-        float maxDist = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-        if (distSq > maxDist)
-            return false;
-
         LF_Searchlight sl = LF_Searchlight.Cast(targetObj);
         if (!sl)
             return false;
@@ -57,20 +49,35 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (!sl.LFPG_IsPowered())
             return false;
 
-        // Block if already in searchlight or CCTV mode
-        LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
-        if (ctrl && ctrl.IsActive())
+        // Distance check
+        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), targetObj.GetPosition());
+        float maxDist = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        if (distSq > maxDist)
             return false;
 
+        // Block if CCTV viewport is active
         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
         if (vp && vp.IsActive())
             return false;
 
+        // Toggle text based on current state
+        LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
+        if (ctrl && ctrl.IsOperatingEntity(sl))
+        {
+            m_Text = "#STR_LFPG_ACTION_RELEASE_SEARCHLIGHT";
+        }
+        else
+        {
+            // Block if already operating a DIFFERENT searchlight
+            if (ctrl && ctrl.IsActive())
+                return false;
+
+            m_Text = "#STR_LFPG_ACTION_OPERATE_SEARCHLIGHT";
+        }
+
         return true;
     }
 
-    // RPC in OnExecuteClient — fires AFTER animation completes.
-    // Pattern: LFPG_ActionWatchMonitor v0.9.6 crash fix.
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -82,10 +89,20 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (!targetObj)
             return;
 
-        string slCheck = "LF_Searchlight";
-        if (!targetObj.IsKindOf(slCheck))
+        LF_Searchlight sl = LF_Searchlight.Cast(targetObj);
+        if (!sl)
             return;
 
+        // Toggle: if already operating, release; otherwise request enter
+        LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
+        if (ctrl && ctrl.IsOperatingEntity(sl))
+        {
+            // Release
+            ctrl.RequestExit();
+            return;
+        }
+
+        // Request enter via RPC
         int netLow  = 0;
         int netHigh = 0;
         targetObj.GetNetworkID(netLow, netHigh);

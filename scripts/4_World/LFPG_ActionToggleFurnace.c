@@ -26,7 +26,7 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
     override void CreateConditionComponents()
     {
         m_ConditionItem   = new CCINone;
-        m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
+        m_ConditionTarget = new CCTObject(LFPG_INTERACT_DIST_M);
     }
 
     override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
@@ -58,15 +58,34 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
         if (!isOn && fuelCur <= 0)
             return false;
 
-        // Dynamic text update
+        // Dynamic text update with fuel percentage
+        int fuelMax = LFPG_FURNACE_MAX_FUEL;
+        float fuelPctF = 0.0;
+        if (fuelMax > 0)
+        {
+            fuelPctF = (fuelCur * 100.0) / fuelMax;
+        }
+        // Format to 0.1% precision
+        int fuelPctWhole = Math.Floor(fuelPctF);
+        float fuelPctFrac = fuelPctF - fuelPctWhole;
+        int fuelPctTenths = Math.Round(fuelPctFrac * 10.0);
+        if (fuelPctTenths >= 10)
+        {
+            fuelPctWhole = fuelPctWhole + 1;
+            fuelPctTenths = 0;
+        }
+        string pctStr = " (" + fuelPctWhole.ToString() + "." + fuelPctTenths.ToString() + "%)";
+
+        string actionLabel = "";
         if (isOn)
         {
-            m_Text = "#STR_LFPG_ACTION_FURNACE_OFF";
+            actionLabel = Widget.TranslateString("#STR_LFPG_ACTION_FURNACE_OFF");
         }
         else
         {
-            m_Text = "#STR_LFPG_ACTION_FURNACE_ON";
+            actionLabel = Widget.TranslateString("#STR_LFPG_ACTION_FURNACE_ON");
         }
+        m_Text = actionLabel + pctStr;
 
         return true;
     }

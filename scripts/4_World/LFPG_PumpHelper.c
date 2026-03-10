@@ -48,7 +48,7 @@ class LFPG_PumpHelper
         return LIQUID_RIVERWATER;
     }
 
-    // Check if a device has an active purification filter
+    // Check if a device has an active NBC filter (GasMask_Filter with qty > 0)
     static bool HasActiveFilter(EntityAI device)
     {
         if (!device)

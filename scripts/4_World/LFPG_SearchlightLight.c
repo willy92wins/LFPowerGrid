@@ -1,11 +1,11 @@
 // =========================================================
-// LF_PowerGrid - Searchlight light classes (v1.4.0)
+// LF_PowerGrid - Searchlight light classes (v1.5.0)
 //
 // 4 light classes for the LF_Searchlight device:
-//   LFPG_SearchlightBeamCore  — primary spot, 80m, narrow 8°, shadows ON
-//   LFPG_SearchlightBeamSpill — secondary spot, 50m, wide 25°, shadows OFF
-//   LFPG_SearchlightHalo      — lens glow, 3m radius point light
-//   LFPG_SearchlightSplash    — ground splash, 5m radius point light
+//   LFPG_SearchlightBeamCore  — primary spot, 120m, narrow 16°, shadows ON
+//   LFPG_SearchlightBeamSpill — secondary spot, 80m, wide 40°, shadows OFF
+//   LFPG_SearchlightHalo      — lens glow, 5m radius point light
+//   LFPG_SearchlightSplash    — ground splash, 10m radius point light
 //
 // All: client-side only, SetVisibleDuringDaylight(false),
 //      SetLifetime(1000000), warm white color.
@@ -28,8 +28,8 @@ class LFPG_SearchlightBeamCore : SpotLightBase
     void LFPG_SearchlightBeamCore()
     {
         SetVisibleDuringDaylight(false);
-        SetRadiusTo(80.0);
-        SetSpotLightAngle(14.0);
+        SetRadiusTo(120.0);
+        SetSpotLightAngle(16.0);
         SetCastShadow(true);
 
         // DancingShadows OFF (Audit H1)
@@ -39,7 +39,7 @@ class LFPG_SearchlightBeamCore : SpotLightBase
         // Flicker: subtle realism. Amplitude BEFORE Brightness.
         SetFlickerAmplitude(0.03);
         SetFlickerSpeed(0.4);
-        SetBrightnessTo(4.0);
+        SetBrightnessTo(8.0);
 
         SetFadeOutTime(0.3);
         SetLifetime(1000000.0);
@@ -58,14 +58,14 @@ class LFPG_SearchlightBeamSpill : SpotLightBase
     void LFPG_SearchlightBeamSpill()
     {
         SetVisibleDuringDaylight(false);
-        SetRadiusTo(50.0);
-        SetSpotLightAngle(35.0);
+        SetRadiusTo(80.0);
+        SetSpotLightAngle(40.0);
         SetCastShadow(false);
 
         // Minimal flicker
         SetFlickerAmplitude(0.001);
         SetFlickerSpeed(0.2);
-        SetBrightnessTo(0.8);
+        SetBrightnessTo(2.5);
 
         SetFadeOutTime(0.3);
         SetLifetime(1000000.0);
@@ -83,9 +83,9 @@ class LFPG_SearchlightHalo : PointLightBase
     void LFPG_SearchlightHalo()
     {
         SetVisibleDuringDaylight(false);
-        SetRadiusTo(3.0);
+        SetRadiusTo(5.0);
         SetCastShadow(false);
-        SetBrightnessTo(8.0);
+        SetBrightnessTo(12.0);
         SetFadeOutTime(0.2);
         SetLifetime(1000000.0);
 
@@ -102,9 +102,9 @@ class LFPG_SearchlightSplash : PointLightBase
     void LFPG_SearchlightSplash()
     {
         SetVisibleDuringDaylight(false);
-        SetRadiusTo(5.0);
+        SetRadiusTo(10.0);
         SetCastShadow(false);
-        SetBrightnessTo(6.0);
+        SetBrightnessTo(10.0);
         SetFadeOutTime(0.2);
         SetLifetime(1000000.0);
 

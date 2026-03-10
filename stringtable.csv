@@ -82,3 +82,4 @@
 "STR_LFPG_Searchlight_Desc","A tripod-mounted searchlight. Requires 25 u/s of power.","A tripod-mounted searchlight. Requires 25 u/s of power.","Reflector montado en tripode. Requiere 25 u/s de energia.","Ein auf einem Stativ montierter Suchscheinwerfer. Benoetigt 25 u/s Strom.","Прожектор на треноге. Требуется 25 ед/с энергии."
 "STR_LFPG_ACTION_OPERATE_SEARCHLIGHT","Operate Searchlight","Operate Searchlight","Operar Reflector","Scheinwerfer bedienen","Управлять прожектором"
 "STR_LFPG_ACTION_PLACE_SEARCHLIGHT","Place Searchlight","Place Searchlight","Colocar Reflector","Scheinwerfer platzieren","Установить прожектор"
+"STR_LFPG_ACTION_RELEASE_SEARCHLIGHT","Release Searchlight","Release Searchlight","Soltar Reflector","Scheinwerfer loslassen","Отпустить прожектор"

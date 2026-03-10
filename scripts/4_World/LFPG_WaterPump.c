@@ -108,7 +108,7 @@ class LF_WaterPump : Inventory_Base
     protected bool m_PoweredNet = false;
     protected bool m_Overloaded = false;
     protected bool m_LFPG_Deleting = false;
-    protected float m_TabletLastRealMs = 0.0;
+    protected float m_FilterLastRealMs = 0.0;
     protected EffectSound m_PumpLoopSound;
 
     void LF_WaterPump()
@@ -147,8 +147,6 @@ class LF_WaterPump : Inventory_Base
 
     override bool CanReleaseAttachment(EntityAI attachment)
     {
-        if (!attachment) return true;
-        if (attachment.IsKindOf("PurificationTablets")) return false;
         return super.CanReleaseAttachment(attachment);
     }
 
@@ -162,7 +160,7 @@ class LF_WaterPump : Inventory_Base
         }
         // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
         SetSynchDirty();
-        m_TabletLastRealMs = GetGame().GetTime();
+        m_FilterLastRealMs = GetGame().GetTime();
         #endif
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
@@ -236,20 +234,30 @@ class LF_WaterPump : Inventory_Base
         if (m_DeviceId != "") { LFPG_DeviceRegistry.Get().Register(this, m_DeviceId); }
     }
 
-    float LFPG_GetTabletLastMs() { return m_TabletLastRealMs; }
-    void LFPG_SetTabletLastMs(float ms) { m_TabletLastRealMs = ms; }
+    float LFPG_GetFilterLastMs() { return m_FilterLastRealMs; }
+    void LFPG_SetFilterLastMs(float ms) { m_FilterLastRealMs = ms; }
 
-    void LFPG_ConsumeFilterTablet()
+    void LFPG_DegradeFilter()
     {
         #ifdef SERVER
         EntityAI filter = FindAttachmentBySlotName("LF_PumpFilter");
-        if (!filter) return;
+        if (!filter)
+            return;
+
         int qty = filter.GetQuantity();
-        if (qty <= 1) { GetGame().ObjectDelete(filter); }
-        else
+        if (qty <= 0)
+            return;
+
+        int newQty = qty - 1;
+        if (newQty < 0)
         {
-            ItemBase filterItem = ItemBase.Cast(filter);
-            if (filterItem) { filterItem.SetQuantity(qty - 1); }
+            newQty = 0;
+        }
+
+        ItemBase filterItem = ItemBase.Cast(filter);
+        if (filterItem)
+        {
+            filterItem.SetQuantity(newQty);
         }
         #endif
     }
@@ -461,7 +469,7 @@ class LF_WaterPump_T2 : Inventory_Base
     protected bool m_PoweredNet = false;
     protected bool m_Overloaded = false;
     protected bool m_LFPG_Deleting = false;
-    protected float m_TabletLastRealMs = 0.0;
+    protected float m_FilterLastRealMs = 0.0;
     protected float m_TankLevel = 0.0;
     protected int m_TankLiquidType = 0;
     protected EffectSound m_PumpLoopSound;
@@ -501,8 +509,6 @@ class LF_WaterPump_T2 : Inventory_Base
 
     override bool CanReleaseAttachment(EntityAI attachment)
     {
-        if (!attachment) return true;
-        if (attachment.IsKindOf("PurificationTablets")) return false;
         return super.CanReleaseAttachment(attachment);
     }
 
@@ -516,7 +522,7 @@ class LF_WaterPump_T2 : Inventory_Base
         }
         // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
         SetSynchDirty();
-        m_TabletLastRealMs = GetGame().GetTime();
+        m_FilterLastRealMs = GetGame().GetTime();
         #endif
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
@@ -590,21 +596,31 @@ class LF_WaterPump_T2 : Inventory_Base
         if (m_DeviceId != "") { LFPG_DeviceRegistry.Get().Register(this, m_DeviceId); }
     }
 
-    // ---- Tablet timer ----
-    float LFPG_GetTabletLastMs() { return m_TabletLastRealMs; }
-    void LFPG_SetTabletLastMs(float ms) { m_TabletLastRealMs = ms; }
+    // ---- Filter degradation timer ----
+    float LFPG_GetFilterLastMs() { return m_FilterLastRealMs; }
+    void LFPG_SetFilterLastMs(float ms) { m_FilterLastRealMs = ms; }
 
-    void LFPG_ConsumeFilterTablet()
+    void LFPG_DegradeFilter()
     {
         #ifdef SERVER
         EntityAI filter = FindAttachmentBySlotName("LF_PumpFilter");
-        if (!filter) return;
+        if (!filter)
+            return;
+
         int qty = filter.GetQuantity();
-        if (qty <= 1) { GetGame().ObjectDelete(filter); }
-        else
+        if (qty <= 0)
+            return;
+
+        int newQty = qty - 1;
+        if (newQty < 0)
         {
-            ItemBase filterItem = ItemBase.Cast(filter);
-            if (filterItem) { filterItem.SetQuantity(qty - 1); }
+            newQty = 0;
+        }
+
+        ItemBase filterItem = ItemBase.Cast(filter);
+        if (filterItem)
+        {
+            filterItem.SetQuantity(newQty);
         }
         #endif
     }

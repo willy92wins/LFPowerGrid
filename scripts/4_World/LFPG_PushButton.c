@@ -510,6 +510,14 @@ class LFPG_PushButton : Inventory_Base
         return m_SwitchOn;
     }
 
+    // P1: Signal to ElecGraph that this device has gate logic.
+    // Cached in LFPG_ElecNode.m_IsGated to skip entity lookup
+    // for non-gated PASSTHROUGH devices every tick.
+    bool LFPG_IsGateCapable()
+    {
+        return true;
+    }
+
     // Zero self-consumption: pure relay.
     // Without this, DeviceAPI fallback returns 10.0 (IsEnergyConsumer=true).
     float LFPG_GetConsumption()

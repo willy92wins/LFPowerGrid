@@ -1,113 +1,56 @@
 // =========================================================
-// LF_PowerGrid - Searchlight Controller (v1.4.0)
+// LF_PowerGrid - Searchlight Grab Controller (v1.5.0)
 //
-// Client-side singleton for spectator control of LF_Searchlight.
-// Pattern: COT (same as LFPG_CameraViewport).
+// Lightweight client-side singleton. Player walks up to a
+// powered searchlight, presses F to "grab" it, then:
+//   YAW:   computed from player position relative to foco
+//           (beam points toward player = drag-the-barrel)
+//   PITCH: scroll wheel (slow increments, +-120 deg)
+//   EXIT:  F again (action toggle) or distance > 2m
 //
-// ENTER (server-side):
-//   SelectPlayer(sender, NULL) + SelectSpectator(sender, "staticcamera", pos)
-//   → RPC SEARCHLIGHT_ENTER_CONFIRM(yaw, pitch) → client
+// NO spectator, NO COT, NO camera, NO HUD overlay.
+// The player remains in normal 3rd/1st person the whole time.
 //
-// ENTER (client-side):
-//   Camera.GetCurrentCamera() → SetActive(true) + position behind beam
-//   Show HUD overlay
-//
-// TICK (client-side):
-//   Accumulate WASD → yaw/pitch (30 deg/s)
-//   Clamp: yaw [-120,120], pitch [-10,45]
-//   Update spectator camera LOCAL (responsive)
-//   Throttle RPC SEARCHLIGHT_AIM every 100ms
-//
-// EXIT (COT round-trip):
-//   Phase 1: RPC EXIT_REQUEST → server
-//   Phase 2: Wait for CONFIRM (5s timeout)
-//   DoExitCleanup: re-enable input, hide HUD, release camera
+// Tick is called from MissionGameplay.OnUpdate.
+// Scroll is captured via UANextAction / UAPrevAction.
 //
 // Enforce Script: no ternaries, no ++/--, no foreach, no +=/-=.
 // =========================================================
-
-static const string LFPG_SL_HUD_LAYOUT = "LFPowerGrid/gui/layouts/LFPG_SearchlightHUD.layout";
 
 class LFPG_SearchlightController
 {
     // ---- Singleton ----
     protected static ref LFPG_SearchlightController s_Instance;
 
-    // ---- Camera (engine-managed via SelectSpectator) ----
-    protected Object    m_ViewCamObj;
-    protected bool      m_Active;
-    protected float     m_ActiveDuration;
+    // ---- Target searchlight ----
+    protected int    m_TargetNetLow;
+    protected int    m_TargetNetHigh;
+    protected bool   m_Active;
 
-    // ---- Player reference (saved before SelectSpectator) ----
-    protected PlayerBase m_PlayerRef;
-
-    // ---- Searchlight NetworkID (for RPCs) ----
-    protected int       m_TargetNetLow;
-    protected int       m_TargetNetHigh;
+    // ---- Cached searchlight ref (resolved once on Enter) ----
+    protected LF_Searchlight m_TargetSl;
 
     // ---- Aim state ----
-    protected float     m_AimYaw;
-    protected float     m_AimPitch;
-
-    // ---- Key tracking ----
-    protected bool      m_KeyW;
-    protected bool      m_KeyA;
-    protected bool      m_KeyS;
-    protected bool      m_KeyD;
+    protected float  m_AimYaw;
+    protected float  m_AimPitch;
 
     // ---- RPC throttle ----
-    protected float     m_RpcAccum;
-    protected bool      m_AimDirty;
-
-    // ---- Cached searchlight world pos (avoid NetworkID resolve per frame) ----
-    protected vector    m_CachedSlPos;
-
-    // ---- HUD change tracking (avoid string alloc every frame) ----
-    protected int       m_PrevHudYaw;
-    protected int       m_PrevHudPitch;
-
-    // ---- Two-phase exit (COT pattern) ----
-    protected int       m_ExitPhase;
-    protected float     m_ExitWaitTimer;
-
-    // ---- HUD ----
-    protected Widget      m_HudRoot;
-    protected TextWidget  m_wAimText;
-    protected TextWidget  m_wHintText;
-    protected TextWidget  m_wCrosshair;
-
-    // ---- Focus lock ----
-    protected bool      m_FocusLocked;
+    protected float  m_RpcAccum;
+    protected bool   m_AimDirty;
 
     // ============================================
     // Constructor
     // ============================================
     void LFPG_SearchlightController()
     {
-        m_ViewCamObj    = null;
-        m_Active        = false;
-        m_ActiveDuration = 0.0;
-        m_PlayerRef     = null;
         m_TargetNetLow  = 0;
         m_TargetNetHigh = 0;
+        m_Active        = false;
+        m_TargetSl      = null;
         m_AimYaw        = 0.0;
         m_AimPitch      = 0.0;
-        m_KeyW          = false;
-        m_KeyA          = false;
-        m_KeyS          = false;
-        m_KeyD          = false;
         m_RpcAccum      = 0.0;
         m_AimDirty      = false;
-        m_CachedSlPos   = "0 0 0";
-        m_PrevHudYaw    = -9999;
-        m_PrevHudPitch  = -9999;
-        m_ExitPhase     = 0;
-        m_ExitWaitTimer = 0.0;
-        m_HudRoot       = null;
-        m_wAimText      = null;
-        m_wHintText     = null;
-        m_wCrosshair    = null;
-        m_FocusLocked   = false;
     }
 
     // ============================================
@@ -138,107 +81,28 @@ class LFPG_SearchlightController
         return m_Active;
     }
 
-    bool ShouldBlockInput()
+    // Returns true if this controller is operating the given searchlight
+    bool IsOperating(int netLow, int netHigh)
     {
-        if (m_Active)
+        if (!m_Active)
+            return false;
+        if (m_TargetNetLow == netLow && m_TargetNetHigh == netHigh)
             return true;
-        if (m_ExitPhase > 0)
+        return false;
+    }
+
+    // Returns true if this controller is operating the given entity
+    bool IsOperatingEntity(LF_Searchlight sl)
+    {
+        if (!m_Active)
+            return false;
+        if (m_TargetSl == sl)
             return true;
         return false;
     }
 
     // ============================================
-    // InitWidgets — called from MissionGameplay.OnUpdate (safe context)
-    // ============================================
-    void InitWidgets()
-    {
-        if (m_HudRoot)
-            return;
-
-        m_HudRoot = GetGame().GetWorkspace().CreateWidgets(LFPG_SL_HUD_LAYOUT);
-        if (!m_HudRoot)
-        {
-            LFPG_Util.Error("[SearchlightCtrl] Failed to create HUD layout");
-            return;
-        }
-
-        m_HudRoot.SetSort(10003);
-
-        string wAim   = "AimText";
-        string wHint  = "HintText";
-        string wCross = "Crosshair";
-        m_wAimText   = TextWidget.Cast(m_HudRoot.FindAnyWidget(wAim));
-        m_wHintText  = TextWidget.Cast(m_HudRoot.FindAnyWidget(wHint));
-        m_wCrosshair = TextWidget.Cast(m_HudRoot.FindAnyWidget(wCross));
-
-        // Position widgets based on screen size
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float sw = scrW;
-        float sh = scrH;
-        float scale = sh / 1080.0;
-
-        int amberColor = ARGB(220, 255, 180, 40);
-        int whiteColor = ARGB(200, 220, 220, 200);
-
-        float labelH = 24.0 * scale;
-        float margin = 16.0 * scale;
-
-        // AimText: bottom-left
-        if (m_wAimText)
-        {
-            float aimY = sh - margin - labelH;
-            m_wAimText.SetPos(margin, aimY);
-            m_wAimText.SetSize(300.0 * scale, labelH);
-            m_wAimText.SetColor(amberColor);
-            m_wAimText.SetText("YAW: 0   PITCH: 0");
-        }
-
-        // HintText: bottom-center
-        if (m_wHintText)
-        {
-            float hintW = 350.0 * scale;
-            float hintX = (sw - hintW) * 0.5;
-            float hintY = sh - margin - labelH;
-            m_wHintText.SetPos(hintX, hintY);
-            m_wHintText.SetSize(hintW, labelH);
-            m_wHintText.SetColor(whiteColor);
-            m_wHintText.SetText("WASD: Aim  |  SPACE/ESC: Exit");
-        }
-
-        // Crosshair: center of screen
-        if (m_wCrosshair)
-        {
-            float crossW = 40.0 * scale;
-            float crossH = 30.0 * scale;
-            float crossX = (sw - crossW) * 0.5;
-            float crossY = (sh - crossH) * 0.5;
-            m_wCrosshair.SetPos(crossX, crossY);
-            m_wCrosshair.SetSize(crossW, crossH);
-            m_wCrosshair.SetColor(amberColor);
-            m_wCrosshair.SetText("+");
-        }
-
-        m_HudRoot.Show(false);
-        LFPG_Util.Info("[SearchlightCtrl] HUD widgets created (hidden)");
-    }
-
-    protected void DestroyWidgets()
-    {
-        if (m_HudRoot)
-        {
-            m_HudRoot.Unlink();
-            m_HudRoot = null;
-        }
-        m_wAimText   = null;
-        m_wHintText  = null;
-        m_wCrosshair = null;
-    }
-
-    // ============================================
-    // Enter — called from RPC SEARCHLIGHT_ENTER_CONFIRM
-    // Server has already called SelectSpectator.
+    // Enter -- called from RPC SEARCHLIGHT_ENTER_CONFIRM
     // ============================================
     void Enter(int netLow, int netHigh, float yaw, float pitch)
     {
@@ -248,303 +112,197 @@ class LFPG_SearchlightController
             return;
         }
 
-        if (m_ExitPhase > 0)
-        {
-            LFPG_Util.Warn("[SearchlightCtrl] Enter: exit in progress, ignoring");
-            return;
-        }
-
-        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
-        m_PlayerRef = p;
-
         m_TargetNetLow  = netLow;
         m_TargetNetHigh = netHigh;
         m_AimYaw        = yaw;
         m_AimPitch      = pitch;
-        m_KeyW  = false;
-        m_KeyA  = false;
-        m_KeyS  = false;
-        m_KeyD  = false;
         m_RpcAccum      = 0.0;
         m_AimDirty      = false;
-        m_ActiveDuration = 0.0;
-        m_ExitPhase     = 0;
-        m_ExitWaitTimer = 0.0;
-        m_PrevHudYaw    = -9999;
-        m_PrevHudPitch  = -9999;
 
-        // Cache searchlight world position (avoid NetworkID resolve per frame)
+        // Resolve searchlight entity
         Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
-        if (slObj)
+        if (!slObj)
         {
-            m_CachedSlPos = slObj.GetPosition();
-        }
-
-        // Get engine-managed camera from SelectSpectator
-        Camera currentCam = Camera.GetCurrentCamera();
-        if (!currentCam)
-        {
-            LFPG_Util.Error("[SearchlightCtrl] Camera.GetCurrentCamera returned null");
-            m_PlayerRef = null;
+            LFPG_Util.Error("[SearchlightCtrl] Cannot resolve NetworkID on Enter");
             return;
         }
 
-        currentCam.SetActive(true);
-        m_ViewCamObj = currentCam;
-
-        // Position camera behind the beam
-        PositionCamera();
-
-        // Lock input + hide vanilla HUD
-        LockFocus();
-        HideHUD();
-        if (m_PlayerRef)
+        m_TargetSl = LF_Searchlight.Cast(slObj);
+        if (!m_TargetSl)
         {
-            HumanInputController hic = m_PlayerRef.GetInputController();
-            if (hic)
-            {
-                hic.SetDisabled(true);
-            }
-        }
-
-        // Show HUD
-        if (m_HudRoot)
-        {
-            m_HudRoot.Show(true);
+            LFPG_Util.Error("[SearchlightCtrl] Object is not LF_Searchlight on Enter");
+            return;
         }
 
         m_Active = true;
 
+        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
         if (p)
         {
-            p.MessageStatus("[LFPG] Searchlight: WASD=Aim  SPACE/ESC=Exit");
+            p.MessageStatus("[LFPG] Searchlight grabbed. Scroll=Pitch  Walk=Aim  F=Release");
         }
 
-        LFPG_Util.Info("[SearchlightCtrl] Entered spectator mode");
+        string logMsg = "[SearchlightCtrl] Grab started netId=";
+        logMsg = logMsg + netLow.ToString();
+        logMsg = logMsg + ":" + netHigh.ToString();
+        LFPG_Util.Info(logMsg);
     }
 
     // ============================================
-    // PositionCamera — place camera behind beam direction
+    // Exit -- send RPC to server + cleanup locally
     // ============================================
-    protected void PositionCamera()
-    {
-        if (!m_ViewCamObj)
-            return;
-
-        // Use cached position (resolved once on Enter)
-        vector slPos = m_CachedSlPos;
-
-        // Beam direction from yaw/pitch angles
-        float yawRad = m_AimYaw * Math.DEG2RAD;
-        float pitchRad = m_AimPitch * Math.DEG2RAD;
-        float cosPitch = Math.Cos(pitchRad);
-
-        float dirX = Math.Sin(yawRad) * cosPitch;
-        float dirY = Math.Sin(pitchRad);
-        float dirZ = Math.Cos(yawRad) * cosPitch;
-
-        // Camera = searchlight pos - (beamDir * BEHIND) + (0, UP, 0)
-        float camX = slPos[0] - dirX * LFPG_SEARCHLIGHT_CAM_BEHIND_M;
-        float camY = slPos[1] + 0.83 - dirY * LFPG_SEARCHLIGHT_CAM_BEHIND_M + LFPG_SEARCHLIGHT_CAM_UP_M;
-        float camZ = slPos[2] - dirZ * LFPG_SEARCHLIGHT_CAM_BEHIND_M;
-        vector camPos = Vector(camX, camY, camZ);
-
-        // Camera orientation: look along beam
-        vector camOri = Vector(m_AimYaw, m_AimPitch, 0.0);
-
-        m_ViewCamObj.SetPosition(camPos);
-        m_ViewCamObj.SetOrientation(camOri);
-    }
-
-    // ============================================
-    // HandleKeyDown
-    // ============================================
-    bool HandleKeyDown(int key)
+    void RequestExit()
     {
         if (!m_Active)
-            return false;
+            return;
 
-        if (key == LFPG_KC_ESCAPE || key == LFPG_KC_SPACE)
+        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
+        if (p)
         {
-            m_ExitPhase = 1;
-            return true;
-        }
-
-        if (key == LFPG_KC_W)
-        {
-            m_KeyW = true;
-            return true;
-        }
-        if (key == LFPG_KC_A)
-        {
-            m_KeyA = true;
-            return true;
-        }
-        if (key == LFPG_KC_S)
-        {
-            m_KeyS = true;
-            return true;
-        }
-        if (key == LFPG_KC_D)
-        {
-            m_KeyD = true;
-            return true;
+            ScriptRPC rpc = new ScriptRPC();
+            int subId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT;
+            rpc.Write(subId);
+            rpc.Write(m_TargetNetLow);
+            rpc.Write(m_TargetNetHigh);
+            rpc.Send(p, LFPG_RPC_CHANNEL, true, null);
         }
 
-        return false;
+        DoCleanup();
     }
 
     // ============================================
-    // HandleKeyUp
+    // DoCleanup -- server-initiated or local exit
     // ============================================
-    void HandleKeyUp(int key)
+    void DoCleanup()
     {
-        if (key == LFPG_KC_W)
-        {
-            m_KeyW = false;
-        }
-        if (key == LFPG_KC_A)
-        {
-            m_KeyA = false;
-        }
-        if (key == LFPG_KC_S)
-        {
-            m_KeyS = false;
-        }
-        if (key == LFPG_KC_D)
-        {
-            m_KeyD = false;
-        }
+        m_Active        = false;
+        m_TargetSl      = null;
+        m_TargetNetLow  = 0;
+        m_TargetNetHigh = 0;
+        m_AimYaw        = 0.0;
+        m_AimPitch      = 0.0;
+        m_RpcAccum      = 0.0;
+        m_AimDirty      = false;
+
+        LFPG_Util.Info("[SearchlightCtrl] Grab released");
     }
 
     // ============================================
-    // Tick — per-frame from MissionGameplay.OnUpdate
+    // Tick -- called every frame from MissionGameplay.OnUpdate
     // ============================================
     void Tick(float timeslice)
     {
-        // ---- Phase 2: waiting for server confirmation ----
-        if (m_ExitPhase == 2)
-        {
-            m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
-            if (m_ExitWaitTimer >= LFPG_SEARCHLIGHT_EXIT_TIMEOUT_S)
-            {
-                LFPG_Util.Warn("[SearchlightCtrl] Exit timeout — forcing cleanup");
-                DoExitCleanup();
-            }
-            return;
-        }
-
-        // ---- Phase 1: send exit request to server ----
-        if (m_ExitPhase == 1)
-        {
-            m_Active = false;
-
-            if (m_HudRoot)
-                m_HudRoot.Show(false);
-
-            m_KeyW = false;
-            m_KeyA = false;
-            m_KeyS = false;
-            m_KeyD = false;
-
-            if (m_PlayerRef)
-            {
-                ScriptRPC exitRpc = new ScriptRPC();
-                int exitSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_REQUEST;
-                exitRpc.Write(exitSubId);
-                exitRpc.Send(m_PlayerRef, LFPG_RPC_CHANNEL, true, null);
-            }
-
-            m_ExitWaitTimer = 0.0;
-            m_ExitPhase = 2;
-            LFPG_Util.Info("[SearchlightCtrl] Phase 1 — exit request sent");
-            return;
-        }
-
         if (!m_Active)
             return;
 
-        // ---- Timeout ----
-        m_ActiveDuration = m_ActiveDuration + timeslice;
-        if (m_ActiveDuration >= LFPG_CCTV_MAX_DURATION_S)
+        // ---- Validate target still exists ----
+        if (!m_TargetSl)
         {
-            LFPG_Util.Info("[SearchlightCtrl] Auto-exit (timeout)");
-            m_ExitPhase = 1;
+            DoCleanup();
             return;
         }
 
-        // ---- WASD aim ----
-        bool anyInput = false;
-        if (m_KeyA || m_KeyD || m_KeyW || m_KeyS)
+        // ---- Get player ----
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
         {
-            anyInput = true;
+            DoCleanup();
+            return;
         }
 
-        if (anyInput)
+        // ---- Distance check: auto-exit if > grab radius ----
+        vector playerPos = player.GetPosition();
+        vector slPos     = m_TargetSl.GetPosition();
+        float dx = playerPos[0] - slPos[0];
+        float dz = playerPos[2] - slPos[2];
+        float distSq = dx * dx + dz * dz;
+        float maxDistSq = LFPG_SEARCHLIGHT_GRAB_RADIUS_M * LFPG_SEARCHLIGHT_GRAB_RADIUS_M;
+
+        if (distSq > maxDistSq)
         {
-            float panStep = LFPG_SEARCHLIGHT_PAN_SPEED * timeslice;
-
-            // A = left (-yaw), D = right (+yaw)
-            if (m_KeyA)
-            {
-                m_AimYaw = m_AimYaw - panStep;
-            }
-            if (m_KeyD)
-            {
-                m_AimYaw = m_AimYaw + panStep;
-            }
-
-            // W = up (+pitch), S = down (-pitch)
-            if (m_KeyW)
-            {
-                m_AimPitch = m_AimPitch + panStep;
-            }
-            if (m_KeyS)
-            {
-                m_AimPitch = m_AimPitch - panStep;
-            }
-
-            // Clamp
-            if (m_AimYaw < LFPG_SEARCHLIGHT_YAW_MIN)
-                m_AimYaw = LFPG_SEARCHLIGHT_YAW_MIN;
-            if (m_AimYaw > LFPG_SEARCHLIGHT_YAW_MAX)
-                m_AimYaw = LFPG_SEARCHLIGHT_YAW_MAX;
-            if (m_AimPitch < LFPG_SEARCHLIGHT_PITCH_MIN)
-                m_AimPitch = LFPG_SEARCHLIGHT_PITCH_MIN;
-            if (m_AimPitch > LFPG_SEARCHLIGHT_PITCH_MAX)
-                m_AimPitch = LFPG_SEARCHLIGHT_PITCH_MAX;
-
-            // Update camera LOCAL (responsive)
-            PositionCamera();
-            m_AimDirty = true;
+            LFPG_Util.Info("[SearchlightCtrl] Auto-exit: player too far");
+            RequestExit();
+            return;
         }
 
-        // ---- RPC throttle: only send when aim changed ----
+        // ---- Compute yaw from player position ----
+        // Beam points OPPOSITE to player = AWAY from player.
+        // Vector FROM player TO searchlight, extended through = beam direction.
+        // Atan2(dx, dz) gives world angle from +Z toward +X.
+        // Subtract searchlight BASE orientation (deployment yaw, frozen)
+        // to get local yaw. NOT GetOrientation which changes every frame.
+        float awayX = slPos[0] - playerPos[0];
+        float awayZ = slPos[2] - playerPos[2];
+        float worldRad = Math.Atan2(awayX, awayZ);
+        float worldDeg = worldRad * Math.RAD2DEG;
+        float slBaseYaw = m_TargetSl.LFPG_GetBaseYaw();
+        float localYaw = worldDeg - slBaseYaw;
+
+        // Normalize to [-180, 180]
+        while (localYaw > 180.0)
+        {
+            localYaw = localYaw - 360.0;
+        }
+        while (localYaw < -180.0)
+        {
+            localYaw = localYaw + 360.0;
+        }
+
+        // No yaw clamp — full 360 degree rotation.
+        // Always update (no deadzone — smooth tracking)
+        m_AimYaw = localYaw;
+        m_AimDirty = true;
+
+        // ---- Read scroll wheel for pitch ----
+        // LocalPress gives exactly one event per scroll notch (no cooldown needed).
+        // UANextAction/UAPrevAction = vanilla scroll-wheel action-menu bindings.
+        // With only one action visible ("Release Searchlight"), the action menu
+        // scroll is inert. If conflict arises with multi-action objects nearby,
+        // this can be switched to a different input binding.
+        Input inp = GetGame().GetInput();
+        if (inp)
+        {
+            bool scrolled = false;
+
+            if (inp.LocalPress("UANextAction", false))
+            {
+                m_AimPitch = m_AimPitch + LFPG_SEARCHLIGHT_SCROLL_STEP;
+                scrolled = true;
+            }
+            if (inp.LocalPress("UAPrevAction", false))
+            {
+                m_AimPitch = m_AimPitch - LFPG_SEARCHLIGHT_SCROLL_STEP;
+                scrolled = true;
+            }
+
+            if (scrolled)
+            {
+                // Clamp pitch
+                if (m_AimPitch < LFPG_SEARCHLIGHT_PITCH_MIN)
+                    m_AimPitch = LFPG_SEARCHLIGHT_PITCH_MIN;
+                if (m_AimPitch > LFPG_SEARCHLIGHT_PITCH_MAX)
+                    m_AimPitch = LFPG_SEARCHLIGHT_PITCH_MAX;
+
+                m_AimDirty = true;
+            }
+        }
+
+        // ---- RPC throttle ----
         m_RpcAccum = m_RpcAccum + timeslice * 1000.0;
         if (m_AimDirty && m_RpcAccum >= LFPG_SEARCHLIGHT_RPC_THROTTLE_MS)
         {
             m_RpcAccum = 0.0;
             m_AimDirty = false;
-            SendAimRPC();
-        }
-
-        // ---- Update HUD: only when values change ----
-        int curYawInt = m_AimYaw;
-        int curPitchInt = m_AimPitch;
-        if (curYawInt != m_PrevHudYaw || curPitchInt != m_PrevHudPitch)
-        {
-            m_PrevHudYaw   = curYawInt;
-            m_PrevHudPitch = curPitchInt;
-            UpdateHUD();
+            SendAimRPC(player);
         }
     }
 
     // ============================================
-    // SendAimRPC — throttled to server
+    // SendAimRPC -- throttled to server
     // ============================================
-    protected void SendAimRPC()
+    protected void SendAimRPC(PlayerBase player)
     {
-        if (!m_PlayerRef)
+        if (!player)
             return;
 
         ScriptRPC rpc = new ScriptRPC();
@@ -554,173 +312,21 @@ class LFPG_SearchlightController
         rpc.Write(m_TargetNetHigh);
         rpc.Write(m_AimYaw);
         rpc.Write(m_AimPitch);
-        rpc.Send(m_PlayerRef, LFPG_RPC_CHANNEL, true, null);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
     }
 
     // ============================================
-    // UpdateHUD
-    // ============================================
-    protected void UpdateHUD()
-    {
-        if (!m_wAimText)
-            return;
-
-        int yawInt = m_AimYaw;
-        int pitchInt = m_AimPitch;
-        string aimStr = "YAW: ";
-        aimStr = aimStr + yawInt.ToString();
-        aimStr = aimStr + "   PITCH: ";
-        aimStr = aimStr + pitchInt.ToString();
-        m_wAimText.SetText(aimStr);
-    }
-
-    // ============================================
-    // DoExitCleanup — called from RPC SEARCHLIGHT_EXIT_CONFIRM
-    // ============================================
-    void DoExitCleanup()
-    {
-        if (m_ViewCamObj)
-        {
-            Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
-            if (viewCamTyped)
-            {
-                viewCamTyped.SetActive(false);
-            }
-            m_ViewCamObj = null;
-        }
-
-        // Re-enable input
-        Human localPlayer = Human.Cast(GetGame().GetPlayer());
-        if (localPlayer)
-        {
-            HumanInputController hic = localPlayer.GetInputController();
-            if (hic)
-            {
-                hic.SetDisabled(false);
-            }
-        }
-
-        m_PlayerRef = null;
-
-        UnlockFocus();
-        RestoreHUD();
-
-        if (m_HudRoot)
-            m_HudRoot.Show(false);
-
-        m_ExitPhase     = 0;
-        m_ExitWaitTimer = 0.0;
-        m_Active        = false;
-
-        LFPG_Util.Info("[SearchlightCtrl] DoExitCleanup complete");
-    }
-
-    // ============================================
-    // ForceCleanup — shutdown/disconnect
+    // ForceCleanup -- shutdown / disconnect
     // ============================================
     protected void ForceCleanup()
     {
-        m_Active    = false;
-        m_ExitPhase = 0;
-        m_ExitWaitTimer = 0.0;
-        m_KeyW = false;
-        m_KeyA = false;
-        m_KeyS = false;
-        m_KeyD = false;
-
-        if (m_ViewCamObj)
-        {
-            Camera forceCam = Camera.Cast(m_ViewCamObj);
-            if (forceCam)
-            {
-                forceCam.SetActive(false);
-            }
-            m_ViewCamObj = null;
-        }
-
-        m_PlayerRef = null;
-
-        Human cleanupPlayer = Human.Cast(GetGame().GetPlayer());
-        if (cleanupPlayer)
-        {
-            HumanInputController cleanupHic = cleanupPlayer.GetInputController();
-            if (cleanupHic)
-            {
-                cleanupHic.SetDisabled(false);
-            }
-        }
-
-        UnlockFocus();
-        RestoreHUD();
-        DestroyWidgets();
-
-        m_ActiveDuration = 0.0;
-        m_RpcAccum       = 0.0;
-        m_AimDirty       = false;
-        m_CachedSlPos    = "0 0 0";
-        m_PrevHudYaw     = -9999;
-        m_PrevHudPitch   = -9999;
-    }
-
-    // ============================================
-    // Focus lock helpers
-    // ============================================
-    protected void LockFocus()
-    {
-        if (m_FocusLocked)
-            return;
-        m_FocusLocked = true;
-        Input inp = GetGame().GetInput();
-        if (inp)
-        {
-            inp.ChangeGameFocus(1);
-        }
-        UIManager uiMgr = GetGame().GetUIManager();
-        if (uiMgr)
-        {
-            uiMgr.ShowUICursor(false);
-        }
-    }
-
-    protected void UnlockFocus()
-    {
-        if (!m_FocusLocked)
-            return;
-        m_FocusLocked = false;
-        Input inp = GetGame().GetInput();
-        if (inp)
-        {
-            inp.ChangeGameFocus(-1);
-        }
-    }
-
-    // ---- Hide/Restore vanilla HUD (pattern: CameraViewport) ----
-    // Without HideHUD, player sees health bar + quickbar in spectator mode.
-    protected void HideHUD()
-    {
-        Mission mission = GetGame().GetMission();
-        if (mission)
-        {
-            Hud hud = mission.GetHud();
-            if (hud)
-            {
-                hud.ShowHudPlayer(false);
-                hud.ShowQuickbarPlayer(false);
-            }
-        }
-    }
-
-    protected void RestoreHUD()
-    {
-        Mission mission = GetGame().GetMission();
-        if (mission)
-        {
-            Hud hud = mission.GetHud();
-            if (hud)
-            {
-                hud.ShowHudPlayer(true);
-                hud.ShowQuickbarPlayer(true);
-            }
-        }
+        m_Active        = false;
+        m_TargetSl      = null;
+        m_TargetNetLow  = 0;
+        m_TargetNetHigh = 0;
+        m_AimYaw        = 0.0;
+        m_AimPitch      = 0.0;
+        m_RpcAccum      = 0.0;
+        m_AimDirty      = false;
     }
 };

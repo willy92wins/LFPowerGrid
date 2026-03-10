@@ -75,9 +75,6 @@ class LFPG_ElecGraph
     // --- Sprint 4.3: Edge budget tracking ---
     protected int m_EdgesVisitedThisEpoch;
 
-    // --- Sprint 4.3: Load telemetry ---
-    protected int m_LastOverloadCount;
-
     // v0.7.46: Flag set by AllocateOutput when any edge's
     // m_AllocatedPower changed. ProcessDirtyQueue Step 3 uses this to
     // re-enqueue downstream even when total output is unchanged.
@@ -146,7 +143,6 @@ class LFPG_ElecGraph
         m_LastProcessMs = 0;
         m_EnqueuedThisEpoch = new map<string, bool>;
         m_EdgesVisitedThisEpoch = 0;
-        m_LastOverloadCount = 0;
         m_AllocChanged = false;
 
         // v0.7.31 (Bloque B): Component Watchdog buffers
@@ -1098,6 +1094,8 @@ class LFPG_ElecGraph
                 // v0.7.47: PASSTHROUGH self-consumption (CeilingLight pattern).
                 // Splitter returns 0.0 explicitly → no regression.
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
+                // P1: Cache gate capability to avoid entity lookup every tick.
+                node.m_IsGated = LFPG_DeviceAPI.IsGateCapable(obj);
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
@@ -1228,6 +1226,18 @@ class LFPG_ElecGraph
             m_EdgeCount = m_EdgeCount - 1;
             if (m_EdgeCount < 0)
                 m_EdgeCount = 0;
+
+            // B6 fix: Detect asymmetric edge state (present in one list but
+            // not the other). This indicates a prior bug that left the graph
+            // inconsistent. Log it for diagnosis.
+            if (removedOut != removedIn)
+            {
+                string asymMsg = "[ElecGraph] WARN: asymmetric edge removal ";
+                asymMsg = asymMsg + sourceId + " -> " + targetId;
+                asymMsg = asymMsg + " out=" + removedOut.ToString();
+                asymMsg = asymMsg + " in=" + removedIn.ToString();
+                LFPG_Util.Warn(asymMsg);
+            }
         }
         #endif
     }
@@ -2075,24 +2085,43 @@ class LFPG_ElecGraph
                     {
                         newOutput = node.m_Consumption;
                     }
-					EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
-                    if (gateEnt)
+                    else
                     {
-                        bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
-                        if (!gateOpen)
+                        // B1 fix: No downstream demand, no self-consumption.
+                        // Without this, newOutput retains inputSum from Step 2a,
+                        // causing phantom load on upstream source via stale
+                        // m_LastStableOutput. Zero it explicitly.
+                        newOutput = 0.0;
+                    }
+                    // P1: Only look up entity and check gate for devices that
+                    // actually implement gate logic (e.g. PushButton). Skips
+                    // FindById + CallBool for Splitter/Combiner/CeilingLight/Monitor.
+                    if (node.m_IsGated)
+                    {
+                        EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
+                        if (gateEnt)
                         {
-                            ref array<ref LFPG_ElecEdge> gateEdges;
-                            if (m_Outgoing.Find(nodeId, gateEdges) && gateEdges)
+                            bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
+                            if (!gateOpen)
                             {
-                                int gi;
-                                for (gi = 0; gi < gateEdges.Count(); gi = gi + 1)
+                                ref array<ref LFPG_ElecEdge> gateEdges;
+                                if (m_Outgoing.Find(nodeId, gateEdges) && gateEdges)
                                 {
-                                    ref LFPG_ElecEdge gEdge = gateEdges[gi];
-                                    if (gEdge)
+                                    int gi;
+                                    for (gi = 0; gi < gateEdges.Count(); gi = gi + 1)
                                     {
-                                        gEdge.m_AllocatedPower = 0.0;
+                                        ref LFPG_ElecEdge gEdge = gateEdges[gi];
+                                        if (gEdge)
+                                        {
+                                            gEdge.m_AllocatedPower = 0.0;
+                                        }
                                     }
                                 }
+                                // B2 fix: Gate override zeroed allocations AFTER
+                                // AllocateOutput ran. Without m_AllocChanged=true,
+                                // Step 3 skips downstream re-enqueue when outputDelta=0,
+                                // leaving consumers Powered=true for 1-2 ticks.
+                                m_AllocChanged = true;
                             }
                         }
                     }
@@ -2482,8 +2511,10 @@ class LFPG_ElecGraph
             if (!node)
                 continue;
 
-            // Only validate consumers (CONSUMER + CAMERA)
-            if (node.m_DeviceType != LFPG_DeviceType.CONSUMER && node.m_DeviceType != LFPG_DeviceType.CAMERA)
+            // Only validate non-source nodes (CONSUMER, CAMERA, PASSTHROUGH)
+            // B5 fix: Previously excluded PASSTHROUGH — a zombie passthrough
+            // (m_Powered=true without sufficient input) was never autocorrected.
+            if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.UNKNOWN)
                 continue;
 
             // Skip nodes currently in the dirty queue — they have pending updates
@@ -2564,7 +2595,8 @@ class LFPG_ElecGraph
                 fixed = fixed + 1;
                 m_ValidateFixCount = m_ValidateFixCount + 1;
 
-                string zombMsg = "[ElecGraph] Zombie consumer fixed: " + nodeId;
+                string zombMsg = "[ElecGraph] Zombie node fixed: " + nodeId;
+                zombMsg = zombMsg + " type=" + node.m_DeviceType.ToString();
                 zombMsg = zombMsg + " inPower=" + incomingPower.ToString();
                 zombMsg = zombMsg + " consumption=" + node.m_Consumption.ToString();
                 zombMsg = zombMsg + " totalFixes=" + m_ValidateFixCount.ToString();
@@ -2582,7 +2614,8 @@ class LFPG_ElecGraph
                 fixed = fixed + 1;
                 m_ValidateFixCount = m_ValidateFixCount + 1;
 
-                string darkMsg = "[ElecGraph] Dark consumer fixed: " + nodeId;
+                string darkMsg = "[ElecGraph] Dark node fixed: " + nodeId;
+                darkMsg = darkMsg + " type=" + node.m_DeviceType.ToString();
                 darkMsg = darkMsg + " inPower=" + incomingPower.ToString();
                 darkMsg = darkMsg + " consumption=" + node.m_Consumption.ToString();
                 darkMsg = darkMsg + " totalFixes=" + m_ValidateFixCount.ToString();
@@ -2662,6 +2695,8 @@ class LFPG_ElecGraph
                 // v0.7.47: PASSTHROUGH self-consumption (CeilingLight pattern).
                 // Splitter returns 0.0 explicitly → no regression.
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
+                // P1: Cache gate capability for bulk warmup path.
+                node.m_IsGated = LFPG_DeviceAPI.IsGateCapable(obj);
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
@@ -2814,13 +2849,25 @@ class LFPG_ElecGraph
                         // demands only its self-consumption (0 for Splitter/Combiner,
                         // N for CeilingLight). Without this check, an empty Combiner
                         // (cap=500) causes permanent false overload on a 50 u/s source.
+                        // B3 fix: Only count ENABLED outgoing edges.
+                        // Without this, disabled edges make ptHasDown=true
+                        // and the fallback uses m_MaxOutput (200) as demand
+                        // instead of consumption (0), inflating upstream load.
                         bool ptHasDown = false;
                         ref array<ref LFPG_ElecEdge> ptOutEdges;
                         if (m_Outgoing.Find(edge.m_TargetNodeId, ptOutEdges) && ptOutEdges)
                         {
-                            if (ptOutEdges.Count() > 0)
+                            int pti;
+                            for (pti = 0; pti < ptOutEdges.Count(); pti = pti + 1)
                             {
-                                ptHasDown = true;
+                                if (!ptHasDown)
+                                {
+                                    ref LFPG_ElecEdge ptEdge = ptOutEdges[pti];
+                                    if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
+                                    {
+                                        ptHasDown = true;
+                                    }
+                                }
                             }
                         }
 
@@ -3038,10 +3085,17 @@ class LFPG_ElecGraph
             if (!edge)
                 continue;
 
+            // B4 fix: Skip disabled edges. Without this, a stale
+            // m_AllocatedPower from a previous epoch on a disabled
+            // edge returns a false positive.
+            if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+
             if (edge.m_TargetPort != portName)
                 continue;
 
-            if (edge.m_AllocatedPower > 0.0)
+            // B4 fix: Use EPSILON for consistency with rest of graph.
+            if (edge.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
                 return true;
         }
 

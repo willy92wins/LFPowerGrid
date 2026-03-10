@@ -57,6 +57,7 @@ modded class MissionGameplay
         LFPG_DeviceInspector.Init();
 
         LFPG_CameraViewport.Reset();
+        LFPG_SearchlightController.Reset();
         LFPG_SorterUI.Cleanup();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
@@ -160,6 +161,13 @@ modded class MissionGameplay
             viewport.Tick(timeslice);
         }
 
+        // ---- Tick del searchlight grab controller ----
+        LFPG_SearchlightController slCtrl = LFPG_SearchlightController.Get();
+        if (slCtrl)
+        {
+            slCtrl.Tick(timeslice);
+        }
+
         // ---- Render cables + preview + CCTV overlay ----
         bool skipCameraOps = false;
         if (viewport)
@@ -226,6 +234,7 @@ modded class MissionGameplay
         LFPG_DeviceInspector.Cleanup();
 
         LFPG_CameraViewport.Reset();
+        LFPG_SearchlightController.Reset();
         LFPG_SorterUI.Cleanup();
 
         super.OnMissionFinish();

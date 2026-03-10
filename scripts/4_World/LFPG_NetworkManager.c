@@ -241,7 +241,7 @@ class LFPG_NetworkManager
         LFPG_ComputeSunState();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
 
-        // v1.1.0: Water Pump tablet + tank timer
+        // v1.1.0: Water Pump filter degradation + tank timer
         LFPG_InitTankFillTime();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
 
@@ -3354,7 +3354,7 @@ class LFPG_NetworkManager
     // v1.1.0: Water Pump Timer
     // ===========================
     // Two sub-systems:
-    //   1. Tablet consumption: real-time (ms), 1 tablet per LFPG_PUMP_TABLET_INTERVAL_MS
+    //   1. Filter degradation: real-time (ms), 1 qty point per LFPG_PUMP_FILTER_INTERVAL_MS (2%/h)
     //   2. Tank fill: in-game hour based, LFPG_PUMP_TANK_FILL_PER_HOUR per hour
 
     // Seed tank fill hour from world time
@@ -3370,7 +3370,7 @@ class LFPG_NetworkManager
     {
         #ifdef SERVER
         float nowMs = GetGame().GetTime();
-        float thresholdMs = LFPG_PUMP_TABLET_INTERVAL_MS;
+        float thresholdMs = LFPG_PUMP_FILTER_INTERVAL_MS;
 
         // --- Compute tank fill amount from real elapsed ms ---
         float fillAmount = 0.0;
@@ -3390,7 +3390,7 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- Single iteration: tablet consumption + tank fill ---
+        // --- Single iteration: filter degradation + tank fill ---
         array<EntityAI> allDevs = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevs);
 
@@ -3402,32 +3402,32 @@ class LFPG_NetworkManager
 
         for (i = 0; i < allDevs.Count(); i = i + 1)
         {
-            // --- T1: tablet consumption only ---
+            // --- T1: filter degradation only ---
             isPump = false;
             pump1 = LF_WaterPump.Cast(allDevs[i]);
             if (pump1)
             {
                 isPump = true;
-                elapsed = nowMs - pump1.LFPG_GetTabletLastMs();
+                elapsed = nowMs - pump1.LFPG_GetFilterLastMs();
                 if (elapsed >= thresholdMs)
                 {
-                    pump1.LFPG_ConsumeFilterTablet();
-                    pump1.LFPG_SetTabletLastMs(nowMs);
+                    pump1.LFPG_DegradeFilter();
+                    pump1.LFPG_SetFilterLastMs(nowMs);
                 }
             }
 
-            // --- T2: tablet consumption + tank fill (separate class) ---
+            // --- T2: filter degradation + tank fill (separate class) ---
             if (!isPump)
             {
                 pump2 = LF_WaterPump_T2.Cast(allDevs[i]);
                 if (pump2)
                 {
-                    // T2 tablet consumption (same logic as T1)
-                    elapsed = nowMs - pump2.LFPG_GetTabletLastMs();
+                    // T2 filter degradation (same logic as T1)
+                    elapsed = nowMs - pump2.LFPG_GetFilterLastMs();
                     if (elapsed >= thresholdMs)
                     {
-                        pump2.LFPG_ConsumeFilterTablet();
-                        pump2.LFPG_SetTabletLastMs(nowMs);
+                        pump2.LFPG_DegradeFilter();
+                        pump2.LFPG_SetFilterLastMs(nowMs);
                     }
 
                     // T2 tank fill (only if hour changed and pump is powered)

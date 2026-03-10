@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Searchlight device (v1.4.0)
+// LF_PowerGrid - Searchlight device (v1.5.0)
 //
 // LF_Searchlight_Kit:  Holdable, deployable (same-model pattern = Splitter/Camera).
 // LF_Searchlight:      CONSUMER, 1 IN (input_1), 25 u/s, no OUT, no wire store.
@@ -137,16 +137,22 @@ class LF_Searchlight : Inventory_Base
     protected string m_DeviceId      = "";
     protected bool   m_LFPG_Deleting = false;
 
+    // ---- Server-only: operator tracking (grab system v1.5.0) ----
+    // NOT SyncVars, NOT persisted. Only valid while someone is grabbing.
+    protected int    m_OperatorNetLow  = 0;
+    protected int    m_OperatorNetHigh = 0;
+
     // ---- Client lights (NOT ref — ScriptedLightBase is engine object) ----
     protected ScriptedLightBase m_LightBeamCore;
     protected ScriptedLightBase m_LightBeamSpill;
     protected ScriptedLightBase m_LightHalo;
     protected ScriptedLightBase m_LightSplash;
 
-    // ---- Client: track previous aim to skip redundant reattach ----
-    protected float m_PrevAimYaw;
-    protected float m_PrevAimPitch;
-    protected bool  m_PrevSplashHit;
+    // ---- Base orientation yaw (set once in EEInit, never synced/persisted) ----
+    // This is the entity's deployment orientation BEFORE any aim is applied.
+    // Used by controller to compute local yaw, and by ApplyOrientation
+    // to reconstruct world orientation = m_BaseOriYaw + m_AimYaw.
+    protected float m_BaseOriYaw = 0.0;
 
     // ============================================
     // Constructor — SyncVar registration
@@ -159,9 +165,9 @@ class LF_Searchlight : Inventory_Base
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
 
-        // Phase 2: rotation SyncVars
-        RegisterNetSyncVariableFloat("m_AimYaw", -120.0, 120.0, 8);
-        RegisterNetSyncVariableFloat("m_AimPitch", -10.0, 45.0, 7);
+        // v1.5.0: grab system — yaw full 360° ([-180,180]), pitch +-120
+        RegisterNetSyncVariableFloat("m_AimYaw", -180.0, 180.0, 9);
+        RegisterNetSyncVariableFloat("m_AimPitch", -120.0, 120.0, 8);
 
         // Phase 2: splash SyncVars
         RegisterNetSyncVariableBool("m_SplashHit");
@@ -204,6 +210,12 @@ class LF_Searchlight : Inventory_Base
     {
         super.EEInit();
 
+        // Capture deployment orientation (set once, never changes).
+        // Server never calls SetOrientation, so GetOrientation() is always
+        // the original deployment yaw — on fresh spawn AND persistence load.
+        vector deployOri = GetOrientation();
+        m_BaseOriYaw = deployOri[0];
+
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
@@ -221,6 +233,9 @@ class LF_Searchlight : Inventory_Base
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
         #ifdef SERVER
+        // Kick any operator before destroying
+        LFPG_KickOperator();
+
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -230,7 +245,12 @@ class LF_Searchlight : Inventory_Base
 
         #ifndef SERVER
         DestroyAllLights();
-        LFPG_SearchlightController.Reset();
+        // If this searchlight was being operated, release the grab
+        LFPG_SearchlightController slCtrl = LFPG_SearchlightController.Get();
+        if (slCtrl && slCtrl.IsOperatingEntity(this))
+        {
+            slCtrl.DoCleanup();
+        }
         #endif
 
         super.EEKilled(killer);
@@ -239,11 +259,20 @@ class LF_Searchlight : Inventory_Base
     override void EEDelete(EntityAI parent)
     {
         m_LFPG_Deleting = true;
+
+        #ifdef SERVER
+        LFPG_KickOperator();
+        #endif
+
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
         DestroyAllLights();
-        LFPG_SearchlightController.Reset();
+        LFPG_SearchlightController slCtrl = LFPG_SearchlightController.Get();
+        if (slCtrl && slCtrl.IsOperatingEntity(this))
+        {
+            slCtrl.DoCleanup();
+        }
         #endif
 
         super.EEDelete(parent);
@@ -260,6 +289,9 @@ class LF_Searchlight : Inventory_Base
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {
+            // Kick operator BEFORE changing power state
+            LFPG_KickOperator();
+
             if (m_PoweredNet)
             {
                 m_PoweredNet = false;
@@ -327,48 +359,37 @@ class LF_Searchlight : Inventory_Base
         if (m_LightBeamCore)
             return;
 
-        // BeamCore: attached at beamStart, oriented toward beamEnd
-        vector mpStart = GetMemoryPointPos("beamStart");
-        vector mpEnd   = GetMemoryPointPos("beamEnd");
-        vector beamDir = vector.Direction(mpStart, mpEnd);
-        beamDir.Normalize();
-        vector beamOri = beamDir.VectorToAngles();
-
+        // BeamCore and BeamSpill: created free-floating (NOT attached).
+        // Position and orientation set in ApplyOrientation() via world-space
+        // SetPosition + SetOrientation. This avoids DetachFromParent/AttachOnObject
+        // cycling which causes 1-frame light disappearance on each aim update.
         ScriptedLightBase tmpLight;
 
-        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, "0 0 0");
+        vector mpStart = ModelToWorld(GetMemoryPointPos("beamStart"));
+
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, mpStart);
         m_LightBeamCore = LFPG_SearchlightBeamCore.Cast(tmpLight);
-        if (m_LightBeamCore)
-        {
-            m_LightBeamCore.AttachOnObject(this, mpStart, beamOri);
-        }
 
-        // BeamSpill: same attachment as core (wider cone)
-        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamSpill, "0 0 0");
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamSpill, mpStart);
         m_LightBeamSpill = LFPG_SearchlightBeamSpill.Cast(tmpLight);
-        if (m_LightBeamSpill)
-        {
-            m_LightBeamSpill.AttachOnObject(this, mpStart, beamOri);
-        }
 
-        // Halo: glow at lens center (no orientation needed)
+        // Halo: point light at lens center — attached to entity (follows position,
+        // no orientation changes needed for omnidirectional light).
+        vector mpStartLocal = GetMemoryPointPos("beamStart");
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, "0 0 0");
         m_LightHalo = LFPG_SearchlightHalo.Cast(tmpLight);
         if (m_LightHalo)
         {
-            m_LightHalo.AttachOnObject(this, mpStart, "0 0 0");
+            m_LightHalo.AttachOnObject(this, mpStartLocal, "0 0 0");
         }
 
-        // Splash: Phase 1 = positioned at beamStart + some forward offset (static)
-        // Phase 2 will reposition via SyncVars from server raycast.
-        // For now, place it ahead of the beam at ground level as a placeholder.
-        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightSplash, "0 0 0");
+        // Splash: created free-floating, positioned from SyncVars in UpdateSplashFromSync.
+        // Starts hidden via brightness=0 (NOT SetEnabled — engine can recycle disabled lights).
+        tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightSplash, mpStart);
         m_LightSplash = LFPG_SearchlightSplash.Cast(tmpLight);
         if (m_LightSplash)
         {
-            // Phase 1: attach near beamEnd (1m forward)
-            // Phase 2: detach and SetPosition from SyncVars
-            m_LightSplash.AttachOnObject(this, mpEnd, "0 0 0");
+            m_LightSplash.SetBrightnessTo(0.0);
         }
 
         string logMsg = "[LF_Searchlight] CreateAllLights id=" + m_DeviceId;
@@ -413,41 +434,42 @@ class LF_Searchlight : Inventory_Base
         if (!m_LightBeamCore)
             return;
 
-        // Skip if aim hasn't changed (avoid DetachFromParent+AttachOnObject churn)
-        float yawDiff = m_AimYaw - m_PrevAimYaw;
-        float pitchDiff = m_AimPitch - m_PrevAimPitch;
-        if (yawDiff < 0.01 && yawDiff > -0.01 && pitchDiff < 0.01 && pitchDiff > -0.01)
-            return;
+        // Total world yaw = base deployment yaw + local aim offset.
+        // m_BaseOriYaw is frozen at EEInit, never changes.
+        float totalYaw = m_BaseOriYaw + m_AimYaw;
 
-        m_PrevAimYaw   = m_AimYaw;
-        m_PrevAimPitch = m_AimPitch;
+        // ---- Rotate the entity model (yaw only, pitch=0, roll=0) ----
+        // The tripod + head rotate together. Pitch is light-only
+        // (a real searchlight tilts its head, not the whole tripod).
+        vector entOri = Vector(totalYaw, 0, 0);
+        SetOrientation(entOri);
 
-        // Compute beam direction from yaw/pitch
-        float yawRad = m_AimYaw * Math.DEG2RAD;
+        // ---- Compute beam direction in world space ----
+        float totalYawRad = totalYaw * Math.DEG2RAD;
         float pitchRad = m_AimPitch * Math.DEG2RAD;
         float cosPitch = Math.Cos(pitchRad);
 
-        float dirX = Math.Sin(yawRad) * cosPitch;
+        float dirX = Math.Sin(totalYawRad) * cosPitch;
         float dirY = Math.Sin(pitchRad);
-        float dirZ = Math.Cos(yawRad) * cosPitch;
+        float dirZ = Math.Cos(totalYawRad) * cosPitch;
 
         vector beamDir = Vector(dirX, dirY, dirZ);
         beamDir.Normalize();
         vector beamOri = beamDir.VectorToAngles();
 
-        vector mpStart = GetMemoryPointPos("beamStart");
+        // ---- Position lights at lens center (uses rotated entity transform) ----
+        vector mpWorld = ModelToWorld(GetMemoryPointPos("beamStart"));
 
-        if (m_LightBeamCore)
-        {
-            m_LightBeamCore.DetachFromParent();
-            m_LightBeamCore.AttachOnObject(this, mpStart, beamOri);
-        }
+        m_LightBeamCore.SetPosition(mpWorld);
+        m_LightBeamCore.SetOrientation(beamOri);
+
         if (m_LightBeamSpill)
         {
-            m_LightBeamSpill.DetachFromParent();
-            m_LightBeamSpill.AttachOnObject(this, mpStart, beamOri);
+            m_LightBeamSpill.SetPosition(mpWorld);
+            m_LightBeamSpill.SetOrientation(beamOri);
         }
-        // Halo (PointLight) stays at fixed lens position — no reattach needed
+
+        // Halo stays attached to entity (omnidirectional, follows via parent)
         #endif
     }
 
@@ -462,19 +484,16 @@ class LF_Searchlight : Inventory_Base
 
         if (m_SplashHit)
         {
-            // Audit H3: splash must have no parent for world-space SetPosition
-            Object splashParent = m_LightSplash.GetAttachmentParent();
-            if (splashParent)
-            {
-                m_LightSplash.DetachFromParent();
-            }
             vector splashPos = Vector(m_SplashX, m_SplashY, m_SplashZ);
             m_LightSplash.SetPosition(splashPos);
-            m_LightSplash.SetEnabled(true);
+            // Restore full brightness (not SetEnabled — engine can recycle
+            // disabled free-floating lights, causing permanent disappearance)
+            m_LightSplash.SetBrightnessTo(10.0);
         }
         else
         {
-            m_LightSplash.SetEnabled(false);
+            // Hide without disabling — zero brightness keeps light alive
+            m_LightSplash.SetBrightnessTo(0.0);
         }
         #endif
     }
@@ -482,6 +501,11 @@ class LF_Searchlight : Inventory_Base
     // ============================================
     // Server: aim setters (called from PlayerRPC)
     // ============================================
+    float LFPG_GetBaseYaw()
+    {
+        return m_BaseOriYaw;
+    }
+
     float LFPG_GetAimYaw()
     {
         return m_AimYaw;
@@ -497,6 +521,8 @@ class LF_Searchlight : Inventory_Base
         #ifdef SERVER
         m_AimYaw   = yaw;
         m_AimPitch = pitch;
+        // Rotation is client-side only (ApplyOrientation in OnVariablesSynchronized).
+        // Server entity keeps deployment orientation — simplifies persistence + JIP.
         // NOTE: caller (HandleSearchlightAim) calls SetSynchDirty once after SetSplash
         #endif
     }
@@ -517,6 +543,85 @@ class LF_Searchlight : Inventory_Base
     {
         #ifdef SERVER
         SetSynchDirty();
+        #endif
+    }
+
+    // ============================================
+    // Server: operator tracking (grab system v1.5.0)
+    // ============================================
+    bool LFPG_HasOperator()
+    {
+        if (m_OperatorNetLow == 0 && m_OperatorNetHigh == 0)
+            return false;
+
+        // Lazy validation: check operator entity still exists.
+        // If player disconnected, GetObjectByNetworkId returns null.
+        // Clear the lock so the searchlight becomes available.
+        #ifdef SERVER
+        Object opObj = GetGame().GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
+        if (!opObj)
+        {
+            LFPG_Util.Warn("[LF_Searchlight] Operator entity gone (disconnect?) — clearing lock");
+            m_OperatorNetLow  = 0;
+            m_OperatorNetHigh = 0;
+            return false;
+        }
+        #endif
+
+        return true;
+    }
+
+    bool LFPG_IsOperator(int netLow, int netHigh)
+    {
+        if (m_OperatorNetLow == netLow && m_OperatorNetHigh == netHigh)
+            return true;
+        return false;
+    }
+
+    void LFPG_SetOperator(int netLow, int netHigh)
+    {
+        #ifdef SERVER
+        m_OperatorNetLow  = netLow;
+        m_OperatorNetHigh = netHigh;
+        #endif
+    }
+
+    void LFPG_ClearOperator()
+    {
+        #ifdef SERVER
+        m_OperatorNetLow  = 0;
+        m_OperatorNetHigh = 0;
+        #endif
+    }
+
+    // Kick the operator (server-initiated exit). Sends EXIT_CONFIRM RPC.
+    void LFPG_KickOperator()
+    {
+        #ifdef SERVER
+        if (m_OperatorNetLow == 0 && m_OperatorNetHigh == 0)
+            return;
+
+        // Resolve player to send the kick RPC
+        Object opObj = GetGame().GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
+        if (opObj)
+        {
+            PlayerBase opPlayer = PlayerBase.Cast(opObj);
+            if (opPlayer)
+            {
+                PlayerIdentity opId = opPlayer.GetIdentity();
+                if (opId)
+                {
+                    ScriptRPC kickRpc = new ScriptRPC();
+                    int kickSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM;
+                    kickRpc.Write(kickSubId);
+                    kickRpc.Send(opPlayer, LFPG_RPC_CHANNEL, true, opId);
+                    LFPG_Util.Info("[LF_Searchlight] Kicked operator");
+                }
+            }
+        }
+
+        m_OperatorNetLow  = 0;
+        m_OperatorNetHigh = 0;
         #endif
     }
 
@@ -703,6 +808,12 @@ class LF_Searchlight : Inventory_Base
 
         m_PoweredNet = powered;
         SetSynchDirty();
+
+        // Kick operator if power lost
+        if (!powered)
+        {
+            LFPG_KickOperator();
+        }
 
         string msg = "[LF_Searchlight] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId;
         LFPG_Util.Debug(msg);

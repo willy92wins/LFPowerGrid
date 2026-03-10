@@ -447,6 +447,17 @@ class LFPG_DeviceAPI
         if (!e) return true;
         return CallBool(e, "LFPG_IsGateOpen", null, true);
     }
+
+    // P1: Check if a device implements gate logic (LFPG_IsGateOpen).
+    // Default false — only PushButton (and future gate devices) return true.
+    // Used by ElecGraph to cache m_IsGated and skip entity lookup + dynamic
+    // dispatch for non-gated PASSTHROUGH devices every tick.
+    static bool IsGateCapable(EntityAI e)
+    {
+        if (!e) return false;
+        return CallBool(e, "LFPG_IsGateCapable", null, false);
+    }
+
     // v0.7.38 (BugFix): Generic powered-state getter.
     // Reads LFPG_IsPowered from LFPG-native devices (SyncVar m_PoweredNet).
     // Used by status display to show correct state instead of CompEM.

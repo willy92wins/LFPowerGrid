@@ -210,6 +210,95 @@ class LFPG_ActionRaycast
         return e;
     }
 
+    // ---- GetCursorTargetDeviceWithProximity (v1.2.1) ----
+    // Same as GetCursorTargetDevice but with a proximity sphere fallback
+    // when the raycast misses. Used by DeviceInspector to handle models
+    // with small Geometry LODs (e.g., Furnace).
+    // Does NOT affect wiring precision — WiringClient still uses
+    // the strict raycast-only GetCursorTargetDevice.
+    static EntityAI GetCursorTargetDeviceWithProximity(PlayerBase player)
+    {
+        if (!player)
+            return null;
+
+        // First try the exact raycast
+        EntityAI exact = GetCursorTargetDevice(player);
+        if (exact)
+            return exact;
+
+        // Fallback: search for devices near the aim point
+        RefreshRayCache(player);
+
+        // Get the aim intersection point (where the ray hit the world)
+        vector aimPos = "0 0 0";
+        bool hasAimPos = false;
+        if (s_RayCacheResults && s_RayCacheResults.Count() > 0)
+        {
+            ref RaycastRVResult aimHit = s_RayCacheResults.Get(0);
+            aimPos = aimHit.pos;
+            hasAimPos = true;
+        }
+
+        // If ray hit nothing, use a point in front of camera
+        if (!hasAimPos)
+        {
+            vector camFrom = GetGame().GetCurrentCameraPosition();
+            vector camDir = GetGame().GetCurrentCameraDirection();
+            float probeDistM = 3.0;
+            aimPos = camFrom + camDir * probeDistM;
+        }
+
+        // Sphere search around aim point
+        float proxyRadius = 1.5;
+        array<Object> nearby = new array<Object>;
+        array<CargoBase> proxyCargo = new array<CargoBase>;
+        GetGame().GetObjectsAtPosition3D(aimPos, proxyRadius, nearby, proxyCargo);
+
+        // Find the closest electrical device IN FRONT of the camera
+        vector camCheck = GetGame().GetCurrentCameraPosition();
+        vector camDirCheck = GetGame().GetCurrentCameraDirection();
+        float maxSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        float bestDistSq = maxSq;
+        EntityAI bestDevice = null;
+
+        int pi;
+        for (pi = 0; pi < nearby.Count(); pi = pi + 1)
+        {
+            Object pObj = nearby[pi];
+            if (!pObj)
+                continue;
+
+            EntityAI pEntity = EntityAI.Cast(pObj);
+            if (!pEntity)
+                continue;
+
+            if (!LFPG_DeviceAPI.IsElectricDevice(pEntity))
+                continue;
+
+            // Distance from camera check
+            vector devPos = pEntity.GetPosition();
+            float pDistSq = LFPG_WorldUtil.DistSq(camCheck, devPos);
+            if (pDistSq > maxSq)
+                continue;
+
+            // Direction check: device must be roughly in front of camera.
+            // toDevice · camDir > 0.5 ≈ within ~60° cone.
+            vector toDevice = vector.Direction(camCheck, devPos);
+            toDevice.Normalize();
+            float dotVal = vector.Dot(toDevice, camDirCheck);
+            if (dotVal < 0.5)
+                continue;
+
+            if (pDistSq < bestDistSq)
+            {
+                bestDistSq = pDistSq;
+                bestDevice = pEntity;
+            }
+        }
+
+        return bestDevice;
+    }
+
     // ---- GetCursorWorldPosSkipDevices ----
     // v0.7.48 (Bug 1): Fallback to first device hit position when ALL
     // raycast results are electrical devices. Common in building interiors

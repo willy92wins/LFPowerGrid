@@ -148,6 +148,12 @@ class LFPG_ElecNode
     bool   m_Overloaded;       // v1.0: true when totalDemand > available (all-off policy)
     float  m_LastSyncedLoadRatio;  // Last load ratio synced to entity (avoids redundant syncs)
 
+    // P1: Cached gate capability. True only for PASSTHROUGH devices that
+    // implement LFPG_IsGateOpen (e.g. PushButton). False for Splitter,
+    // Combiner, CeilingLight, Monitor. Avoids entity lookup + dynamic
+    // dispatch on every ProcessDirtyQueue tick for non-gated devices.
+    bool   m_IsGated;
+
     void LFPG_ElecNode()
     {
         m_DeviceId = "";
@@ -167,6 +173,7 @@ class LFPG_ElecNode
         m_LoadRatio = 0.0;
         m_Overloaded = false;
         m_LastSyncedLoadRatio = -1.0;
+        m_IsGated = false;
     }
 };
 
