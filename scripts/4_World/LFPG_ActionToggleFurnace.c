@@ -45,12 +45,6 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
         if (!furnace)
             return false;
 
-        // Distance check
-        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), furnace.GetPosition());
-        float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-        if (distSq > maxDistSq)
-            return false;
-
         bool isOn = furnace.LFPG_GetSourceOn();
         int fuelCur = furnace.LFPG_GetFuelCurrent();
 

@@ -69,12 +69,6 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (!furnace)
             return false;
 
-        // Distance check
-        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), furnace.GetPosition());
-        float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-        if (distSq > maxDistSq)
-            return false;
-
         // Filter: CableReel is a wiring tool, not fuel
         if (handItem.IsKindOf("LF_CableReel"))
             return false;

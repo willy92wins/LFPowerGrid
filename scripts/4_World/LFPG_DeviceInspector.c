@@ -64,6 +64,7 @@ class LFPG_DeviceInspector
     protected TextWidget m_wCapLine;
     protected TextWidget m_wTankLine;
     protected TextWidget m_wFuelLine;
+    protected TextWidget m_wReserveLine;
     protected TextWidget m_wWiresHeader;
     protected ref array<TextWidget> m_wWireSlots;
 
@@ -79,6 +80,8 @@ class LFPG_DeviceInspector
     protected float m_TankLineOffset;
     // v1.2.0: Fuel line offset for Furnace
     protected float m_FuelLineOffset;
+    // v1.2.2: Reserve line offset for Furnace cargo
+    protected float m_ReserveLineOffset;
 
     // ---- Position smoothing (P1-A anti-jitter) ----
     protected float m_SmoothX;
@@ -187,6 +190,7 @@ class LFPG_DeviceInspector
         m_wCapLine = TextWidget.Cast(m_Root.FindAnyWidget("CapLine"));
         m_wTankLine = TextWidget.Cast(m_Root.FindAnyWidget("TankLine"));
         m_wFuelLine = TextWidget.Cast(m_Root.FindAnyWidget("FuelLine"));
+        m_wReserveLine = TextWidget.Cast(m_Root.FindAnyWidget("ReserveLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
 
         // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
@@ -283,6 +287,15 @@ class LFPG_DeviceInspector
             m_wFuelLine.Show(false);
         }
         m_FuelLineOffset = 0.0;
+        // v1.2.2: ReserveLine (below FuelLine, furnace cargo reserve)
+        if (m_wReserveLine)
+        {
+            m_wReserveLine.SetPos(14, 114);
+            m_wReserveLine.SetSize(274, 16);
+            m_wReserveLine.SetColor(ARGB(255, 230, 126, 34));
+            m_wReserveLine.Show(false);
+        }
+        m_ReserveLineOffset = 0.0;
         if (m_wWiresHeader)
         {
             m_wWiresHeader.SetPos(14, 99);
@@ -335,6 +348,7 @@ class LFPG_DeviceInspector
         m_wCapLine = null;
         m_wTankLine = null;
         m_wFuelLine = null;
+        m_wReserveLine = null;
         m_wWiresHeader = null;
         m_wWireSlots.Clear();
         m_RespWires.Clear();
@@ -727,6 +741,7 @@ class LFPG_DeviceInspector
 
         // ---- v1.2.0: Fuel line (LF_Furnace only) ----
         m_FuelLineOffset = 0.0;
+        m_ReserveLineOffset = 0.0;
         if (m_wFuelLine)
         {
             LF_Furnace furnaceDevice = LF_Furnace.Cast(device);
@@ -736,7 +751,7 @@ class LFPG_DeviceInspector
                 bool fuelOn = furnaceDevice.LFPG_GetSourceOn();
                 int fuelMax = LFPG_FURNACE_MAX_FUEL;
 
-                // Time remaining calculation (Days + Hours only for compact display)
+                // Time remaining from current fuel (Days + Hours)
                 int totalSec = fuelCur * 30;
                 int fuelDays = totalSec / 86400;
                 int fuelHours = (totalSec % 86400) / 3600;
@@ -756,66 +771,83 @@ class LFPG_DeviceInspector
                     fuelPctT = 0;
                 }
 
-                // Line 1: "Fuel: 500/2880 (17.3%) | 4D 3H (-2/m)"
-                // Compact format to fit 274px widget width.
+                // Fuel line: "Fuel: 500/2880 (17.3%) | 0D 12H"
                 string fuelText = "Fuel: ";
                 fuelText = fuelText + fuelCur.ToString() + "/" + fuelMax.ToString();
                 fuelText = fuelText + " (" + fuelPctW.ToString() + "." + fuelPctT.ToString() + "%)";
                 fuelText = fuelText + " | " + fuelDays.ToString() + "D " + fuelHours.ToString() + "H";
 
-                // Append burn rate only when burning
-                if (fuelOn && fuelCur > 0)
-                {
-                    float burnPerMin = 60000.0 / LFPG_FURNACE_BURN_INTERVAL_MS;
-                    int burnPMWhole = Math.Floor(burnPerMin);
-                    fuelText = fuelText + " (-" + burnPMWhole.ToString() + "/m)";
-                }
-
-                // v1.2.2: Cargo reserve info
+                // Cargo reserve data (used for both fuel line status + reserve line)
                 int cargoCount = furnaceDevice.LFPG_GetCargoItemCount();
-                if (cargoCount > 0)
-                {
-                    int cargoFuel = furnaceDevice.LFPG_GetCargoFuelEstimate();
-                    fuelText = fuelText + " R:" + cargoCount.ToString() + "(" + cargoFuel.ToString() + ")";
-                }
 
-                // Status: color indicates state.
-                // Burning = cyan. Off with fuel = yellow [OFF].
-                // Empty but has cargo = orange. Fully empty = grey [EMPTY].
+                // Status color (shared with reserve line below)
+                int fuelLineColor = ARGB(255, 120, 120, 120);
                 if (fuelOn)
                 {
-                    m_wFuelLine.SetColor(ARGB(255, 50, 200, 220));
+                    fuelLineColor = ARGB(255, 50, 200, 220);
                 }
                 else if (fuelCur > 0)
                 {
                     fuelText = fuelText + " [OFF]";
-                    m_wFuelLine.SetColor(ARGB(255, 230, 200, 50));
+                    fuelLineColor = ARGB(255, 230, 200, 50);
                 }
                 else if (cargoCount > 0)
                 {
                     fuelText = fuelText + " [OFF]";
-                    m_wFuelLine.SetColor(ARGB(255, 230, 160, 50));
+                    fuelLineColor = ARGB(255, 230, 160, 50);
                 }
                 else
                 {
                     fuelText = fuelText + " [EMPTY]";
-                    m_wFuelLine.SetColor(ARGB(255, 120, 120, 120));
                 }
+                m_wFuelLine.SetColor(fuelLineColor);
 
                 m_wFuelLine.SetText(fuelText);
                 m_wFuelLine.Show(true);
                 m_FuelLineOffset = 20.0;
+
+                // ---- v1.2.2: Reserve line (separate widget below fuel) ----
+                if (m_wReserveLine)
+                {
+                    if (cargoCount > 0)
+                    {
+                        int cargoFuel = furnaceDevice.LFPG_GetCargoFuelEstimate();
+                        int resSec = cargoFuel * 30;
+                        int resDays = resSec / 86400;
+                        int resHours = (resSec % 86400) / 3600;
+
+                        string resText = "Reserve: ";
+                        resText = resText + cargoCount.ToString();
+                        resText = resText + " | " + resDays.ToString() + "D " + resHours.ToString() + "H approx";
+
+                        m_wReserveLine.SetText(resText);
+                        m_wReserveLine.SetColor(fuelLineColor);
+                        m_wReserveLine.SetPos(14, 94 + m_FuelLineOffset);
+                        m_wReserveLine.Show(true);
+                        m_ReserveLineOffset = 20.0;
+                    }
+                    else
+                    {
+                        m_wReserveLine.Show(false);
+                        m_ReserveLineOffset = 0.0;
+                    }
+                }
             }
             else
             {
                 m_wFuelLine.Show(false);
                 m_FuelLineOffset = 0.0;
+                if (m_wReserveLine)
+                {
+                    m_wReserveLine.Show(false);
+                    m_ReserveLineOffset = 0.0;
+                }
             }
         }
 
-        // Reposition separator + wires header with tank/fuel offset
-        // (mutually exclusive: only one can be non-zero)
-        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset;
+        // Reposition separator + wires header with extra line offsets
+        // (TankLine vs FuelLine+ReserveLine are mutually exclusive sets)
+        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
         if (m_wSeparator)
         {
             m_wSeparator.SetPos(12, 93 + extraLineOffset);
@@ -917,10 +949,10 @@ class LFPG_DeviceInspector
         if (m_wSeparator)
         {
             m_wSeparator.Show(true);
-            m_wSeparator.SetPos(12, 93 + m_TankLineOffset + m_FuelLineOffset);
+            m_wSeparator.SetPos(12, 93 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
         }
         m_wWiresHeader.Show(true);
-        m_wWiresHeader.SetPos(14, 99 + m_TankLineOffset + m_FuelLineOffset);
+        m_wWiresHeader.SetPos(14, 99 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
 
         // Reposition wire slots with tank/fuel offset
         int ri;
@@ -929,7 +961,7 @@ class LFPG_DeviceInspector
             TextWidget rSlot = m_wWireSlots[ri];
             if (rSlot)
             {
-                float rY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + m_TankLineOffset + m_FuelLineOffset + (ri * LFPG_INSPECT_WIRE_ROW_H);
+                float rY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + (ri * LFPG_INSPECT_WIRE_ROW_H);
                 rSlot.SetPos(14, rY);
             }
         }
@@ -1034,7 +1066,7 @@ class LFPG_DeviceInspector
     protected void ResizePanelHeight(int wireCount)
     {
         float h = ComputePanelHeight(wireCount);
-        h = h + m_TankLineOffset + m_FuelLineOffset;
+        h = h + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
         ApplyPanelSize(h);
     }
 
@@ -1042,7 +1074,7 @@ class LFPG_DeviceInspector
     // Separator and WiresHeader are hidden, so panel stops after CapLine + padding.
     protected void ResizePanelCompact()
     {
-        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset + m_FuelLineOffset);
+        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
     }
 
     // Shared resize implementation: sets panel, background, and accent bar heights.
@@ -1094,7 +1126,7 @@ class LFPG_DeviceInspector
         float panelH = m_CurrentPanelH;
         if (panelH < 1.0)
         {
-            panelH = ComputePanelHeight(m_VisibleWireCount) + m_TankLineOffset + m_FuelLineOffset;
+            panelH = ComputePanelHeight(m_VisibleWireCount) + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
         }
 
         float fScreenW = screenW;

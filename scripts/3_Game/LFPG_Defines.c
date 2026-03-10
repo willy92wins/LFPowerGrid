@@ -603,4 +603,6 @@ static const float LFPG_SEARCHLIGHT_CAM_BEHIND_M      = 2.0;     // spectator of
 static const float LFPG_SEARCHLIGHT_CAM_UP_M          = 0.3;     // spectator offset above
 static const float LFPG_SEARCHLIGHT_EXIT_TIMEOUT_S    = 5.0;     // force cleanup timeout
 static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // raycast range
+static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 5.0;     // auto-exit if player walks beyond this
+static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 3.0;     // degrees per scroll tick (pitch adjust)
 
