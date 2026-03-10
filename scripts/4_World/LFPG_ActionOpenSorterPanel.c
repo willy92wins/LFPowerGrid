@@ -15,7 +15,7 @@
 //   Client: send CONFIG_REQUEST(sorterNetLow, sorterNetHigh)
 //   Server: resolve → validate → build response payload
 //   Server: send CONFIG_RESPONSE(filterJSON, containerName, destNames[6])
-//   Client: receive → LFPG_SorterUI.Open(...)
+//   Client: receive → LFPG_SorterView.Open(...)
 //
 // Pattern: ActionInteractBase (same as LFPG_ActionWatchMonitor)
 // Register in LFPG_ActionRegistration + LF_Sorter.SetActions
@@ -65,7 +65,7 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
             return false;
 
         // Don't open if UI is already showing
-        if (LFPG_SorterUI.IsOpen())
+        if (LFPG_SorterView.IsOpen())
             return false;
 
         return true;

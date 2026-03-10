@@ -58,7 +58,7 @@ modded class MissionGameplay
 
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
-        LFPG_SorterUI.Cleanup();
+        LFPG_SorterView.Init();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
@@ -127,17 +127,6 @@ modded class MissionGameplay
                 m_LFPG_WidgetsCreated = true;
             }
         }
-
-        // ---- SorterUI deferred widget creation (same pattern as CCTV) ----
-        // CreateWidgets from RPC context produces corrupt widget trees.
-        // DoOpen stores params + sets pending flag; we finish here.
-        if (LFPG_SorterUI.NeedsDeferredCreate())
-        {
-            LFPG_SorterUI.FinishDeferredCreate();
-        }
-
-        // ---- SorterUI per-frame tick (animations, hover, input) ----
-        LFPG_SorterUI.Tick(timeslice);
 
         // ---- Wiring session lifecycle ----
         LFPG_WiringClient wc = LFPG_WiringClient.Get();
@@ -235,7 +224,7 @@ modded class MissionGameplay
 
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
-        LFPG_SorterUI.Cleanup();
+        LFPG_SorterView.Cleanup();
 
         super.OnMissionFinish();
     }

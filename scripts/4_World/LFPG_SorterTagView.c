@@ -1,54 +1,36 @@
 // =========================================================
-// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.0)
+// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.0 FIXED)
 //
-// ScriptView for a single rule tag chip. Used as items in
-// ObservableCollection<ref LFPG_SorterTagView> bound to
-// WrapSpacerWidget "TagsList".
-//
-// The BtnRemove Relay_Command propagates up to the parent
-// controller via ScriptedViewBase event hierarchy.
+// Bug 2 fix: stores direct ref to owning controller instead
+// of traversing m_ParentScriptedViewBase (which points to
+// TagView, not SorterController).
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
 
 class LFPG_SorterTagController extends ViewController
 {
-    // Bound to TextWidget "TagLabel" in LF_SorterTag.layout
     string TagLabel;
 
-    // Data stored for removal lookup (not bound to UI)
     int m_RuleIndex;
     int m_OutputIndex;
 
-    // Relay_Command: BtnRemove click
+    // Bug 2 fix: direct ref instead of parent traversal
+    LFPG_SorterController m_OwnerController;
+
     void BtnRemove()
     {
-        // Propagate removal to parent controller
-        // Parent is the LFPG_SorterController via view hierarchy
-        LFPG_SorterController parent = LFPG_SorterController.Cast(m_ParentScriptedViewBase);
-        if (!parent)
+        if (m_OwnerController)
         {
-            // Try grandparent (view → controller)
-            ScriptedViewBase parentView = ScriptedViewBase.Cast(m_ParentScriptedViewBase);
-            if (parentView)
-            {
-                parent = LFPG_SorterController.Cast(parentView);
-            }
-        }
-        if (parent)
-        {
-            parent.OnRemoveTag(m_OutputIndex, m_RuleIndex);
+            m_OwnerController.OnRemoveTag(m_OutputIndex, m_RuleIndex);
         }
     }
 };
 
 class LFPG_SorterTagView extends ScriptView
 {
-    // Auto-assigned widgets
     ImageWidget TagBg;
     TextWidget TagLabel;
-
-    // Color for this tag type
     protected int m_TagColor;
 
     override string GetLayoutFile()
@@ -61,7 +43,8 @@ class LFPG_SorterTagView extends ScriptView
         return LFPG_SorterTagController;
     }
 
-    void SetData(string label, int color, int ruleIndex, int outputIndex)
+    // Bug 2 fix: ownerCtrl passed directly from Controller.RefreshTagsList
+    void SetData(string label, int color, int ruleIndex, int outputIndex, LFPG_SorterController ownerCtrl)
     {
         m_TagColor = color;
 
@@ -71,14 +54,13 @@ class LFPG_SorterTagView extends ScriptView
             ctrl.TagLabel = label;
             ctrl.m_RuleIndex = ruleIndex;
             ctrl.m_OutputIndex = outputIndex;
+            ctrl.m_OwnerController = ownerCtrl;
             ctrl.NotifyPropertyChanged("TagLabel");
         }
 
-        // Style the chip
         if (TagBg)
         {
             TagBg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
-            // Tinted background at ~7% opacity of the tag color
             int bgColor = (color & 0x00FFFFFF) | 0x12000000;
             TagBg.SetColor(bgColor);
         }

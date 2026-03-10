@@ -2579,7 +2579,7 @@ modded class PlayerBase
         }
 
         // Open the Sorter UI with full data
-        LFPG_SorterUI.Open(filterJSON, containerName, destName0, destName1, destName2, destName3, destName4, destName5, netLow, netHigh);
+        LFPG_SorterView.Open(filterJSON, containerName, destName0, destName1, destName2, destName3, destName4, destName5, netLow, netHigh);
 
         string logMsg = "[SorterConfigResponse] Opened UI, container=" + containerName;
         LFPG_Util.Info(logMsg);
@@ -2595,6 +2595,6 @@ modded class PlayerBase
         if (!ctx.Read(success))
             return;
 
-        LFPG_SorterUI.OnSaveAck(success);
+        LFPG_SorterView.OnSaveAck(success);
     }
 };

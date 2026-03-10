@@ -94,8 +94,7 @@ FrameWidgetClass SorterRoot {
 							ignorepointer 1
 						}
 
-						TextWidgetClass StatusText {
-							scriptclass "ViewBinding"
+						TextWidgetClass StatusLabel {
 							position 520 12
 							size 80 18
 							hexactpos 1
@@ -649,6 +648,7 @@ FrameWidgetClass SorterRoot {
 						}
 						EditBoxWidgetClass EditPrefix {
 							scriptclass "ViewBinding"
+							Two_Way_Binding 1
 							position 14 116
 							size 286 28
 							hexactpos 1
@@ -695,6 +695,7 @@ FrameWidgetClass SorterRoot {
 						}
 						EditBoxWidgetClass EditContains {
 							scriptclass "ViewBinding"
+							Two_Way_Binding 1
 							position 14 170
 							size 286 28
 							hexactpos 1
@@ -809,6 +810,7 @@ FrameWidgetClass SorterRoot {
 						}
 						EditBoxWidgetClass EditSlotMin {
 							scriptclass "ViewBinding"
+							Two_Way_Binding 1
 							position 14 268
 							size 52 28
 							hexactpos 1
@@ -841,6 +843,7 @@ FrameWidgetClass SorterRoot {
 						}
 						EditBoxWidgetClass EditSlotMax {
 							scriptclass "ViewBinding"
+							Two_Way_Binding 1
 							position 88 268
 							size 52 28
 							hexactpos 1
