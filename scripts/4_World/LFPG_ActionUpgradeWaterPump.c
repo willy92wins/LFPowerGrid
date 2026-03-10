@@ -162,14 +162,45 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         string deviceId = pump.LFPG_GetDeviceId();
         LFPG_DeviceLifecycle.OnDeviceKilled(pump, deviceId);
 
-        // ---- Delete T1 ----
+        // ---- Surface detection BEFORE T1 deletion ----
+        // v1.2.1: Downward raycast to find the actual surface (terrain or
+        // building floor) at T1's XZ position. This avoids T2 sinking below
+        // ground when its P3D model has a different origin height than T1's.
+        // Must run BEFORE ObjectDelete because ObjectDelete is deferred —
+        // T1 still exists in physics world during this frame.
+        // Pass pump as ignore object so the ray skips the T1 model.
+        vector rayFrom = pos;
+        rayFrom[1] = rayFrom[1] + 0.5;
+        vector rayTo = pos;
+        rayTo[1] = rayTo[1] - 1.0;
+
+        vector spawnPos = pos;
+        float groundY = 0.0;
+        float surfY = 0.0;
+        RaycastRVParams surfRay = new RaycastRVParams(rayFrom, rayTo, pump, 0);
+        surfRay.sorted = true;
+        array<ref RaycastRVResult> surfResults = new array<ref RaycastRVResult>;
+        DayZPhysics.RaycastRVProxy(surfRay, surfResults);
+
+        if (surfResults.Count() > 0)
+        {
+            groundY = surfResults[0].pos[1];
+            spawnPos[1] = groundY;
+        }
+        else
+        {
+            // Fallback: use engine surface Y (terrain only, no floors)
+            surfY = GetGame().SurfaceY(pos[0], pos[2]);
+            spawnPos[1] = surfY;
+        }
+
+        // ---- Delete T1 (deferred — object persists in physics until end of frame) ----
         GetGame().ObjectDelete(pump);
 
-        // ---- Spawn T2 at same position ----
-        EntityAI t2 = GetGame().CreateObjectEx("LF_WaterPump_T2", pos, ECE_CREATEPHYSICS);
+        EntityAI t2 = GetGame().CreateObjectEx("LF_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS);
         if (t2)
         {
-            t2.SetPosition(pos);
+            t2.SetPosition(spawnPos);
             t2.SetOrientation(ori);
             t2.Update();
 
@@ -187,7 +218,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
                 }
             }
 
-            LFPG_Util.Info("[UpgradePump] T2 created at " + pos.ToString() + " ori=" + ori.ToString());
+            LFPG_Util.Info("[UpgradePump] T2 created at " + spawnPos.ToString() + " ori=" + ori.ToString() + " (T1 was " + pos.ToString() + ")");
         }
         else
         {

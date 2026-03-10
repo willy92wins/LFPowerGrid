@@ -54,9 +54,13 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
         bool isOn = furnace.LFPG_GetSourceOn();
         int fuelCur = furnace.LFPG_GetFuelCurrent();
 
-        // If furnace is OFF, can only turn ON if there's fuel
+        // If furnace is OFF, can only turn ON if there's fuel OR cargo items
         if (!isOn && fuelCur <= 0)
-            return false;
+        {
+            bool hasCargo = furnace.LFPG_HasCargoItems();
+            if (!hasCargo)
+                return false;
+        }
 
         // Dynamic text update with fuel percentage
         int fuelMax = LFPG_FURNACE_MAX_FUEL;

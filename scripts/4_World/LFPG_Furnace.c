@@ -13,6 +13,15 @@
 //                  1 output port (output_1). Owns wires.
 //                  Burn timer: -1 fuel every 30s. Auto-off at 0.
 //
+// v1.2.2: Furnace has a 10x10 cargo (reserve hopper).
+//   - Can ignite with fuel=0 if cargo has items (auto-consumes
+//     the largest item immediately on ignition).
+//   - When fuel reaches 0 during burning, auto-consumes the
+//     largest cargo item to replenish. Largest-first = fewer
+//     burns, more efficient.
+//   - Only auto-off when fuel=0 AND cargo is empty.
+//   - ActionFeedFurnace (manual hand-feed) still works.
+//
 // ENFORCE SCRIPT NOTES:
 //   - No ternary operators, No ++ / --, Explicit typing, No foreach
 //   - Variables hoisted before conditionals
@@ -183,6 +192,12 @@ class LF_Furnace : Inventory_Base
         return false;
     }
 
+    // v1.2.2: Furnace has a 10x10 cargo for auto-burn reserve
+    override bool CanDisplayCargo()
+    {
+        return true;
+    }
+
     // ============================================
     // Fuel system
     // ============================================
@@ -271,7 +286,120 @@ class LF_Furnace : Inventory_Base
         return m_FuelCurrent;
     }
 
+    // ============================================
+    // v1.2.2: Cargo-based auto-burn system
+    // ============================================
+
+    // Returns true if furnace cargo has at least 1 item
+    bool LFPG_HasCargoItems()
+    {
+        CargoBase cargo = GetInventory().GetCargo();
+        if (!cargo)
+            return false;
+
+        int count = cargo.GetItemCount();
+        return (count > 0);
+    }
+
+    // Returns number of items in furnace cargo
+    int LFPG_GetCargoItemCount()
+    {
+        CargoBase cargo = GetInventory().GetCargo();
+        if (!cargo)
+            return 0;
+
+        return cargo.GetItemCount();
+    }
+
+    // Returns estimated total fuel from all cargo items
+    int LFPG_GetCargoFuelEstimate()
+    {
+        CargoBase cargo = GetInventory().GetCargo();
+        if (!cargo)
+            return 0;
+
+        int total = 0;
+        int count = cargo.GetItemCount();
+        int ei;
+        for (ei = 0; ei < count; ei = ei + 1)
+        {
+            EntityAI cargoItem = cargo.GetItem(ei);
+            if (cargoItem)
+            {
+                total = total + LFPG_CalcFuelRecursive(cargoItem);
+            }
+        }
+        return total;
+    }
+
+    // Auto-consume the largest item from cargo into fuel.
+    // Called when fuel reaches 0 while burning.
+    // Returns true if an item was consumed (fuel was added).
+    bool LFPG_AutoConsumeLargestItem()
+    {
+        #ifdef SERVER
+        CargoBase cargo = GetInventory().GetCargo();
+        if (!cargo)
+            return false;
+
+        int count = cargo.GetItemCount();
+        if (count <= 0)
+            return false;
+
+        // Find item with highest fuel value
+        int bestFuel = 0;
+        int bestIdx = -1;
+        int si;
+        for (si = 0; si < count; si = si + 1)
+        {
+            EntityAI scanItem = cargo.GetItem(si);
+            if (!scanItem)
+                continue;
+
+            int scanFuel = LFPG_CalcFuelRecursive(scanItem);
+            if (scanFuel > bestFuel)
+            {
+                bestFuel = scanFuel;
+                bestIdx = si;
+            }
+        }
+
+        // No item with usable fuel value
+        if (bestIdx < 0 || bestFuel <= 0)
+            return false;
+
+        EntityAI bestItem = cargo.GetItem(bestIdx);
+        if (!bestItem)
+            return false;
+
+        // Clamp to max fuel
+        int fuelAfter = m_FuelCurrent + bestFuel;
+        if (fuelAfter > LFPG_FURNACE_MAX_FUEL)
+        {
+            fuelAfter = LFPG_FURNACE_MAX_FUEL;
+        }
+        m_FuelCurrent = fuelAfter;
+
+        string burnedType = bestItem.GetType();
+        GetGame().ObjectDelete(bestItem);
+
+        SetSynchDirty();
+
+        string acLog = "[LF_Furnace] Auto-consumed ";
+        acLog = acLog + burnedType + " +" + bestFuel.ToString();
+        acLog = acLog + " fuel=" + m_FuelCurrent.ToString();
+        acLog = acLog + " id=" + m_DeviceId;
+        LFPG_Util.Info(acLog);
+
+        return true;
+        #else
+        return false;
+        #endif
+    }
+
     // ---- Burn timer tick (server, called every 30s via CallLater) ----
+    // v1.2.2: When fuel reaches 0, auto-consume from cargo.
+    // Only auto-off if both fuel=0 AND cargo is empty.
     void LFPG_BurnTick()
     {
         #ifdef SERVER
@@ -290,13 +418,22 @@ class LF_Furnace : Inventory_Base
         if (m_FuelCurrent <= 0)
         {
             m_FuelCurrent = 0;
-            m_SourceOn = false;
-            SetSynchDirty();
-            if (m_DeviceId != "")
+
+            // Try auto-consume from cargo
+            bool consumed = LFPG_AutoConsumeLargestItem();
+            if (!consumed)
             {
-                LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                // Nothing left — shut down
+                m_SourceOn = false;
+                LFPG_StopBurnTimer();
+                SetSynchDirty();
+                if (m_DeviceId != "")
+                {
+                    LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                }
+                LFPG_Util.Info("[LF_Furnace] Fuel exhausted + cargo empty, auto-off. id=" + m_DeviceId);
             }
-            LFPG_Util.Info("[LF_Furnace] Fuel exhausted, auto-off. id=" + m_DeviceId);
+            // else: fuel was replenished from cargo, keep burning
         }
         #endif
     }
@@ -318,6 +455,9 @@ class LF_Furnace : Inventory_Base
     }
 
     // ---- Toggle power (server only, called from ActionToggleFurnace) ----
+    // v1.2.2: Can turn on if fuel > 0 OR cargo has items.
+    // If fuel=0 at ignition, auto-consume immediately so power
+    // starts from second 0 (no 30s dead zone).
     void LFPG_ToggleFurnace()
     {
         #ifdef SERVER
@@ -335,8 +475,23 @@ class LF_Furnace : Inventory_Base
         }
         else
         {
-            // Turn ON (only if fuel > 0)
+            // Turn ON: requires fuel > 0 OR cargo items
+            bool canIgnite = false;
             if (m_FuelCurrent > 0)
+            {
+                canIgnite = true;
+            }
+            else
+            {
+                // No fuel — try to consume from cargo immediately
+                bool igniteConsumed = LFPG_AutoConsumeLargestItem();
+                if (igniteConsumed)
+                {
+                    canIgnite = true;
+                }
+            }
+
+            if (canIgnite)
             {
                 m_SourceOn = true;
                 LFPG_StartBurnTimer();
@@ -376,12 +531,23 @@ class LF_Furnace : Inventory_Base
         {
             LFPG_StartBurnTimer();
         }
-        // Safety: if source was on but no fuel, force off
+        // Safety: if source was on but no fuel, try auto-consume from cargo.
+        // Only force off if cargo is also empty.
         if (m_SourceOn && m_FuelCurrent <= 0)
         {
-            m_SourceOn = false;
-            m_FuelCurrent = 0;
-            SetSynchDirty();
+            bool restoreConsumed = LFPG_AutoConsumeLargestItem();
+            if (restoreConsumed)
+            {
+                // Fuel restored from cargo — resume burning
+                LFPG_StartBurnTimer();
+            }
+            else
+            {
+                // Nothing to burn — force off
+                m_SourceOn = false;
+                m_FuelCurrent = 0;
+                SetSynchDirty();
+            }
         }
 
         LFPG_NetworkManager.Get().BroadcastOwnerWires(this);

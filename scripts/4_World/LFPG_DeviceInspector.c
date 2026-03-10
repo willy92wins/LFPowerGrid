@@ -771,18 +771,30 @@ class LFPG_DeviceInspector
                     fuelText = fuelText + " (-" + burnPMWhole.ToString() + "/m)";
                 }
 
+                // v1.2.2: Cargo reserve info
+                int cargoCount = furnaceDevice.LFPG_GetCargoItemCount();
+                if (cargoCount > 0)
+                {
+                    int cargoFuel = furnaceDevice.LFPG_GetCargoFuelEstimate();
+                    fuelText = fuelText + " R:" + cargoCount.ToString() + "(" + cargoFuel.ToString() + ")";
+                }
+
                 // Status: color indicates state.
-                // Burning = cyan (burn rate suffix already visible).
-                // Off with fuel = yellow with [OFF] tag.
-                // Empty = grey with [EMPTY] tag.
-                if (fuelOn && fuelCur > 0)
+                // Burning = cyan. Off with fuel = yellow [OFF].
+                // Empty but has cargo = orange. Fully empty = grey [EMPTY].
+                if (fuelOn)
                 {
                     m_wFuelLine.SetColor(ARGB(255, 50, 200, 220));
                 }
-                else if (!fuelOn && fuelCur > 0)
+                else if (fuelCur > 0)
                 {
                     fuelText = fuelText + " [OFF]";
                     m_wFuelLine.SetColor(ARGB(255, 230, 200, 50));
+                }
+                else if (cargoCount > 0)
+                {
+                    fuelText = fuelText + " [OFF]";
+                    m_wFuelLine.SetColor(ARGB(255, 230, 160, 50));
                 }
                 else
                 {
