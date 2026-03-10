@@ -722,7 +722,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_MotionSensorKit";
         descriptionShort = "$STR_LFPG_MotionSensorKit_Desc";
-        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        model = "\LFPowerGrid\data\sensor\lfpg_motion_sensor.p3d";
         weight = 600;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -740,7 +740,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_MotionSensor";
         descriptionShort = "$STR_LFPG_MotionSensor_Desc";
-        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        model = "\LFPowerGrid\data\sensor\lfpg_motion_sensor.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -749,7 +749,7 @@ class CfgVehicles
         isDeployable = 0;
 
         hiddenSelections[] = {"led_indicator"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\sensor\materials\sensor_led_off.rvmat"};
 
         class DamageSystem
         {
