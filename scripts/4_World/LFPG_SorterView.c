@@ -1,10 +1,19 @@
 // =========================================================
-// LF_PowerGrid — Sorter View (Dabs MVC, v2.2 Polish Sprint)
+// LF_PowerGrid — Sorter View (Dabs MVC, v2.3 P3 Sprint)
 //
 // CREATION: LFPG_SorterView.Init() from MissionGameplay.OnInit
 //   pre-creates the view HIDDEN (safe context). Avoids
 //   RPC-context CreateWidgets corruption.
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
+//
+// v2.3 changes (P3 Performance & Polish):
+//   S7: UseUpdateLoop=false, manual Insert/Remove on DoOpen/DoClose
+//   S3: ApplyColors moved from OnWidgetScriptInit to DoOpen
+//   OPT-1: GetGame() null-guard in DoOpen queue insert
+//   R7: GetGame() null-guard in Update Input access
+//   R4: GetGame() null-guard in ShowCursor/HideCursor
+//   E1: String literals converted to local variables
+//   V1: Resolution-aware panel clamp for small screens
 //
 // v2.2 changes (Polish Sprint):
 //   - Button hover feedback via color cache + OnMouseEnter/Leave
@@ -108,6 +117,14 @@ class LFPG_SorterView extends ScriptView
         return LFPG_SorterController;
     }
 
+    // S7: Disable ScriptView auto-registration of Update in CALL_CATEGORY_SYSTEM.
+    // Without this, Update runs ~60fps even when the panel is hidden (99% of the time).
+    // We manually Insert/Remove in DoOpen/DoClose/destructor instead.
+    override bool UseUpdateLoop()
+    {
+        return false;
+    }
+
     // =========================================================
     // Update: drag, double-ESC, controller timers
     // =========================================================
@@ -173,10 +190,11 @@ class LFPG_SorterView extends ScriptView
             }
         }
 
-        // ── Double-ESC pattern ──
-        if (GetGame().GetInput())
+        // ── Double-ESC pattern (R7: GetGame guard for late shutdown) ──
+        if (GetGame() && GetGame().GetInput())
         {
-            if (GetGame().GetInput().LocalPress("UAUIBack", false))
+            string uaBack = "UAUIBack";
+            if (GetGame().GetInput().LocalPress(uaBack, false))
             {
                 // First ESC: if an EditBox has focus, just clear focus
                 Widget focused = GetFocus();
@@ -218,12 +236,18 @@ class LFPG_SorterView extends ScriptView
     }
 
     // S1 fix: destructor releases input lock if destroyed while open
-    // Prevents permanent stuck-input (CRASH-08) on game shutdown,
-    // mission end, or unexpected deletion.
+    // S7: also removes Update from queue (covers unexpected shutdown while open)
     void ~LFPG_SorterView()
     {
         if (GetGame())
         {
+            // S7: Remove Update from queue if still registered
+            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
+            if (updQueue)
+            {
+                updQueue.Remove(Update);
+            }
+
             if (m_FocusLocked)
             {
                 Input inp = GetGame().GetInput();
@@ -241,10 +265,12 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
+    // S3: ApplyColors moved to DoOpen() — calling here caused flash
+    // because colors were painted before data existed, then overwritten by InitFromRPC.
+    // R2: Override kept intentionally to document this design decision.
     override void OnWidgetScriptInit(Widget w)
     {
         super.OnWidgetScriptInit(w);
-        ApplyColors();
     }
 
     protected void ApplyColors()
@@ -281,7 +307,8 @@ class LFPG_SorterView extends ScriptView
         if (PairingText)
         {
             PairingText.SetColor(COL_RED);
-            PairingText.SetText("No container linked");
+            string defaultPairingMsg = "No container linked";
+            PairingText.SetText(defaultPairingMsg);
         }
     }
 
@@ -422,9 +449,23 @@ class LFPG_SorterView extends ScriptView
         int scrW = 0;
         int scrH = 0;
         GetScreenSize(scrW, scrH);
-        float panW = 0.0;
-        float panH = 0.0;
-        SorterPanel.GetSize(panW, panH);
+
+        // V1: Always reset to layout-designed height first, then clamp if needed.
+        // Without this, if the panel was clamped at 720p and the player re-opens
+        // at 1080p, GetSize() would return the old clamped value.
+        float panW = 720.0;
+        float panH = 590.0;
+        SorterPanel.SetSize(panW, panH);
+
+        // V1: Clamp panel height for small screens (720p and below)
+        int minH = 620;
+        if (scrH < minH)
+        {
+            float clampedH = scrH - 30;
+            SorterPanel.SetSize(panW, clampedH);
+            panH = clampedH;
+        }
+
         float cx = (scrW - panW) * 0.5;
         float cy = (scrH - panH) * 0.5;
         SorterPanel.SetPos(cx, cy);
@@ -458,7 +499,8 @@ class LFPG_SorterView extends ScriptView
             Tint(PairingDot, COL_RED);
             if (PairingText)
             {
-                PairingText.SetText("No container linked");
+                string noLinkMsg = "No container linked";
+                PairingText.SetText(noLinkMsg);
                 PairingText.SetColor(COL_RED);
             }
         }
@@ -479,7 +521,8 @@ class LFPG_SorterView extends ScriptView
             root.Show(false);
             root.SetSort(10003);
         }
-        LFPG_Util.Info("[SorterView] Pre-created (hidden)");
+        string initMsg = "[SorterView] Pre-created (hidden)";
+        LFPG_Util.Info(initMsg);
         #endif
     }
 
@@ -489,7 +532,8 @@ class LFPG_SorterView extends ScriptView
         #ifndef SERVER
         if (!s_Instance)
         {
-            LFPG_Util.Warn("[SorterView] Open before Init — cannot open");
+            string warnMsg = "[SorterView] Open before Init — cannot open";
+            LFPG_Util.Warn(warnMsg);
             return;
         }
         s_Instance.DoOpen(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
@@ -513,8 +557,7 @@ class LFPG_SorterView extends ScriptView
 
     // S2 fix: Cleanup deletes instance properly (prevents leak).
     // Input release is handled by the destructor (S1) which has
-    // GetGame() null guard for safe shutdown. Do NOT call HideCursor()
-    // here — it lacks GetGame() check and would crash during late shutdown.
+    // GetGame() null guard for safe shutdown.
     static void Cleanup()
     {
         if (s_Instance)
@@ -549,7 +592,8 @@ class LFPG_SorterView extends ScriptView
         Widget root = GetLayoutRoot();
         if (!root)
         {
-            LFPG_Util.Error("[SorterView] No layout root");
+            string errMsg = "[SorterView] No layout root";
+            LFPG_Util.Error(errMsg);
             return;
         }
         m_IsOpen = true;
@@ -557,6 +601,16 @@ class LFPG_SorterView extends ScriptView
         m_HoveredBg = null;
         root.Show(true);
         CenterPanel();
+
+        // S7: Register Update in CALL_CATEGORY_SYSTEM (OPT-1: GetGame guard)
+        if (GetGame())
+        {
+            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
+            if (updQueue)
+            {
+                updQueue.Insert(Update);
+            }
+        }
 
         // Fade-in (v2.2)
         m_FadeAlpha = 0.0;
@@ -568,6 +622,9 @@ class LFPG_SorterView extends ScriptView
 
         ShowCursor();
 
+        // S3: ApplyColors here (not in OnWidgetScriptInit) — avoids flash
+        ApplyColors();
+
         // Update pairing banner (Bug #5)
         UpdatePairingState(containerName);
 
@@ -576,7 +633,8 @@ class LFPG_SorterView extends ScriptView
         {
             ctrl.InitFromRPC(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
         }
-        LFPG_Util.Info("[SorterView] Opened for: " + containerName);
+        string openMsg = "[SorterView] Opened for: " + containerName;
+        LFPG_Util.Info(openMsg);
     }
 
     protected void DoClose()
@@ -587,13 +645,25 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_FadingIn = false;
         m_HoveredBg = null;
+
+        // S7: Remove Update from queue
+        if (GetGame())
+        {
+            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
+            if (updQueue)
+            {
+                updQueue.Remove(Update);
+            }
+        }
+
         Widget root = GetLayoutRoot();
         if (root)
         {
             root.Show(false);
         }
         HideCursor();
-        LFPG_Util.Info("[SorterView] Closed");
+        string closeMsg = "[SorterView] Closed";
+        LFPG_Util.Info(closeMsg);
     }
 
     // =========================================================
@@ -602,6 +672,8 @@ class LFPG_SorterView extends ScriptView
     protected void ShowCursor()
     {
         #ifndef SERVER
+        if (!GetGame())
+            return;
         UIManager uiMgr = GetGame().GetUIManager();
         if (uiMgr)
         {
@@ -622,6 +694,8 @@ class LFPG_SorterView extends ScriptView
     protected void HideCursor()
     {
         #ifndef SERVER
+        if (!GetGame())
+            return;
         UIManager uiMgr = GetGame().GetUIManager();
         if (uiMgr)
         {
@@ -797,7 +871,8 @@ class LFPG_SorterView extends ScriptView
         if (!player)
             return;
 
-        SEffectManager.PlaySoundOnObject("pickUpItem_SoundSet", player);
+        string sndClick = "pickUpItem_SoundSet";
+        SEffectManager.PlaySoundOnObject(sndClick, player);
         #endif
     }
 
@@ -811,7 +886,8 @@ class LFPG_SorterView extends ScriptView
         if (!player)
             return;
 
-        SEffectManager.PlaySoundOnObject("attachmentAdded_SoundSet", player);
+        string sndAction = "attachmentAdded_SoundSet";
+        SEffectManager.PlaySoundOnObject(sndAction, player);
         #endif
     }
 

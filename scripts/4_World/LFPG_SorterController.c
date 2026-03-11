@@ -1,5 +1,12 @@
 // =========================================================
-// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.2 Polish)
+// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.3 P3 Sprint)
+//
+// v2.3 changes (P3 Performance & Polish):
+//   S5: Extracted GetStatusColor (eliminates 40-line duplication)
+//   S6: Merged save/sort feedback timers into m_FeedbackTimer
+//   E1: String literals converted to local variables
+//   V2: Tab rule indicators (* on tabs with rules/catch-all)
+//   R4: GetGame() null-guard in BtnSave/BtnSort
 //
 // v2.2 changes (Polish Sprint):
 //   - Visual disabled state when unpaired (IGNOREPOINTER + dim)
@@ -41,7 +48,7 @@ class LFPG_SorterController extends ViewController
     protected bool m_ShowRules;
     protected bool m_ResetConfirmActive;
     protected float m_ResetTimer;
-    protected float m_SaveFeedbackTimer;
+    protected float m_FeedbackTimer;
 
     // ── Pairing state (Bug #5/#6) ──
     protected bool m_IsPaired;
@@ -108,9 +115,6 @@ class LFPG_SorterController extends ViewController
     Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
-    // ── Sort feedback timer (v2.2) ──
-    protected float m_SortFeedbackTimer;
-
     static const string PROC = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
     // =========================================================
@@ -123,12 +127,11 @@ class LFPG_SorterController extends ViewController
         m_ShowRules = true;
         m_ResetConfirmActive = false;
         m_ResetTimer = 0.0;
-        m_SaveFeedbackTimer = 0.0;
+        m_FeedbackTimer = 0.0;
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
         m_IsPaired = false;
         m_ContainerDisplayName = "";
-        m_SortFeedbackTimer = 0.0;
         m_CatLabel0 = "Weapons";    m_CatValue0 = "WEAPON";
         m_CatLabel1 = "Attach";     m_CatValue1 = "ATTACHMENT";
         m_CatLabel2 = "Ammo";       m_CatValue2 = "AMMO";
@@ -150,8 +153,7 @@ class LFPG_SorterController extends ViewController
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
-        m_SaveFeedbackTimer = 0.0;
-        m_SortFeedbackTimer = 0.0;
+        m_FeedbackTimer = 0.0;
         m_Dest0 = d0; m_Dest1 = d1; m_Dest2 = d2;
         m_Dest3 = d3; m_Dest4 = d4; m_Dest5 = d5;
 
@@ -175,16 +177,20 @@ class LFPG_SorterController extends ViewController
             m_Config.ResetAll();
         }
 
-        HeaderTitle = "SORTER";
-        NotifyPropertyChanged("HeaderTitle", false);
+        string sorterTitle = "SORTER";
+        HeaderTitle = sorterTitle;
+        string propHeader = "HeaderTitle";
+        NotifyPropertyChanged(propHeader, false);
 
         if (m_IsPaired)
         {
-            SetStatus("ONLINE");
+            string stOnline = "ONLINE";
+            SetStatus(stOnline);
         }
         else
         {
-            SetStatus("NO LINK");
+            string stNoLink = "NO LINK";
+            SetStatus(stNoLink);
         }
         ApplyInitialColors();
         ApplyInitialLabels();
@@ -248,10 +254,14 @@ class LFPG_SorterController extends ViewController
         SetBtnLabel(CatBtn6Text, m_CatLabel6);
         SetBtnLabel(CatBtn7Text, m_CatLabel7);
 
-        SetBtnLabel(SlotPre0Text, "Tiny");
-        SetBtnLabel(SlotPre1Text, "Small");
-        SetBtnLabel(SlotPre2Text, "Med");
-        SetBtnLabel(SlotPre3Text, "Large");
+        string lblTiny = "Tiny";
+        string lblSmall = "Small";
+        string lblMed = "Med";
+        string lblLarge = "Large";
+        SetBtnLabel(SlotPre0Text, lblTiny);
+        SetBtnLabel(SlotPre1Text, lblSmall);
+        SetBtnLabel(SlotPre2Text, lblMed);
+        SetBtnLabel(SlotPre3Text, lblLarge);
     }
 
     protected void SetBtnLabel(TextWidget txt, string label)
@@ -315,44 +325,40 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     // Status label/dot (reflects pairing + save state)
     // =========================================================
+    // S5: Extracted from SetStatus — maps status text to ARGB color
+    protected int GetStatusColor(string st)
+    {
+        string stSaving = "SAVING...";
+        string stSorting = "SORTING...";
+        string stError = "ERROR";
+        string stNoLink = "NO LINK";
+        if (st == stSaving || st == stSorting)
+        {
+            return LFPG_SorterView.COL_AMBER;
+        }
+        if (st == stError)
+        {
+            return LFPG_SorterView.COL_RED;
+        }
+        if (st == stNoLink)
+        {
+            return LFPG_SorterView.COL_RED;
+        }
+        return LFPG_SorterView.COL_GREEN;
+    }
+
     protected void SetStatus(string st)
     {
+        int col = GetStatusColor(st);
         if (StatusLabel)
         {
             StatusLabel.SetText(st);
-            int txtCol = LFPG_SorterView.COL_GREEN;
-            if (st == "SAVING..." || st == "SORTING...")
-            {
-                txtCol = LFPG_SorterView.COL_AMBER;
-            }
-            else if (st == "ERROR")
-            {
-                txtCol = LFPG_SorterView.COL_RED;
-            }
-            else if (st == "NO LINK")
-            {
-                txtCol = LFPG_SorterView.COL_RED;
-            }
-            StatusLabel.SetColor(txtCol);
+            StatusLabel.SetColor(col);
         }
-
         if (StatusDot)
         {
             StatusDot.LoadImageFile(0, PROC);
-            int dotCol = LFPG_SorterView.COL_GREEN;
-            if (st == "SAVING..." || st == "SORTING...")
-            {
-                dotCol = LFPG_SorterView.COL_AMBER;
-            }
-            else if (st == "ERROR")
-            {
-                dotCol = LFPG_SorterView.COL_RED;
-            }
-            else if (st == "NO LINK")
-            {
-                dotCol = LFPG_SorterView.COL_RED;
-            }
-            StatusDot.SetColor(dotCol);
+            StatusDot.SetColor(col);
         }
     }
 
@@ -360,52 +366,39 @@ class LFPG_SorterController extends ViewController
     {
         if (success)
         {
-            SetStatus("SAVED");
+            string stSaved = "SAVED";
+            SetStatus(stSaved);
         }
         else
         {
-            SetStatus("ERROR");
+            string stErr = "ERROR";
+            SetStatus(stErr);
         }
-        m_SaveFeedbackTimer = 2.5;
+        m_FeedbackTimer = 2.5;
     }
 
     // =========================================================
     // Timer tick (called from View.Update)
+    // S6: Single m_FeedbackTimer (last-write-wins)
     // =========================================================
     void TickTimers(float dt)
     {
-        // Save feedback revert
-        if (m_SaveFeedbackTimer > 0.0)
+        // Feedback revert (save or sort)
+        if (m_FeedbackTimer > 0.0)
         {
-            m_SaveFeedbackTimer = m_SaveFeedbackTimer - dt;
-            if (m_SaveFeedbackTimer <= 0.0)
+            m_FeedbackTimer = m_FeedbackTimer - dt;
+            if (m_FeedbackTimer <= 0.0)
             {
-                m_SaveFeedbackTimer = 0.0;
+                m_FeedbackTimer = 0.0;
                 if (m_IsPaired)
                 {
-                    SetStatus("ONLINE");
+                    string stOnline = "ONLINE";
+                    SetStatus(stOnline);
                 }
                 else
                 {
-                    SetStatus("NO LINK");
-                }
-            }
-        }
-
-        // Sort feedback revert (v2.2)
-        if (m_SortFeedbackTimer > 0.0)
-        {
-            m_SortFeedbackTimer = m_SortFeedbackTimer - dt;
-            if (m_SortFeedbackTimer <= 0.0)
-            {
-                m_SortFeedbackTimer = 0.0;
-                if (m_IsPaired)
-                {
-                    SetStatus("ONLINE");
-                }
-                else
-                {
-                    SetStatus("NO LINK");
+                    string stNoLink = "NO LINK";
+                    SetStatus(stNoLink);
                 }
             }
         }
@@ -418,7 +411,8 @@ class LFPG_SorterController extends ViewController
             {
                 m_ResetConfirmActive = false;
                 m_ResetTimer = 0.0;
-                if (BtnResetAllText) { BtnResetAllText.SetText("Reset All"); }
+                string resetLabel = "Reset All";
+                if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
                 TintBg(BtnResetAllBg, LFPG_SorterView.COL_RED_BTN);
             }
         }
@@ -503,7 +497,8 @@ class LFPG_SorterController extends ViewController
         if (!outCfg) return;
         outCfg.AddRule(LFPG_SORT_FILTER_PREFIX, EditPrefix);
         EditPrefix = "";
-        NotifyPropertyChanged("EditPrefix", false);
+        string propEP = "EditPrefix";
+        NotifyPropertyChanged(propEP, false);
         LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
@@ -516,7 +511,8 @@ class LFPG_SorterController extends ViewController
         if (!outCfg) return;
         outCfg.AddRule(LFPG_SORT_FILTER_CONTAINS, EditContains);
         EditContains = "";
-        NotifyPropertyChanged("EditContains", false);
+        string propEC = "EditContains";
+        NotifyPropertyChanged(propEC, false);
         LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
@@ -529,14 +525,18 @@ class LFPG_SorterController extends ViewController
         int maxVal = EditSlotMax.ToInt();
         if (minVal < 1) { minVal = 1; }
         if (maxVal < minVal) { maxVal = minVal; }
-        string slotValue = minVal.ToString() + "-" + maxVal.ToString();
+        string dash = "-";
+        string slotValue = minVal.ToString() + dash;
+        slotValue = slotValue + maxVal.ToString();
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue);
         EditSlotMin = "";
         EditSlotMax = "";
-        NotifyPropertyChanged("EditSlotMin", false);
-        NotifyPropertyChanged("EditSlotMax", false);
+        string propMin = "EditSlotMin";
+        string propMax = "EditSlotMax";
+        NotifyPropertyChanged(propMin, false);
+        NotifyPropertyChanged(propMax, false);
         LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
@@ -571,14 +571,16 @@ class LFPG_SorterController extends ViewController
         {
             m_ResetConfirmActive = true;
             m_ResetTimer = 3.0;
-            if (BtnResetAllText) { BtnResetAllText.SetText("Confirm?"); }
+            string confirmLabel = "Confirm?";
+            if (BtnResetAllText) { BtnResetAllText.SetText(confirmLabel); }
             TintBg(BtnResetAllBg, LFPG_SorterView.COL_AMBER);
             LFPG_SorterView.PlayUIClick();
             return;
         }
         m_ResetConfirmActive = false;
         m_Config.ResetAll();
-        if (BtnResetAllText) { BtnResetAllText.SetText("Reset All"); }
+        string resetLabel = "Reset All";
+        if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
         TintBg(BtnResetAllBg, LFPG_SorterView.COL_RED_BTN);
         LFPG_SorterView.PlayUIAction();
         RefreshAll();
@@ -591,10 +593,15 @@ class LFPG_SorterController extends ViewController
             return;
 
         string json = m_Config.ToJSON();
-        LFPG_Util.Info("[SorterCtrl] SAVE: " + json);
-        SetStatus("SAVING...");
+        string saveMsg = "[SorterCtrl] SAVE: " + json;
+        LFPG_Util.Info(saveMsg);
+        string stSaving = "SAVING...";
+        SetStatus(stSaving);
         LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
+        // R4: GetGame guard
+        if (!GetGame())
+            return;
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (player)
         {
@@ -612,12 +619,18 @@ class LFPG_SorterController extends ViewController
     void BtnSort()
     {
         if (!m_IsPaired) return;
-        LFPG_Util.Info("[SorterCtrl] REQUEST_SORT");
-        // Sort feedback (v2.2) — immediate client-side status
-        SetStatus("SORTING...");
-        m_SortFeedbackTimer = 3.0;
+        string sortMsg = "[SorterCtrl] REQUEST_SORT";
+        LFPG_Util.Info(sortMsg);
+        // Sort feedback — immediate client-side status
+        string stSorting = "SORTING...";
+        SetStatus(stSorting);
+        // S6: Single feedback timer (last-write-wins over save)
+        m_FeedbackTimer = 3.0;
         LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
+        // R4: GetGame guard
+        if (!GetGame())
+            return;
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (player)
         {
@@ -682,17 +695,46 @@ class LFPG_SorterController extends ViewController
     protected void RefreshOutputTabs()
     {
         int i;
+        LFPG_SortOutputConfig tabCfg = null;
+        int tabRules = 0;
+        bool tabHasContent = false;
+        bool isSel = false;
+        int bgCol = 0;
+        int txtCol = 0;
+        int num = 0;
+        string numStr = "";
+        string prefix = "0";
+        string label = "";
+        string indicator = " *";
+        TextWidget tt = null;
         for (i = 0; i < 6; i = i + 1)
         {
-            bool isSel = (i == m_SelectedOutput);
-            int bgCol = LFPG_SorterView.COL_BTN;
-            int txtCol = LFPG_SorterView.COL_TEXT_MID;
+            isSel = (i == m_SelectedOutput);
+            bgCol = LFPG_SorterView.COL_BTN;
+            txtCol = LFPG_SorterView.COL_TEXT_MID;
             if (isSel) { bgCol = LFPG_SorterView.COL_BG_ELEVATED; txtCol = LFPG_SorterView.COL_GREEN; }
-            int num = i + 1;
-            string label = "0" + num.ToString();
-            if (num >= 10) { label = num.ToString(); }
+            num = i + 1;
+            numStr = num.ToString();
+            label = prefix + numStr;
+            if (num >= 10) { label = numStr; }
+
+            // V2: Indicate tabs with rules/catch-all (non-selected only)
+            tabCfg = m_Config.GetOutput(i);
+            tabHasContent = false;
+            if (tabCfg)
+            {
+                tabRules = tabCfg.GetRuleCount();
+                if (tabRules > 0) { tabHasContent = true; }
+                if (tabCfg.m_IsCatchAll) { tabHasContent = true; }
+            }
+            if (tabHasContent && !isSel)
+            {
+                label = label + indicator;
+                txtCol = LFPG_SorterView.COL_TEXT;
+            }
+
             TintBg(GetTabBg(i), bgCol);
-            TextWidget tt = GetTabText(i);
+            tt = GetTabText(i);
             if (tt) { tt.SetColor(txtCol); tt.SetText(label); }
         }
     }
@@ -802,7 +844,8 @@ class LFPG_SorterController extends ViewController
         if (outCfg.m_IsCatchAll)
         {
             LFPG_SorterTagView caTag = new LFPG_SorterTagView();
-            caTag.SetData("* CATCH-ALL", LFPG_SorterView.COL_AMBER, -1, m_SelectedOutput, this);
+            string caLabel = "* CATCH-ALL";
+            caTag.SetData(caLabel, LFPG_SorterView.COL_AMBER, -1, m_SelectedOutput, this);
             TagsList.Insert(caTag);
         }
 
@@ -824,8 +867,10 @@ class LFPG_SorterController extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         int count = 0;
         if (outCfg) { count = outCfg.GetRuleCount(); }
-        RuleCount = count.ToString() + "/8";
-        NotifyPropertyChanged("RuleCount", false);
+        string suffix = "/8";
+        RuleCount = count.ToString() + suffix;
+        string propRC = "RuleCount";
+        NotifyPropertyChanged(propRC, false);
     }
 
     protected void RefreshDestIndicator()
@@ -833,17 +878,21 @@ class LFPG_SorterController extends ViewController
         string dest = GetDestName(m_SelectedOutput);
         bool hasDest = (dest != "");
         if (DestIndicator) { DestIndicator.Show(hasDest); }
+        string propDN = "DestName";
+        string propHT = "HeaderTitle";
         if (hasDest)
         {
             DestName = dest;
-            NotifyPropertyChanged("DestName", false);
-            HeaderTitle = "SORTER  " + dest;
+            NotifyPropertyChanged(propDN, false);
+            string sorterPrefix = "SORTER  ";
+            HeaderTitle = sorterPrefix + dest;
         }
         else
         {
-            HeaderTitle = "SORTER";
+            string sorterTitle = "SORTER";
+            HeaderTitle = sorterTitle;
         }
-        NotifyPropertyChanged("HeaderTitle", false);
+        NotifyPropertyChanged(propHT, false);
     }
 
     protected string GetDestName(int idx)

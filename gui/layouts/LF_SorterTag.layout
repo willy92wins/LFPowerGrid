@@ -4,7 +4,7 @@
 // Renders inside WrapSpacerWidget "TagsList"
 // =========================================================
 FrameWidgetClass TagRoot {
-	size 1 24
+	size 1 28
 	hexactpos 0
 	vexactpos 0
 	hexactsize 0

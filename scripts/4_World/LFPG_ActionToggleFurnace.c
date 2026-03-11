@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Action: Toggle Furnace On/Off (v1.2.0)
+// LF_PowerGrid - Action: Toggle Furnace On/Off (v1.2.1)
 //
 // Turns the furnace on or off. No item required (CCINone).
 // Dynamic text: "Turn On Furnace" / "Turn Off Furnace"
@@ -9,9 +9,8 @@
 //
 // Base: ActionInteractBase (CCINone, no item in hand)
 // Target: LF_Furnace
-//
-// IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
-//   via actions.Insert(LFPG_ActionToggleFurnace).
+// v1.2.1: CCTObject→CCTCursor + manual DistSq (fixes interaction
+//         reliability on small Geometry LOD models).
 // =========================================================
 
 class LFPG_ActionToggleFurnace : ActionInteractBase
@@ -26,7 +25,7 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
     override void CreateConditionComponents()
     {
         m_ConditionItem   = new CCINone;
-        m_ConditionTarget = new CCTObject(LFPG_INTERACT_DIST_M);
+        m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
     }
 
     override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
@@ -43,6 +42,12 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
 
         LF_Furnace furnace = LF_Furnace.Cast(targetObj);
         if (!furnace)
+            return false;
+
+        // Manual proximity check (CCTCursor does not enforce distance by type)
+        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), furnace.GetPosition());
+        float maxSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        if (distSq > maxSq)
             return false;
 
         bool isOn = furnace.LFPG_GetSourceOn();

@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Action: Feed Furnace (v1.2.1)
+// LF_PowerGrid - Action: Feed Furnace (v1.2.2)
 //
 // Destroys the item in hand and converts it to fuel.
 // Fuel = inventory squares calculated recursively
@@ -13,8 +13,8 @@
 //   Item-in-hand is resolved manually via player.GetItemInHands().
 //
 // Target: LF_Furnace
-// Registered on TARGET (LF_Furnace.SetActions) so that
-// ANY non-ruined item in hand triggers the action.
+// v1.2.2: CCTObject→CCTCursor + manual DistSq (fixes interaction
+//         reliability on small Geometry LOD models).
 //
 // Filtered items (ActionCondition rejects):
 //   - Empty hands (no item)
@@ -39,7 +39,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
     override void CreateConditionComponents()
     {
         m_ConditionItem   = new CCINone;
-        m_ConditionTarget = new CCTObject(LFPG_INTERACT_DIST_M);
+        m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
     }
 
     override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
@@ -67,6 +67,12 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         // Target must be LF_Furnace
         LF_Furnace furnace = LF_Furnace.Cast(targetObj);
         if (!furnace)
+            return false;
+
+        // Manual proximity check (CCTCursor does not enforce distance by type)
+        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), furnace.GetPosition());
+        float maxSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
+        if (distSq > maxSq)
             return false;
 
         // Filter: CableReel is a wiring tool, not fuel
