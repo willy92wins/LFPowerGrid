@@ -100,7 +100,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionCycleDetectMode);
         actions.Insert(LFPG_ActionPairSensor);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (43)");
+        // --- v1.7.0: Logic Gate Kit placement ---
+        actions.Insert(LFPG_ActionPlaceLogicGate);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (44)");
     }
 };
 

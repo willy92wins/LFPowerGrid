@@ -1,0 +1,74 @@
+class cfgSkeletons
+{
+	class AND_OR_XOR_Memory_cell_skeleton
+	{
+		skeletonInherit                                 = "";
+		isDiscrete                                      = 0;
+		SkeletonBones[]                                 =
+		{
+            "unit",                                     "",
+			"lid",                                   	"unit",
+			"latches",                                  "unit",
+            "light_led",                                "unit",
+			"port_input_0",                             "unit",
+			"port_input_1",                             "unit",
+			"port_output_0",			                "unit"
+		};
+	};
+};
+class CfgModels
+{
+	class Default
+	{
+		sections[]                                      = {};
+		sectionsInherit                                 = "";
+		skeletonName                                    = "";
+	};
+	class AND_OR_XOR_Memory_cell:Default
+	{
+		skeletonName                                    = "AND_OR_XOR_Memory_cell_skeleton";
+		sections[]                                      =
+		{
+			"unit",
+			"lid",
+			"latches",
+			"bolts",
+			"light_led_input0",
+			"light_led_input1",
+			"light_led_output0",
+			"camo"
+		};
+		class Animations
+        {
+            class open_lid
+            {
+                source                                      = "user";
+				memory										= 1;
+            };
+			class latches
+            {
+                type                                        = "rotation";
+                source                                      = "open_lid";
+                selection                                   = "latches";
+                axis                                        = "latches_axis";
+				memory										= 1;
+                minValue                                    = 0.0;
+                maxValue                                    = 0.2;
+                angle0                                      = 0.0;
+				angle1                                      = -0.5;
+            };
+			class lid
+            {
+                type                                        = "rotation";
+                source                                      = "open_lid";
+                selection                                   = "lid";
+                axis                                        = "lid_axis";
+				memory										= 1;
+                minValue                                    = 0.2;
+                maxValue                                    = 1.0;
+                angle0                                      = 0.0;
+				angle1                                      = -1.5;
+            };
+        };
+	};
+};
