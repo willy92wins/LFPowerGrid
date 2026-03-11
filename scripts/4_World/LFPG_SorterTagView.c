@@ -1,9 +1,7 @@
 // =========================================================
-// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.0 FIXED)
+// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.1)
 //
-// Bug 2 fix: stores direct ref to owning controller instead
-// of traversing m_ParentScriptedViewBase (which points to
-// TagView, not SorterController).
+// Bug 10 fix: tag bg alpha 0x12→0x26 for visibility in DayZ
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -15,7 +13,7 @@ class LFPG_SorterTagController extends ViewController
     int m_RuleIndex;
     int m_OutputIndex;
 
-    // Bug 2 fix: direct ref instead of parent traversal
+    // Direct ref instead of parent traversal
     LFPG_SorterController m_OwnerController;
 
     void BtnRemove()
@@ -43,7 +41,7 @@ class LFPG_SorterTagView extends ScriptView
         return LFPG_SorterTagController;
     }
 
-    // Bug 2 fix: ownerCtrl passed directly from Controller.RefreshTagsList
+    // ownerCtrl passed directly from Controller.RefreshTagsList
     void SetData(string label, int color, int ruleIndex, int outputIndex, LFPG_SorterController ownerCtrl)
     {
         m_TagColor = color;
@@ -61,7 +59,8 @@ class LFPG_SorterTagView extends ScriptView
         if (TagBg)
         {
             TagBg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
-            int bgColor = (color & 0x00FFFFFF) | 0x12000000;
+            // Bug #10 fix: alpha 0x12→0x26 for visibility
+            int bgColor = (color & 0x00FFFFFF) | 0x26000000;
             TagBg.SetColor(bgColor);
         }
         if (TagLabel)

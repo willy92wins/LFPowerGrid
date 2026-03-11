@@ -2281,7 +2281,7 @@ modded class PlayerBase
         EntityAI linkedCont = sorter.LFPG_GetLinkedContainer();
         if (linkedCont)
         {
-            containerName = linkedCont.GetType();
+            containerName = linkedCont.GetDisplayName();
         }
 
         // Resolve dest container names via wire topology (6 outputs)
@@ -2341,7 +2341,7 @@ modded class PlayerBase
                     destCont = targetSorter.LFPG_GetLinkedContainer();
                     if (destCont)
                     {
-                        resolvedName = destCont.GetType();
+                        resolvedName = destCont.GetDisplayName();
                     }
                     break;
                 }

@@ -1,9 +1,8 @@
 // =========================================================
-// LF_PowerGrid — Sorter Preview Row (Dabs MVC prefab, v2.0)
+// LF_PowerGrid — Sorter Preview Row (Dabs MVC prefab, v2.1)
 //
-// ScriptView for a single item in the match preview.
-// Used in ObservableCollection<ref LFPG_SorterPreviewRow>
-// bound to GridSpacerWidget "PreviewItems".
+// Bug 9 fix: separator alpha 0x14→0x30 (via shared constant)
+// Bug 14 fix: hardcoded colors replaced with shared constants
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -53,34 +52,34 @@ class LFPG_SorterPreviewRow extends ScriptView
         ctrl.NotifyPropertyChanged("CatIcon");
         ctrl.NotifyPropertyChanged("SlotText");
 
-        // Style
+        // Style — shared constants (Bug #14)
         string procWhite = LFPG_SorterView.PROC_WHITE;
         if (CatBadge)
         {
             CatBadge.LoadImageFile(0, procWhite);
-            CatBadge.SetColor(0x1234D399);  // green ghost
+            CatBadge.SetColor(LFPG_SorterView.COL_GREEN_BORDER);
         }
         if (SlotBadgeBg)
         {
             SlotBadgeBg.LoadImageFile(0, procWhite);
-            SlotBadgeBg.SetColor(0xE61C2840);  // bg elevated
+            SlotBadgeBg.SetColor(LFPG_SorterView.COL_BTN);
         }
         if (RowSep)
         {
             RowSep.LoadImageFile(0, procWhite);
-            RowSep.SetColor(0x14CBD5E1);  // separator
+            RowSep.SetColor(LFPG_SorterView.COL_SEPARATOR);
         }
         if (CatIcon)
         {
-            CatIcon.SetColor(0xFF34D399);  // green
+            CatIcon.SetColor(LFPG_SorterView.COL_GREEN);
         }
         if (ItemName)
         {
-            ItemName.SetColor(0xFFF1F5F9);  // text primary
+            ItemName.SetColor(LFPG_SorterView.COL_TEXT);
         }
         if (SlotText)
         {
-            SlotText.SetColor(0xFF94A3B8);  // text mid
+            SlotText.SetColor(LFPG_SorterView.COL_TEXT_MID);
         }
     }
 

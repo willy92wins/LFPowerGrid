@@ -11,35 +11,25 @@ FrameWidgetClass SorterRoot {
 	hexactsize 0
 	vexactsize 0
 	visible 0
+	ignorepointer 1
 	scriptclass "LFPG_SorterController"
 	{
-		// ── Modal overlay (fullscreen, click-to-close) ──
-		ImageWidgetClass ModalOverlay {
-			position 0 0
-			size 1 1
-			hexactpos 0
-			vexactpos 0
-			hexactsize 0
-			vexactsize 0
-			stretch 1
-			color 0 0 0 0.65
-		}
-
-		// ── Main panel (centered) ──
+		// ── Main panel (centered programmatically, drag via SetPos) ──
 		FrameWidgetClass SorterPanel {
-			halign center_ref
-			valign center_ref
+			halign left_ref
+			valign top_ref
 			position 0 0
-			size 720 560
+			size 720 590
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
+			clipchildren 1
 			{
 				// Panel background
 				ImageWidgetClass PanelBg {
 					position 0 0
-					size 720 560
+					size 720 590
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -95,8 +85,8 @@ FrameWidgetClass SorterRoot {
 						}
 
 						TextWidgetClass StatusLabel {
-							position 520 12
-							size 80 18
+							position 492 12
+							size 64 18
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -107,7 +97,7 @@ FrameWidgetClass SorterRoot {
 						}
 
 						ImageWidgetClass StatusDot {
-							position 506 18
+							position 478 18
 							size 6 6
 							hexactpos 1
 							vexactpos 1
@@ -118,8 +108,8 @@ FrameWidgetClass SorterRoot {
 						}
 
 						ButtonWidgetClass BtnSort {
-							position 610 6
-							size 96 30
+							position 562 6
+							size 120 30
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -153,14 +143,96 @@ FrameWidgetClass SorterRoot {
 								}
 							}
 						}
+
+						ButtonWidgetClass BtnCloseX {
+							position 688 8
+							size 26 26
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnCloseXBg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+								}
+								TextWidgetClass BtnCloseXText {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									text "X"
+									ignorepointer 1
+								}
+								ScriptParamsClass {
+									Relay_Command "BtnCloseX"
+								}
+							}
+						}
 					}
 				}
 
 				// ════════════════════════════════
-				// TAB BAR (y=44, h=30)
+				// PAIRING BANNER (y=44, h=28)
+				// ════════════════════════════════
+				FrameWidgetClass PairingBanner {
+					position 0 44
+					size 720 28
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass PairingBannerBg {
+							position 0 0
+							size 720 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						ImageWidgetClass PairingDot {
+							position 12 11
+							size 6 6
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+						}
+						TextWidgetClass PairingText {
+							position 24 4
+							size 680 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							"text valign" center
+							ignorepointer 1
+						}
+					}
+				}
+
+				// ════════════════════════════════
+				// TAB BAR (y=72, h=30)
 				// ════════════════════════════════
 				FrameWidgetClass TabBar {
-					position 0 44
+					position 0 72
 					size 720 30
 					hexactpos 1
 					vexactpos 1
@@ -479,13 +551,13 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
-				// BODY (y=74, h=442)
+				// BODY (y=102, h=442)
 				// Split: left 400px controls, right 320px rules/preview
 				// ════════════════════════════════
 
 				// ── LEFT COLUMN: Filter Controls ──
 				FrameWidgetClass FiltersPanel {
-					position 0 74
+					position 0 102
 					size 400 442
 					hexactpos 1
 					vexactpos 1
@@ -897,7 +969,7 @@ FrameWidgetClass SorterRoot {
 
 				// ── Column separator ──
 				ImageWidgetClass ColumnSep {
-					position 400 74
+					position 400 102
 					size 1 442
 					hexactpos 1
 					vexactpos 1
@@ -909,7 +981,7 @@ FrameWidgetClass SorterRoot {
 
 				// ── RIGHT COLUMN: Rules View ──
 				FrameWidgetClass RulesPanel {
-					position 401 74
+					position 401 102
 					size 319 442
 					hexactpos 1
 					vexactpos 1
@@ -1076,7 +1148,7 @@ FrameWidgetClass SorterRoot {
 
 				// ── RIGHT COLUMN: Preview View (hidden by default) ──
 				FrameWidgetClass PreviewPanel {
-					position 401 74
+					position 401 102
 					size 319 442
 					hexactpos 1
 					vexactpos 1
@@ -1165,11 +1237,11 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
-				// FOOTER (y=516, h=44)
+				// FOOTER (y=544, h=46)
 				// ════════════════════════════════
 				FrameWidgetClass FooterFrame {
-					position 0 516
-					size 720 44
+					position 0 544
+					size 720 46
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -1177,7 +1249,7 @@ FrameWidgetClass SorterRoot {
 					{
 						ImageWidgetClass FooterBg {
 							position 0 0
-							size 720 44
+							size 720 46
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1198,7 +1270,7 @@ FrameWidgetClass SorterRoot {
 
 						ButtonWidgetClass BtnClearOut {
 							position 12 8
-							size 110 28
+							size 140 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1210,7 +1282,7 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 						ButtonWidgetClass BtnResetAll {
-							position 130 8
+							position 160 8
 							size 110 28
 							hexactpos 1
 							vexactpos 1
