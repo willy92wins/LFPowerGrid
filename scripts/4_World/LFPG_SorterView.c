@@ -32,8 +32,9 @@ class LFPG_SorterView extends ScriptView
     protected float m_DragOffY;
 
     // ── Hover color cache (v2.2) ──
-    // Maps ImageWidget bg → its current base color (no GetColor in DayZ)
-    protected ref map<Widget, int> m_ColorCache;
+    // Parallel arrays: widget ref + its base color (no GetColor / no map<Widget> in DayZ)
+    protected ref array<Widget> m_CacheWidgets;
+    protected ref array<int> m_CacheColors;
     // Currently hovered bg (null if none)
     protected ImageWidget m_HoveredBg;
 
@@ -209,7 +210,8 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_DragOffX = 0.0;
         m_DragOffY = 0.0;
-        m_ColorCache = new map<Widget, int>();
+        m_CacheWidgets = new array<Widget>();
+        m_CacheColors = new array<int>();
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
@@ -266,10 +268,47 @@ class LFPG_SorterView extends ScriptView
         img.LoadImageFile(0, PROC_WHITE);
         img.SetColor(color);
         // Cache for hover system (v2.2)
-        if (m_ColorCache)
+        CacheColorLocal(img, color);
+    }
+
+    // Store/update color for a widget in parallel arrays
+    protected void CacheColorLocal(Widget w, int color)
+    {
+        if (!w)
+            return;
+        if (!m_CacheWidgets)
+            return;
+        int i = 0;
+        int count = m_CacheWidgets.Count();
+        for (i = 0; i < count; i = i + 1)
         {
-            m_ColorCache.Set(img, color);
+            if (m_CacheWidgets[i] == w)
+            {
+                m_CacheColors[i] = color;
+                return;
+            }
         }
+        m_CacheWidgets.Insert(w);
+        m_CacheColors.Insert(color);
+    }
+
+    // Find cached color for a widget, returns -1 if not found
+    protected int FindCachedColor(Widget w)
+    {
+        if (!w)
+            return -1;
+        if (!m_CacheWidgets)
+            return -1;
+        int i = 0;
+        int count = m_CacheWidgets.Count();
+        for (i = 0; i < count; i = i + 1)
+        {
+            if (m_CacheWidgets[i] == w)
+            {
+                return m_CacheColors[i];
+            }
+        }
+        return -1;
     }
 
     // =========================================================
@@ -279,11 +318,9 @@ class LFPG_SorterView extends ScriptView
     {
         if (!s_Instance)
             return;
-        if (!s_Instance.m_ColorCache)
-            return;
         if (!w)
             return;
-        s_Instance.m_ColorCache.Set(w, color);
+        s_Instance.CacheColorLocal(w, color);
     }
 
     // =========================================================
@@ -587,7 +624,8 @@ class LFPG_SorterView extends ScriptView
             // Restore previous hover first (guards against Enter-before-Leave race)
             if (m_HoveredBg && m_HoveredBg != bg)
             {
-                if (m_ColorCache && m_ColorCache.Find(m_HoveredBg, baseColor))
+                baseColor = FindCachedColor(m_HoveredBg);
+                if (baseColor >= 0)
                 {
                     m_HoveredBg.SetColor(baseColor);
                 }
@@ -595,7 +633,8 @@ class LFPG_SorterView extends ScriptView
                 baseColor = 0;
             }
 
-            if (m_ColorCache && m_ColorCache.Find(bg, baseColor))
+            baseColor = FindCachedColor(bg);
+            if (baseColor >= 0)
             {
                 m_HoveredBg = bg;
                 hoverColor = LightenARGB(baseColor, 20);
@@ -605,12 +644,13 @@ class LFPG_SorterView extends ScriptView
         return false;
     }
 
-    override bool OnMouseLeave(Widget w, int x, int y)
+    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
     {
         int baseColor = 0;
         if (m_HoveredBg)
         {
-            if (m_ColorCache && m_ColorCache.Find(m_HoveredBg, baseColor))
+            baseColor = FindCachedColor(m_HoveredBg);
+            if (baseColor >= 0)
             {
                 m_HoveredBg.SetColor(baseColor);
             }
