@@ -66,6 +66,10 @@ modded class ActionConstructor
 		actions.Insert(LFPG_ActionPlacePushButton);
 		actions.Insert(LFPG_ActionTogglePushButton);
 
+        // --- v1.6.0: Switch V2 (latching toggle lever) ---
+        actions.Insert(LFPG_ActionPlaceSwitchV2);
+        actions.Insert(LFPG_ActionToggleSwitchV2);
+
         // --- v1.1.0: Water Pump upgrade + water actions ---
         actions.Insert(LFPG_ActionUpgradeWaterPump);
         actions.Insert(LFPG_ActionDrinkPump);
@@ -93,7 +97,7 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionCycleDetectMode);
         actions.Insert(LFPG_ActionPairSensor);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (41)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (43)");
     }
 };
 
