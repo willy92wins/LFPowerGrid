@@ -82,6 +82,9 @@ modded class ActionConstructor
         // --- v1.2.0 S4: Sorter panel (interact, no item in hand) ---
         actions.Insert(LFPG_ActionOpenSorterPanel);
 
+        // --- v2.4: Sorter container sync ---
+        actions.Insert(LFPG_ActionSyncSorter);
+
         // --- v1.2.0: Furnace actions ---
         actions.Insert(LFPG_ActionToggleFurnace);
         actions.Insert(LFPG_ActionFeedFurnace);

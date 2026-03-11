@@ -1384,6 +1384,65 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
+				// UNPAIRED OVERLAY (v2.4 Bug C)
+				// Covers content area when no container linked.
+				// Hidden by default; shown/hidden by UpdatePairingState.
+				// ════════════════════════════════
+				FrameWidgetClass UnpairedOverlay {
+					position 0 105
+					size 720 440
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					visible 0
+					{
+						ImageWidgetClass UnpairedOverlayBg {
+							position 0 0
+							size 1 1
+							hexactpos 0
+							vexactpos 0
+							hexactsize 0
+							vexactsize 0
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass UnpairedLabel {
+							position 0 150
+							size 720 40
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							text "NO CONTAINER LINKED"
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass UnpairedHint {
+							position 0 200
+							size 720 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							text "Use [Sync Container] action to link"
+							ignorepointer 1
+							{
+							}
+						}
+					}
+				}
+
+				// ════════════════════════════════
 				// FOOTER (y=544, h=46)
 				// ════════════════════════════════
 				FrameWidgetClass FooterFrame {

@@ -82,6 +82,9 @@ class LFPG_DeviceInspector
     protected float m_FuelLineOffset;
     // v1.2.2: Reserve line offset for Furnace cargo
     protected float m_ReserveLineOffset;
+    // v2.4: Link line offset for Sorter
+    protected TextWidget m_wLinkLine;
+    protected float m_LinkLineOffset;
 
     // ---- Position smoothing (P1-A anti-jitter) ----
     protected float m_SmoothX;
@@ -191,6 +194,7 @@ class LFPG_DeviceInspector
         m_wTankLine = TextWidget.Cast(m_Root.FindAnyWidget("TankLine"));
         m_wFuelLine = TextWidget.Cast(m_Root.FindAnyWidget("FuelLine"));
         m_wReserveLine = TextWidget.Cast(m_Root.FindAnyWidget("ReserveLine"));
+        m_wLinkLine = TextWidget.Cast(m_Root.FindAnyWidget("LinkLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
 
         // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
@@ -296,6 +300,15 @@ class LFPG_DeviceInspector
             m_wReserveLine.Show(false);
         }
         m_ReserveLineOffset = 0.0;
+        // v2.4: LinkLine (Sorter container link status)
+        if (m_wLinkLine)
+        {
+            m_wLinkLine.SetPos(14, 94);
+            m_wLinkLine.SetSize(274, 16);
+            m_wLinkLine.SetColor(ARGB(255, 52, 211, 153));
+            m_wLinkLine.Show(false);
+        }
+        m_LinkLineOffset = 0.0;
         if (m_wWiresHeader)
         {
             m_wWiresHeader.SetPos(14, 99);
@@ -349,6 +362,7 @@ class LFPG_DeviceInspector
         m_wTankLine = null;
         m_wFuelLine = null;
         m_wReserveLine = null;
+        m_wLinkLine = null;
         m_wWiresHeader = null;
         m_wWireSlots.Clear();
         m_RespWires.Clear();
@@ -845,9 +859,42 @@ class LFPG_DeviceInspector
             }
         }
 
+        // v2.4: Link line (LF_Sorter only)
+        m_LinkLineOffset = 0.0;
+        if (m_wLinkLine)
+        {
+            LF_Sorter sorterInspect = LF_Sorter.Cast(device);
+            if (sorterInspect)
+            {
+                float linkY = 94.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
+                m_wLinkLine.SetPos(14, linkY);
+
+                EntityAI linkedEnt = sorterInspect.LFPG_GetLinkedContainer();
+                if (linkedEnt)
+                {
+                    string linkText = "Linked: ";
+                    linkText = linkText + linkedEnt.GetDisplayName();
+                    m_wLinkLine.SetText(linkText);
+                    m_wLinkLine.SetColor(ARGB(255, 52, 211, 153));
+                }
+                else
+                {
+                    string noLinkText = "Not linked";
+                    m_wLinkLine.SetText(noLinkText);
+                    m_wLinkLine.SetColor(ARGB(255, 248, 113, 113));
+                }
+                m_wLinkLine.Show(true);
+                m_LinkLineOffset = 20.0;
+            }
+            else
+            {
+                m_wLinkLine.Show(false);
+            }
+        }
+
         // Reposition separator + wires header with extra line offsets
         // (TankLine vs FuelLine+ReserveLine are mutually exclusive sets)
-        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
+        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset;
         if (m_wSeparator)
         {
             m_wSeparator.SetPos(12, 93 + extraLineOffset);

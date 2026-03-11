@@ -247,7 +247,9 @@ enum LFPG_RPC_SubId
 	SEARCHLIGHT_ENTER          = 25,  // v1.4.0: Client→Server: request enter spectator
 	SEARCHLIGHT_ENTER_CONFIRM  = 26,  // v1.4.0: Server→Client: confirm + send yaw/pitch
 	SEARCHLIGHT_EXIT_REQUEST   = 27,  // v1.4.0: Client→Server: request exit
-	SEARCHLIGHT_EXIT_CONFIRM   = 28   // v1.4.0: Server→Client: confirm exit
+	SEARCHLIGHT_EXIT_CONFIRM   = 28,  // v1.4.0: Server→Client: confirm exit
+	SORTER_RESYNC              = 29,  // v2.4: Client→Server: re-link nearest container
+	SORTER_RESYNC_ACK          = 30   // v2.4: Server→Client: result (containerName)
 };
 
 // ---- Sorter tick constants (Sprint S3) ----

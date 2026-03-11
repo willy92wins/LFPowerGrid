@@ -3580,8 +3580,25 @@ class LFPG_NetworkManager
             if (!filterConfig)
                 continue;
 
-            // Must have linked container
+            // v2.4 Bug B: Auto-unlink if container moved beyond link radius
             inputContainer = sorter.LFPG_GetLinkedContainer();
+            if (inputContainer)
+            {
+                float linkDist = vector.Distance(sorter.GetPosition(), inputContainer.GetPosition());
+                if (linkDist > LFPG_SORTER_LINK_RADIUS)
+                {
+                    sorter.LFPG_UnlinkContainer();
+                    string unlinkMsg = "[Sorter] Auto-unlink: container beyond ";
+                    unlinkMsg = unlinkMsg + LFPG_SORTER_LINK_RADIUS.ToString();
+                    unlinkMsg = unlinkMsg + "m (was ";
+                    unlinkMsg = unlinkMsg + linkDist.ToString();
+                    unlinkMsg = unlinkMsg + "m)";
+                    LFPG_Util.Info(unlinkMsg);
+                    continue;
+                }
+            }
+
+            // Must have linked container
             if (!inputContainer)
                 continue;
 

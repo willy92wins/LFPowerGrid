@@ -1,20 +1,17 @@
 // =========================================================
-// LF_PowerGrid — Sorter View (Dabs MVC, v2.3 P3 Sprint)
+// LF_PowerGrid — Sorter View (Dabs MVC, v2.4 Sprint)
 //
 // CREATION: LFPG_SorterView.Init() from MissionGameplay.OnInit
 //   pre-creates the view HIDDEN (safe context). Avoids
 //   RPC-context CreateWidgets corruption.
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
 //
-// v2.3 changes (P3 Performance & Polish):
-//   S3: ApplyColors moved from OnWidgetScriptInit to DoOpen
-//   R7: GetGame() null-guard in Update Input access
-//   R4: GetGame() null-guard in ShowCursor/HideCursor
-//   E1: String literals converted to local variables
-//   FIX: OnMouseButtonDown consumes ALL clicks when open (prevents game input)
-//   FIX: OnMouseButtonUp consumes release events when open
-//   NOTE: S7 (UseUpdateLoop) REVERTED — ScriptInvoker.Insert doesn't pass dt
-//   NOTE: V1 (recursive scaling) REVERTED — corrupts ScriptParamsClass/Relay_Command
+// v2.4 changes:
+//   Bug A: ESC via MissionGameplay.OnKeyPress (LocalPress blocked by ChangeGameFocus)
+//   Bug C: UnpairedOverlay when no container linked
+//   Bug D: SetDisabled(true) blocks player actions; OnKeyPress consumes all keys
+//   E8: CenterPanel clamp for small resolutions
+//   E9: Hover color cache cleared per ApplyColors
 //
 // v2.2 changes (Polish Sprint):
 //   - Button hover feedback via color cache + OnMouseEnter/Leave
@@ -81,6 +78,12 @@ class LFPG_SorterView extends ScriptView
     ImageWidget MatchFooterBg;
     ImageWidget BtnCloseXBg;
     TextWidget BtnCloseXText;
+
+    // v2.4 Bug C: Overlay when no container linked
+    Widget UnpairedOverlay;
+    ImageWidget UnpairedOverlayBg;
+    TextWidget UnpairedLabel;
+    TextWidget UnpairedHint;
 
     static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
@@ -183,28 +186,8 @@ class LFPG_SorterView extends ScriptView
             }
         }
 
-        // ── Double-ESC pattern (R7: GetGame guard for late shutdown) ──
-        if (GetGame() && GetGame().GetInput())
-        {
-            string uaBack = "UAUIBack";
-            if (GetGame().GetInput().LocalPress(uaBack, false))
-            {
-                // First ESC: if an EditBox has focus, just clear focus
-                Widget focused = GetFocus();
-                if (focused)
-                {
-                    EditBoxWidget editCheck = EditBoxWidget.Cast(focused);
-                    if (editCheck)
-                    {
-                        SetFocus(null);
-                        return;
-                    }
-                }
-                // Second ESC (or no EditBox focused): close
-                DoClose();
-                return;
-            }
-        }
+        // v2.4 Bug A: ESC handled via MissionGameplay.OnKeyPress → HandleEscKey()
+        // UAUIBack block removed — ChangeGameFocus(1) blocks LocalPress("UAUIBack").
 
         // ── Controller timers ──
         LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
@@ -233,6 +216,17 @@ class LFPG_SorterView extends ScriptView
     {
         if (GetGame())
         {
+            // v2.4 Bug D: Restore player actions on destruction
+            Human localHuman = Human.Cast(GetGame().GetPlayer());
+            if (localHuman)
+            {
+                HumanInputController hicDtor = localHuman.GetInputController();
+                if (hicDtor)
+                {
+                    hicDtor.SetDisabled(false);
+                }
+            }
+
             if (m_FocusLocked)
             {
                 Input inp = GetGame().GetInput();
@@ -260,6 +254,16 @@ class LFPG_SorterView extends ScriptView
 
     protected void ApplyColors()
     {
+        // E9 fix: Clear stale hover color cache before re-populating
+        if (m_CacheWidgets)
+        {
+            m_CacheWidgets.Clear();
+        }
+        if (m_CacheColors)
+        {
+            m_CacheColors.Clear();
+        }
+
         // Bug #1: ModalOverlay removed
         Tint(PanelBg, COL_BG_PANEL);
         Tint(AccentLine, COL_GREEN);
@@ -294,6 +298,20 @@ class LFPG_SorterView extends ScriptView
             PairingText.SetColor(COL_RED);
             string defaultPairingMsg = "No container linked";
             PairingText.SetText(defaultPairingMsg);
+        }
+
+        // v2.4 Bug C: Unpaired overlay
+        if (UnpairedOverlayBg)
+        {
+            Tint(UnpairedOverlayBg, 0xCC0A0F1A);
+        }
+        if (UnpairedLabel)
+        {
+            UnpairedLabel.SetColor(COL_RED);
+        }
+        if (UnpairedHint)
+        {
+            UnpairedHint.SetColor(COL_TEXT_DIM);
         }
     }
 
@@ -449,6 +467,15 @@ class LFPG_SorterView extends ScriptView
         SorterPanel.GetSize(panW, panH);
         float cx = (scrW - panW) * 0.5;
         float cy = (scrH - panH) * 0.5;
+        // E8: Clamp for resolutions smaller than panel
+        if (cx < 0.0)
+        {
+            cx = 0.0;
+        }
+        if (cy < 0.0)
+        {
+            cy = 0.0;
+        }
         SorterPanel.SetPos(cx, cy);
     }
 
@@ -483,6 +510,19 @@ class LFPG_SorterView extends ScriptView
                 string noLinkMsg = "No container linked";
                 PairingText.SetText(noLinkMsg);
                 PairingText.SetColor(COL_RED);
+            }
+        }
+
+        // v2.4 Bug C: Show/hide unpaired overlay
+        if (UnpairedOverlay)
+        {
+            if (paired)
+            {
+                UnpairedOverlay.Show(false);
+            }
+            else
+            {
+                UnpairedOverlay.Show(true);
             }
         }
     }
@@ -534,6 +574,30 @@ class LFPG_SorterView extends ScriptView
         if (!s_Instance)
             return false;
         return s_Instance.m_IsOpen;
+    }
+
+    // v2.4 Bug A: Called from MissionGameplay.OnKeyPress(key==1).
+    // Double-ESC: first clears EditBox focus, second closes panel.
+    // Returns true if event consumed (panel was open).
+    static bool HandleEscKey()
+    {
+        if (!s_Instance)
+            return false;
+        if (!s_Instance.m_IsOpen)
+            return false;
+
+        Widget focused = GetFocus();
+        if (focused)
+        {
+            EditBoxWidget editCheck = EditBoxWidget.Cast(focused);
+            if (editCheck)
+            {
+                SetFocus(null);
+                return true;
+            }
+        }
+        s_Instance.DoClose();
+        return true;
     }
 
     // S2 fix: Cleanup deletes instance properly (prevents leak).
@@ -593,6 +657,24 @@ class LFPG_SorterView extends ScriptView
 
         ShowCursor();
 
+        // v2.4 Bug D: Block all player actions while UI open
+        // (CCTV pattern: SetDisabled blocks movement/interaction/inventory
+        //  but widget event system still works for EditBox typing + buttons)
+        #ifndef SERVER
+        if (GetGame())
+        {
+            PlayerBase openPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            if (openPlayer)
+            {
+                HumanInputController hicOpen = openPlayer.GetInputController();
+                if (hicOpen)
+                {
+                    hicOpen.SetDisabled(true);
+                }
+            }
+        }
+        #endif
+
         // S3: ApplyColors here (not in OnWidgetScriptInit) — avoids flash
         ApplyColors();
 
@@ -623,6 +705,22 @@ class LFPG_SorterView extends ScriptView
         {
             root.Show(false);
         }
+        // v2.4 Bug D: Restore player actions before releasing cursor
+        #ifndef SERVER
+        if (GetGame())
+        {
+            PlayerBase closePlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            if (closePlayer)
+            {
+                HumanInputController hicClose = closePlayer.GetInputController();
+                if (hicClose)
+                {
+                    hicClose.SetDisabled(false);
+                }
+            }
+        }
+        #endif
+
         HideCursor();
         string closeMsg = "[SorterView] Closed";
         LFPG_Util.Info(closeMsg);

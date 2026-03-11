@@ -76,6 +76,19 @@ modded class MissionGameplay
             return;
         }
 
+        // v2.4 Bug A+D: When Sorter UI open, consume ALL keys.
+        // ESC (key==1) triggers double-ESC pattern.
+        // All other keys are swallowed (no super call).
+        // EditBox typing uses widget event path, not OnKeyPress.
+        if (LFPG_SorterView.IsOpen())
+        {
+            if (key == 1)
+            {
+                LFPG_SorterView.HandleEscKey();
+            }
+            return;
+        }
+
         super.OnKeyPress(key);
     }
 

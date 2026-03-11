@@ -201,6 +201,7 @@ class LF_Sorter : Inventory_Base
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
         AddAction(LFPG_ActionOpenSorterPanel);
+        AddAction(LFPG_ActionSyncSorter);
     }
 
     override bool CanPutInCargo(EntityAI parent)
@@ -453,20 +454,46 @@ class LF_Sorter : Inventory_Base
             // Skip players/zombies — they have inventory but aren't containers
             Man manCheck = Man.Cast(candidate);
             if (manCheck)
+            {
+                string manReject = "[LF_Sorter] SCAN reject: ";
+                manReject = manReject + candidate.GetType();
+                manReject = manReject + " reason=IS_MAN";
+                LFPG_Util.Debug(manReject);
                 continue;
+            }
 
             // Skip ALL electrical devices (Sorters, Splitters, Generators, etc.)
             if (LFPG_DeviceAPI.IsElectricDevice(candidate))
+            {
+                string elecReject = "[LF_Sorter] SCAN reject: ";
+                elecReject = elecReject + candidate.GetType();
+                elecReject = elecReject + " reason=IS_ELECTRIC";
+                LFPG_Util.Debug(elecReject);
                 continue;
+            }
 
-            // Must have actual cargo space (not just InventoryOwner)
-            // GetCargo() returns null for entities without cargo slots in config.
+            // Must have inventory system
             if (!candidate.GetInventory())
+            {
+                string invReject = "[LF_Sorter] SCAN reject: ";
+                invReject = invReject + candidate.GetType();
+                invReject = invReject + " reason=NO_INVENTORY";
+                LFPG_Util.Debug(invReject);
                 continue;
+            }
 
+            // v2.4 Bug B: Accept containers with cargo OR attachments
+            // Some vanilla containers (WoodenCrate) use proxy slots instead of cargo.
             CargoBase candidateCargo = candidate.GetInventory().GetCargo();
-            if (!candidateCargo)
+            int attachCount = candidate.GetInventory().AttachmentCount();
+            if (!candidateCargo && attachCount == 0)
+            {
+                string cargoReject = "[LF_Sorter] SCAN reject: ";
+                cargoReject = cargoReject + candidate.GetType();
+                cargoReject = cargoReject + " reason=NO_CARGO_NO_ATTACH";
+                LFPG_Util.Debug(cargoReject);
                 continue;
+            }
 
             // Check uniqueness: container not already claimed
             int candLow = 0;
@@ -564,6 +591,25 @@ class LF_Sorter : Inventory_Base
     int LFPG_GetLinkedContainerHigh()
     {
         return m_LinkedContainerHigh;
+    }
+
+    // v2.4 Bug B: Quick linked check (no entity resolve — safe for ActionCondition)
+    bool LFPG_IsLinked()
+    {
+        if (m_LinkedContainerLow == 0 && m_LinkedContainerHigh == 0)
+            return false;
+        return true;
+    }
+
+    // v2.4 Bug B: Public unlink (called from TickSorters auto-unlink + Resync)
+    void LFPG_UnlinkContainer()
+    {
+        #ifdef SERVER
+        UnregisterContainer();
+        m_LinkedContainerLow = 0;
+        m_LinkedContainerHigh = 0;
+        SetSynchDirty();
+        #endif
     }
 
     // =========================================================

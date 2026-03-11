@@ -122,6 +122,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterRequestSort(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_RESYNC)
+        {
+            HandleLFPG_SorterResync(sender, ctx);
+        }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_AIM)
         {
             HandleLFPG_SearchlightAim(sender, ctx);
@@ -162,6 +166,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.SORTER_SAVE_ACK)
         {
             HandleLFPG_SorterSaveAck(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SORTER_RESYNC_ACK)
+        {
+            HandleLFPG_SorterResyncAck(ctx);
         }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM)
         {
@@ -2596,5 +2604,113 @@ modded class PlayerBase
             return;
 
         LFPG_SorterView.OnSaveAck(success);
+    }
+
+    // =====================================
+    // SERVER: Sorter RESYNC (SubId 29)
+    // Client requests re-link nearest container.
+    // v2.4 Bug B
+    // =====================================
+    protected void HandleLFPG_SorterResync(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        if (!devEnt)
+        {
+            string warnNotFound = "[SorterResync] entity not found";
+            LFPG_Util.Warn(warnNotFound);
+            return;
+        }
+
+        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        if (!sorter)
+        {
+            string warnNotSorter = "[SorterResync] entity is not LF_Sorter";
+            LFPG_Util.Warn(warnNotSorter);
+            return;
+        }
+
+        // Proximity check
+        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+        {
+            string warnFar = "[SorterResync] player too far";
+            LFPG_Util.Warn(warnFar);
+            return;
+        }
+
+        if (sorter.IsRuined())
+            return;
+
+        if (!sorter.LFPG_IsPowered())
+            return;
+
+        // Unlink old container (if any)
+        sorter.LFPG_UnlinkContainer();
+
+        // Re-scan for nearest container
+        sorter.LFPG_LinkNearestContainer(sorter.GetPosition());
+
+        // Resolve new linked container name
+        string containerName = "";
+        EntityAI linkedCont = sorter.LFPG_GetLinkedContainer();
+        if (linkedCont)
+        {
+            containerName = linkedCont.GetDisplayName();
+        }
+
+        // Send ACK to client
+        ScriptRPC ackRpc = new ScriptRPC();
+        int ackSubId = LFPG_RPC_SubId.SORTER_RESYNC_ACK;
+        ackRpc.Write(ackSubId);
+        ackRpc.Write(containerName);
+        ackRpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
+
+        string logMsg = "[SorterResync] result=";
+        logMsg = logMsg + containerName;
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Sorter RESYNC_ACK (SubId 30)
+    // Server confirms re-link result.
+    // v2.4 Bug B
+    // =====================================
+    protected void HandleLFPG_SorterResyncAck(ParamsReadContext ctx)
+    {
+        string containerName = "";
+        if (!ctx.Read(containerName))
+            return;
+
+        if (!GetGame())
+            return;
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
+            return;
+
+        if (containerName != "")
+        {
+            string okMsg = "[LFPG] Sorter linked: ";
+            okMsg = okMsg + containerName;
+            player.MessageStatus(okMsg);
+        }
+        else
+        {
+            string failMsg = "[LFPG] No container found nearby";
+            player.MessageStatus(failMsg);
+        }
     }
 };

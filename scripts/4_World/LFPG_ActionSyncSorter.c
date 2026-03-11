@@ -1,8 +1,8 @@
 // =========================================================
-// LF_PowerGrid - Action: Open Sorter Panel (v1.2.0 Sprint S4)
+// LF_PowerGrid - Action: Sync Sorter Container (v2.4)
 //
-// Opens the Sorter configuration UI by sending a
-// CONFIG_REQUEST RPC to the server.
+// Re-scans for nearest container within LFPG_SORTER_LINK_RADIUS
+// and links it. Works whether already linked or not (re-link).
 //
 // Conditions:
 //   - No item in hand (CCINone)
@@ -10,24 +10,24 @@
 //   - Target is powered
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
+//   - Sorter UI not already open
 //
 // Flow:
-//   Client: send CONFIG_REQUEST(sorterNetLow, sorterNetHigh)
-//   Server: resolve → validate → build response payload
-//   Server: send CONFIG_RESPONSE(filterJSON, containerName, destNames[6])
-//   Client: receive → LFPG_SorterView.Open(...)
+//   Client: send SORTER_RESYNC(sorterNetLow, sorterNetHigh)
+//   Server: unlink old → re-scan → link nearest → resolve name
+//   Server: send SORTER_RESYNC_ACK(containerName)
+//   Client: MessageStatus with result
 //
-// Pattern: ActionInteractBase (same as LFPG_ActionWatchMonitor)
-// Register in LFPG_ActionRegistration + LF_Sorter.SetActions
+// Pattern: ActionInteractBase (CCINone, same as ActionOpenSorterPanel)
 // =========================================================
 
-class LFPG_ActionOpenSorterPanel : ActionInteractBase
+class LFPG_ActionSyncSorter : ActionInteractBase
 {
-    void LFPG_ActionOpenSorterPanel()
+    void LFPG_ActionSyncSorter()
     {
         m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
-        m_Text       = "#STR_LFPG_ACTION_OPEN_SORTER";
+        m_Text       = "#STR_LFPG_ACTION_SYNC_SORTER";
     }
 
     override void CreateConditionComponents()
@@ -64,19 +64,13 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
         if (sorter.IsRuined())
             return false;
 
-        // Don't open if UI is already showing
+        // Don't allow if UI is open
         if (LFPG_SorterView.IsOpen())
-            return false;
-
-        // v2.4 Bug B: Only show if container is linked
-        if (!sorter.LFPG_IsLinked())
             return false;
 
         return true;
     }
 
-    // RPC in OnExecuteClient (after animation completes, same pattern
-    // as LFPG_ActionWatchMonitor v0.9.6 crash fix).
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -88,21 +82,29 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
         if (!targetObj)
             return;
 
-        string checkType = "LF_Sorter";
-        if (!targetObj.IsKindOf(checkType))
+        EntityAI targetEnt = EntityAI.Cast(targetObj);
+        if (!targetEnt)
             return;
 
-        int netLow  = 0;
+        int netLow = 0;
         int netHigh = 0;
-        targetObj.GetNetworkID(netLow, netHigh);
+        targetEnt.GetNetworkID(netLow, netHigh);
+
+        PlayerBase player = action_data.m_Player;
+        if (!player)
+            return;
 
         ScriptRPC rpc = new ScriptRPC();
-        int subId = LFPG_RPC_SubId.SORTER_CONFIG_REQUEST;
+        int subId = LFPG_RPC_SubId.SORTER_RESYNC;
         rpc.Write(subId);
         rpc.Write(netLow);
         rpc.Write(netHigh);
-        rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
-    }
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
 
-    override void OnExecuteServer(ActionData action_data) {}
+        string logMsg = "[ActionSyncSorter] RPC sent netId=";
+        logMsg = logMsg + netLow.ToString();
+        logMsg = logMsg + ":";
+        logMsg = logMsg + netHigh.ToString();
+        LFPG_Util.Info(logMsg);
+    }
 };

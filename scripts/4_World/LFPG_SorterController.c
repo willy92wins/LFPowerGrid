@@ -115,7 +115,7 @@ class LFPG_SorterController extends ViewController
     Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
-    static const string PROC = "#(argb,8,8,3)color(1,1,1,1,CO)";
+    // E3: PROC constant removed — use LFPG_SorterView.PROC_WHITE instead
 
     // =========================================================
     void LFPG_SorterController()
@@ -285,15 +285,19 @@ class LFPG_SorterController extends ViewController
         {
             TintBg(BtnSortBg, LFPG_SorterView.COL_BLUE_BTN);
             TintBg(BtnClearOutBg, LFPG_SorterView.COL_BTN);
+            TintBg(BtnSaveBg, LFPG_SorterView.COL_GREEN_BTN);
             SetTxtCol(BtnSortText, LFPG_SorterView.COL_TEXT);
             SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_TEXT_MID);
+            SetTxtCol(BtnSaveText, LFPG_SorterView.COL_GREEN);
         }
         else
         {
             TintBg(BtnSortBg, dimBg);
             TintBg(BtnClearOutBg, dimBg);
+            TintBg(BtnSaveBg, dimBg);
             SetTxtCol(BtnSortText, dimTxt);
             SetTxtCol(BtnClearOutText, dimTxt);
+            SetTxtCol(BtnSaveText, dimTxt);
 
             // Dim all category buttons
             TintBg(CatBtn0Bg, dimBg); SetTxtCol(CatBtn0Text, dimTxt);
@@ -357,7 +361,7 @@ class LFPG_SorterController extends ViewController
         }
         if (StatusDot)
         {
-            StatusDot.LoadImageFile(0, PROC);
+            StatusDot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
             StatusDot.SetColor(col);
         }
     }
@@ -567,6 +571,7 @@ class LFPG_SorterController extends ViewController
 
     void BtnResetAll()
     {
+        if (!m_IsPaired) return;
         if (!m_ResetConfirmActive)
         {
             m_ResetConfirmActive = true;
@@ -654,6 +659,7 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     void OnRemoveTag(int outputIdx, int ruleIdx)
     {
+        if (!m_IsPaired) return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(outputIdx);
         if (!outCfg) return;
         if (ruleIdx < 0) { outCfg.m_IsCatchAll = false; }
@@ -906,7 +912,7 @@ class LFPG_SorterController extends ViewController
     protected void TintBg(ImageWidget bg, int color)
     {
         if (!bg) return;
-        bg.LoadImageFile(0, PROC);
+        bg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
         bg.SetColor(color);
         // Cache in View for hover system (v2.2)
         LFPG_SorterView.CacheColor(bg, color);
