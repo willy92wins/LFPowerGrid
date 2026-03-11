@@ -20,6 +20,8 @@ FrameWidgetClass PreviewRowRoot {
 			vexactsize 1
 			stretch 1
 			ignorepointer 1
+			{
+			}
 		}
 		ImageWidgetClass CatBadge {
 			position 10 4
@@ -30,6 +32,8 @@ FrameWidgetClass PreviewRowRoot {
 			vexactsize 1
 			stretch 1
 			ignorepointer 1
+			{
+			}
 		}
 		TextWidgetClass CatIcon {
 			scriptclass "ViewBinding"
@@ -43,6 +47,8 @@ FrameWidgetClass PreviewRowRoot {
 			"text halign" center
 			"text valign" center
 			ignorepointer 1
+			{
+			}
 		}
 		TextWidgetClass ItemName {
 			scriptclass "ViewBinding"
@@ -55,6 +61,8 @@ FrameWidgetClass PreviewRowRoot {
 			font "gui/fonts/MetronBook"
 			"text valign" center
 			ignorepointer 1
+			{
+			}
 		}
 		ImageWidgetClass SlotBadgeBg {
 			position 258 6
@@ -65,6 +73,8 @@ FrameWidgetClass PreviewRowRoot {
 			vexactsize 1
 			stretch 1
 			ignorepointer 1
+			{
+			}
 		}
 		TextWidgetClass SlotText {
 			scriptclass "ViewBinding"
@@ -78,6 +88,8 @@ FrameWidgetClass PreviewRowRoot {
 			"text halign" center
 			"text valign" center
 			ignorepointer 1
+			{
+			}
 		}
 	}
 }

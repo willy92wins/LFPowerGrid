@@ -217,6 +217,30 @@ class LFPG_SorterView extends ScriptView
         m_FadingIn = false;
     }
 
+    // S1 fix: destructor releases input lock if destroyed while open
+    // Prevents permanent stuck-input (CRASH-08) on game shutdown,
+    // mission end, or unexpected deletion.
+    void ~LFPG_SorterView()
+    {
+        if (GetGame())
+        {
+            if (m_FocusLocked)
+            {
+                Input inp = GetGame().GetInput();
+                if (inp)
+                {
+                    inp.ChangeGameFocus(-1);
+                }
+                UIManager uiMgr = GetGame().GetUIManager();
+                if (uiMgr)
+                {
+                    uiMgr.ShowUICursor(false);
+                }
+                m_FocusLocked = false;
+            }
+        }
+    }
+
     override void OnWidgetScriptInit(Widget w)
     {
         super.OnWidgetScriptInit(w);
@@ -487,13 +511,20 @@ class LFPG_SorterView extends ScriptView
         return s_Instance.m_IsOpen;
     }
 
+    // S2 fix: Cleanup deletes instance properly (prevents leak).
+    // Input release is handled by the destructor (S1) which has
+    // GetGame() null guard for safe shutdown. Do NOT call HideCursor()
+    // here — it lacks GetGame() check and would crash during late shutdown.
     static void Cleanup()
     {
         if (s_Instance)
         {
             s_Instance.m_IsOpen = false;
-            s_Instance.m_FocusLocked = false;
             s_Instance.m_Dragging = false;
+            s_Instance.m_FadingIn = false;
+            // delete triggers ~LFPG_SorterView (input release) then
+            // ~ScriptView (Unlink + removes from All)
+            delete s_Instance;
         }
         s_Instance = null;
     }

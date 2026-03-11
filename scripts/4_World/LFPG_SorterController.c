@@ -586,6 +586,10 @@ class LFPG_SorterController extends ViewController
 
     void BtnSave()
     {
+        // S8 fix: guard unpaired — all other action buttons check this
+        if (!m_IsPaired)
+            return;
+
         string json = m_Config.ToJSON();
         LFPG_Util.Info("[SorterCtrl] SAVE: " + json);
         SetStatus("SAVING...");

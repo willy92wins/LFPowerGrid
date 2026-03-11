@@ -20,6 +20,8 @@ FrameWidgetClass TagRoot {
 			vexactsize 0
 			stretch 1
 			ignorepointer 1
+			{
+			}
 		}
 		TextWidgetClass TagLabel {
 			scriptclass "ViewBinding"
@@ -32,6 +34,8 @@ FrameWidgetClass TagRoot {
 			font "gui/fonts/Metron"
 			"text valign" center
 			ignorepointer 1
+			{
+			}
 		}
 		ButtonWidgetClass BtnRemove {
 			position 0.82 2
@@ -53,9 +57,13 @@ FrameWidgetClass TagRoot {
 					"text valign" center
 					text "x"
 					ignorepointer 1
+					{
+					}
 				}
 				ScriptParamsClass {
 					Relay_Command "BtnRemove"
+					{
+					}
 				}
 			}
 		}
