@@ -1,14 +1,17 @@
 // =========================================================
-// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.1 Floating)
+// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.2 Polish)
+//
+// v2.2 changes (Polish Sprint):
+//   - Visual disabled state when unpaired (IGNOREPOINTER + dim)
+//   - Sort feedback in StatusLabel (client-only, 3s timer)
+//   - UI click/action sounds on all interactions
+//   - Color cache integration for View hover system
 //
 // v2.1 changes (Floating Window Sprint):
 //   Bug 3: BtnCloseX relay
 //   Bug 5: Pairing state (m_IsPaired) controls banner + status
 //   Bug 6: Guards all filter handlers when unpaired
-//   Bug 7: COL_BTN bumped (via View palette)
-//   Bug 8: COL_TEXT_DIM bumped (via View palette)
-//   Fix: BtnResetAllText white color in ApplyInitialColors
-//   Fix: BtnSort disabled when unpaired
+//   Bug 7-9: Color palette bumped
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -105,6 +108,9 @@ class LFPG_SorterController extends ViewController
     Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
+    // ── Sort feedback timer (v2.2) ──
+    protected float m_SortFeedbackTimer;
+
     static const string PROC = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
     // =========================================================
@@ -122,7 +128,7 @@ class LFPG_SorterController extends ViewController
         m_SorterNetHigh = 0;
         m_IsPaired = false;
         m_ContainerDisplayName = "";
-
+        m_SortFeedbackTimer = 0.0;
         m_CatLabel0 = "Weapons";    m_CatValue0 = "WEAPON";
         m_CatLabel1 = "Attach";     m_CatValue1 = "ATTACHMENT";
         m_CatLabel2 = "Ammo";       m_CatValue2 = "AMMO";
@@ -145,7 +151,7 @@ class LFPG_SorterController extends ViewController
         m_ShowRules = true;
         m_ResetConfirmActive = false;
         m_SaveFeedbackTimer = 0.0;
-
+        m_SortFeedbackTimer = 0.0;
         m_Dest0 = d0; m_Dest1 = d1; m_Dest2 = d2;
         m_Dest3 = d3; m_Dest4 = d4; m_Dest5 = d5;
 
@@ -254,6 +260,59 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
+    // Visual disabled state (v2.2) — dim controls when unpaired
+    // IGNOREPOINTER does NOT propagate to children in DayZ,
+    // so we rely on m_IsPaired guards in each handler +
+    // visual dimming of every interactive element.
+    // =========================================================
+    protected void SetControlsEnabled(bool enabled)
+    {
+        int dimBg = 0xFF151E2E;
+        int dimTxt = LFPG_SorterView.COL_TEXT_DIM;
+
+        // Footer action buttons
+        if (enabled)
+        {
+            TintBg(BtnSortBg, LFPG_SorterView.COL_BLUE_BTN);
+            TintBg(BtnClearOutBg, LFPG_SorterView.COL_BTN);
+            SetTxtCol(BtnSortText, LFPG_SorterView.COL_TEXT);
+            SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_TEXT_MID);
+        }
+        else
+        {
+            TintBg(BtnSortBg, dimBg);
+            TintBg(BtnClearOutBg, dimBg);
+            SetTxtCol(BtnSortText, dimTxt);
+            SetTxtCol(BtnClearOutText, dimTxt);
+
+            // Dim all category buttons
+            TintBg(CatBtn0Bg, dimBg); SetTxtCol(CatBtn0Text, dimTxt);
+            TintBg(CatBtn1Bg, dimBg); SetTxtCol(CatBtn1Text, dimTxt);
+            TintBg(CatBtn2Bg, dimBg); SetTxtCol(CatBtn2Text, dimTxt);
+            TintBg(CatBtn3Bg, dimBg); SetTxtCol(CatBtn3Text, dimTxt);
+            TintBg(CatBtn4Bg, dimBg); SetTxtCol(CatBtn4Text, dimTxt);
+            TintBg(CatBtn5Bg, dimBg); SetTxtCol(CatBtn5Text, dimTxt);
+            TintBg(CatBtn6Bg, dimBg); SetTxtCol(CatBtn6Text, dimTxt);
+            TintBg(CatBtn7Bg, dimBg); SetTxtCol(CatBtn7Text, dimTxt);
+
+            // Dim all slot preset buttons
+            TintBg(SlotPre0Bg, dimBg); SetTxtCol(SlotPre0Text, dimTxt);
+            TintBg(SlotPre1Bg, dimBg); SetTxtCol(SlotPre1Text, dimTxt);
+            TintBg(SlotPre2Bg, dimBg); SetTxtCol(SlotPre2Text, dimTxt);
+            TintBg(SlotPre3Bg, dimBg); SetTxtCol(SlotPre3Text, dimTxt);
+
+            // Dim add buttons
+            TintBg(BtnPrefixAddBg, dimBg);
+            TintBg(BtnContainsAddBg, dimBg);
+            TintBg(BtnSlotAddBg, dimBg);
+
+            // Dim catch-all
+            TintBg(BtnCatchAllBg, dimBg);
+            SetTxtCol(BtnCatchAllText, dimTxt);
+        }
+    }
+
+    // =========================================================
     // Status label/dot (reflects pairing + save state)
     // =========================================================
     protected void SetStatus(string st)
@@ -262,7 +321,7 @@ class LFPG_SorterController extends ViewController
         {
             StatusLabel.SetText(st);
             int txtCol = LFPG_SorterView.COL_GREEN;
-            if (st == "SAVING...")
+            if (st == "SAVING..." || st == "SORTING...")
             {
                 txtCol = LFPG_SorterView.COL_AMBER;
             }
@@ -281,7 +340,7 @@ class LFPG_SorterController extends ViewController
         {
             StatusDot.LoadImageFile(0, PROC);
             int dotCol = LFPG_SorterView.COL_GREEN;
-            if (st == "SAVING...")
+            if (st == "SAVING..." || st == "SORTING...")
             {
                 dotCol = LFPG_SorterView.COL_AMBER;
             }
@@ -333,6 +392,24 @@ class LFPG_SorterController extends ViewController
             }
         }
 
+        // Sort feedback revert (v2.2)
+        if (m_SortFeedbackTimer > 0.0)
+        {
+            m_SortFeedbackTimer = m_SortFeedbackTimer - dt;
+            if (m_SortFeedbackTimer <= 0.0)
+            {
+                m_SortFeedbackTimer = 0.0;
+                if (m_IsPaired)
+                {
+                    SetStatus("ONLINE");
+                }
+                else
+                {
+                    SetStatus("NO LINK");
+                }
+            }
+        }
+
         // Reset confirmation timeout
         if (m_ResetConfirmActive)
         {
@@ -363,14 +440,15 @@ class LFPG_SorterController extends ViewController
             return;
         m_SelectedOutput = idx;
         m_ResetConfirmActive = false;
+        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
     // =========================================================
     // Relay_Commands — view tabs
     // =========================================================
-    void TabRules()  { m_ShowRules = true;  RefreshViewTabs(); }
-    void TabPreview() { m_ShowRules = false; RefreshViewTabs(); }
+    void TabRules()  { m_ShowRules = true;  LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); }
+    void TabPreview() { m_ShowRules = false; LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); }
 
     // =========================================================
     // Relay_Commands — category toggles (Bug #6: guard unpaired)
@@ -391,6 +469,7 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_CATEGORY, catValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_CATEGORY, catValue); }
+        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -409,6 +488,7 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_SLOT, slotValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue); }
+        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -424,6 +504,7 @@ class LFPG_SorterController extends ViewController
         outCfg.AddRule(LFPG_SORT_FILTER_PREFIX, EditPrefix);
         EditPrefix = "";
         NotifyPropertyChanged("EditPrefix", false);
+        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -436,6 +517,7 @@ class LFPG_SorterController extends ViewController
         outCfg.AddRule(LFPG_SORT_FILTER_CONTAINS, EditContains);
         EditContains = "";
         NotifyPropertyChanged("EditContains", false);
+        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -455,6 +537,7 @@ class LFPG_SorterController extends ViewController
         EditSlotMax = "";
         NotifyPropertyChanged("EditSlotMin", false);
         NotifyPropertyChanged("EditSlotMax", false);
+        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -468,6 +551,7 @@ class LFPG_SorterController extends ViewController
         if (!outCfg) return;
         if (outCfg.m_IsCatchAll) { outCfg.m_IsCatchAll = false; }
         else { outCfg.m_IsCatchAll = true; }
+        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -477,6 +561,7 @@ class LFPG_SorterController extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         outCfg.ClearRules();
+        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -488,12 +573,14 @@ class LFPG_SorterController extends ViewController
             m_ResetTimer = 3.0;
             if (BtnResetAllText) { BtnResetAllText.SetText("Confirm?"); }
             TintBg(BtnResetAllBg, LFPG_SorterView.COL_AMBER);
+            LFPG_SorterView.PlayUIClick();
             return;
         }
         m_ResetConfirmActive = false;
         m_Config.ResetAll();
         if (BtnResetAllText) { BtnResetAllText.SetText("Reset All"); }
         TintBg(BtnResetAllBg, LFPG_SorterView.COL_RED_BTN);
+        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -502,6 +589,7 @@ class LFPG_SorterController extends ViewController
         string json = m_Config.ToJSON();
         LFPG_Util.Info("[SorterCtrl] SAVE: " + json);
         SetStatus("SAVING...");
+        LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (player)
@@ -521,6 +609,10 @@ class LFPG_SorterController extends ViewController
     {
         if (!m_IsPaired) return;
         LFPG_Util.Info("[SorterCtrl] REQUEST_SORT");
+        // Sort feedback (v2.2) — immediate client-side status
+        SetStatus("SORTING...");
+        m_SortFeedbackTimer = 3.0;
+        LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (player)
@@ -535,10 +627,10 @@ class LFPG_SorterController extends ViewController
         #endif
     }
 
-    void BtnClose() { LFPG_SorterView.Close(); }
+    void BtnClose() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
 
     // Bug #3: X close button in header
-    void BtnCloseX() { LFPG_SorterView.Close(); }
+    void BtnCloseX() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
 
     // =========================================================
     // Tag removal (called from tag chip via direct ref)
@@ -579,6 +671,8 @@ class LFPG_SorterController extends ViewController
         RefreshTagsList();
         RefreshRuleCount();
         RefreshDestIndicator();
+        // Apply disabled visual after all refreshes (v2.2)
+        SetControlsEnabled(m_IsPaired);
     }
 
     protected void RefreshOutputTabs()
@@ -761,6 +855,8 @@ class LFPG_SorterController extends ViewController
         if (!bg) return;
         bg.LoadImageFile(0, PROC);
         bg.SetColor(color);
+        // Cache in View for hover system (v2.2)
+        LFPG_SorterView.CacheColor(bg, color);
     }
 
     protected void SetTxtCol(TextWidget txt, int color)

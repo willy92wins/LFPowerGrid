@@ -1,19 +1,21 @@
 // =========================================================
-// LF_PowerGrid — Sorter View (Dabs MVC, v2.1 Floating Window)
+// LF_PowerGrid — Sorter View (Dabs MVC, v2.2 Polish Sprint)
 //
 // CREATION: LFPG_SorterView.Init() from MissionGameplay.OnInit
 //   pre-creates the view HIDDEN (safe context). Avoids
 //   RPC-context CreateWidgets corruption.
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
 //
+// v2.2 changes (Polish Sprint):
+//   - Button hover feedback via color cache + OnMouseEnter/Leave
+//   - Fade-in animation on open (0.2s alpha lerp)
+//   - Enter-to-submit on EditBoxes via OnKeyDown
+//   - UI click sounds (SEffectManager)
+//   - Visual disabled state when unpaired (IGNOREPOINTER + dim)
+//   - Sort feedback in StatusLabel (client-only)
+//
 // v2.1 changes (Floating Window Sprint):
-//   Bug 1: ModalOverlay removed, root ignorepointer, panel captures
-//   Bug 2: INPUT_EXCLUDE_ALL removed, cursor-only focus
-//   Bug 3: BtnCloseX in header
-//   Bug 4: Drag on HeaderFrame with screen clamping
-//   Bug 5: PairingBanner shows linked container status
-//   Bug 7-9: Color palette bumped for DayZ gamma
-//   Double-ESC: first clears EditBox focus, second closes
+//   Bug 1-9, drag, double-ESC, pairing banner, DayZ palette
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -28,6 +30,16 @@ class LFPG_SorterView extends ScriptView
     protected bool m_Dragging;
     protected float m_DragOffX;
     protected float m_DragOffY;
+
+    // ── Hover color cache (v2.2) ──
+    // Maps ImageWidget bg → its current base color (no GetColor in DayZ)
+    protected ref map<Widget, int> m_ColorCache;
+    // Currently hovered bg (null if none)
+    protected ImageWidget m_HoveredBg;
+
+    // ── Fade-in state (v2.2) ──
+    protected float m_FadeAlpha;
+    protected bool m_FadingIn;
 
     // Widget refs for ApplyColors ONLY (no dupes with Controller)
     // ModalOverlay REMOVED (Bug #1)
@@ -102,6 +114,21 @@ class LFPG_SorterView extends ScriptView
     {
         if (!m_IsOpen)
             return;
+
+        // ── Fade-in animation (v2.2) ──
+        if (m_FadingIn)
+        {
+            m_FadeAlpha = m_FadeAlpha + dt * 5.0;
+            if (m_FadeAlpha >= 1.0)
+            {
+                m_FadeAlpha = 1.0;
+                m_FadingIn = false;
+            }
+            if (SorterPanel)
+            {
+                SorterPanel.SetAlpha(m_FadeAlpha);
+            }
+        }
 
         // ── Drag logic ──
         if (m_Dragging)
@@ -182,6 +209,10 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_DragOffX = 0.0;
         m_DragOffY = 0.0;
+        m_ColorCache = new map<Widget, int>();
+        m_HoveredBg = null;
+        m_FadeAlpha = 1.0;
+        m_FadingIn = false;
     }
 
     override void OnWidgetScriptInit(Widget w)
@@ -234,6 +265,25 @@ class LFPG_SorterView extends ScriptView
             return;
         img.LoadImageFile(0, PROC_WHITE);
         img.SetColor(color);
+        // Cache for hover system (v2.2)
+        if (m_ColorCache)
+        {
+            m_ColorCache.Set(img, color);
+        }
+    }
+
+    // =========================================================
+    // Static color cache accessor (called from Controller.TintBg)
+    // =========================================================
+    static void CacheColor(Widget w, int color)
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_ColorCache)
+            return;
+        if (!w)
+            return;
+        s_Instance.m_ColorCache.Set(w, color);
     }
 
     // =========================================================
@@ -436,8 +486,18 @@ class LFPG_SorterView extends ScriptView
         }
         m_IsOpen = true;
         m_Dragging = false;
+        m_HoveredBg = null;
         root.Show(true);
         CenterPanel();
+
+        // Fade-in (v2.2)
+        m_FadeAlpha = 0.0;
+        m_FadingIn = true;
+        if (SorterPanel)
+        {
+            SorterPanel.SetAlpha(0.0);
+        }
+
         ShowCursor();
 
         // Update pairing banner (Bug #5)
@@ -457,6 +517,8 @@ class LFPG_SorterView extends ScriptView
             return;
         m_IsOpen = false;
         m_Dragging = false;
+        m_FadingIn = false;
+        m_HoveredBg = null;
         Widget root = GetLayoutRoot();
         if (root)
         {
@@ -506,6 +568,179 @@ class LFPG_SorterView extends ScriptView
             }
             m_FocusLocked = false;
         }
+        #endif
+    }
+
+    // =========================================================
+    // Hover feedback (v2.2) — lighten button bg on mouse enter
+    // =========================================================
+    override bool OnMouseEnter(Widget w, int x, int y)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        ImageWidget bg = FindButtonBg(w);
+        int baseColor = 0;
+        int hoverColor = 0;
+        if (bg)
+        {
+            // Restore previous hover first (guards against Enter-before-Leave race)
+            if (m_HoveredBg && m_HoveredBg != bg)
+            {
+                if (m_ColorCache && m_ColorCache.Find(m_HoveredBg, baseColor))
+                {
+                    m_HoveredBg.SetColor(baseColor);
+                }
+                m_HoveredBg = null;
+                baseColor = 0;
+            }
+
+            if (m_ColorCache && m_ColorCache.Find(bg, baseColor))
+            {
+                m_HoveredBg = bg;
+                hoverColor = LightenARGB(baseColor, 20);
+                bg.SetColor(hoverColor);
+            }
+        }
+        return false;
+    }
+
+    override bool OnMouseLeave(Widget w, int x, int y)
+    {
+        int baseColor = 0;
+        if (m_HoveredBg)
+        {
+            if (m_ColorCache && m_ColorCache.Find(m_HoveredBg, baseColor))
+            {
+                m_HoveredBg.SetColor(baseColor);
+            }
+            m_HoveredBg = null;
+        }
+        return false;
+    }
+
+    // Walk up from w to find enclosing ButtonWidget, then return first ImageWidget child
+    protected ImageWidget FindButtonBg(Widget w)
+    {
+        if (!w)
+            return null;
+
+        Widget check = w;
+        ButtonWidget btn = null;
+        while (check)
+        {
+            btn = ButtonWidget.Cast(check);
+            if (btn)
+            {
+                break;
+            }
+            check = check.GetParent();
+        }
+
+        if (!btn)
+            return null;
+
+        // First child is the Bg ImageWidget
+        Widget child = btn.GetChildren();
+        if (!child)
+            return null;
+
+        ImageWidget bg = ImageWidget.Cast(child);
+        return bg;
+    }
+
+    // Lighten an ARGB color by adding 'amount' to RGB channels (clamped to 255)
+    static int LightenARGB(int color, int amount)
+    {
+        int a = (color >> 24) & 0xFF;
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+
+        r = r + amount;
+        g = g + amount;
+        b = b + amount;
+
+        if (r > 255) { r = 255; }
+        if (g > 255) { g = 255; }
+        if (b > 255) { b = 255; }
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    // =========================================================
+    // Enter-to-submit on EditBoxes (v2.2)
+    // =========================================================
+    override bool OnKeyDown(Widget w, int x, int y, int key)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        Widget focused = null;
+        LFPG_SorterController ctrl = null;
+        string wName = "";
+
+        // KC_RETURN = 28
+        if (key == KeyCode.KC_RETURN)
+        {
+            focused = GetFocus();
+            if (!focused)
+                return false;
+
+            ctrl = LFPG_SorterController.Cast(GetController());
+            if (!ctrl)
+                return false;
+
+            // Match focused widget to the known EditBoxes
+            wName = focused.GetName();
+            if (wName == "EditPrefix")
+            {
+                ctrl.BtnPrefixAdd();
+                return true;
+            }
+            if (wName == "EditContains")
+            {
+                ctrl.BtnContainsAdd();
+                return true;
+            }
+            if (wName == "EditSlotMin" || wName == "EditSlotMax")
+            {
+                ctrl.BtnSlotAdd();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================================
+    // UI Sound helper (v2.2)
+    // =========================================================
+    static void PlayUIClick()
+    {
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
+            return;
+
+        SEffectManager.PlaySoundOnObject("pickUpItem_SoundSet", player);
+        #endif
+    }
+
+    static void PlayUIAction()
+    {
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
+            return;
+
+        SEffectManager.PlaySoundOnObject("attachmentAdded_SoundSet", player);
         #endif
     }
 

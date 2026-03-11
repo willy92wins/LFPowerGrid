@@ -18,6 +18,7 @@ class LFPG_SorterTagController extends ViewController
 
     void BtnRemove()
     {
+        LFPG_SorterView.PlayUIClick();
         if (m_OwnerController)
         {
             m_OwnerController.OnRemoveTag(m_OutputIndex, m_RuleIndex);
