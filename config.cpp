@@ -422,8 +422,8 @@ class CfgVehicles
     {
         scope = 2;
         displayName = "Push Button Kit";
-        descriptionShort = "A momentary push button switch. Place to deploy.";
-        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        descriptionShort = "A toggle switch. Place to deploy.";
+        model = "\LFPowerGrid\switch_v1\switch_v1.p3d";
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -436,15 +436,15 @@ class CfgVehicles
     };
 
     // ---- PushButton (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
-    // Ports: input_1, output_1 (virtual — computed in script, no memory points)
+    // Ports: input_1, output_1 (memory points: port_input_0, port_output_0)
     // Toggle: momentary ON for 2s, then auto-OFF.
     // LED: green (passing power), red (blocking), off (disconnected)
     class LFPG_PushButton : Inventory_Base
     {
         scope = 2;
-        displayName = "Electrical Push Button";
-        descriptionShort = "A worn industrial push button with LED status indicator.";
-        model = "\LFPowerGrid\data\button\lfpg_button.p3d";
+        displayName = "Electrical Switch";
+        descriptionShort = "A toggle switch with LED status indicator.";
+        model = "\LFPowerGrid\switch_v1\switch_v1.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -452,12 +452,12 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"led_indicator"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelections[] = {"light_led"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\led_off.rvmat"};
 
         class AnimationSources
         {
-            class button_state
+            class switch_state
             {
                 source = "user";
                 initPhase = 0;

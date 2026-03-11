@@ -92,11 +92,9 @@ class LFPG_SorterController extends ViewController
     ImageWidget BtnSortBg; ImageWidget BtnSaveBg;
     ImageWidget BtnResetAllBg; ImageWidget BtnClearOutBg; ImageWidget BtnCloseBg;
     ImageWidget BtnPrefixAddBg; ImageWidget BtnContainsAddBg; ImageWidget BtnSlotAddBg;
-    ImageWidget BtnCloseXBg;
     TextWidget BtnResetAllText;
     TextWidget BtnSortText; TextWidget BtnSaveText;
     TextWidget BtnClearOutText; TextWidget BtnCloseText;
-    TextWidget BtnCloseXText;
     // Label refs
     TextWidget LblCategory; TextWidget LblPrefix; TextWidget LblContains;
     TextWidget LblSlot; TextWidget LblSlotDash;
@@ -203,7 +201,7 @@ class LFPG_SorterController extends ViewController
 
         // Footer buttons
         TintBg(BtnSortBg, B);
-        TintBg(BtnSaveBg, LFPG_SorterView.COL_GREEN_BTN);
+        TintBg(BtnSaveBg, G);
         TintBg(BtnResetAllBg, R);
         TintBg(BtnClearOutBg, V);
         TintBg(BtnCloseBg, V);
@@ -216,9 +214,9 @@ class LFPG_SorterController extends ViewController
         SetTxtCol(BtnCloseText, DIM);
 
         // Add buttons (green)
-        TintBg(BtnPrefixAddBg, LFPG_SorterView.COL_GREEN_BTN);
-        TintBg(BtnContainsAddBg, LFPG_SorterView.COL_GREEN_BTN);
-        TintBg(BtnSlotAddBg, LFPG_SorterView.COL_GREEN_BTN);
+        TintBg(BtnPrefixAddBg, G);
+        TintBg(BtnContainsAddBg, G);
+        TintBg(BtnSlotAddBg, G);
 
         // Labels
         SetTxtCol(LblCategory, DIM);

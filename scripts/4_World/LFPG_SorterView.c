@@ -283,10 +283,11 @@ class LFPG_SorterView extends ScriptView
             return false;
 
         Widget check = w;
+        ButtonWidget btnCheck = null;
         while (check)
         {
             // If we hit a button first, it's a button click, not drag
-            ButtonWidget btnCheck = ButtonWidget.Cast(check);
+            btnCheck = ButtonWidget.Cast(check);
             if (btnCheck)
             {
                 return false;

@@ -1,31 +1,36 @@
 // =========================================================
-// LF_PowerGrid - Push Button (v0.10.0)
+// LF_PowerGrid - Push Button / Switch (v0.10.0)
 //
 // LFPG_PushButton_Kit: Holdable, deployable (same-model pattern = Splitter).
 // LFPG_PushButton:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
 //                       Zero self-consumption. Momentary toggle (2s pulse).
 //
+// Model: switch_v1.p3d (toggle switch with LED indicator)
+//   Memory points: port_input_0, port_output_0
+//   Animation: switch_state (translation 0→0.5)
+//   Hidden selection: light_led (index 0)
+//
 // Behavior:
-//   Toggle ON:  m_SwitchOn=true → power passes through → LED green → anim pressed
-//   After 2s:   m_SwitchOn=false → power blocked → LED red → anim released
+//   Toggle ON:  m_SwitchOn=true → power passes through → LED green → switch up
+//   After 2s:   m_SwitchOn=false → power blocked → LED red → switch down
 //   No input:   LED off (disconnected)
 //
-// LED states (hiddenSelections[0] = "led_indicator"):
+// LED states (hiddenSelections[0] = "light_led"):
 //   Green = m_PoweredNet && m_SwitchOn  (passing power)
 //   Red   = m_PoweredNet && !m_SwitchOn (has input, blocking)
 //   Off   = !m_PoweredNet               (no upstream / disconnected)
 //
-// Port positions: Virtual (no memory points in p3d).
-//   Computed as model-space offsets from device center.
+// Port names remain input_1/output_1 for persistence compatibility.
+// GetPortWorldPos maps to p3d memory points port_input_0/port_output_0.
 //
 // Persistence: DeviceIdLow, DeviceIdHigh + wires JSON.
 //   m_SwitchOn NOT persisted (momentary, defaults to false on restart).
 //   m_PoweredNet NOT persisted (derived by graph propagation).
 // =========================================================
 
-static const string LFPG_BUTTON_RVMAT_OFF   = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
-static const string LFPG_BUTTON_RVMAT_GREEN  = "\\LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
-static const string LFPG_BUTTON_RVMAT_RED    = "\\LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
+static const string LFPG_BUTTON_RVMAT_OFF   = "\\LFPowerGrid\\switch_v1\\data\\led_off.rvmat";
+static const string LFPG_BUTTON_RVMAT_GREEN  = "\\LFPowerGrid\\switch_v1\\data\\led_green.rvmat";
+static const string LFPG_BUTTON_RVMAT_RED    = "\\LFPowerGrid\\switch_v1\\data\\led_red.rvmat";
 
 // Duration in milliseconds that the button stays ON after toggle.
 static const int LFPG_BUTTON_PULSE_MS = 2000;
@@ -354,14 +359,14 @@ class LFPG_PushButton : Inventory_Base
             SetObjectMaterial(0, LFPG_BUTTON_RVMAT_OFF);
         }
 
-        // Button animation
+        // Switch animation
         if (m_SwitchOn)
         {
-            SetAnimationPhase("button_state", 1.0);
+            SetAnimationPhase("switch_state", 1.0);
         }
         else
         {
-            SetAnimationPhase("button_state", 0.0);
+            SetAnimationPhase("switch_state", 0.0);
         }
         #endif
     }
@@ -452,21 +457,32 @@ class LFPG_PushButton : Inventory_Base
         return false;
     }
 
-    // Virtual port positions: p3d has no port memory points.
-    // Offset from device center in model space, converted to world.
-    // Y+0.02 so cables attach slightly above center, not inside the model.
+    // Port positions: switch_v1.p3d has real memory points.
+    // port_input_0 and port_output_0 in the p3d.
+    // LFPG port names remain input_1/output_1 for persistence compat.
     vector LFPG_GetPortWorldPos(string portName)
     {
-        // Try memory point first (future-proof if p3d gets updated)
-        string memPoint = "port_" + portName;
+        // Map LFPG port names → p3d memory point names
+        string memPoint;
+        if (portName == "input_1")
+        {
+            memPoint = "port_input_0";
+        }
+        else if (portName == "output_1")
+        {
+            memPoint = "port_output_0";
+        }
+        else
+        {
+            memPoint = "port_" + portName;
+        }
+
         if (MemoryPointExists(memPoint))
         {
             return ModelToWorld(GetMemoryPointPos(memPoint));
         }
 
-        // Virtual offsets in model-local space
-        // input_1:  behind the button (negative Z in model space)
-        // output_1: in front (positive Z in model space)
+        // Fallback: virtual offsets if memory points missing
         vector offset = "0 0.02 0";
         if (portName == "input_1")
         {
