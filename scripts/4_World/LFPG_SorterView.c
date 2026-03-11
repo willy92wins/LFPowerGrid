@@ -7,13 +7,14 @@
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
 //
 // v2.3 changes (P3 Performance & Polish):
-//   S7: UseUpdateLoop=false, manual Insert/Remove on DoOpen/DoClose
 //   S3: ApplyColors moved from OnWidgetScriptInit to DoOpen
-//   OPT-1: GetGame() null-guard in DoOpen queue insert
 //   R7: GetGame() null-guard in Update Input access
 //   R4: GetGame() null-guard in ShowCursor/HideCursor
 //   E1: String literals converted to local variables
-//   V1: Resolution-aware panel clamp for small screens
+//   FIX: OnMouseButtonDown consumes ALL clicks when open (prevents game input)
+//   FIX: OnMouseButtonUp consumes release events when open
+//   NOTE: S7 (UseUpdateLoop) REVERTED — ScriptInvoker.Insert doesn't pass dt
+//   NOTE: V1 (recursive scaling) REVERTED — corrupts ScriptParamsClass/Relay_Command
 //
 // v2.2 changes (Polish Sprint):
 //   - Button hover feedback via color cache + OnMouseEnter/Leave
@@ -115,14 +116,6 @@ class LFPG_SorterView extends ScriptView
     override typename GetControllerType()
     {
         return LFPG_SorterController;
-    }
-
-    // S7: Disable ScriptView auto-registration of Update in CALL_CATEGORY_SYSTEM.
-    // Without this, Update runs ~60fps even when the panel is hidden (99% of the time).
-    // We manually Insert/Remove in DoOpen/DoClose/destructor instead.
-    override bool UseUpdateLoop()
-    {
-        return false;
     }
 
     // =========================================================
@@ -236,18 +229,10 @@ class LFPG_SorterView extends ScriptView
     }
 
     // S1 fix: destructor releases input lock if destroyed while open
-    // S7: also removes Update from queue (covers unexpected shutdown while open)
     void ~LFPG_SorterView()
     {
         if (GetGame())
         {
-            // S7: Remove Update from queue if still registered
-            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
-            if (updQueue)
-            {
-                updQueue.Remove(Update);
-            }
-
             if (m_FocusLocked)
             {
                 Input inp = GetGame().GetInput();
@@ -381,25 +366,29 @@ class LFPG_SorterView extends ScriptView
     {
         if (!m_IsOpen)
             return false;
-        if (button != 0)
-            return false;
 
-        // Check if the click is on the header (drag handle)
-        if (IsHeaderWidget(w))
+        // Header drag (LMB only)
+        if (button == 0)
         {
-            m_Dragging = true;
-            float px = 0.0;
-            float py = 0.0;
-            if (SorterPanel)
+            if (IsHeaderWidget(w))
             {
-                SorterPanel.GetPos(px, py);
+                m_Dragging = true;
+                float px = 0.0;
+                float py = 0.0;
+                if (SorterPanel)
+                {
+                    SorterPanel.GetPos(px, py);
+                }
+                m_DragOffX = x - px;
+                m_DragOffY = y - py;
             }
-            m_DragOffX = x - px;
-            m_DragOffY = y - py;
-            return true;
         }
 
-        return super.OnMouseButtonDown(w, x, y, button);
+        // ALWAYS consume clicks when open — prevents game from receiving
+        // mouse events (animations, attacks, interactions).
+        // Button Relay_Commands fire at the ButtonWidget level BEFORE
+        // this handler, so buttons still respond normally.
+        return true;
     }
 
     override bool OnMouseButtonUp(Widget w, int x, int y, int button)
@@ -408,7 +397,10 @@ class LFPG_SorterView extends ScriptView
         {
             m_Dragging = false;
         }
-        return super.OnMouseButtonUp(w, x, y, button);
+        if (!m_IsOpen)
+            return false;
+        // Consume release too — prevents game from seeing mouse-up events
+        return true;
     }
 
     // Walk the parent chain to see if widget is in the HeaderFrame
@@ -441,6 +433,9 @@ class LFPG_SorterView extends ScriptView
 
     // =========================================================
     // Center panel on screen (called on open)
+    // Panel is 720×590 fixed pixels (designed for 1080p).
+    // At 4K it appears smaller (18.75%) but fully functional.
+    // Full proportional scaling requires layout redesign (future sprint).
     // =========================================================
     protected void CenterPanel()
     {
@@ -449,23 +444,9 @@ class LFPG_SorterView extends ScriptView
         int scrW = 0;
         int scrH = 0;
         GetScreenSize(scrW, scrH);
-
-        // V1: Always reset to layout-designed height first, then clamp if needed.
-        // Without this, if the panel was clamped at 720p and the player re-opens
-        // at 1080p, GetSize() would return the old clamped value.
-        float panW = 720.0;
-        float panH = 590.0;
-        SorterPanel.SetSize(panW, panH);
-
-        // V1: Clamp panel height for small screens (720p and below)
-        int minH = 620;
-        if (scrH < minH)
-        {
-            float clampedH = scrH - 30;
-            SorterPanel.SetSize(panW, clampedH);
-            panH = clampedH;
-        }
-
+        float panW = 0.0;
+        float panH = 0.0;
+        SorterPanel.GetSize(panW, panH);
         float cx = (scrW - panW) * 0.5;
         float cy = (scrH - panH) * 0.5;
         SorterPanel.SetPos(cx, cy);
@@ -602,16 +583,6 @@ class LFPG_SorterView extends ScriptView
         root.Show(true);
         CenterPanel();
 
-        // S7: Register Update in CALL_CATEGORY_SYSTEM (OPT-1: GetGame guard)
-        if (GetGame())
-        {
-            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
-            if (updQueue)
-            {
-                updQueue.Insert(Update);
-            }
-        }
-
         // Fade-in (v2.2)
         m_FadeAlpha = 0.0;
         m_FadingIn = true;
@@ -633,6 +604,7 @@ class LFPG_SorterView extends ScriptView
         {
             ctrl.InitFromRPC(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
         }
+
         string openMsg = "[SorterView] Opened for: " + containerName;
         LFPG_Util.Info(openMsg);
     }
@@ -646,16 +618,6 @@ class LFPG_SorterView extends ScriptView
         m_FadingIn = false;
         m_HoveredBg = null;
 
-        // S7: Remove Update from queue
-        if (GetGame())
-        {
-            ScriptCallQueue updQueue = GetGame().GetUpdateQueue(CALL_CATEGORY_SYSTEM);
-            if (updQueue)
-            {
-                updQueue.Remove(Update);
-            }
-        }
-
         Widget root = GetLayoutRoot();
         if (root)
         {
@@ -667,7 +629,8 @@ class LFPG_SorterView extends ScriptView
     }
 
     // =========================================================
-    // Bug #2 fix: NO INPUT_EXCLUDE_ALL — cursor-only focus
+    // Input lock: ChangeGameFocus(1) suppresses continuous input (WASD/look).
+    // OnMouseButtonDown returning true suppresses click-through to game.
     // =========================================================
     protected void ShowCursor()
     {
