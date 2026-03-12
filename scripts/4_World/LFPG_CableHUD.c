@@ -289,6 +289,18 @@ class LFPG_CableHUD
         if (x1 != x1 || y1 != y1 || x2 != x2 || y2 != y2)
             return;
 
+        // v0.8.x: Degenerate projection guard.
+        // GetScreenPos produces extreme coords (±50000 px) for points
+        // near the frustum edge. Canvas.DrawLine clips these to the
+        // viewport boundary, producing visible artifact lines at screen
+        // edges. Reject any coordinate beyond 3× screen size.
+        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
+        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
+        if (x1 < -degLimX || x1 > degLimX || y1 < -degLimY || y1 > degLimY)
+            return;
+        if (x2 < -degLimX || x2 > degLimX || y2 < -degLimY || y2 > degLimY)
+            return;
+
         m_Canvas.DrawLine(x1, y1, x2, y2, width, color);
         m_SegmentsDrawn = m_SegmentsDrawn + 1;
     }
@@ -301,6 +313,12 @@ class LFPG_CableHUD
 
         // v0.7.10: NaN guard (matches DrawLineScreen/DrawCrossScreen)
         if (x != x || y != y)
+            return;
+
+        // v0.8.x: Degenerate projection guard (see DrawLineScreen).
+        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
+        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
+        if (x < -degLimX || x > degLimX || y < -degLimY || y > degLimY)
             return;
 
         m_Canvas.DrawLine(x, y - halfSize, x + halfSize, y, 2.0, color);
@@ -319,6 +337,12 @@ class LFPG_CableHUD
 
         // v0.7.10: NaN guard (coords + perpendicular vector)
         if (x != x || y != y || perpX != perpX || perpY != perpY)
+            return;
+
+        // v0.8.x: Degenerate projection guard (see DrawLineScreen).
+        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
+        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
+        if (x < -degLimX || x > degLimX || y < -degLimY || y > degLimY)
             return;
 
         float x1 = x + perpX * halfLen;

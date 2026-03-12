@@ -50,6 +50,23 @@ static const float LFPG_SWAY_X_PHASE_OFS   = 1.5;     // radians offset from ver
 // edge artifacts after clipping. 0.3m is well within the near plane.
 static const float LFPG_BEHIND_CAM_Z       = 0.3;
 
+// v0.8.x: Degenerate projection guard.
+// GetScreenPos produces extreme screen coords (±50000 px) when a point
+// is in front of the camera but at a wide angle (near frustum edge).
+// If |x| or |y| exceeds screen dimension * this factor, the projection
+// is unreliable and the point should be treated as off-screen.
+// 3.0 is generous enough to never cull legitimately visible geometry
+// but catches the ±30000 px projections that produce edge artifacts.
+static const float LFPG_SCREEN_DEGENERATE_MULT = 3.0;
+
+// v0.8.x: 3D near-plane clip distance for ClipBehindCamera.
+// When one endpoint is behind the camera, the segment is clipped
+// to this distance in front of the camera plane before projection.
+// 0.5m (vs BEHIND_CAM_Z=0.3m) ensures the projected point has z
+// well above the behind-camera threshold, reducing perspective
+// distortion at the clip boundary. Must be > LFPG_BEHIND_CAM_Z.
+static const float LFPG_NEAR_CLIP_M = 0.5;
+
 // ---- Cable state system (v0.7.8) ----
 // Each committed wire has a visual state that determines color,
 // and in the future, pattern (dash, pulse, etc.).

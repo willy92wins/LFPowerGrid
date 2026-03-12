@@ -772,10 +772,12 @@ class LFPG_LaserDetector : Inventory_Base
         return true;
     }
 
-    // 5 u/s self-consumption
+    // PASSTHROUGH devices MUST return 0.0 consumption.
+    // Without this, DeviceAPI fallback returns 10.0 erroneously.
+    // Actual self-consumption (5 u/s) is handled by the graph propagation layer.
     float LFPG_GetConsumption()
     {
-        return LFPG_LASER_CONSUMPTION;
+        return 0.0;
     }
 
     // 20 u/s max throughput

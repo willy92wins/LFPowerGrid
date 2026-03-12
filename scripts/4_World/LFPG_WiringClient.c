@@ -638,6 +638,10 @@ class LFPG_WiringClient
             margin = LFPG_SCREEN_MARGIN_MIN_PX;
         }
 
+        // v0.8.x: Degenerate projection limits (same as CableRenderer DrawFrame).
+        float degLimX = swF * LFPG_SCREEN_DEGENERATE_MULT;
+        float degLimY = shF * LFPG_SCREEN_DEGENERATE_MULT;
+
         // v0.7.13 (G1): Preview metrics — grab reference once per frame
         LFPG_PreviewMetrics tPrv = LFPG_Telemetry.GetPreview();
 
@@ -728,7 +732,28 @@ class LFPG_WiringClient
             int pp;
             for (pp = 0; pp < sagCount; pp = pp + 1)
             {
-                m_PreviewScreenPts.Insert(GetGame().GetScreenPos(m_SagPts[pp]));
+                // v0.8.x: Degenerate projection guard (same as CableRenderer Phase 1).
+                // Mark extreme projections by zeroing z so the behindA/behindB
+                // check downstream skips them naturally.
+                vector prvScr = GetGame().GetScreenPos(m_SagPts[pp]);
+                if (prvScr[2] > LFPG_BEHIND_CAM_Z)
+                {
+                    float absPX = prvScr[0];
+                    if (absPX < 0.0)
+                    {
+                        absPX = -absPX;
+                    }
+                    float absPY = prvScr[1];
+                    if (absPY < 0.0)
+                    {
+                        absPY = -absPY;
+                    }
+                    if (absPX > degLimX || absPY > degLimY)
+                    {
+                        prvScr[2] = 0.0;
+                    }
+                }
+                m_PreviewScreenPts.Insert(prvScr);
             }
             // G1: projections for this span
             tPrv.m_Projections = tPrv.m_Projections + sagCount;

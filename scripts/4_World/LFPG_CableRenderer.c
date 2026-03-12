@@ -2216,6 +2216,12 @@ class LFPG_CableRenderer
         // Fixed 200px was too large at 720p and too small at 4K.
         float ulMargin = shF * LFPG_ULTRA_LOD_MARGIN_RATIO;
 
+        // v0.8.x: Degenerate projection limits (precomputed once per frame).
+        // Used in Phase 1 to mark extreme GetScreenPos results as behind-camera,
+        // so Phase 2's behindA/behindB check skips them naturally.
+        float degLimX = swF * LFPG_SCREEN_DEGENERATE_MULT;
+        float degLimY = shF * LFPG_SCREEN_DEGENERATE_MULT;
+
         // ---- v0.7.38: Player screen-space occlusion ----
         // In 3rd-person view, compute a screen-space bounding rect around
         // the player model. Segments farther from camera than the player
@@ -2571,9 +2577,57 @@ class LFPG_CableRenderer
                 vector ulA = GetGame().GetScreenPos(wsi.cachedPosA);
                 vector ulB = GetGame().GetScreenPos(wsi.cachedPosB);
 
-                // At >40m any endpoint behind camera means the visible
-                // portion is negligible. Skip entirely (both OR either).
-                if (ulA[2] < LFPG_BEHIND_CAM_Z || ulB[2] < LFPG_BEHIND_CAM_Z)
+                bool ulBehindA = (ulA[2] < LFPG_BEHIND_CAM_Z);
+                bool ulBehindB = (ulB[2] < LFPG_BEHIND_CAM_Z);
+
+                // Both behind camera: nothing visible, skip.
+                if (ulBehindA && ulBehindB)
+                {
+                    tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+                    continue;
+                }
+
+                // v0.8.x: One endpoint behind camera — 3D near-plane clip.
+                // Instead of skipping the entire wire (which causes brief
+                // vanishing during rotation), clip to the camera plane and
+                // project the clipped point. ClipBehindCamera uses the
+                // parametric intersection with the near plane:
+                //   t = (nearClip - dot(behind-cam, camDir)) / dot(vis-behind, camDir)
+                // Safety: CableHUD degenerate guard catches extreme results.
+                if (ulBehindA)
+                {
+                    ulA = LFPG_WorldUtil.ClipBehindCamera(wsi.cachedPosA, wsi.cachedPosB, camPos, camDir);
+                }
+                if (ulBehindB)
+                {
+                    ulB = LFPG_WorldUtil.ClipBehindCamera(wsi.cachedPosB, wsi.cachedPosA, camPos, camDir);
+                }
+
+                // v0.8.x: Degenerate projection guard for ultra-LOD.
+                // ClipBehindCamera or original projection may produce extreme
+                // screen coords near the frustum edge. Reject if either
+                // endpoint exceeds 3× screen dimensions.
+                float absUlAx = ulA[0];
+                if (absUlAx < 0.0)
+                {
+                    absUlAx = -absUlAx;
+                }
+                float absUlAy = ulA[1];
+                if (absUlAy < 0.0)
+                {
+                    absUlAy = -absUlAy;
+                }
+                float absUlBx = ulB[0];
+                if (absUlBx < 0.0)
+                {
+                    absUlBx = -absUlBx;
+                }
+                float absUlBy = ulB[1];
+                if (absUlBy < 0.0)
+                {
+                    absUlBy = -absUlBy;
+                }
+                if (absUlAx > degLimX || absUlAy > degLimY || absUlBx > degLimX || absUlBy > degLimY)
                 {
                     tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
                     continue;
@@ -2684,7 +2738,27 @@ class LFPG_CableRenderer
                 continue;
 
             // Project first point (port endpoint: no sway)
-            m_ScreenPts.Insert(GetGame().GetScreenPos(firstSeg.m_From));
+            // v0.8.x: Degenerate guard — mark extreme projections by zeroing z.
+            // Phase 2's behindA/behindB check then skips these naturally.
+            vector firstScr = GetGame().GetScreenPos(firstSeg.m_From);
+            if (firstScr[2] > LFPG_BEHIND_CAM_Z)
+            {
+                float absFX = firstScr[0];
+                if (absFX < 0.0)
+                {
+                    absFX = -absFX;
+                }
+                float absFY = firstScr[1];
+                if (absFY < 0.0)
+                {
+                    absFY = -absFY;
+                }
+                if (absFX > degLimX || absFY > degLimY)
+                {
+                    firstScr[2] = 0.0;
+                }
+            }
+            m_ScreenPts.Insert(firstScr);
 
             int s;
             for (s = 0; s < segCount; s = s + 1)
@@ -2716,7 +2790,26 @@ class LFPG_CableRenderer
                     wp[0] = wp[0] + swayOffX * swayW;
                 }
 
-                m_ScreenPts.Insert(GetGame().GetScreenPos(wp));
+                // v0.8.x: Degenerate projection guard (see firstScr above).
+                vector segScr = GetGame().GetScreenPos(wp);
+                if (segScr[2] > LFPG_BEHIND_CAM_Z)
+                {
+                    float absWX = segScr[0];
+                    if (absWX < 0.0)
+                    {
+                        absWX = -absWX;
+                    }
+                    float absWY = segScr[1];
+                    if (absWY < 0.0)
+                    {
+                        absWY = -absWY;
+                    }
+                    if (absWX > degLimX || absWY > degLimY)
+                    {
+                        segScr[2] = 0.0;
+                    }
+                }
+                m_ScreenPts.Insert(segScr);
             }
 
             // ================================================

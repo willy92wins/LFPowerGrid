@@ -142,8 +142,9 @@ class LFPG_WorldUtil
     // Returns: screen-space vector from GetScreenPos of the clipped point.
     static vector ClipBehindCamera(vector behindWorld, vector visibleWorld, vector camPos, vector camDir)
     {
-        // Near plane offset: slightly in front of camera to avoid edge artifacts.
-        float nearClip = 0.3;
+        // v0.8.x: Use centralized constant. 0.5m ensures the clipped
+        // point projects to z > BEHIND_CAM_Z with reduced distortion.
+        float nearClip = LFPG_NEAR_CLIP_M;
 
         // Signed distance from camera plane for each point.
         // d = dot(point - camPos, camDir)
@@ -310,11 +311,10 @@ class LFPG_WorldUtil
             }
         }
 
-        // Max iterations reached — accept with current coords (safety fallback)
-        clipA[0] = x1;
-        clipA[1] = y1;
-        clipB[0] = x2;
-        clipB[1] = y2;
-        return true;
+        // Max iterations reached — reject to prevent edge artifacts.
+        // Extreme screen coords from near-frustum projections can cause
+        // C-S to bounce between boundaries without converging.
+        // Not drawing a marginal segment is safer than drawing garbage.
+        return false;
     }
 };
