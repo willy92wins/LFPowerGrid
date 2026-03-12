@@ -100,8 +100,10 @@ class LFPG_ElectronicCounter_Kit : Inventory_Base
         vector finalPos = position;
         vector finalOri = orientation;
 
-        string tLog = "[Counter_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        string tLog = "[Counter_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
         // No ECE_PLACE_ON_SURFACE — kills wall placement.
@@ -113,8 +115,10 @@ class LFPG_ElectronicCounter_Kit : Inventory_Base
             counter.SetOrientation(finalOri);
             counter.Update();
 
-            string deployMsg = "[Counter_Kit] Deployed LFPG_ElectronicCounter at " + finalPos.ToString();
-            deployMsg = deployMsg + " ori=" + finalOri.ToString();
+            string deployMsg = "[Counter_Kit] Deployed LFPG_ElectronicCounter at ";
+            deployMsg = deployMsg + finalPos.ToString();
+            deployMsg = deployMsg + " ori=";
+            deployMsg = deployMsg + finalOri.ToString();
             LFPG_Util.Info(deployMsg);
 
             // Only delete kit on successful spawn.
@@ -278,7 +282,10 @@ class LFPG_ElectronicCounter : Inventory_Base
 
         #ifdef SERVER
         // Cancel pending pulse timer
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+        if (GetGame())
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+        }
 
         bool dirty = false;
         if (m_PoweredNet)
@@ -320,7 +327,10 @@ class LFPG_ElectronicCounter : Inventory_Base
         m_LFPG_Deleting = true;
 
         // Cancel pending pulse timer
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+        if (GetGame())
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+        }
 
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -337,7 +347,10 @@ class LFPG_ElectronicCounter : Inventory_Base
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            if (GetGame())
+            {
+                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            }
 
             bool locDirty = false;
             if (m_PoweredNet)
@@ -420,12 +433,16 @@ class LFPG_ElectronicCounter : Inventory_Base
             // Disable previous animation first (MANDATORY — breaks otherwise)
             if (m_PrevCounterValue >= 0 && m_PrevCounterValue != m_CounterValue)
             {
-                string prevAnim = "show_" + m_PrevCounterValue.ToString();
+                string prevIdx = m_PrevCounterValue.ToString();
+                string prevAnim = "show_";
+                prevAnim = prevAnim + prevIdx;
                 SetAnimationPhase(prevAnim, 0.0);
             }
 
             // Enable current digit animation
-            string curAnim = "show_" + m_CounterValue.ToString();
+            string curIdx = m_CounterValue.ToString();
+            string curAnim = "show_";
+            curAnim = curAnim + curIdx;
             SetAnimationPhase(curAnim, 1.0);
 
             m_PrevCounterValue = m_CounterValue;
@@ -446,7 +463,9 @@ class LFPG_ElectronicCounter : Inventory_Base
         int i;
         for (i = 0; i < 10; i = i + 1)
         {
-            string animName = "show_" + i.ToString();
+            string idxStr = i.ToString();
+            string animName = "show_";
+            animName = animName + idxStr;
             SetAnimationPhase(animName, 0.0);
         }
         #endif
@@ -466,8 +485,10 @@ class LFPG_ElectronicCounter : Inventory_Base
             m_CounterValue = m_CounterValue + 1;
             SetSynchDirty();
 
-            string incMsg = "[Counter] Increment to " + m_CounterValue.ToString();
-            incMsg = incMsg + " id=" + m_DeviceId;
+            string incMsg = "[Counter] Increment to ";
+            incMsg = incMsg + m_CounterValue.ToString();
+            incMsg = incMsg + " id=";
+            incMsg = incMsg + m_DeviceId;
             LFPG_Util.Debug(incMsg);
         }
         else
@@ -493,14 +514,18 @@ class LFPG_ElectronicCounter : Inventory_Base
         m_PulseActive = true;
         SetSynchDirty();
 
-        string pulseMsg = "[Counter] 9→wrap PULSE ON id=" + m_DeviceId;
+        string pulseMsg = "[Counter] 9->wrap PULSE ON id=";
+        pulseMsg = pulseMsg + m_DeviceId;
         LFPG_Util.Info(pulseMsg);
 
         // Propagate immediately so downstream gets power
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
         // Schedule auto-off after pulse duration
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_COUNTER_PULSE_MS, false);
+        if (GetGame())
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_COUNTER_PULSE_MS, false);
+        }
         #endif
     }
 
@@ -514,7 +539,8 @@ class LFPG_ElectronicCounter : Inventory_Base
         m_PulseActive = false;
         SetSynchDirty();
 
-        string offMsg = "[Counter] Pulse OFF id=" + m_DeviceId;
+        string offMsg = "[Counter] Pulse OFF id=";
+        offMsg = offMsg + m_DeviceId;
         LFPG_Util.Info(offMsg);
 
         // Propagate to cut downstream power
@@ -644,10 +670,11 @@ class LFPG_ElectronicCounter : Inventory_Base
         return true;
     }
 
-    // Self-consumption: 5 u/s.
+    // PASSTHROUGH devices MUST return 0.0 consumption.
+    // Without this, DeviceAPI fallback returns 10.0 erroneously.
     float LFPG_GetConsumption()
     {
-        return LFPG_COUNTER_CONSUMPTION;
+        return 0.0;
     }
 
     // Throughput capacity.
@@ -708,7 +735,8 @@ class LFPG_ElectronicCounter : Inventory_Base
             m_ToggleWasHigh = newIn1;
             changed = true;
 
-            string onMsg = "[Counter] Power ON, reset to 0 id=" + m_DeviceId;
+            string onMsg = "[Counter] Power ON, reset to 0 id=";
+            onMsg = onMsg + m_DeviceId;
             LFPG_Util.Debug(onMsg);
         }
         else if (wasPowered && !mainPower)
@@ -716,14 +744,18 @@ class LFPG_ElectronicCounter : Inventory_Base
             // Just turned OFF → cancel pulse, reset toggle tracking
             if (m_PulseActive)
             {
-                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+                if (GetGame())
+                {
+                    GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+                }
                 m_PulseActive = false;
             }
             m_ToggleWasHigh = false;
             changed = true;
 
-            string offMsg = "[Counter] Power OFF id=" + m_DeviceId;
-            LFPG_Util.Debug(offMsg);
+            string offMsg2 = "[Counter] Power OFF id=";
+            offMsg2 = offMsg2 + m_DeviceId;
+            LFPG_Util.Debug(offMsg2);
         }
         else if (mainPower)
         {
@@ -763,12 +795,19 @@ class LFPG_ElectronicCounter : Inventory_Base
             SetSynchDirty();
         }
 
-        string dbgLog = "[Counter] SetPowered(" + powered.ToString() + ")";
-        dbgLog = dbgLog + " in0=" + newIn0.ToString();
-        dbgLog = dbgLog + " in1=" + newIn1.ToString();
-        dbgLog = dbgLog + " val=" + m_CounterValue.ToString();
-        dbgLog = dbgLog + " pulse=" + m_PulseActive.ToString();
-        dbgLog = dbgLog + " id=" + m_DeviceId;
+        string dbgLog = "[Counter] SetPowered(";
+        dbgLog = dbgLog + powered.ToString();
+        dbgLog = dbgLog + ")";
+        dbgLog = dbgLog + " in0=";
+        dbgLog = dbgLog + newIn0.ToString();
+        dbgLog = dbgLog + " in1=";
+        dbgLog = dbgLog + newIn1.ToString();
+        dbgLog = dbgLog + " val=";
+        dbgLog = dbgLog + m_CounterValue.ToString();
+        dbgLog = dbgLog + " pulse=";
+        dbgLog = dbgLog + m_PulseActive.ToString();
+        dbgLog = dbgLog + " id=";
+        dbgLog = dbgLog + m_DeviceId;
         LFPG_Util.Debug(dbgLog);
         #endif
     }
@@ -838,7 +877,8 @@ class LFPG_ElectronicCounter : Inventory_Base
 
         if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
         {
-            string warnMsg = "[Counter] AddWire rejected: not an output port: " + wd.m_SourcePort;
+            string warnMsg = "[Counter] AddWire rejected: not an output port: ";
+            warnMsg = warnMsg + wd.m_SourcePort;
             LFPG_Util.Warn(warnMsg);
             return false;
         }
@@ -948,7 +988,8 @@ class LFPG_ElectronicCounter : Inventory_Base
         string json = "";
         if (!ctx.Read(json))
         {
-            string errMsg = "[Counter] OnStoreLoad: failed to read wires json for " + m_DeviceId;
+            string errMsg = "[Counter] OnStoreLoad: failed to read wires json for ";
+            errMsg = errMsg + m_DeviceId;
             LFPG_Util.Error(errMsg);
             return false;
         }

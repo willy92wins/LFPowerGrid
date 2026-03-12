@@ -1133,6 +1133,7 @@ class CfgVehicles
         yawPitchRollLimit[] = {90, 90, 90};
         hiddenSelections[] = {"camo"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\electronic_counter\data\electronic_counter_grey.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\electronic_counter\data\electronic_counter.rvmat"};
     };
 
     // ---- ElectronicCounter (placed device, PASSTHROUGH 2 IN + 1 OUT) ----
@@ -1151,7 +1152,7 @@ class CfgVehicles
 
         hiddenSelections[] = {"camo", "camo2", "light_led"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\electronic_counter\data\electronic_counter_grey.paa", "\LFPowerGrid\data\electronic_counter\data\electronic_counter_black.paa", ""};
-        hiddenSelectionsMaterials[] = {"", "", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\electronic_counter\data\electronic_counter.rvmat", "\LFPowerGrid\data\electronic_counter\data\electronic_counter.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
 
         class DamageSystem
         {

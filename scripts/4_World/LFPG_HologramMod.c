@@ -277,6 +277,8 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LFPG_XOR_Gate_Kit"))
             return true;
+        if (proj.IsKindOf("LFPG_ElectronicCounter_Kit"))
+            return true;
         if (proj.IsKindOf("LF_Sorter_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
