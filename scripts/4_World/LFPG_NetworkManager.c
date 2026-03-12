@@ -130,6 +130,9 @@ class LFPG_NetworkManager
     // v1.8.0: Pressure Pad dedicated registry
     protected ref array<LFPG_PressurePad> m_RegisteredPads;
 
+    // v1.9.0: Laser Detector dedicated registry
+    protected ref array<LFPG_LaserDetector> m_RegisteredLasers;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -204,6 +207,7 @@ class LFPG_NetworkManager
         m_SorterItemCache = new array<EntityAI>;
         m_RegisteredSensors = new array<LFPG_MotionSensor>;
         m_RegisteredPads = new array<LFPG_PressurePad>;
+        m_RegisteredLasers = new array<LFPG_LaserDetector>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -261,6 +265,12 @@ class LFPG_NetworkManager
 
         // v1.8.1: Pressure pad detection tick (500ms — fast polling for small surface)
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPressurePads, LFPG_PAD_TICK_MS, bTrue);
+
+        // v1.9.0: Laser detector beam raycast (7s — walls don't move)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickLaserBeams, LFPG_LASER_BEAM_TICK_MS, bTrue);
+
+        // v1.9.0: Laser detector player crossing (300ms — thin beam, fast poll)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickLaserCrossing, LFPG_LASER_CROSS_TICK_MS, bTrue);
         #endif
     }
 
@@ -3795,6 +3805,28 @@ class LFPG_NetworkManager
         }
     }
 
+    // v1.9.0: Laser Detector Registration
+    void RegisterLaserDetector(LFPG_LaserDetector laser)
+    {
+        if (!laser)
+            return;
+        if (m_RegisteredLasers.Find(laser) < 0)
+        {
+            m_RegisteredLasers.Insert(laser);
+        }
+    }
+
+    void UnregisterLaserDetector(LFPG_LaserDetector laser)
+    {
+        if (!laser)
+            return;
+        int idx = m_RegisteredLasers.Find(laser);
+        if (idx >= 0)
+        {
+            m_RegisteredLasers.Remove(idx);
+        }
+    }
+
     // Motion sensor detection tick (v1.5.0, split from unified v1.8.1).
     // Runs at LFPG_SENSOR_TICK_MS (3s) — sensors have large range, no need for fast poll.
     protected void LFPG_TickMotionSensors()
@@ -3890,6 +3922,83 @@ class LFPG_NetworkManager
             padMsg = padMsg + changed.ToString();
             padMsg = padMsg + " pads changed state";
             LFPG_Util.Debug(padMsg);
+        }
+        #endif
+    }
+
+    // Laser detector beam raycast tick (v1.9.0).
+    // Runs at LFPG_LASER_BEAM_TICK_MS (7s) — walls/objects rarely move.
+    // Updates beam length for each laser (used by client renderer).
+    protected void LFPG_TickLaserBeams()
+    {
+        #ifdef SERVER
+        int totalLasers = m_RegisteredLasers.Count();
+        if (totalLasers == 0)
+            return;
+
+        int i;
+        LFPG_LaserDetector laser;
+
+        for (i = 0; i < totalLasers; i = i + 1)
+        {
+            if (i >= m_RegisteredLasers.Count())
+                break;
+
+            laser = m_RegisteredLasers[i];
+            if (!laser)
+                continue;
+
+            laser.LFPG_UpdateBeamRaycast();
+        }
+        #endif
+    }
+
+    // Laser detector player crossing tick (v1.9.0).
+    // Runs at LFPG_LASER_CROSS_TICK_MS (300ms) — fast poll for thin beam line.
+    // A player sprinting crosses the beam in ~0.2s, so 300ms catches most crossings.
+    protected void LFPG_TickLaserCrossing()
+    {
+        #ifdef SERVER
+        int totalLasers = m_RegisteredLasers.Count();
+        if (totalLasers == 0)
+            return;
+
+        array<Man> players = new array<Man>;
+        GetGame().GetPlayers(players);
+
+        int i;
+        int changed = 0;
+        LFPG_LaserDetector laser;
+        bool laserChanged;
+        string laserId;
+
+        for (i = 0; i < totalLasers; i = i + 1)
+        {
+            if (i >= m_RegisteredLasers.Count())
+                break;
+
+            laser = m_RegisteredLasers[i];
+            if (!laser)
+                continue;
+
+            laserChanged = laser.LFPG_EvaluateCrossing(players);
+            if (laserChanged)
+            {
+                laserId = laser.LFPG_GetDeviceId();
+                if (laserId != "")
+                {
+                    RequestPropagate(laserId);
+                }
+                changed = changed + 1;
+            }
+        }
+
+        if (changed > 0)
+        {
+            string laserMsg = "[Lasers] Tick: ";
+            laserMsg = laserMsg + changed.ToString();
+            laserMsg = laserMsg + " lasers changed state";
+            LFPG_Util.Debug(laserMsg);
         }
         #endif
     }

@@ -270,6 +270,16 @@ static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
 // 500ms guarantees detection even at sprint speed.
 static const int   LFPG_PAD_TICK_MS         = 500;    // 0.5s between pad scan ticks
 
+// ---- Laser Detector constants (v1.9.0) ----
+// Two ticks: slow (beam raycast) and fast (player crossing).
+static const int   LFPG_LASER_BEAM_TICK_MS    = 7000;   // 7s — beam raycast (walls don't move)
+static const int   LFPG_LASER_CROSS_TICK_MS   = 300;    // 300ms — player crossing detection (fast)
+static const float LFPG_LASER_BEAM_RANGE_M    = 5.0;    // max beam length (metres)
+static const float LFPG_LASER_CROSS_RADIUS    = 0.35;   // crossing detection radius (metres)
+static const float LFPG_LASER_CROSS_RADIUS_SQ = 0.1225; // 0.35² pre-computed
+static const float LFPG_LASER_CONSUMPTION     = 5.0;    // self-consumption (u/s)
+static const float LFPG_LASER_CAPACITY        = 20.0;   // max throughput (u/s)
+
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
 // Interval between telemetry log dumps (ms).
 // 5000ms = every 5 seconds when active. Low overhead: only increments counters per-frame,

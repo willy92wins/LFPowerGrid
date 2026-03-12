@@ -59,6 +59,7 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
         LFPG_SorterView.Init();
+        LFPG_LaserBeamRenderer.Reset();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
@@ -184,6 +185,16 @@ modded class MissionGameplay
         if (renderer && !skipCameraOps)
         {
             renderer.DrawFrame();
+        }
+
+        // v1.9.0: Laser beam rendering (uses same CableHUD pipeline)
+        if (!skipCameraOps)
+        {
+            LFPG_LaserBeamRenderer laserR = LFPG_LaserBeamRenderer.Get();
+            if (laserR)
+            {
+                laserR.DrawFrame();
+            }
         }
 
         if (isActive && !skipCameraOps)

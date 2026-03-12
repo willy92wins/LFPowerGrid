@@ -106,6 +106,9 @@ modded class ActionConstructor
         // --- v1.8.0: Pressure Pad Kit placement ---
         actions.Insert(LFPG_ActionPlacePressurePad);
 
+        // --- v1.9.0: Laser Detector Kit placement ---
+        actions.Insert(LFPG_ActionPlaceLaserDetector);
+
         LFPG_Util.Debug("[Actions] LFPG actions registered (45)");
     }
 };
