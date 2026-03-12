@@ -448,9 +448,9 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat"};
+        hiddenSelections[] = {"camo", "switch"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\switch_v1\data\switch_v1_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\switch_v1.rvmat"};
     };
 
     // ---- PushButton (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -470,9 +470,9 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"camo", "light_led"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa", ""};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\led_off.rvmat"};
+        hiddenSelections[] = {"camo", "switch", "light_led"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\switch_v1\data\switch_v1_co.paa", ""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\led_off.rvmat"};
 
         class AnimationSources
         {
@@ -883,9 +883,9 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
+        hiddenSelections[] = {"camo", "pressure_pad"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa", "\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
     };
 
     // ---- PressurePad (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -904,9 +904,9 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
+        hiddenSelections[] = {"camo", "pressure_pad"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa", "\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
 
         class AnimationSources
         {

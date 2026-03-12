@@ -263,6 +263,22 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LF_Searchlight_Kit"))
             return true;
+        if (proj.IsKindOf("LFPG_SwitchV2_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_MotionSensor_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_PressurePad_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_LaserDetector_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_AND_Gate_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_OR_Gate_Kit"))
+            return true;
+        if (proj.IsKindOf("LFPG_XOR_Gate_Kit"))
+            return true;
+        if (proj.IsKindOf("LF_Sorter_Kit"))
+            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
@@ -295,6 +311,12 @@ modded class Hologram
             return 1;
         if (projection.IsKindOf("LFPG_PushButton_Kit"))
             return 1;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return 1;
+        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
+            return 1;
+        if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
+            return 1;
 
         // Different-model kits and everything else: floor only
         return 0;
@@ -312,6 +334,17 @@ modded class Hologram
         if (m_Parent.IsKindOf("LF_Furnace_Kit"))
             return true;
         return false;
+    }
+
+    // ---- Helper: per-kit roll offset (degrees) ----
+    // LaserDetector deploys rotated 90° around its longest axis.
+    protected float LFPG_GetKitRollOffset(EntityAI projection)
+    {
+        if (!projection)
+            return 0.0;
+        if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
+            return 90.0;
+        return 0.0;
     }
 
     // ============================================
@@ -645,6 +678,13 @@ modded class Hologram
     // ============================================
     protected void LFPG_ApplySmoothed(vector targetPos, vector targetOri, float timeslice, EntityAI projection)
     {
+        // Per-kit roll offset (e.g. LaserDetector 90°) — applied BEFORE smoothing
+        float kitRoll = LFPG_GetKitRollOffset(projection);
+        if (kitRoll != 0.0)
+        {
+            targetOri[2] = targetOri[2] + kitRoll;
+        }
+
         vector finalPos;
         vector finalOri;
 

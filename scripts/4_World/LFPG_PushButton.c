@@ -346,18 +346,18 @@ class LFPG_PushButton : Inventory_Base
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // LED rvmat swap (index 1: camo=0, light_led=1)
+        // LED rvmat swap (index 2: camo=0, switch=1, light_led=2)
         if (m_PoweredNet && m_SwitchOn)
         {
-            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_GREEN);
+            SetObjectMaterial(2, LFPG_BUTTON_RVMAT_GREEN);
         }
         else if (m_PoweredNet)
         {
-            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_RED);
+            SetObjectMaterial(2, LFPG_BUTTON_RVMAT_RED);
         }
         else
         {
-            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_OFF);
+            SetObjectMaterial(2, LFPG_BUTTON_RVMAT_OFF);
         }
 
         // Switch animation
