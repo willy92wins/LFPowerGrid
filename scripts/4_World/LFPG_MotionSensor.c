@@ -207,6 +207,8 @@ class LFPG_MotionSensor : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
+        AddAction(LFPG_ActionCycleDetectMode);
+        AddAction(LFPG_ActionPairSensor);
     }
 
     // ============================================
