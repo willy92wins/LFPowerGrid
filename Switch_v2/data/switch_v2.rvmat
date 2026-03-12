@@ -20,7 +20,7 @@ class Stage1
 };
 class Stage2
 {
-	texture = "#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	texture = "\LFPowerGrid\Switch_v2\data\switch_v2_co.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
