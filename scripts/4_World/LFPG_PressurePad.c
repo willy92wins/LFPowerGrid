@@ -386,7 +386,7 @@ class LFPG_PressurePad : Inventory_Base
     }
 
     // ============================================
-    // Detection — called by LFPG_TickDetectionDevices
+    // Detection — called by LFPG_TickPressurePads
     // ============================================
 
     // Called by centralized tick in NetworkManager (server only).

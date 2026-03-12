@@ -256,8 +256,11 @@ class LFPG_NetworkManager
         // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
 
-        // v1.5.0→v1.8.0: Unified detection tick — sensors + pressure pads
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickDetectionDevices, LFPG_SENSOR_TICK_MS, bTrue);
+        // v1.5.0: Motion sensor detection tick (3s interval)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickMotionSensors, LFPG_SENSOR_TICK_MS, bTrue);
+
+        // v1.8.1: Pressure pad detection tick (500ms — fast polling for small surface)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPressurePads, LFPG_PAD_TICK_MS, bTrue);
         #endif
     }
 
@@ -3792,33 +3795,26 @@ class LFPG_NetworkManager
         }
     }
 
-    // Unified detection tick (v1.8.0).
-    // Processes both motion sensors and pressure pads with a SINGLE
-    // GetPlayers() call. Avoids 2x player list allocation per cycle.
-    protected void LFPG_TickDetectionDevices()
+    // Motion sensor detection tick (v1.5.0, split from unified v1.8.1).
+    // Runs at LFPG_SENSOR_TICK_MS (3s) — sensors have large range, no need for fast poll.
+    protected void LFPG_TickMotionSensors()
     {
         #ifdef SERVER
         int totalSensors = m_RegisteredSensors.Count();
-        int totalPads = m_RegisteredPads.Count();
-
-        if (totalSensors == 0 && totalPads == 0)
+        if (totalSensors == 0)
             return;
 
-        // Fetch player list ONCE for all detection devices
         array<Man> players = new array<Man>;
         GetGame().GetPlayers(players);
 
         int i;
         int changed = 0;
-
-        // --- Phase 1: Motion Sensors ---
         LFPG_MotionSensor sensor;
         bool sensorChanged;
         string sensorId;
 
         for (i = 0; i < totalSensors; i = i + 1)
         {
-            // Safety: array may shrink if sensor destroyed mid-tick
             if (i >= m_RegisteredSensors.Count())
                 break;
 
@@ -3838,14 +3834,37 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- Phase 2: Pressure Pads ---
+        if (changed > 0)
+        {
+            string tickMsg = "[Sensors] Tick: ";
+            tickMsg = tickMsg + changed.ToString();
+            tickMsg = tickMsg + " sensors changed state";
+            LFPG_Util.Debug(tickMsg);
+        }
+        #endif
+    }
+
+    // Pressure pad detection tick (v1.8.1).
+    // Runs at LFPG_PAD_TICK_MS (500ms) — pads cover tiny surface area,
+    // a player at sprint speed crosses in <1s so fast polling is required.
+    protected void LFPG_TickPressurePads()
+    {
+        #ifdef SERVER
+        int totalPads = m_RegisteredPads.Count();
+        if (totalPads == 0)
+            return;
+
+        array<Man> players = new array<Man>;
+        GetGame().GetPlayers(players);
+
+        int i;
+        int changed = 0;
         LFPG_PressurePad pad;
         bool padChanged;
         string padId;
 
         for (i = 0; i < totalPads; i = i + 1)
         {
-            // Safety: array may shrink if pad destroyed mid-tick
             if (i >= m_RegisteredPads.Count())
                 break;
 
@@ -3867,10 +3886,10 @@ class LFPG_NetworkManager
 
         if (changed > 0)
         {
-            string tickMsg = "[Detection] Tick: ";
-            tickMsg = tickMsg + changed.ToString();
-            tickMsg = tickMsg + " devices changed state";
-            LFPG_Util.Debug(tickMsg);
+            string padMsg = "[Pads] Tick: ";
+            padMsg = padMsg + changed.ToString();
+            padMsg = padMsg + " pads changed state";
+            LFPG_Util.Debug(padMsg);
         }
         #endif
     }

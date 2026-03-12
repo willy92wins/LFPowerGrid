@@ -167,6 +167,7 @@ class LFPG_PushButton : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
+        AddAction(LFPG_ActionTogglePushButton);
     }
 
     // ============================================
@@ -345,18 +346,18 @@ class LFPG_PushButton : Inventory_Base
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // LED rvmat swap
+        // LED rvmat swap (index 1: camo=0, light_led=1)
         if (m_PoweredNet && m_SwitchOn)
         {
-            SetObjectMaterial(0, LFPG_BUTTON_RVMAT_GREEN);
+            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_GREEN);
         }
         else if (m_PoweredNet)
         {
-            SetObjectMaterial(0, LFPG_BUTTON_RVMAT_RED);
+            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_RED);
         }
         else
         {
-            SetObjectMaterial(0, LFPG_BUTTON_RVMAT_OFF);
+            SetObjectMaterial(1, LFPG_BUTTON_RVMAT_OFF);
         }
 
         // Switch animation

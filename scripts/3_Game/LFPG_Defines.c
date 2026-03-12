@@ -264,6 +264,12 @@ static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres
 static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
 
+// ---- Pressure Pad tick constants (v1.8.1) ----
+// Separate from SENSOR_TICK_MS because pads cover a tiny surface area.
+// At 3s a player running across the pad is missed entirely.
+// 500ms guarantees detection even at sprint speed.
+static const int   LFPG_PAD_TICK_MS         = 500;    // 0.5s between pad scan ticks
+
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
 // Interval between telemetry log dumps (ms).
 // 5000ms = every 5 seconds when active. Low overhead: only increments counters per-frame,

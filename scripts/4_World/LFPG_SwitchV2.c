@@ -165,6 +165,7 @@ class LFPG_SwitchV2 : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
+        AddAction(LFPG_ActionToggleSwitchV2);
     }
 
     // ============================================
@@ -334,18 +335,18 @@ class LFPG_SwitchV2 : Inventory_Base
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // LED rvmat swap
+        // LED rvmat swap (index 1: camo=0, light_led=1)
         if (m_PoweredNet && m_SwitchOn)
         {
-            SetObjectMaterial(0, LFPG_SWITCHV2_RVMAT_GREEN);
+            SetObjectMaterial(1, LFPG_SWITCHV2_RVMAT_GREEN);
         }
         else if (m_PoweredNet)
         {
-            SetObjectMaterial(0, LFPG_SWITCHV2_RVMAT_RED);
+            SetObjectMaterial(1, LFPG_SWITCHV2_RVMAT_RED);
         }
         else
         {
-            SetObjectMaterial(0, LFPG_SWITCHV2_RVMAT_OFF);
+            SetObjectMaterial(1, LFPG_SWITCHV2_RVMAT_OFF);
         }
 
         // Lever animation: rotation via model.cfg "switch" source
