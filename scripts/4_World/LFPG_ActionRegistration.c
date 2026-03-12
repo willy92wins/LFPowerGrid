@@ -109,7 +109,10 @@ modded class ActionConstructor
         // --- v1.9.0: Laser Detector Kit placement ---
         actions.Insert(LFPG_ActionPlaceLaserDetector);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (45)");
+        // --- v2.0.0: Electronic Counter Kit placement ---
+        actions.Insert(LFPG_ActionPlaceElectronicCounter);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (46)");
     }
 };
 
