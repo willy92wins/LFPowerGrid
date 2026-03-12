@@ -57,6 +57,14 @@ class CfgSoundShaders
         range = 10;
         rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
     };
+    // v1.8.0: Pressure Pad press click (one-shot)
+    class LFPG_PressurePad_Press_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\data\pressure_pad\sounds\pressure_pad_press", 1 }};
+        volume = 0.5;
+        range = 8;
+        rangeCurve[] = {{ 0, 1 }, { 4, 0.4 }, { 8, 0 }};
+    };
 };
 
 class CfgSoundSets
@@ -77,13 +85,21 @@ class CfgSoundSets
         frequencyFactor = 1;
         spatial = 1;
     };
+    // v1.8.0: Pressure Pad press — spatial 3D, one-shot on gate open
+    class LFPG_PressurePad_Press_SoundSet
+    {
+        soundShaders[] = { "LFPG_PressurePad_Press_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
 };
 
 class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -824,6 +840,73 @@ class CfgVehicles
 
         hiddenSelections[] = {"led_indicator"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\sensor\materials\sensor_led_off.rvmat"};
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 100;
+                    };
+                };
+            };
+        };
+    };
+
+    // =========================================================
+    // v1.8.0: PRESSURE PAD (PASSTHROUGH, gated by player presence)
+    //   1 IN + 1 OUT, capacity 20 u/s, consumption 5 u/s
+    //   Animated pad depression when player stands on it
+    // =========================================================
+
+    // ---- PressurePad Kit (holdable, deployable, same-model) ----
+    class LFPG_PressurePad_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PressurePadKit";
+        descriptionShort = "$STR_LFPG_PressurePadKit_Desc";
+        model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
+        weight = 500;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- PressurePad (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
+    // Ports: input_1, output_1 (memory points: port_input_0, port_output_0)
+    // Gate: opens when player stands on pad, closes when player leaves.
+    class LFPG_PressurePad : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PressurePad";
+        descriptionShort = "$STR_LFPG_PressurePad_Desc";
+        model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
+        weight = 800;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {};
+
+        class AnimationSources
+        {
+            class pad_press
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
 
         class DamageSystem
         {

@@ -109,3 +109,8 @@
 "STR_LFPG_OR_Gate_Desc","Logic gate: output ON when any input powered. 20 u/s capacity.","Logic gate: output ON when any input powered. 20 u/s capacity.","Puerta lógica: salida activa con cualquier entrada alimentada. 20 u/s.","Logik-Gatter: Ausgang AN wenn ein Eingang versorgt. 20 u/s.","Логический вентиль: выход ВКЛ при питании любого входа. 20 ед/с."
 "STR_LFPG_XOR_Gate","XOR Gate","XOR Gate","Puerta XOR","XOR-Gatter","XOR-вентиль"
 "STR_LFPG_XOR_Gate_Desc","Logic gate: output ON when exactly one input powered. 20 u/s capacity.","Logic gate: output ON when exactly one input powered. 20 u/s capacity.","Puerta lógica: salida activa con exactamente una entrada alimentada. 20 u/s.","Logik-Gatter: Ausgang AN wenn genau ein Eingang versorgt. 20 u/s.","Логический вентиль: выход ВКЛ при питании ровно одного входа. 20 ед/с."
+
+"STR_LFPG_PressurePadKit","Pressure Pad Kit","Pressure Pad Kit","Kit Placa de Presión","Druckplatten-Kit","Набор нажимной плиты"
+"STR_LFPG_PressurePadKit_Desc","A floor-mounted pressure pad. Place to deploy.","A floor-mounted pressure pad. Place to deploy.","Placa de presión para suelo. Coloca para desplegar.","Eine Bodendruckplatte. Platzieren zum Aufstellen.","Напольная нажимная плита. Разместите для установки."
+"STR_LFPG_PressurePad","Pressure Pad","Pressure Pad","Placa de Presión","Druckplatte","Нажимная плита"
+"STR_LFPG_PressurePad_Desc","Passes power when a player stands on it. 20 u/s capacity.","Passes power when a player stands on it. 20 u/s capacity.","Transmite energía cuando un jugador pisa sobre ella. 20 u/s.","Leitet Strom wenn ein Spieler darauf steht. 20 E/s.","Передаёт энергию, когда игрок стоит на ней. 20 ед/с."

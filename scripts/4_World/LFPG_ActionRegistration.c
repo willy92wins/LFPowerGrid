@@ -103,7 +103,10 @@ modded class ActionConstructor
         // --- v1.7.0: Logic Gate Kit placement ---
         actions.Insert(LFPG_ActionPlaceLogicGate);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (44)");
+        // --- v1.8.0: Pressure Pad Kit placement ---
+        actions.Insert(LFPG_ActionPlacePressurePad);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (45)");
     }
 };
 
