@@ -122,6 +122,74 @@ class LFPG_WorldUtil
         return dx * dx + dy * dy + dz * dz;
     }
 
+    // v0.8.x: Compute edge fade factor for a screen-space segment.
+    // Returns 1.0 if both endpoints are well inside the viewport,
+    // 0.0-1.0 if the nearest endpoint is within fadeWidth of a screen edge.
+    // Only called for segments that passed through Cohen-Sutherland
+    // (outsideA || outsideB), so the typical cost is 0 per segment.
+    // Cost when called: 8 comparisons + 1 division.
+    static float ComputeEdgeFade(float sx1, float sy1, float sx2, float sy2,
+                                  float screenW, float screenH, float fadeWidth)
+    {
+        // Min distance from endpoint A to nearest screen edge
+        float dA = sx1;
+        if (sy1 < dA)
+        {
+            dA = sy1;
+        }
+        float rA = screenW - sx1;
+        if (rA < dA)
+        {
+            dA = rA;
+        }
+        float bA = screenH - sy1;
+        if (bA < dA)
+        {
+            dA = bA;
+        }
+
+        // Min distance from endpoint B to nearest screen edge
+        float dB = sx2;
+        if (sy2 < dB)
+        {
+            dB = sy2;
+        }
+        float rB = screenW - sx2;
+        if (rB < dB)
+        {
+            dB = rB;
+        }
+        float bB = screenH - sy2;
+        if (bB < dB)
+        {
+            dB = bB;
+        }
+
+        // Take maximum of both endpoints.
+        // After C-S clipping, one endpoint may be in the margin zone
+        // (negative distance from viewport edge). Using MIN would make
+        // the entire segment invisible even if most of it is on-screen.
+        // MAX ensures the segment stays visible as long as at least one
+        // endpoint is inside the viewport. For catenary cables, this
+        // creates a progressive fade across sub-segments: only the last
+        // sub-segment (both endpoints near edge) actually fades.
+        float maxDist = dA;
+        if (dB > maxDist)
+        {
+            maxDist = dB;
+        }
+
+        // Point in margin zone (negative) → fully faded
+        if (maxDist <= 0.0)
+            return 0.0;
+
+        // Beyond fade band → fully opaque
+        if (maxDist >= fadeWidth)
+            return 1.0;
+
+        return maxDist / fadeWidth;
+    }
+
     // v0.7.14: Clip a behind-camera point toward a visible point in world space,
     // then project the clipped point to get valid screen coordinates.
     //

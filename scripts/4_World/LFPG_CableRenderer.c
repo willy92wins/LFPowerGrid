@@ -2659,6 +2659,25 @@ class LFPG_CableRenderer
                     uly2 = m_ClipB[1];
                 }
 
+                // v0.8.x: Edge fade for ultra-LOD.
+                float ulEdgeFade = 1.0;
+                if (ulOutA || ulOutB)
+                {
+                    ulEdgeFade = LFPG_WorldUtil.ComputeEdgeFade(ulx1, uly1, ulx2, uly2, swF, shF, LFPG_EDGE_FADE_PX);
+                    if (ulEdgeFade < 0.01)
+                    {
+                        tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+                        continue;
+                    }
+                }
+                int ulDraw = drawColor;
+                int ulPlDraw = plOccDrawColor;
+                if (ulEdgeFade < 0.99)
+                {
+                    ulDraw = ApplyAlpha(drawColor, ulEdgeFade);
+                    ulPlDraw = ApplyAlpha(plOccDrawColor, ulEdgeFade);
+                }
+
                 // Draw single line with minimum width.
                 // v0.7.38: Negative clipping — split into opaque→faded→opaque
                 // at the exact edges of the player rect.
@@ -2679,15 +2698,15 @@ class LFPG_CableRenderer
                             float uld1 = (ulPcX1 - ulx1) * (ulPcX1 - ulx1) + (ulPcY1 - uly1) * (ulPcY1 - uly1);
                             if (uld1 > 1.0)
                             {
-                                hud.DrawLineScreen(ulx1, uly1, ulPcX1, ulPcY1, LFPG_DEPTH_WIDTH_MIN, drawColor);
+                                hud.DrawLineScreen(ulx1, uly1, ulPcX1, ulPcY1, LFPG_DEPTH_WIDTH_MIN, ulDraw);
                             }
                             // Tramo 2: Pin → Pout (faded behind player)
-                            hud.DrawLineScreen(ulPcX1, ulPcY1, ulPcX2, ulPcY2, LFPG_DEPTH_WIDTH_MIN, plOccDrawColor);
+                            hud.DrawLineScreen(ulPcX1, ulPcY1, ulPcX2, ulPcY2, LFPG_DEPTH_WIDTH_MIN, ulPlDraw);
                             // Tramo 3: Pout → B (opaque, skip if degenerate)
                             float uld3 = (ulx2 - ulPcX2) * (ulx2 - ulPcX2) + (uly2 - ulPcY2) * (uly2 - ulPcY2);
                             if (uld3 > 1.0)
                             {
-                                hud.DrawLineScreen(ulPcX2, ulPcY2, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, drawColor);
+                                hud.DrawLineScreen(ulPcX2, ulPcY2, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, ulDraw);
                             }
 
                             tRnd.m_WiresDrawn = tRnd.m_WiresDrawn + 1;
@@ -2696,7 +2715,7 @@ class LFPG_CableRenderer
                         }
                     }
                 }
-                hud.DrawLineScreen(ulx1, uly1, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, drawColor);
+                hud.DrawLineScreen(ulx1, uly1, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, ulDraw);
 
                 tRnd.m_WiresDrawn = tRnd.m_WiresDrawn + 1;
                 tRnd.m_SegmentsDrawn = tRnd.m_SegmentsDrawn + 1;
@@ -2875,6 +2894,17 @@ class LFPG_CableRenderer
                     sy2 = m_ClipB[1];
                 }
 
+                // v0.8.x: Edge fade — smooth alpha falloff near screen edges.
+                // Only computed for clipped segments (outsideA || outsideB).
+                // Segments fully on-screen skip this entirely (edgeFade stays 1.0).
+                float edgeFade = 1.0;
+                if (outsideA || outsideB)
+                {
+                    edgeFade = LFPG_WorldUtil.ComputeEdgeFade(sx1, sy1, sx2, sy2, swF, shF, LFPG_EDGE_FADE_PX);
+                    if (edgeFade < 0.01)
+                        continue;
+                }
+
                 // Depth-based width (use z of visible point for behind-camera cases)
                 float zA = sA[2];
                 float zB = sB[2];
@@ -2939,6 +2969,40 @@ class LFPG_CableRenderer
                 float shOfsX = depthWidth * LFPG_SHADOW_OFS_X_RATIO;
                 float shOfsY = depthWidth * LFPG_SHADOW_OFS_Y_RATIO;
 
+                // v0.8.x: Per-segment edge-faded colors.
+                // Default to wire-level colors. Only compute faded variants
+                // when edgeFade < 1.0 (clipped segments near screen edge).
+                int segDraw = drawColor;
+                int segShadow = shadowColor;
+                int segHighlight = highlightColor;
+                int segPlDraw = plOccDrawColor;
+                int segPlShadow = plOccShadowColor;
+                int segPlHighlight = plOccHighlightColor;
+                if (edgeFade < 0.99)
+                {
+                    segDraw = ApplyAlpha(drawColor, edgeFade);
+                    if (lodTier <= 1)
+                    {
+                        segShadow = ApplyAlpha(shadowColor, edgeFade);
+                    }
+                    if (lodTier == 0)
+                    {
+                        segHighlight = ApplyAlpha(highlightColor, edgeFade);
+                    }
+                    if (wirePlOcc)
+                    {
+                        segPlDraw = ApplyAlpha(plOccDrawColor, edgeFade);
+                        if (lodTier <= 1)
+                        {
+                            segPlShadow = ApplyAlpha(plOccShadowColor, edgeFade);
+                        }
+                        if (lodTier == 0)
+                        {
+                            segPlHighlight = ApplyAlpha(plOccHighlightColor, edgeFade);
+                        }
+                    }
+                }
+
                 // ---- Multi-pass drawing (LOD-dependent) ----
                 if (segPlOcc)
                 {
@@ -2952,24 +3016,24 @@ class LFPG_CableRenderer
                     {
                         if (lodTier <= 1)
                         {
-                            hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, plClX1 + shOfsX, plClY1 + shOfsY, depthWidth, shadowColor);
+                            hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, plClX1 + shOfsX, plClY1 + shOfsY, depthWidth, segShadow);
                         }
-                        hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, depthWidth, drawColor);
+                        hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, depthWidth, segDraw);
                         if (lodTier == 0)
                         {
-                            hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, hlWidth, highlightColor);
+                            hud.DrawLineScreen(sx1, sy1, plClX1, plClY1, hlWidth, segHighlight);
                         }
                     }
 
                     // Tramo 2: Pin → Pout (faded behind player)
                     if (lodTier <= 1)
                     {
-                        hud.DrawLineScreen(plClX1 + shOfsX, plClY1 + shOfsY, plClX2 + shOfsX, plClY2 + shOfsY, depthWidth, plOccShadowColor);
+                        hud.DrawLineScreen(plClX1 + shOfsX, plClY1 + shOfsY, plClX2 + shOfsX, plClY2 + shOfsY, depthWidth, segPlShadow);
                     }
-                    hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, depthWidth, plOccDrawColor);
+                    hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, depthWidth, segPlDraw);
                     if (lodTier == 0)
                     {
-                        hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, hlWidth, plOccHighlightColor);
+                        hud.DrawLineScreen(plClX1, plClY1, plClX2, plClY2, hlWidth, segPlHighlight);
                     }
 
                     // Tramo 3: Pout → B (opaque)
@@ -2977,12 +3041,12 @@ class LFPG_CableRenderer
                     {
                         if (lodTier <= 1)
                         {
-                            hud.DrawLineScreen(plClX2 + shOfsX, plClY2 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, shadowColor);
+                            hud.DrawLineScreen(plClX2 + shOfsX, plClY2 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, segShadow);
                         }
-                        hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, depthWidth, drawColor);
+                        hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, depthWidth, segDraw);
                         if (lodTier == 0)
                         {
-                            hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, hlWidth, highlightColor);
+                            hud.DrawLineScreen(plClX2, plClY2, sx2, sy2, hlWidth, segHighlight);
                         }
                     }
                 }
@@ -2991,12 +3055,12 @@ class LFPG_CableRenderer
                     // Normal draw (no player intersection)
                     if (lodTier <= 1)
                     {
-                        hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, shadowColor);
+                        hud.DrawLineScreen(sx1 + shOfsX, sy1 + shOfsY, sx2 + shOfsX, sy2 + shOfsY, depthWidth, segShadow);
                     }
-                    hud.DrawLineScreen(sx1, sy1, sx2, sy2, depthWidth, drawColor);
+                    hud.DrawLineScreen(sx1, sy1, sx2, sy2, depthWidth, segDraw);
                     if (lodTier == 0)
                     {
-                        hud.DrawLineScreen(sx1, sy1, sx2, sy2, hlWidth, highlightColor);
+                        hud.DrawLineScreen(sx1, sy1, sx2, sy2, hlWidth, segHighlight);
                     }
                 }
             }

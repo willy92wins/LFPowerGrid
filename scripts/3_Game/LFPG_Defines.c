@@ -67,6 +67,15 @@ static const float LFPG_SCREEN_DEGENERATE_MULT = 3.0;
 // distortion at the clip boundary. Must be > LFPG_BEHIND_CAM_Z.
 static const float LFPG_NEAR_CLIP_M = 0.5;
 
+// v0.8.x: Edge fade — smooth alpha falloff near screen edges.
+// Segments clipped by Cohen-Sutherland fade proportionally to how
+// close the clipped endpoint is to the screen edge. Eliminates the
+// hard visual cut when cables exit the viewport. Only computed for
+// segments that enter the C-S path (outsideA || outsideB), so zero
+// cost for the 90%+ of segments fully on-screen.
+// 80px at 1080p ≈ 4% of screen height. Subtle but effective.
+static const float LFPG_EDGE_FADE_PX = 80.0;
+
 // ---- Cable state system (v0.7.8) ----
 // Each committed wire has a visual state that determines color,
 // and in the future, pattern (dash, pulse, etc.).

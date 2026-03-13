@@ -36,6 +36,11 @@ class LFPG_CableHUD
     protected int m_SegmentsDrawn = 0;
     protected int m_SegmentsCulled = 0;
 
+    // v0.8.x: Precomputed degenerate projection limits (set once per frame in BeginFrame).
+    // Avoids redundant multiplication in DrawLineScreen/DrawJointScreen/DrawEndcapScreen.
+    protected float m_DegLimX = 0.0;
+    protected float m_DegLimY = 0.0;
+
 
     static LFPG_CableHUD Get()
     {
@@ -198,6 +203,10 @@ class LFPG_CableHUD
         m_ScreenWF = curW;
         m_ScreenHF = curH;
 
+        // v0.8.x: Precompute degenerate limits once per frame.
+        m_DegLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
+        m_DegLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
+
         // Detect resolution change and resize canvas
         if (curW != m_CanvasW || curH != m_CanvasH)
         {
@@ -294,11 +303,10 @@ class LFPG_CableHUD
         // near the frustum edge. Canvas.DrawLine clips these to the
         // viewport boundary, producing visible artifact lines at screen
         // edges. Reject any coordinate beyond 3× screen size.
-        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
-        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
-        if (x1 < -degLimX || x1 > degLimX || y1 < -degLimY || y1 > degLimY)
+        // degLim precomputed once per frame in BeginFrame.
+        if (x1 < -m_DegLimX || x1 > m_DegLimX || y1 < -m_DegLimY || y1 > m_DegLimY)
             return;
-        if (x2 < -degLimX || x2 > degLimX || y2 < -degLimY || y2 > degLimY)
+        if (x2 < -m_DegLimX || x2 > m_DegLimX || y2 < -m_DegLimY || y2 > m_DegLimY)
             return;
 
         m_Canvas.DrawLine(x1, y1, x2, y2, width, color);
@@ -315,10 +323,8 @@ class LFPG_CableHUD
         if (x != x || y != y)
             return;
 
-        // v0.8.x: Degenerate projection guard (see DrawLineScreen).
-        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
-        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
-        if (x < -degLimX || x > degLimX || y < -degLimY || y > degLimY)
+        // v0.8.x: Degenerate projection guard (precomputed in BeginFrame).
+        if (x < -m_DegLimX || x > m_DegLimX || y < -m_DegLimY || y > m_DegLimY)
             return;
 
         m_Canvas.DrawLine(x, y - halfSize, x + halfSize, y, 2.0, color);
@@ -339,10 +345,8 @@ class LFPG_CableHUD
         if (x != x || y != y || perpX != perpX || perpY != perpY)
             return;
 
-        // v0.8.x: Degenerate projection guard (see DrawLineScreen).
-        float degLimX = m_ScreenWF * LFPG_SCREEN_DEGENERATE_MULT;
-        float degLimY = m_ScreenHF * LFPG_SCREEN_DEGENERATE_MULT;
-        if (x < -degLimX || x > degLimX || y < -degLimY || y > degLimY)
+        // v0.8.x: Degenerate projection guard (precomputed in BeginFrame).
+        if (x < -m_DegLimX || x > m_DegLimX || y < -m_DegLimY || y > m_DegLimY)
             return;
 
         float x1 = x + perpX * halfLen;

@@ -823,7 +823,35 @@ class LFPG_WiringClient
                     sy2 = m_ClipB[1];
                 }
 
-                hud.DrawLineScreen(sx1, sy1, sx2, sy2, LFPG_PREVIEW_LINE_WIDTH, color);
+                // v0.8.x: Edge fade for preview segments near screen edge.
+                int segColor = color;
+                if (offA || offB)
+                {
+                    float prvEdgeFade = LFPG_WorldUtil.ComputeEdgeFade(sx1, sy1, sx2, sy2, swF, shF, LFPG_EDGE_FADE_PX);
+                    if (prvEdgeFade < 0.01)
+                    {
+                        tPrv.m_CulledOffScreen = tPrv.m_CulledOffScreen + 1;
+                        continue;
+                    }
+                    if (prvEdgeFade < 0.99)
+                    {
+                        // Apply fade to alpha channel of color
+                        int prvOrigAlpha = (color >> 24) & 0xFF;
+                        int prvNewAlpha = (int)(prvOrigAlpha * prvEdgeFade);
+                        if (prvNewAlpha < 0)
+                        {
+                            prvNewAlpha = 0;
+                        }
+                        if (prvNewAlpha > 255)
+                        {
+                            prvNewAlpha = 255;
+                        }
+                        int prvRgb = color & 0x00FFFFFF;
+                        segColor = (prvNewAlpha << 24) | prvRgb;
+                    }
+                }
+
+                hud.DrawLineScreen(sx1, sy1, sx2, sy2, LFPG_PREVIEW_LINE_WIDTH, segColor);
                 tPrv.m_Drawn = tPrv.m_Drawn + 1;
             }
         }

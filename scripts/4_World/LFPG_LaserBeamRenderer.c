@@ -103,6 +103,10 @@ class LFPG_LaserBeamRenderer
         vector camDir = GetGame().GetCurrentCameraDirection();
         float cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
 
+        // v0.8.x: Precompute screen dims once (not per-laser).
+        float lasSwF = hud.GetScreenW();
+        float lasShF = hud.GetScreenH();
+
         int i;
         LFPG_LaserDetector det;
         float beamLen;
@@ -160,8 +164,23 @@ class LFPG_LaserBeamRenderer
             scrB = GetGame().GetScreenPos(beamEnd);
 
             // Z check (behind camera plane)
-            if (scrA[2] < LFPG_BEHIND_CAM_Z && scrB[2] < LFPG_BEHIND_CAM_Z)
+            bool lasBehindA = (scrA[2] < LFPG_BEHIND_CAM_Z);
+            bool lasBehindB = (scrB[2] < LFPG_BEHIND_CAM_Z);
+
+            if (lasBehindA && lasBehindB)
                 continue;
+
+            // v0.8.x: Single-behind — 3D near-plane clip.
+            // Laser beams are single segments (no catenary), so clipping
+            // to the near plane is essential to avoid vanishing or artifacts.
+            if (lasBehindA)
+            {
+                scrA = LFPG_WorldUtil.ClipBehindCamera(beamStart, beamEnd, camPos, camDir);
+            }
+            if (lasBehindB)
+            {
+                scrB = LFPG_WorldUtil.ClipBehindCamera(beamEnd, beamStart, camPos, camDir);
+            }
 
             // Depth-based width scaling (same formula as cables)
             dist = Math.Sqrt(distSq);
@@ -180,7 +199,30 @@ class LFPG_LaserBeamRenderer
             }
 
             // Draw the beam line
-            hud.DrawLineScreen(scrA[0], scrA[1], scrB[0], scrB[1], depthWidth, LFPG_LASER_BEAM_COLOR);
+            // v0.8.x: Edge fade — smooth alpha falloff near screen edges.
+            int lasDraw = LFPG_LASER_BEAM_COLOR;
+            if (lasSwF > 0.0 && lasShF > 0.0)
+            {
+                float lasEdgeFade = LFPG_WorldUtil.ComputeEdgeFade(scrA[0], scrA[1], scrB[0], scrB[1], lasSwF, lasShF, LFPG_EDGE_FADE_PX);
+                if (lasEdgeFade < 0.01)
+                    continue;
+                if (lasEdgeFade < 0.99)
+                {
+                    int lasOrigAlpha = (LFPG_LASER_BEAM_COLOR >> 24) & 0xFF;
+                    int lasNewAlpha = (int)(lasOrigAlpha * lasEdgeFade);
+                    if (lasNewAlpha < 0)
+                    {
+                        lasNewAlpha = 0;
+                    }
+                    if (lasNewAlpha > 255)
+                    {
+                        lasNewAlpha = 255;
+                    }
+                    int lasRgb = LFPG_LASER_BEAM_COLOR & 0x00FFFFFF;
+                    lasDraw = (lasNewAlpha << 24) | lasRgb;
+                }
+            }
+            hud.DrawLineScreen(scrA[0], scrA[1], scrB[0], scrB[1], depthWidth, lasDraw);
         }
     }
 };
