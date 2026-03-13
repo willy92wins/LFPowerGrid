@@ -883,9 +883,9 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"model_0", "pressure_pad"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelections[] = {"model_0", "pressure_pad", "port_input_0", "port_output_0"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
     };
 
     // ---- PressurePad (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -904,9 +904,9 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"model_0", "pressure_pad"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelections[] = {"model_0", "pressure_pad", "port_input_0", "port_output_0"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
 
         class AnimationSources
         {

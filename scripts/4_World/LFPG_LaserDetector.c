@@ -637,20 +637,19 @@ class LFPG_LaserDetector : Inventory_Base
             return ModelToWorld(GetMemoryPointPos(memPoint));
         }
         // Fallback: model is ~7cm deep (X axis in model space).
-        // LED is on the front face (-X in model space).
-        // Model space: front face is at negative X (-0.029), height center ~0.028.
-        vector ledOffset = "-0.025 0.028 0.0";
+        // Optic faces +X in model space.
+        // Model space: optic face is at positive X (~0.029), height center ~0.028.
+        vector ledOffset = "0.025 0.028 0.0";
         return ModelToWorld(ledOffset);
     }
 
     // Returns beam emission direction in world space.
-    // LED faces -X in model space. GetDirection() returns entity Z-forward
-    // which is WRONG after pitch=90° deployment. Instead, transform the
-    // model-space -X axis through ModelToWorld to get correct world direction.
+    // Optic faces +X in model space. Transform the model-space +X axis
+    // through ModelToWorld to get correct world direction.
     vector LFPG_GetBeamDirection()
     {
         vector origin = ModelToWorld("0 0 0");
-        vector fwd = ModelToWorld("-1 0 0");
+        vector fwd = ModelToWorld("1 0 0");
         float dx = fwd[0] - origin[0];
         float dy = fwd[1] - origin[1];
         float dz = fwd[2] - origin[2];
