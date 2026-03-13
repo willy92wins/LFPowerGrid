@@ -1071,7 +1071,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {};
+        hiddenSelections[] = {"light_led"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat"};
     };
 
     // ---- LaserDetector (placed device, PASSTHROUGH 1 IN + 1 OUT) ----

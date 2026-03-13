@@ -20,7 +20,7 @@ class Stage1
 };
 class Stage2
 {
-	texture = "#(argb,8,8,3)color(0.5,0.5,0.5,1,DT)";
+	texture = "\LFPowerGrid\data\laser_detector\laser_detector_grey.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
@@ -44,14 +44,14 @@ class Stage3
 };
 class Stage4
 {
-	texture = "#(argb,8,8,3)color(1,1,1,1,AS)";
+	texture = "";
 	uvSource = "tex";
 	class uvTransform
 	{
 		aside[] = {1,0,0};
 		up[] = {0,1,0};
-		dir[] = {0,0,0};
-		pos[] = {0,0,0};
+		dir[] = {0,0,1};
+		pos[] = {0,0,1};
 	};
 };
 class Stage5
@@ -62,31 +62,17 @@ class Stage5
 	{
 		aside[] = {1,0,0};
 		up[] = {0,1,0};
-		dir[] = {0,0,0};
-		pos[] = {0,0,0};
+		dir[] = {0,0,1};
+		pos[] = {0,0,1};
 	};
 };
 class Stage6
 {
-	texture = "#(argb,8,8,3)color(1,1,1,1,CO)";
-	uvSource = "tex";
-	class uvTransform
-	{
-		aside[] = {1,0,0};
-		up[] = {0,1,0};
-		dir[] = {0,0,0};
-		pos[] = {0,0,0};
-	};
+	texture = "#(ai,64,64,1)fresnel(1.53,2.44)";
+	uvSource = "none";
 };
 class Stage7
 {
 	texture = "dz\data\data\env_land_co.paa";
-	uvSource = "tex";
-	class uvTransform
-	{
-		aside[] = {1,0,0};
-		up[] = {0,1,0};
-		dir[] = {0,0,1};
-		pos[] = {0,0,0};
-	};
+	uvSource = "none";
 };
