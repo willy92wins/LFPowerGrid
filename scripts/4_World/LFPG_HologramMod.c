@@ -340,9 +340,9 @@ modded class Hologram
         return false;
     }
 
-    // ---- Helper: per-kit roll offset (degrees) ----
-    // LaserDetector deploys rotated 90° around its longest axis.
-    protected float LFPG_GetKitRollOffset(EntityAI projection)
+    // ---- Helper: per-kit pitch offset (degrees) ----
+    // LaserDetector deploys rotated 90° in pitch (ori[1]).
+    protected float LFPG_GetKitPitchOffset(EntityAI projection)
     {
         if (!projection)
             return 0.0;
@@ -682,11 +682,11 @@ modded class Hologram
     // ============================================
     protected void LFPG_ApplySmoothed(vector targetPos, vector targetOri, float timeslice, EntityAI projection)
     {
-        // Per-kit roll offset (e.g. LaserDetector 90°) — applied BEFORE smoothing
-        float kitRoll = LFPG_GetKitRollOffset(projection);
-        if (kitRoll != 0.0)
+        // Per-kit pitch offset (e.g. LaserDetector 90°) — applied BEFORE smoothing
+        float kitPitch = LFPG_GetKitPitchOffset(projection);
+        if (kitPitch != 0.0)
         {
-            targetOri[2] = targetOri[2] + kitRoll;
+            targetOri[1] = targetOri[1] + kitPitch;
         }
 
         vector finalPos;

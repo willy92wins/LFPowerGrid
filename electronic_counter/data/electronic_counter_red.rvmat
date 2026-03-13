@@ -82,7 +82,7 @@ class Stage6
 class Stage7
 {
 	// Usamos tu textura negra como base de color
-	texture = "LFPowerGrid\data\electronic_counter\data\electronic_counter_black.paa";
+	texture = "LFPowerGrid\electronic_counter\data\electronic_counter_black.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
