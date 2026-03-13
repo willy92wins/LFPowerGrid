@@ -418,8 +418,8 @@ class LFPG_LaserDetector : Inventory_Base
         // Beam origin: light_led memory point
         vector beamStart = LFPG_GetBeamStart();
 
-        // Beam direction: forward of the device
-        vector beamDir = GetDirection();
+        // Beam direction: model-space -X axis (LED emission direction)
+        vector beamDir = LFPG_GetBeamDirection();
 
         // Beam end: max range
         float maxRange = LFPG_LASER_BEAM_RANGE_M;
@@ -504,7 +504,7 @@ class LFPG_LaserDetector : Inventory_Base
 
         // Beam segment: start → end
         vector beamStart = LFPG_GetBeamStart();
-        vector beamDir = GetDirection();
+        vector beamDir = LFPG_GetBeamDirection();
         float bEndX = beamStart[0] + beamDir[0] * m_BeamLength;
         float bEndY = beamStart[1] + beamDir[1] * m_BeamLength;
         float bEndZ = beamStart[2] + beamDir[2] * m_BeamLength;
@@ -637,19 +637,38 @@ class LFPG_LaserDetector : Inventory_Base
             return ModelToWorld(GetMemoryPointPos(memPoint));
         }
         // Fallback: model is ~7cm deep (X axis in model space).
-        // LED is on the front face. Device forward = GetDirection().
-        // Offset from center: ~3cm forward + 3cm up (model center is near base).
+        // LED is on the front face (-X in model space).
         // Model space: front face is at negative X (-0.029), height center ~0.028.
-        // Use a model-space offset that places origin on the front LED face.
         vector ledOffset = "-0.025 0.028 0.0";
         return ModelToWorld(ledOffset);
+    }
+
+    // Returns beam emission direction in world space.
+    // LED faces -X in model space. GetDirection() returns entity Z-forward
+    // which is WRONG after pitch=90° deployment. Instead, transform the
+    // model-space -X axis through ModelToWorld to get correct world direction.
+    vector LFPG_GetBeamDirection()
+    {
+        vector origin = ModelToWorld("0 0 0");
+        vector fwd = ModelToWorld("-1 0 0");
+        float dx = fwd[0] - origin[0];
+        float dy = fwd[1] - origin[1];
+        float dz = fwd[2] - origin[2];
+        float len = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001)
+        {
+            // Degenerate fallback — should never happen
+            return Vector(0, 0, 1);
+        }
+        float invLen = 1.0 / len;
+        return Vector(dx * invLen, dy * invLen, dz * invLen);
     }
 
     // Returns beam end in world space
     vector LFPG_GetBeamEnd()
     {
         vector beamStart = LFPG_GetBeamStart();
-        vector beamDir = GetDirection();
+        vector beamDir = LFPG_GetBeamDirection();
         float len = m_BeamLength;
         if (len < 0.01)
         {

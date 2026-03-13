@@ -3001,6 +3001,16 @@ class LFPG_ElecGraph
         if (inEdge.m_AllocatedPower > LFPG_PROPAGATION_EPSILON)
             return inEdge.m_AllocatedPower;
 
+        // v2.0.1: Gated PASSTHROUGH nodes (PushButton, PressurePad, Laser,
+        // Counter) use m_OutputPower as demand signal, NOT real power.
+        // When gate closes or upstream has no power, AllocateOutput zeroes
+        // edge allocations. The fallback below would read the demand signal
+        // from m_OutputPower and leak phantom power to downstream consumers,
+        // causing a 1-frame flash. For gated devices, AllocateOutput always
+        // runs (they are PASSTHROUGH), so m_AllocatedPower=0 is authoritative.
+        if (srcNode.m_IsGated)
+            return 0.0;
+
         // Fallback: equal split (cold-start / first pass before AllocateOutput runs)
         float srcOutput = srcNode.m_OutputPower;
         if (srcOutput < LFPG_PROPAGATION_EPSILON)
