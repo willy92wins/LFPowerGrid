@@ -883,7 +883,7 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "pressure_pad"};
+        hiddenSelections[] = {"model_0", "pressure_pad"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa", "\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
     };
@@ -904,7 +904,7 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"camo", "pressure_pad"};
+        hiddenSelections[] = {"model_0", "pressure_pad"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa", "\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\pressure_pad.rvmat"};
 

@@ -395,17 +395,9 @@ class LFPG_PressurePad : Inventory_Base
     bool LFPG_EvaluatePresence(array<Man> players)
     {
         #ifdef SERVER
-        // Only detect if powered — unpowered pad cannot activate
-        if (!m_PoweredNet)
-        {
-            if (m_GateOpen)
-            {
-                m_GateOpen = false;
-                SetSynchDirty();
-                return true;
-            }
-            return false;
-        }
+        // Presence detection runs ALWAYS — gate is a physical sensor.
+        // Sound plays on gate transition regardless of power state.
+        // Power only affects whether the graph propagates through the gate.
 
         vector padPos = GetPosition();
         float padX = padPos[0];
@@ -606,11 +598,8 @@ class LFPG_PressurePad : Inventory_Base
 
         m_PoweredNet = powered;
 
-        // When power is lost, close gate immediately
-        if (!powered && m_GateOpen)
-        {
-            m_GateOpen = false;
-        }
+        // Gate is NOT closed on power loss — it is a physical sensor.
+        // Power only affects whether the graph propagates through.
 
         SetSynchDirty();
 

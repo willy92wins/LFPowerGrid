@@ -319,6 +319,8 @@ modded class Hologram
             return 1;
         if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
             return 1;
+        if (projection.IsKindOf("LFPG_ElectronicCounter_Kit"))
+            return 1;
 
         // Different-model kits and everything else: floor only
         return 0;

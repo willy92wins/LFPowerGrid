@@ -810,8 +810,10 @@ class LFPG_WiringClient
                 }
                 if (offA || offB)
                 {
+                    // FIX: C-S clips to actual viewport, not expanded rect.
+                    // Margin only used in fast-path above to decide invocation.
                     bool segVisible = LFPG_WorldUtil.ClipSegToScreen(sx1, sy1, sx2, sy2,
-                        -margin, -margin, swF + margin, shF + margin, m_ClipA, m_ClipB);
+                        0.0, 0.0, swF, shF, m_ClipA, m_ClipB);
                     if (!segVisible)
                     {
                         tPrv.m_CulledOffScreen = tPrv.m_CulledOffScreen + 1;

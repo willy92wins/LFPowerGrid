@@ -2643,10 +2643,12 @@ class LFPG_CableRenderer
                 bool ulOutB = (ulx2 < -ulMargin || ulx2 > swF + ulMargin || uly2 < -ulMargin || uly2 > shF + ulMargin);
                 if (ulOutA || ulOutB)
                 {
-                    float ulMinX = -ulMargin;
-                    float ulMinY = -ulMargin;
-                    float ulMaxX = swF + ulMargin;
-                    float ulMaxY = shF + ulMargin;
+                    // FIX: C-S clips to actual viewport, not expanded rect.
+                    // ulMargin only used in fast-path above.
+                    float ulMinX = 0.0;
+                    float ulMinY = 0.0;
+                    float ulMaxX = swF;
+                    float ulMaxY = shF;
                     bool ulVis = LFPG_WorldUtil.ClipSegToScreen(ulx1, uly1, ulx2, uly2, ulMinX, ulMinY, ulMaxX, ulMaxY, m_ClipA, m_ClipB);
                     if (!ulVis)
                     {
@@ -2880,10 +2882,14 @@ class LFPG_CableRenderer
                     // One or both endpoints outside: use Cohen-Sutherland.
                     // This correctly handles segments that cross the viewport
                     // (old code incorrectly culled these with offA && offB).
-                    float csMinX = -margin;
-                    float csMinY = -margin;
-                    float csMaxX = swF + margin;
-                    float csMaxY = shF + margin;
+                    // FIX: C-S clips to ACTUAL viewport (0,0,swF,shF).
+                    // Margin is only used in the fast-path above to decide
+                    // whether to invoke C-S. Output coords are always in
+                    // [0,swF]×[0,shF] — no negative values for Canvas.
+                    float csMinX = 0.0;
+                    float csMinY = 0.0;
+                    float csMaxX = swF;
+                    float csMaxY = shF;
                     bool segVisible = LFPG_WorldUtil.ClipSegToScreen(sx1, sy1, sx2, sy2, csMinX, csMinY, csMaxX, csMaxY, m_ClipA, m_ClipB);
                     if (!segVisible)
                         continue;
