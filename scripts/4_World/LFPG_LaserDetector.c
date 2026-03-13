@@ -791,12 +791,14 @@ class LFPG_LaserDetector : Inventory_Base
         return true;
     }
 
-    // PASSTHROUGH devices MUST return 0.0 consumption.
-    // Without this, DeviceAPI fallback returns 10.0 erroneously.
-    // Actual self-consumption (5 u/s) is handled by the graph propagation layer.
+    // Self-consumption: 5 u/s for beam operation.
+    // PASSTHROUGH with non-zero consumption follows CeilingLight pattern:
+    // graph subtracts selfCons before passing remainder downstream.
+    // Without this, demand signal is 0 when no downstream is connected,
+    // causing the source to allocate 0 → laser loses power after cold-start.
     float LFPG_GetConsumption()
     {
-        return 0.0;
+        return LFPG_LASER_CONSUMPTION;
     }
 
     // 20 u/s max throughput

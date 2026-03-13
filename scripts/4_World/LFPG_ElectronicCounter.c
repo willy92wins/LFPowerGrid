@@ -670,11 +670,13 @@ class LFPG_ElectronicCounter : Inventory_Base
         return true;
     }
 
-    // PASSTHROUGH devices MUST return 0.0 consumption.
-    // Without this, DeviceAPI fallback returns 10.0 erroneously.
+    // Self-consumption: 5 u/s for display operation.
+    // PASSTHROUGH with non-zero consumption follows CeilingLight pattern.
+    // Without this, demand signal is 0 when no downstream is connected,
+    // causing the source to allocate 0 → counter loses power after cold-start.
     float LFPG_GetConsumption()
     {
-        return 0.0;
+        return LFPG_COUNTER_CONSUMPTION;
     }
 
     // Throughput capacity.
