@@ -20,7 +20,7 @@ class Stage1
 };
 class Stage2
 {
-	texture = "\LFPowerGrid\data\pressure_pad\pressure_pad_co.paa";
+	texture = "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
