@@ -4086,6 +4086,7 @@ class LFPG_NetworkManager
         string fnGetEfficiency = "LFPG_GetEfficiency";
         string fnGetSelfDisch = "LFPG_GetSelfDischargeRate";
         string fnIsDischEnabled = "LFPG_IsDischargeEnabled";
+        string fnIsOutputEnabled = "LFPG_IsOutputEnabled";
         string fnSetStored = "LFPG_SetStoredEnergy";
         string fnSetDisch = "LFPG_SetDischargeEnabled";
         string fnSetChargeRate = "LFPG_SetChargeRateCurrent";
@@ -4121,6 +4122,7 @@ class LFPG_NetworkManager
             float efficiency = 1.0;
             float selfDischargeRate = 0.0;
             bool dischargeEnabled = true;
+            bool outputEnabled = true;
 
             GetGame().GameScript.CallFunctionParams(batEnt, fnGetStored, storedEnergy, null);
             GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxStored, maxStored, null);
@@ -4129,6 +4131,7 @@ class LFPG_NetworkManager
             GetGame().GameScript.CallFunctionParams(batEnt, fnGetEfficiency, efficiency, null);
             GetGame().GameScript.CallFunctionParams(batEnt, fnGetSelfDisch, selfDischargeRate, null);
             GetGame().GameScript.CallFunctionParams(batEnt, fnIsDischEnabled, dischargeEnabled, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnIsOutputEnabled, outputEnabled, null);
 
             // Skip if not a real battery (maxStored = 0 means entity doesn't implement battery API).
             if (maxStored < LFPG_PROPAGATION_EPSILON)
@@ -4223,8 +4226,11 @@ class LFPG_NetworkManager
             }
 
             // --- Compute new graph node fields ---
+            // v2.0: outputEnabled gates discharge. When switch is OFF,
+            // virtualGen=0 (battery doesn't offer power to grid).
+            // softDemand is NOT gated — battery charges even with switch OFF.
             float newVirtualGen = 0.0;
-            if (newDischargeEnabled && newStored > LFPG_PROPAGATION_EPSILON)
+            if (outputEnabled && newDischargeEnabled && newStored > LFPG_PROPAGATION_EPSILON)
             {
                 // Cap by energy budget: can't promise more than storage can sustain
                 // for the duration of one tick.

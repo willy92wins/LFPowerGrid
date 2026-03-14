@@ -192,6 +192,12 @@ class LF_BatteryBase : Inventory_Base
     protected float m_StoredEnergy = 0.0;
     protected bool m_DischargeEnabled = true;
 
+    // v2.0: Output toggle (switch button on Medium/Large models).
+    // When false, m_VirtualGeneration=0 (no discharge to grid) and
+    // gate is closed (no passthrough). Battery still charges from surplus.
+    // Default true = no regression for tiers without switch (Small).
+    protected bool m_OutputEnabled = true;
+
     // ---- Battery UI state (SyncVar, set by timer) ----
     // Positive = charging, negative = discharging, 0 = idle.
     protected float m_ChargeRateCurrent = 0.0;
@@ -215,6 +221,7 @@ class LF_BatteryBase : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
+        RegisterNetSyncVariableBool("m_OutputEnabled");
         // 12 bits = 4096 steps across 100000 = ~24.4u/step.
         // Small(2000u): ~82 distinct levels. Medium(10000u): ~410. Large(50000u): ~2048.
         // All smooth enough for charge bar display.
@@ -335,6 +342,19 @@ class LF_BatteryBase : Inventory_Base
         m_DischargeEnabled = val;
         // No SetSynchDirty here — discharge state is internal.
         // UI shows charge rate (+/-/0) which implicitly reflects this.
+        #endif
+    }
+
+    bool LFPG_IsOutputEnabled()
+    {
+        return m_OutputEnabled;
+    }
+
+    void LFPG_SetOutputEnabled(bool val)
+    {
+        #ifdef SERVER
+        m_OutputEnabled = val;
+        SetSynchDirty();
         #endif
     }
 
@@ -831,6 +851,9 @@ class LF_BatteryBase : Inventory_Base
         super.SetActions();
         RemoveAction(ActionTakeItem);
         RemoveAction(ActionTakeItemToHands);
+        // v2.0: Toggle output switch (only visible for gate-capable tiers).
+        // ActionCondition checks LFPG_IsGateCapable → false for Small (no switch).
+        AddAction(LFPG_ActionToggleBatteryOutput);
     }
 
     override bool CanPutInCargo(EntityAI parent)
@@ -869,6 +892,7 @@ class LF_BatteryBase : Inventory_Base
         ctx.Write(m_DeviceIdHigh);
         ctx.Write(m_StoredEnergy);
         ctx.Write(m_DischargeEnabled);
+        ctx.Write(m_OutputEnabled);
 
         string json = "";
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
@@ -909,6 +933,14 @@ class LF_BatteryBase : Inventory_Base
             string errDisch = "[LF_Battery] OnStoreLoad: failed to read m_DischargeEnabled for ";
             errDisch = errDisch + m_DeviceId;
             LFPG_Util.Error(errDisch);
+            return false;
+        }
+
+        if (!ctx.Read(m_OutputEnabled))
+        {
+            string errOutput = "[LF_Battery] OnStoreLoad: failed to read m_OutputEnabled for ";
+            errOutput = errOutput + m_DeviceId;
+            LFPG_Util.Error(errOutput);
             return false;
         }
 
@@ -972,14 +1004,36 @@ class LF_BatteryMedium : LF_BatteryBase
         return LFPG_BATTERY_MEDIUM_MAX_OUTPUT;
     }
 
-    // v2.0: 7-LED charge bar visual update (client only).
-    // LED 0 = lowest, LED 6 = highest.
-    // Ratio mapped to 0..7 lit LEDs. If stored > 0 but ratio rounds to 0,
-    // still show 1 LED (avoid "looks dead but isn't" confusion).
-    // Called from LF_BatteryBase.OnVariablesSynchronized via virtual dispatch.
+    // v2.0: Gated PASSTHROUGH — switch button controls output.
+    // When gate closed (m_OutputEnabled=false):
+    //   - ElecGraph zeroes outgoing allocations (no passthrough)
+    //   - NetworkManager timer sets m_VirtualGeneration=0 (no discharge)
+    //   - Battery still charges from surplus (m_SoftDemand unaffected)
+    bool LFPG_IsGateCapable()
+    {
+        return true;
+    }
+
+    bool LFPG_IsGateOpen()
+    {
+        return m_OutputEnabled;
+    }
+
+    // v2.0: 7-LED charge bar + switch animation visual update (client only).
     override void LFPG_UpdateLEDs()
     {
         #ifndef SERVER
+        // --- Switch animation: 1.0 = pressed (output ON), 0.0 = released (output OFF) ---
+        if (m_OutputEnabled)
+        {
+            SetAnimationPhase("switch", 1.0);
+        }
+        else
+        {
+            SetAnimationPhase("switch", 0.0);
+        }
+
+        // --- LED charge bar ---
         float maxStored = LFPG_GetMaxStoredEnergy();
         float ratio = 0.0;
         if (maxStored > 0.1)
@@ -991,14 +1045,12 @@ class LF_BatteryMedium : LF_BatteryBase
             ratio = 1.0;
         }
 
-        // Compute how many LEDs should be lit (0..7)
         float litFloat = ratio * 7.0;
         int numLit = litFloat;
         if (numLit < 0)
         {
             numLit = 0;
         }
-        // Ensure at least 1 LED if battery has any charge
         if (numLit < 1 && m_StoredEnergy > 0.1)
         {
             numLit = 1;
@@ -1008,7 +1060,6 @@ class LF_BatteryMedium : LF_BatteryBase
             numLit = LFPG_BAT_MED_LED_COUNT;
         }
 
-        // Apply material to each LED selection (hiddenSelections indices 0..6)
         int i = 0;
         for (i = 0; i < LFPG_BAT_MED_LED_COUNT; i = i + 1)
         {

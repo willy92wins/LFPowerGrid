@@ -115,7 +115,10 @@ modded class ActionConstructor
         // --- v2.0: Battery Medium Kit placement ---
         actions.Insert(LFPG_ActionPlaceBatteryMedium);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (48)");
+        // --- v2.0: Battery output toggle (Medium switch) ---
+        actions.Insert(LFPG_ActionToggleBatteryOutput);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (49)");
     }
 };
 
