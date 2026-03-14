@@ -57,6 +57,11 @@ static const int LFPG_INTERCOM_HS_LED1       = 2;
 static const int LFPG_INTERCOM_HS_LED2       = 3;
 static const int LFPG_INTERCOM_HS_MIC        = 4;
 
+// Sound effect soundsets (must match config.cpp CfgSoundSets)
+static const string LFPG_INTERCOM_SND_RF_BEEP      = "LFPG_Intercom_RFBeep_SoundSet";
+static const string LFPG_INTERCOM_SND_KNOB_CLICK   = "LFPG_Intercom_KnobClick_SoundSet";
+static const string LFPG_INTERCOM_SND_STATIC_BURST  = "LFPG_Intercom_Static_SoundSet";
+
 // ---------------------------------------------------------
 // KIT - same-model deploy pattern (SwitchV2/PushButton parity)
 // ---------------------------------------------------------
@@ -471,6 +476,9 @@ class LF_Intercom : Inventory_Base
 
         // Propagate immediately so graph updates
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+
+        // Play knob click sound
+        SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
         #endif
     }
 
@@ -726,7 +734,8 @@ class LF_Intercom : Inventory_Base
         rfMsg = rfMsg + m_DeviceId;
         LFPG_Util.Info(rfMsg);
 
-        // TODO Sprint 4: Play beep sound on intercom
+        // Play RF beep sound on intercom
+        SEffectManager.PlaySound(LFPG_INTERCOM_SND_RF_BEEP, GetPosition());
         #endif
     }
 
@@ -928,6 +937,12 @@ class LF_Intercom : Inventory_Base
         }
         bcMsg = bcMsg + " id=" + m_DeviceId;
         LFPG_Util.Info(bcMsg);
+
+        // Play static burst when broadcast is enabled
+        if (m_BroadcastEnabled)
+        {
+            SEffectManager.PlaySound(LFPG_INTERCOM_SND_STATIC_BURST, GetPosition());
+        }
         #endif
     }
 
@@ -956,6 +971,9 @@ class LF_Intercom : Inventory_Base
         freqMsg = freqMsg + " id=";
         freqMsg = freqMsg + m_DeviceId;
         LFPG_Util.Info(freqMsg);
+
+        // Play knob click sound
+        SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
         #endif
     }
 

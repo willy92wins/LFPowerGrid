@@ -65,6 +65,30 @@ class CfgSoundShaders
         range = 8;
         rangeCurve[] = {{ 0, 1 }, { 4, 0.4 }, { 8, 0 }};
     };
+    // v3.0: Intercom RF beep (one-shot, short electronic tone)
+    class LFPG_Intercom_RFBeep_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\rf_beep", 1 }};
+        volume = 0.6;
+        range = 15;
+        rangeCurve[] = {{ 0, 1 }, { 8, 0.4 }, { 15, 0 }};
+    };
+    // v3.0: Intercom knob click (one-shot, mechanical)
+    class LFPG_Intercom_KnobClick_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\knob_click", 1 }};
+        volume = 0.4;
+        range = 5;
+        rangeCurve[] = {{ 0, 1 }, { 3, 0.3 }, { 5, 0 }};
+    };
+    // v3.0: Intercom static burst (one-shot, radio noise)
+    class LFPG_Intercom_Static_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\static_burst", 1 }};
+        volume = 0.5;
+        range = 10;
+        rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
+    };
 };
 
 class CfgSoundSets
@@ -93,13 +117,37 @@ class CfgSoundSets
         frequencyFactor = 1;
         spatial = 1;
     };
+    // v3.0: Intercom RF beep — spatial 3D, one-shot on RF toggle
+    class LFPG_Intercom_RFBeep_SoundSet
+    {
+        soundShaders[] = { "LFPG_Intercom_RFBeep_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
+    // v3.0: Intercom knob click — spatial 3D, one-shot on frequency change
+    class LFPG_Intercom_KnobClick_SoundSet
+    {
+        soundShaders[] = { "LFPG_Intercom_KnobClick_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
+    // v3.0: Intercom static burst — spatial 3D, one-shot on broadcast enable
+    class LFPG_Intercom_Static_SoundSet
+    {
+        soundShaders[] = { "LFPG_Intercom_Static_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
 };
 
 class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables" };

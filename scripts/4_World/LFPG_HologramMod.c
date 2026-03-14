@@ -91,12 +91,6 @@ modded class Hologram
             {
                 return furnaceKit.GetDeployedClassname();
             }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                return batLargeKit.GetDeployedClassname();
-            }
         }
 
         return super.ProjectionBasedOnParent();
@@ -122,12 +116,6 @@ modded class Hologram
             if (furnaceKit)
             {
                 return furnaceKit.GetDeployedClassname();
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                return batLargeKit.GetDeployedClassname();
             }
         }
 
@@ -155,12 +143,6 @@ modded class Hologram
 
             LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
             if (furnaceKit)
-            {
-                return entity_for_placing;
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
             {
                 return entity_for_placing;
             }
@@ -215,19 +197,6 @@ modded class Hologram
                 }
                 return;
             }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                vector batLargeOffset = batLargeKit.GetDeployPositionOffset();
-                vector batLargeFinal = position + batLargeOffset;
-
-                if (m_Projection)
-                {
-                    m_Projection.SetPosition(batLargeFinal);
-                }
-                return;
-            }
         }
 
         super.SetProjectionPosition(position);
@@ -263,15 +232,6 @@ modded class Hologram
                 vector furnaceOriOff = furnaceKit.GetDeployOrientationOffset();
                 vector furnaceResult = furnaceBase + furnaceOriOff;
                 return furnaceResult;
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                vector batLargeBase = super.GetDefaultOrientation();
-                vector batLargeOriOff = batLargeKit.GetDeployOrientationOffset();
-                vector batLargeResult = batLargeBase + batLargeOriOff;
-                return batLargeResult;
             }
         }
 
@@ -323,15 +283,11 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LF_BatteryMedium_Kit"))
             return true;
-        if (proj.IsKindOf("LF_DoorController_Kit"))
-            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_Furnace_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
             return true;
 
         return false;
@@ -367,8 +323,6 @@ modded class Hologram
             return 1;
         if (projection.IsKindOf("LFPG_ElectronicCounter_Kit"))
             return 1;
-        if (projection.IsKindOf("LF_DoorController_Kit"))
-            return 1;
 
         // Different-model kits and everything else: floor only
         return 0;
@@ -384,8 +338,6 @@ modded class Hologram
         if (m_Parent.IsKindOf("LF_WaterPump_Kit"))
             return true;
         if (m_Parent.IsKindOf("LF_Furnace_Kit"))
-            return true;
-        if (m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
             return true;
         return false;
     }
@@ -722,14 +674,6 @@ modded class Hologram
             vector furnaceOff = furnaceKit.GetDeployPositionOffset();
             vector furnaceOut = pos + furnaceOff;
             return furnaceOut;
-        }
-
-        LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-        if (batLargeKit)
-        {
-            vector batLargeOff = batLargeKit.GetDeployPositionOffset();
-            vector batLargeOut = pos + batLargeOff;
-            return batLargeOut;
         }
 
         return pos;
