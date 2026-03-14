@@ -1443,4 +1443,138 @@ class CfgVehicles
             };
         };
     };
+
+    // =========================================================
+    // v3.0: INTERCOM / RF BROADCASTER (CONSUMER, 2 IN ports)
+    // =========================================================
+
+    // ---- Intercom Kit (holdable, same-model deploy) ----
+    class LF_Intercom_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_INTERCOM_KIT";
+        descriptionShort = "$STR_LFPG_INTERCOM_KIT_DESC";
+        model = "\LFPowerGrid\rf_broadcaster\rf_broadcaster.p3d";
+        weight = 2000;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2"};
+        hiddenSelectionsTextures[] =
+        {
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_co.paa",
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_glass.paa",
+            "",
+            ""
+        };
+        hiddenSelectionsMaterials[] =
+        {
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat"
+        };
+    };
+
+    // ---- Intercom (placed device, CONSUMER 2 IN ports) ----
+    // Ports: input_1 (power), input_toggle (RF trigger signal)
+    // Memory: port_input_0 -> input_1, port_output_0 -> input_toggle
+    // T1: 10 u/s consumption, toggle on/off, LED1 feedback
+    // T2: 20 u/s consumption, ghost radio, frequency cycling, LED2
+    class LF_Intercom : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_INTERCOM";
+        descriptionShort = "$STR_LFPG_INTERCOM_DESC";
+        model = "\LFPowerGrid\rf_broadcaster\rf_broadcaster.p3d";
+        weight = 3000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
+        hiddenSelectionsTextures[] =
+        {
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_co.paa",
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_glass.paa",
+            "",
+            "",
+            ""
+        };
+        hiddenSelectionsMaterials[] =
+        {
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat"
+        };
+
+        class AnimationSources
+        {
+            class knob_freq
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+            class knob_input
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+            class knob_vol
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class Zone_Housing
+                {
+                    class Health
+                    {
+                        hitpoints = 200;
+                        healthLevels[] =
+                        {
+                            {1.0, {}},
+                            {0.7, {}},
+                            {0.5, {}},
+                            {0.3, {}},
+                            {0.0, {}}
+                        };
+                    };
+                    componentNames[] = {"Component01"};
+                    fatalInjuryCoef = -1;
+                };
+            };
+        };
+    };
+
+    // =========================================================
+    // v3.0: GHOST RADIO (invisible transceiver for Intercom T2)
+    // NOT spawnable by players (scope=1). No attachments, no actions.
+    // CompEM disabled in script. Tiny invisible model.
+    // =========================================================
+    class LF_GhostRadio : PersonalRadio
+    {
+        scope = 1;
+        displayName = "";
+        descriptionShort = "";
+        model = "\dz\gear\consumables\Stone.p3d";
+        weight = 0;
+        itemSize[] = {0, 0};
+    };
 };

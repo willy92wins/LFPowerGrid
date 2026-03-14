@@ -139,6 +139,9 @@ class LFPG_NetworkManager
     protected ref array<EntityAI> m_RegisteredBatteries;
     protected float m_BatteryLastTickMs;
 
+    // v3.0: Intercom toggle input evaluation registry
+    protected ref array<LF_Intercom> m_RegisteredIntercoms;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -215,6 +218,7 @@ class LFPG_NetworkManager
         m_RegisteredPads = new array<LFPG_PressurePad>;
         m_RegisteredLasers = new array<LFPG_LaserDetector>;
         m_RegisteredBatteries = new array<EntityAI>;
+        m_RegisteredIntercoms = new array<LF_Intercom>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -282,6 +286,9 @@ class LFPG_NetworkManager
         // v2.0: Battery energy accounting timer (5s — balance charge/discharge)
         m_BatteryLastTickMs = GetGame().GetTime();
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBatteries, LFPG_BATTERY_TICK_MS, bTrue);
+
+        // v3.0: Intercom toggle input evaluation (1s — rising edge detection)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickIntercoms, LFPG_INTERCOM_TOGGLE_TICK_MS, bTrue);
         #endif
     }
 
@@ -3836,6 +3843,55 @@ class LFPG_NetworkManager
         {
             m_RegisteredLasers.Remove(idx);
         }
+    }
+
+    // v3.0: Intercom Registration (for toggle input evaluation)
+    void RegisterIntercom(LF_Intercom ic)
+    {
+        if (!ic)
+            return;
+        if (m_RegisteredIntercoms.Find(ic) < 0)
+        {
+            m_RegisteredIntercoms.Insert(ic);
+        }
+    }
+
+    void UnregisterIntercom(LF_Intercom ic)
+    {
+        if (!ic)
+            return;
+        int idx = m_RegisteredIntercoms.Find(ic);
+        if (idx >= 0)
+        {
+            m_RegisteredIntercoms.Remove(idx);
+        }
+    }
+
+    // Intercom toggle input tick (v3.0).
+    // Runs at LFPG_INTERCOM_TOGGLE_TICK_MS (1s).
+    // Evaluates rising edge on input_toggle port for each registered intercom.
+    protected void LFPG_TickIntercoms()
+    {
+        #ifdef SERVER
+        int totalIntercoms = m_RegisteredIntercoms.Count();
+        if (totalIntercoms == 0)
+            return;
+
+        int i;
+        LF_Intercom ic;
+
+        for (i = 0; i < totalIntercoms; i = i + 1)
+        {
+            if (i >= m_RegisteredIntercoms.Count())
+                break;
+
+            ic = m_RegisteredIntercoms[i];
+            if (!ic)
+                continue;
+
+            ic.LFPG_EvaluateToggleInput();
+        }
+        #endif
     }
 
     // Motion sensor detection tick (v1.5.0, split from unified v1.8.1).

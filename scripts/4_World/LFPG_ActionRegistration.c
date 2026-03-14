@@ -121,7 +121,15 @@ modded class ActionConstructor
         // --- v3.0: Door Controller Kit placement ---
         actions.Insert(LFPG_ActionPlaceDoorController);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (50)");
+        // --- v3.0: Intercom / RF Broadcaster ---
+        actions.Insert(LFPG_ActionPlaceIntercom);
+        actions.Insert(LFPG_ActionToggleIntercom);
+        actions.Insert(LFPG_ActionRFToggle);
+        actions.Insert(LFPG_ActionInstallMic);
+        actions.Insert(LFPG_ActionToggleBroadcast);
+        actions.Insert(LFPG_ActionCycleFrequency);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (56)");
     }
 };
 
@@ -149,5 +157,15 @@ modded class Hammer
         super.SetActions();
         AddAction(LFPG_ActionUpgradeSolarPanel);
         AddAction(LFPG_ActionUpgradeWaterPump);
+    }
+};
+
+// v3.0: Screwdriver can install microphone on Intercom
+modded class Screwdriver
+{
+    override void SetActions()
+    {
+        super.SetActions();
+        AddAction(LFPG_ActionInstallMic);
     }
 };

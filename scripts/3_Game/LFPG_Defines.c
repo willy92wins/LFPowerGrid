@@ -673,3 +673,15 @@ static const float LFPG_BATTERY_LARGE_CHARGE_RATE     = 80.0;
 static const float LFPG_BATTERY_LARGE_DISCHARGE_RATE  = 120.0;
 static const float LFPG_BATTERY_LARGE_EFFICIENCY      = 0.88;
 static const float LFPG_BATTERY_LARGE_MAX_OUTPUT      = 200.0;
+
+// =========================================================
+// v3.0: INTERCOM / RF BROADCASTER constants (Sprint 2+)
+// Note: RVMAT paths, consumption, and HS indices are in LFPG_Intercom.c
+// =========================================================
+static const float LFPG_INTERCOM_TOGGLE_INPUT_MIN      = 20.0;    // u/s minimum on input_toggle
+static const float LFPG_INTERCOM_RF_RANGE              = 50.0;    // metres RF toggle radius
+static const float LFPG_INTERCOM_RF_RANGE_SQ           = 2500.0;  // 50^2 pre-computed
+static const int   LFPG_INTERCOM_RF_COOLDOWN_MS        = 2000;    // ms between RF toggles
+static const int   LFPG_INTERCOM_INSTALL_TIME_MS       = 5000;    // ms for mic install action
+static const int   LFPG_INTERCOM_FREQ_COUNT            = 7;       // vanilla frequency count
+static const int   LFPG_INTERCOM_TOGGLE_TICK_MS        = 1000;    // 1s between toggle input evaluation ticks

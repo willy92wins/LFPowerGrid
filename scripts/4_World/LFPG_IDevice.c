@@ -765,4 +765,23 @@ class LFPG_DeviceAPI
         realDeviceId = GetOrCreateDeviceId(ent);
         return ent;
     }
+
+    // ----- v3.0: RF toggle capability (Intercom system) -----
+
+    // Check if a device can be toggled remotely via RF signal.
+    // Default: false (existing devices are unaffected).
+    // Override LFPG_IsRFCapable() → true on RF-capable subclasses.
+    static bool IsRFCapable(EntityAI e)
+    {
+        if (!e) return false;
+        return CallBool(e, "LFPG_IsRFCapable", null, false);
+    }
+
+    // Execute remote toggle on an RF-capable device.
+    // Returns true if the toggle was successfully executed.
+    static bool RemoteToggle(EntityAI e)
+    {
+        if (!e) return false;
+        return CallBool(e, "LFPG_RemoteToggle", null, false);
+    }
 };
