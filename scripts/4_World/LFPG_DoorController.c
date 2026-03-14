@@ -47,8 +47,10 @@ static const float LFPG_DC_PAIR_RADIUS     = 1.0;
 // DistanceSq threshold = radius^2
 static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
 
-// Poll interval (seconds)
-static const float LFPG_DC_POLL_INTERVAL   = 5.0;
+// Poll interval (seconds) — v2.1: reduced from 5s to 2s.
+// Now only handles pairing discovery + validation (door alive/range).
+// Power reactions are immediate via LFPG_ApplyDoorState in LFPG_SetPowered.
+static const float LFPG_DC_POLL_INTERVAL   = 2.0;
 
 // Max door index to scan for vanilla buildings
 static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
@@ -492,6 +494,10 @@ class LF_DoorController : Inventory_Base
 
         string msg = "[LF_DoorController] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId;
         LFPG_Util.Debug(msg);
+
+        // v2.1: Immediate door reaction — no waiting for poll timer.
+        // Eliminates 0-5s delay from async timer stacking.
+        LFPG_ApplyDoorState();
         #endif
     }
 
@@ -585,6 +591,21 @@ class LF_DoorController : Inventory_Base
         }
 
         // 3. Apply door state based on power
+        LFPG_ApplyDoorState();
+        #endif
+    }
+
+    // ============================================
+    // APPLY DOOR STATE — opens/closes based on m_PoweredNet.
+    // Called from LFPG_SetPowered (immediate) and LFPG_OnDoorPoll (periodic).
+    // Safe to call anytime: guards on m_PairedDoor null.
+    // ============================================
+    protected void LFPG_ApplyDoorState()
+    {
+        #ifdef SERVER
+        if (!m_PairedDoor)
+            return;
+
         bool doorOpen = LFPG_IsPairedDoorOpen();
 
         if (m_PoweredNet)
