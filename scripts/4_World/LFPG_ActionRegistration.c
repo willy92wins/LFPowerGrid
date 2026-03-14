@@ -129,7 +129,7 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionToggleBroadcast);
         actions.Insert(LFPG_ActionCycleFrequency);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (56)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (57)");
     }
 };
 

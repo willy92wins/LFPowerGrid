@@ -17,7 +17,11 @@
 
 class LF_GhostRadio : TransmitterBase
 {
-    // Disable CompEM — no battery drain
+    // Give CompEM pseudo-infinite energy so the radio can transmit
+    // without a battery. We do NOT SwitchOff — that would prevent
+    // TurnOnTransmitter from working. Instead we set energy very high.
+    // The ghost is deleted by the intercom when power is lost, so
+    // energy drain is irrelevant (ghost lifetime = seconds to hours).
     override void EEInit()
     {
         super.EEInit();
@@ -26,7 +30,7 @@ class LF_GhostRadio : TransmitterBase
         ComponentEnergyManager cem = GetCompEM();
         if (cem)
         {
-            cem.SwitchOff();
+            cem.SetEnergy(9999);
         }
         #endif
     }

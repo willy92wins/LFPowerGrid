@@ -344,6 +344,8 @@ class LF_Intercom : Inventory_Base
             if (locDirty)
             {
                 SetSynchDirty();
+                // Ghost radio: conditions now false → destroy immediately
+                LFPG_UpdateGhostRadio();
             }
         }
         #endif
@@ -357,6 +359,17 @@ class LF_Intercom : Inventory_Base
         #ifndef SERVER
         // LED + animation update
         LFPG_UpdateVisuals();
+
+        // CableRenderer sync: this device is a target (CONSUMER, no owner wires)
+        // but cables pointing at it need entity resolution for rendering.
+        if (m_DeviceId != "")
+        {
+            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
+            if (r)
+            {
+                r.RequestDeviceSync(m_DeviceId, this);
+            }
+        }
         #endif
     }
 
@@ -804,6 +817,15 @@ class LF_Intercom : Inventory_Base
         }
 
         // Configure as bidirectional transceiver
+        // Belt-and-suspenders: ensure CompEM has energy and is active
+        // before activating the transmitter. EEInit sets energy=9999,
+        // but we re-set here in case of timing edge cases.
+        ComponentEnergyManager ghostCEM = m_GhostRadio.GetCompEM();
+        if (ghostCEM)
+        {
+            ghostCEM.SetEnergy(9999);
+            ghostCEM.SwitchOn();
+        }
         m_GhostRadio.TurnOnTransmitter();
         m_GhostRadio.EnableBroadcast(true);
         m_GhostRadio.EnableReceive(true);
