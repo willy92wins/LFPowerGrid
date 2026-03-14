@@ -169,6 +169,115 @@ class LF_BatteryMedium_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
+// KIT (LARGE): Different-model kit (box → transformer hologram).
+// Follows SolarPanel_Kit proven pattern:
+//   - DeployableContainer_Base (vanilla ActionPlaceObject)
+//   - GetDeployedClassname() for hologram projection
+//   - 8 Hologram overrides in LFPG_HologramMod.c
+//   - PlaceEntity override prevents ghost entity creation
+//   - Config: SingleUseActions[]={527}, ContinuousActions[]={231}
+//
+// No custom LFPG_ActionPlaceBatteryLarge needed.
+// ---------------------------------------------------------
+class LF_BatteryLarge_Kit : DeployableContainer_Base
+{
+    // Hologram projects this classname instead of the box kit model.
+    string GetDeployedClassname()
+    {
+        string cls = "LF_BatteryLarge";
+        return cls;
+    }
+
+    // No position offset needed — transformer model origin is ground level.
+    vector GetDeployPositionOffset()
+    {
+        return "0 0 0";
+    }
+
+    // No orientation correction needed — transformer model is upright.
+    vector GetDeployOrientationOffset()
+    {
+        return "0 0 0";
+    }
+
+    // DeployableContainer_Base pattern (SolarPanel_Kit v0.8.1).
+    // Uses CreateObject (not CreateObjectEx), pb.GetLocalProjectionPosition()
+    // as initial spawn position, then SetPosition/SetOrientation from params.
+    // DeleteSafe instead of ObjectDelete for safer network cleanup.
+    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
+    {
+        super.OnPlacementComplete(player, position, orientation);
+
+        if (!GetGame().IsDedicatedServer())
+            return;
+
+        PlayerBase pb = PlayerBase.Cast(player);
+        if (!pb)
+            return;
+
+        string spawnClass = GetDeployedClassname();
+        vector spawnPos = pb.GetLocalProjectionPosition();
+
+        string tLog = "[BatteryLarge_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
+        LFPG_Util.Info(tLog);
+
+        EntityAI battery = GetGame().CreateObject(spawnClass, spawnPos, false);
+        if (!battery)
+        {
+            string errLog = "[BatteryLarge_Kit] Failed to create LF_BatteryLarge! Kit preserved.";
+            LFPG_Util.Error(errLog);
+            string errMsg = "[LFPG] Battery placement failed. Kit preserved.";
+            pb.MessageStatus(errMsg);
+            return;
+        }
+
+        battery.SetPosition(position);
+        battery.SetOrientation(orientation);
+
+        SetIsDeploySound(true);
+
+        string okLog = "[BatteryLarge_Kit] Deployed LF_BatteryLarge at pos=";
+        okLog = okLog + position.ToString();
+        okLog = okLog + " ori=";
+        okLog = okLog + orientation.ToString();
+        LFPG_Util.Info(okLog);
+
+        // Delete kit only on successful spawn
+        this.DeleteSafe();
+    }
+
+    override bool IsBasebuildingKit()
+    {
+        return true;
+    }
+
+    override bool IsDeployable()
+    {
+        return true;
+    }
+
+    // Prevent orphan loop sound — same fix as all other LFPG kits.
+    override string GetLoopDeploySoundset()
+    {
+        string empty = "";
+        return empty;
+    }
+
+    override void SetActions()
+    {
+        super.SetActions();
+        // Vanilla placement actions (no custom action).
+        // Config also declares these via SingleUseActions[]={527} ContinuousActions[]={231}.
+        // DayZ deduplicates, having both is safe and matches SolarPanel_Kit pattern.
+        AddAction(ActionTogglePlaceObject);
+        AddAction(ActionPlaceObject);
+    }
+};
+
+// ---------------------------------------------------------
 // DEVICE BASE: PASSTHROUGH with energy storage
 // Tiers inherit and override capacity/rates.
 // ---------------------------------------------------------
@@ -391,6 +500,13 @@ class LF_BatteryBase : Inventory_Base
             SetSynchDirty();
         }
         #endif
+    }
+
+    // v2.1: Public getter for inspector HUD.
+    // Positive = charging, negative = discharging, 0 = idle.
+    float LFPG_GetChargeRateCurrent()
+    {
+        return m_ChargeRateCurrent;
     }
 
     // ============================================
@@ -700,12 +816,11 @@ class LF_BatteryBase : Inventory_Base
     }
 
     // Tiers inherit this. LFPG_GetMaxStoredEnergy() resolves to tier override.
-    // If a future tier should start empty (crafted), override with no-op.
+    // v2.1: Fresh-spawned batteries start empty (0%). Charge from grid only.
+    // Previous: random 10-80% caused admin-spawned batteries to appear full.
     void LFPG_InitFreshSpawn()
     {
-        float maxCap = LFPG_GetMaxStoredEnergy();
-        float randomPct = Math.RandomFloatInclusive(0.1, 0.8);
-        m_StoredEnergy = maxCap * randomPct;
+        m_StoredEnergy = 0.0;
         SetSynchDirty();
     }
 
@@ -965,7 +1080,7 @@ class LF_BatteryBase : Inventory_Base
 class LF_BatterySmall : LF_BatteryBase
 {
     // Uses base class defaults (SMALL constants).
-    // LFPG_InitFreshSpawn inherited from base → random charge 10-80%.
+    // LFPG_InitFreshSpawn inherited from base → starts at 0%.
 };
 
 // =========================================================

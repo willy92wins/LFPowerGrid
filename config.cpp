@@ -1260,6 +1260,20 @@ class CfgVehicles
                 };
             };
         };
+
+        // EnergyManager: drives vanilla inventory white charge bar.
+        // All actual energy logic is handled by LFPG timer + SyncCompEM().
+        // energyStorageMax MUST match LFPG_BATTERY_MEDIUM_CAPACITY (10000).
+        class EnergyManager
+        {
+            energyStorageMax = 10000;
+            energyAtSpawn = 0;
+            convertEnergyToQuantity = 1;
+            updateInterval = 0;
+            isPassiveDevice = 1;
+            canReceiveAttachment = 0;
+            canWork = 0;
+        };
     };
 
     // =========================================================
@@ -1333,6 +1347,20 @@ class CfgVehicles
                     };
                 };
             };
+        };
+
+        // EnergyManager: drives vanilla inventory white charge bar.
+        // All actual energy logic is handled by LFPG timer + SyncCompEM().
+        // energyStorageMax MUST match LFPG_BATTERY_LARGE_CAPACITY (50000).
+        class EnergyManager
+        {
+            energyStorageMax = 50000;
+            energyAtSpawn = 0;
+            convertEnergyToQuantity = 1;
+            updateInterval = 0;
+            isPassiveDevice = 1;
+            canReceiveAttachment = 0;
+            canWork = 0;
         };
     };
 

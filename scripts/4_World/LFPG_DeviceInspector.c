@@ -85,6 +85,9 @@ class LFPG_DeviceInspector
     // v2.4: Link line offset for Sorter
     protected TextWidget m_wLinkLine;
     protected float m_LinkLineOffset;
+    // v2.1: Battery line for charge display
+    protected TextWidget m_wBatteryLine;
+    protected float m_BatteryLineOffset;
 
     // ---- Position smoothing (P1-A anti-jitter) ----
     protected float m_SmoothX;
@@ -195,6 +198,7 @@ class LFPG_DeviceInspector
         m_wFuelLine = TextWidget.Cast(m_Root.FindAnyWidget("FuelLine"));
         m_wReserveLine = TextWidget.Cast(m_Root.FindAnyWidget("ReserveLine"));
         m_wLinkLine = TextWidget.Cast(m_Root.FindAnyWidget("LinkLine"));
+        m_wBatteryLine = TextWidget.Cast(m_Root.FindAnyWidget("BatteryLine"));
         m_wWiresHeader = TextWidget.Cast(m_Root.FindAnyWidget("WiresHeader"));
 
         // ---- Force geometry from code (layout pos/size unreliable in FrameWidgetClass) ----
@@ -309,6 +313,15 @@ class LFPG_DeviceInspector
             m_wLinkLine.Show(false);
         }
         m_LinkLineOffset = 0.0;
+        // v2.1: BatteryLine (charge level + rate for batteries)
+        if (m_wBatteryLine)
+        {
+            m_wBatteryLine.SetPos(14, 94);
+            m_wBatteryLine.SetSize(274, 16);
+            m_wBatteryLine.SetColor(ARGB(255, 255, 200, 50));
+            m_wBatteryLine.Show(false);
+        }
+        m_BatteryLineOffset = 0.0;
         if (m_wWiresHeader)
         {
             m_wWiresHeader.SetPos(14, 99);
@@ -363,6 +376,7 @@ class LFPG_DeviceInspector
         m_wFuelLine = null;
         m_wReserveLine = null;
         m_wLinkLine = null;
+        m_wBatteryLine = null;
         m_wWiresHeader = null;
         m_wWireSlots.Clear();
         m_RespWires.Clear();
@@ -892,9 +906,106 @@ class LFPG_DeviceInspector
             }
         }
 
+        // ---- v2.1: Battery line (LF_BatteryBase tiers) ----
+        m_BatteryLineOffset = 0.0;
+        if (m_wBatteryLine)
+        {
+            LF_BatteryBase batDevice = LF_BatteryBase.Cast(device);
+            if (batDevice)
+            {
+                float batStored = batDevice.LFPG_GetStoredEnergy();
+                float batMax = batDevice.LFPG_GetMaxStoredEnergy();
+                float batRate = batDevice.LFPG_GetChargeRateCurrent();
+                bool batOutEnabled = batDevice.LFPG_IsOutputEnabled();
+
+                // Percentage
+                int batPct = 0;
+                if (batMax > 0.0)
+                {
+                    batPct = (batStored / batMax) * 100.0;
+                }
+                if (batPct > 100)
+                {
+                    batPct = 100;
+                }
+
+                // Integer display values
+                int batStoredInt = batStored;
+                int batMaxInt = batMax;
+
+                // Base text: "Charge: 5000/10000 (50%)"
+                string batText = "Charge: ";
+                batText = batText + batStoredInt.ToString();
+                batText = batText + "/";
+                batText = batText + batMaxInt.ToString();
+                batText = batText + " (";
+                batText = batText + batPct.ToString();
+                batText = batText + "%)";
+
+                // Status suffix + color
+                int batColor = ARGB(255, 120, 120, 120);
+
+                if (!batOutEnabled)
+                {
+                    // Output disabled (switch off)
+                    batText = batText + "  [OFF]";
+                    batColor = ARGB(255, 180, 180, 50);
+                }
+                else if (batRate > 0.5)
+                {
+                    // Charging
+                    int chgRate = batRate;
+                    batText = batText + "  >> CHG +";
+                    batText = batText + chgRate.ToString();
+                    batText = batText + " u/s";
+                    batColor = ARGB(255, 50, 200, 220);
+                }
+                else if (batRate < -0.5)
+                {
+                    // Discharging
+                    float absRate = -batRate;
+                    int disRate = absRate;
+                    batText = batText + "  << DIS -";
+                    batText = batText + disRate.ToString();
+                    batText = batText + " u/s";
+                    batColor = ARGB(255, 230, 126, 34);
+                }
+                else if (batPct >= 100)
+                {
+                    // Full and idle
+                    batText = batText + "  FULL";
+                    batColor = ARGB(255, 46, 155, 89);
+                }
+                else if (batPct < 1)
+                {
+                    // Empty
+                    batText = batText + "  EMPTY";
+                    batColor = ARGB(255, 200, 60, 60);
+                }
+                else
+                {
+                    // Idle (connected but not charging/discharging)
+                    batText = batText + "  IDLE";
+                    batColor = ARGB(255, 160, 160, 160);
+                }
+
+                float batY = 94.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset;
+                m_wBatteryLine.SetPos(14, batY);
+                m_wBatteryLine.SetText(batText);
+                m_wBatteryLine.SetColor(batColor);
+                m_wBatteryLine.Show(true);
+                m_BatteryLineOffset = 20.0;
+            }
+            else
+            {
+                m_wBatteryLine.Show(false);
+                m_BatteryLineOffset = 0.0;
+            }
+        }
+
         // Reposition separator + wires header with extra line offsets
         // (TankLine vs FuelLine+ReserveLine are mutually exclusive sets)
-        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset;
+        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset;
         if (m_wSeparator)
         {
             m_wSeparator.SetPos(12, 93 + extraLineOffset);
@@ -1173,7 +1284,7 @@ class LFPG_DeviceInspector
         float panelH = m_CurrentPanelH;
         if (panelH < 1.0)
         {
-            panelH = ComputePanelHeight(m_VisibleWireCount) + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
+            panelH = ComputePanelHeight(m_VisibleWireCount) + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_BatteryLineOffset;
         }
 
         float fScreenW = screenW;
