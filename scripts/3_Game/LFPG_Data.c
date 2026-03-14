@@ -154,6 +154,28 @@ class LFPG_ElecNode
     // dispatch on every ProcessDirtyQueue tick for non-gated devices.
     bool   m_IsGated;
 
+    // --- v2.0: Battery (PASSTHROUGH + energy storage) ---
+    // Set by NetworkManager battery timer (~5s). Graph reads only.
+    // Default 0.0 = zero regression for all non-battery devices.
+    //
+    // m_VirtualGeneration: discharge power from storage (W).
+    //   Added to inputSum in PDQ PASSTHROUGH evaluation.
+    //   Subtracted from demand signal (upstream sees reduced need).
+    //   Capped by timer: min(maxDischargeRate, storedEnergy * 3600 / delta).
+    //
+    // m_SoftDemand: charge absorption want (W).
+    //   Added to demand signal but NEVER causes overload.
+    //   AllocateOutput Pass 3 distributes surplus proportionally.
+    //   Set to 0 when battery is full or discharge-only mode.
+    //
+    // m_SoftDemandRatio: fraction of m_LastStableOutput that is soft.
+    //   Computed in PDQ demand signal section.
+    //   Read by upstream AllocateOutput to split hard/soft per edge.
+    //   Propagates through PASSTHROUGH chains automatically.
+    float  m_VirtualGeneration;
+    float  m_SoftDemand;
+    float  m_SoftDemandRatio;
+
     void LFPG_ElecNode()
     {
         m_DeviceId = "";
@@ -174,6 +196,9 @@ class LFPG_ElecNode
         m_Overloaded = false;
         m_LastSyncedLoadRatio = -1.0;
         m_IsGated = false;
+        m_VirtualGeneration = 0.0;
+        m_SoftDemand = 0.0;
+        m_SoftDemandRatio = 0.0;
     }
 };
 

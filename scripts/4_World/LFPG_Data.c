@@ -1,15 +1,3 @@
-// =========================================================
-// LF_PowerGrid - data structures (v1.0, Sprint Overload Simplification)
-//
-// Pure data classes. No logic. No entity references.
-// Instantiated by LFPG_ElecGraph (4_World) or persistence (3_Game).
-//
-// The LFPG_ElecGraph class (4_World) owns and manipulates these.
-//
-// v1.0: Overload simplification — all-off binary policy.
-//   - ElecNode: m_OverloadMask/m_WarningMask → m_Overloaded (bool)
-//   - ElecEdge: removed m_Priority (always 0), m_EdgeIndex (bitmask dead)
-//   - ElecEdge: m_Flags reduced to LFPG_EDGE_ENABLED only
 //
 // v0.7.28 (Refactor): Consolidated missing data structures:
 //   - LFPG_WireData: single wire endpoint descriptor
@@ -227,6 +215,3 @@ class LFPG_ElecEdge
         m_WireRef = null;
         m_Flags = LFPG_EDGE_ENABLED;
         m_Demand = 0.0;
-        m_AllocatedPower = 0.0;
-    }
-};
