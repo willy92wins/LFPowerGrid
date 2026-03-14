@@ -644,3 +644,32 @@ static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 150.0;   // ms between a
 static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 2.5;     // auto-exit distance
 static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // server raycast range
 
+// =========================================================
+// v2.0: BATTERY constants (energy storage devices)
+// =========================================================
+static const int   LFPG_BATTERY_TICK_MS               = 5000;     // ~5s between energy accounting ticks
+static const float LFPG_BATTERY_DISCHARGE_OFF_PCT     = 0.01;     // 1% — disable discharge below this
+static const float LFPG_BATTERY_DISCHARGE_ON_PCT      = 0.05;     // 5% — re-enable discharge above this
+static const float LFPG_BATTERY_SELF_DISCHARGE_RATE   = 0.0005;   // 0.05% per hour idle drain
+static const float LFPG_BATTERY_SYNC_THRESHOLD_PCT    = 0.01;     // 1% delta for SyncVar update
+
+// Tier 1: Small (portable backup)
+static const float LFPG_BATTERY_SMALL_CAPACITY        = 2000.0;   // max stored energy (u)
+static const float LFPG_BATTERY_SMALL_CHARGE_RATE     = 30.0;     // max charge rate (u/s)
+static const float LFPG_BATTERY_SMALL_DISCHARGE_RATE  = 40.0;     // max discharge rate (u/s)
+static const float LFPG_BATTERY_SMALL_EFFICIENCY      = 0.92;     // charge roundtrip efficiency
+static const float LFPG_BATTERY_SMALL_MAX_OUTPUT      = 60.0;     // max throughput (u/s)
+
+// Tier 2: Medium (base standard)
+static const float LFPG_BATTERY_MEDIUM_CAPACITY       = 10000.0;
+static const float LFPG_BATTERY_MEDIUM_CHARGE_RATE    = 50.0;
+static const float LFPG_BATTERY_MEDIUM_DISCHARGE_RATE = 70.0;
+static const float LFPG_BATTERY_MEDIUM_EFFICIENCY     = 0.90;
+static const float LFPG_BATTERY_MEDIUM_MAX_OUTPUT     = 120.0;
+
+// Tier 3: Large (industrial grid bank)
+static const float LFPG_BATTERY_LARGE_CAPACITY        = 50000.0;
+static const float LFPG_BATTERY_LARGE_CHARGE_RATE     = 80.0;
+static const float LFPG_BATTERY_LARGE_DISCHARGE_RATE  = 120.0;
+static const float LFPG_BATTERY_LARGE_EFFICIENCY      = 0.88;
+static const float LFPG_BATTERY_LARGE_MAX_OUTPUT      = 200.0;
