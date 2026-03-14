@@ -99,7 +99,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -1330,6 +1330,86 @@ class CfgVehicles
                     class Health
                     {
                         hitpoints = 500;
+                    };
+                };
+            };
+        };
+    };
+
+    // =========================================================
+    // v3.0: DOOR CONTROLLER (CONSUMER, auto open/close doors)
+    //   input_0 = power input (5 u/s)
+    //   Pairs to nearest door within 1m (Fence/BBP/Building)
+    //   Powered = open, Unpowered = close
+    // =========================================================
+
+    // ---- DoorController Kit (holdable, deployable, same-model) ----
+    class LF_DoorController_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_DoorController_Kit";
+        descriptionShort = "$STR_LFPG_DoorController_Kit_Desc";
+        model = "\LFPowerGrid\data\doorcontroller\door_controller.p3d";
+        weight = 500;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- DoorController (placed device, CONSUMER 1 IN) ----
+    class LF_DoorController : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_DoorController";
+        descriptionShort = "$STR_LFPG_DoorController_Desc";
+        model = "\LFPowerGrid\data\doorcontroller\door_controller.p3d";
+        weight = 500;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"bolt", "light_led", "screen", "camo"};
+        hiddenSelectionsTextures[] =
+        {
+            "\LFPowerGrid\data\doorcontroller\door_controller_grey.paa",
+            "\LFPowerGrid\data\doorcontroller\door_controller_red.paa",
+            "\LFPowerGrid\data\doorcontroller\door_controller_grey.paa",
+            "\LFPowerGrid\data\doorcontroller\door_controller_grey.paa"
+        };
+        hiddenSelectionsMaterials[] =
+        {
+            "\LFPowerGrid\data\doorcontroller\door_controller.rvmat",
+            "\LFPowerGrid\data\doorcontroller\door_controller_red.rvmat",
+            "\LFPowerGrid\data\doorcontroller\door_controller.rvmat",
+            "\LFPowerGrid\data\doorcontroller\door_controller.rvmat"
+        };
+
+        class AnimationSources
+        {
+            class bolt
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 200;
                     };
                 };
             };
