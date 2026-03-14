@@ -80,6 +80,12 @@ class LFPG_ElecGraph
     // re-enqueue downstream even when total output is unchanged.
     protected bool m_AllocChanged;
 
+    // v2.0: Soft demand total from last AllocateOutput call.
+    // Set by AllocateOutput, read by PDQ demand signal section.
+    // Avoids redundant outgoing edge iteration in demand signal.
+    // Reset to 0.0 per-node in PDQ (alongside m_AllocChanged).
+    protected float m_LastAllocSoftDemand;
+
     // --- v0.7.31 (Bloque B): Component Watchdog ---
     // m_ComponentSizes: populated in RebuildComponents(), keyed by componentId.
     // m_WdgQueue/m_WdgVisited: reusable BFS buffers for CountComponentLimited().
@@ -144,6 +150,7 @@ class LFPG_ElecGraph
         m_EnqueuedThisEpoch = new map<string, bool>;
         m_EdgesVisitedThisEpoch = 0;
         m_AllocChanged = false;
+        m_LastAllocSoftDemand = 0.0;
 
         // v0.7.31 (Bloque B): Component Watchdog buffers
         m_ComponentSizes = new map<int, int>;
@@ -1429,6 +1436,29 @@ class LFPG_ElecGraph
         return null;
     }
 
+    // v2.0: Sum allocated power on all outgoing edges for a node.
+    // Used by battery timer to compute actual downstream energy consumption.
+    // O(K) where K = outgoing edges (typically 1-3 for batteries).
+    float SumOutgoingAllocations(string nodeId)
+    {
+        float total = 0.0;
+        ref array<ref LFPG_ElecEdge> outEdges;
+        if (!m_Outgoing.Find(nodeId, outEdges) || !outEdges)
+            return 0.0;
+
+        int oi;
+        for (oi = 0; oi < outEdges.Count(); oi = oi + 1)
+        {
+            ref LFPG_ElecEdge edge = outEdges[oi];
+            if (!edge)
+                continue;
+            if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+            total = total + edge.m_AllocatedPower;
+        }
+        return total;
+    }
+
     // v0.7.36 (Audit Feb2026): Pre-check component size before wire storage.
     // Returns true if adding a wire between sourceId and targetId would
     // cause the merged component to exceed LFPG_MAX_NODES_PER_COMPONENT.
@@ -1758,13 +1788,25 @@ class LFPG_ElecGraph
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
-            if (node && node.m_DeviceType == LFPG_DeviceType.SOURCE)
+            if (!node)
+                continue;
+
+            if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
                 // v0.7.37 (Audit 6, M4): Use DIRTY_INTERNAL, not DIRTY_INPUT.
                 // Sources manage their own powered state — they don't need input
                 // re-evaluation on startup. DIRTY_INTERNAL skips the incoming edge
                 // loop and directly computes output from m_Powered + m_MaxOutput.
                 MarkNodeDirty(m_Nodes.GetKey(ni), LFPG_DIRTY_INTERNAL);
+            }
+            else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH && node.m_VirtualGeneration > LFPG_PROPAGATION_EPSILON)
+            {
+                // v2.0: Battery PASSTHROUGH with stored energy can produce power
+                // without upstream input. Must be marked dirty on startup so
+                // downstream consumers wake up. Uses DIRTY_INPUT (not INTERNAL)
+                // because PASSTHROUGH needs to evaluate incoming edges to combine
+                // inputSum + virtualGeneration.
+                MarkNodeDirty(m_Nodes.GetKey(ni), LFPG_DIRTY_INPUT);
             }
         }
 
@@ -1884,6 +1926,7 @@ class LFPG_ElecGraph
             // v0.7.46: Reset per-node (not per-branch) to prevent stale flag
             // from a previous SOURCE/PASSTHROUGH leaking into a CONSUMER iteration.
             m_AllocChanged = false;
+            m_LastAllocSoftDemand = 0.0;
 
             // --- Step 1: Evaluate inputs ---
             bool skipInputEval = false;
@@ -1959,20 +2002,25 @@ class LFPG_ElecGraph
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                if (inputSum > LFPG_PROPAGATION_EPSILON)
+                // v2.0: Battery support — m_VirtualGeneration adds discharge
+                // power from storage to effective input. For non-battery
+                // PASSTHROUGH devices this is 0.0 (zero regression).
+                float effectiveInput = inputSum + node.m_VirtualGeneration;
+
+                if (effectiveInput > LFPG_PROPAGATION_EPSILON)
                 {
                     // v0.7.47: Subtract self-consumption before passing downstream.
                     // CeilingLight consumes 10 u/s for its own light, rest goes out.
-                    // Splitter has consumption=0 → afterSelf = inputSum (no regression).
+                    // Splitter has consumption=0 → afterSelf = effectiveInput (no regression).
                     float selfCons = node.m_Consumption;
                     if (selfCons > LFPG_PROPAGATION_EPSILON)
                     {
                         // Has self-consumption: check if input covers it
-                        if (inputSum + LFPG_PROPAGATION_EPSILON >= selfCons)
+                        if (effectiveInput + LFPG_PROPAGATION_EPSILON >= selfCons)
                         {
                             // Enough for self → powered, pass remainder downstream
                             newPowered = true;
-                            float afterSelf = inputSum - selfCons;
+                            float afterSelf = effectiveInput - selfCons;
                             if (afterSelf < 0.0)
                             {
                                 afterSelf = 0.0;
@@ -1991,14 +2039,11 @@ class LFPG_ElecGraph
                     {
                         // Zero self-consumption (Splitter pattern) → pass everything
                         // v1.1.0: Only powered if actually receiving input.
-                        // Previously unconditionally set newPowered=true, causing
-                        // downstream devices to briefly see stale powered state
-                        // via SyncVar before dirty queue propagated fully.
-                        if (inputSum > LFPG_PROPAGATION_EPSILON)
+                        if (effectiveInput > LFPG_PROPAGATION_EPSILON)
                         {
                             newPowered = true;
                         }
-                        newOutput = inputSum;
+                        newOutput = effectiveInput;
                     }
 
                     // v0.7.33 (Fix #22): Cap output to max throughput capacity.
@@ -2072,26 +2117,73 @@ class LFPG_ElecGraph
                 // even when unpowered or overloaded, preventing oscillation.
                 if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
-                    float demandSignal = downstreamDemand + node.m_Consumption;
+                    // v2.0: Read downstream soft demand from AllocateOutput cache.
+                    // AllocateOutput already iterated all outgoing edges and computed
+                    // totalSoftDemand → stored in m_LastAllocSoftDemand.
+                    // Eliminates redundant O(K) edge iteration + map lookups.
+                    float downstreamSoft = m_LastAllocSoftDemand;
+
+                    // v2.0: Demand signal includes:
+                    //   hard = downstreamDemand - downstreamSoft + selfConsumption - virtualGen
+                    //   soft = downstreamSoft + node.m_SoftDemand (charge want)
+                    //   virtualGen subtracted (storage covers part of demand)
+                    float totalSoft = downstreamSoft + node.m_SoftDemand;
+                    float demandSignal = downstreamDemand + node.m_Consumption + node.m_SoftDemand - node.m_VirtualGeneration;
+                    if (demandSignal < 0.0)
+                    {
+                        demandSignal = 0.0;
+                    }
+
                     if (demandSignal > LFPG_PROPAGATION_EPSILON)
                     {
                         newOutput = demandSignal;
+
+                        // v2.0 (Fix C1): MaxOutput cap with hard-priority.
+                        // When throughput bottleneck forces a cap, reduce soft FIRST
+                        // so hard consumers retain full demand signal upstream.
+                        // Without this, uniform scaling starves hard demand when
+                        // soft demand is large relative to total.
                         if (node.m_MaxOutput > LFPG_PROPAGATION_EPSILON && newOutput > node.m_MaxOutput)
                         {
+                            float excess = newOutput - node.m_MaxOutput;
                             newOutput = node.m_MaxOutput;
+                            // Reduce soft by the excess amount (cap soft first).
+                            totalSoft = totalSoft - excess;
+                            if (totalSoft < 0.0)
+                            {
+                                totalSoft = 0.0;
+                            }
                         }
-                    }
-                    else if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
-                    {
-                        newOutput = node.m_Consumption;
+
+                        // Compute soft ratio for upstream propagation.
+                        // Non-battery PASSTHROUGH: totalSoft=0 → ratio=0 (no regression).
+                        float ratioVal = totalSoft / newOutput;
+                        if (ratioVal < 0.0)
+                        {
+                            ratioVal = 0.0;
+                        }
+                        if (ratioVal > 1.0)
+                        {
+                            ratioVal = 1.0;
+                        }
+                        node.m_SoftDemandRatio = ratioVal;
                     }
                     else
                     {
-                        // B1 fix: No downstream demand, no self-consumption.
-                        // Without this, newOutput retains inputSum from Step 2a,
-                        // causing phantom load on upstream source via stale
-                        // m_LastStableOutput. Zero it explicitly.
-                        newOutput = 0.0;
+                        node.m_SoftDemandRatio = 0.0;
+
+                        if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
+                        {
+                            newOutput = node.m_Consumption;
+                        }
+                        else
+                        {
+                            // B1 fix: No downstream demand, no self-consumption.
+                            // Without this, newOutput retains effectiveInput from Step 2a,
+                            // causing phantom load on upstream source via stale
+                            // m_LastStableOutput. Zero it explicitly.
+                            newOutput = 0.0;
+                        }
                     }
                     // P1: Only look up entity and check gate for devices that
                     // actually implement gate logic (e.g. PushButton). Skips
@@ -2697,6 +2789,12 @@ class LFPG_ElecGraph
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
                 // P1: Cache gate capability for bulk warmup path.
                 node.m_IsGated = LFPG_DeviceAPI.IsGateCapable(obj);
+                // v2.0: Battery fields (m_VirtualGeneration, m_SoftDemand) are
+                // set by NetworkManager battery timer on first tick (~5s).
+                // Warmup gap is acceptable (same pattern as solar panels).
+                // Sprint 2 timer calls RefreshBatteryNodeState() which reads
+                // stored energy from entity and computes virtualGen + softDemand.
+                // For non-battery PASSTHROUGH, fields remain 0.0 (default).
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
@@ -2819,8 +2917,12 @@ class LFPG_ElecGraph
 
         // Pass 1: Collect demands and compute total.
         // Store per-edge demand in edge.m_Demand for pass 2.
+        // v2.0: Also track totalSoftDemand via target node m_SoftDemandRatio.
+        // For non-battery networks, all ratios are 0.0 → totalSoftDemand stays 0.0.
         float totalDemand = 0.0;
+        float totalSoftDemand = 0.0;
         float edgeDemand = 0.0;
+        float edgeSoftPortion = 0.0;
         int ei;
         for (ei = 0; ei < edgeCount; ei = ei + 1)
         {
@@ -2831,6 +2933,7 @@ class LFPG_ElecGraph
                 continue;
 
             edgeDemand = 0.0;
+            edgeSoftPortion = 0.0;
             ref LFPG_ElecNode targetNode;
             if (m_Nodes.Find(edge.m_TargetNodeId, targetNode) && targetNode)
             {
@@ -2887,21 +2990,46 @@ class LFPG_ElecGraph
                     {
                         edgeDemand = edgeDemand / ptPoweredIn;
                     }
+
+                    // v2.0: Track soft portion of this edge's demand.
+                    // SoftDemandRatio is 0.0 for all non-battery PASSTHROUGH
+                    // (Splitter, Combiner, CeilingLight, etc.) → no regression.
+                    if (targetNode.m_SoftDemandRatio > LFPG_PROPAGATION_EPSILON)
+                    {
+                        edgeSoftPortion = edgeDemand * targetNode.m_SoftDemandRatio;
+                    }
                 }
             }
 
             edge.m_Demand = edgeDemand;
             totalDemand = totalDemand + edgeDemand;
+            totalSoftDemand = totalSoftDemand + edgeSoftPortion;
         }
 
-        // Overload decision: binary all-on / all-off.
+        // v2.0: Cache soft demand total for PDQ demand signal section.
+        // Eliminates redundant outgoing edge iteration in PDQ.
+        m_LastAllocSoftDemand = totalSoftDemand;
+
+        // v2.0: Overload decision uses hard demand only.
+        // Soft demand (battery charging) NEVER causes overload.
+        // For non-battery networks: totalSoftDemand=0 → identical to before.
+        float totalHardDemand = totalDemand - totalSoftDemand;
+        if (totalHardDemand < 0.0)
+        {
+            totalHardDemand = 0.0;
+        }
         bool overloaded = false;
-        if (totalDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
+        if (totalHardDemand > availableOutput + LFPG_PROPAGATION_EPSILON)
         {
             overloaded = true;
         }
 
         // Pass 2: Set allocations + detect changes.
+        // v2.0: When soft demand exists and not overloaded, allocate only
+        // the hard portion per edge. Soft surplus handled in Pass 3.
+        // When totalSoftDemand=0 (99.9% of nodes), newAlloc = edge.m_Demand
+        // (unchanged behavior).
+        float totalAllocated = 0.0;
         int ai;
         for (ai = 0; ai < edgeCount; ai = ai + 1)
         {
@@ -2915,9 +3043,31 @@ class LFPG_ElecGraph
             float newAlloc = 0.0;
             if (!overloaded)
             {
-                newAlloc = allocEdge.m_Demand;
+                if (totalSoftDemand > LFPG_PROPAGATION_EPSILON)
+                {
+                    // Has soft demand in this node's edges: allocate hard portion only.
+                    // Soft portion deferred to Pass 3 (surplus distribution).
+                    ref LFPG_ElecNode allocTarget;
+                    float allocTargetRatio = 0.0;
+                    if (m_Nodes.Find(allocEdge.m_TargetNodeId, allocTarget) && allocTarget)
+                    {
+                        allocTargetRatio = allocTarget.m_SoftDemandRatio;
+                    }
+                    float edgeHard = allocEdge.m_Demand * (1.0 - allocTargetRatio);
+                    if (edgeHard < 0.0)
+                    {
+                        edgeHard = 0.0;
+                    }
+                    newAlloc = edgeHard;
+                }
+                else
+                {
+                    // No soft demand anywhere → full demand (existing behavior).
+                    newAlloc = allocEdge.m_Demand;
+                }
             }
             allocEdge.m_AllocatedPower = newAlloc;
+            totalAllocated = totalAllocated + newAlloc;
 
             // Track allocation change for Step 3 downstream re-enqueue.
             if (!m_AllocChanged)
@@ -2934,13 +3084,68 @@ class LFPG_ElecGraph
             }
         }
 
+        // v2.0 Pass 3: Distribute surplus to soft demand edges proportionally.
+        // Only runs when: not overloaded, totalSoftDemand > 0, and surplus exists.
+        // For non-battery networks this block is skipped entirely (totalSoftDemand=0).
+        if (!overloaded && totalSoftDemand > LFPG_PROPAGATION_EPSILON)
+        {
+            float surplus = availableOutput - totalAllocated;
+            if (surplus > LFPG_PROPAGATION_EPSILON)
+            {
+                // Cap surplus to total soft demand (don't over-allocate).
+                if (surplus > totalSoftDemand)
+                {
+                    surplus = totalSoftDemand;
+                }
+                int si;
+                for (si = 0; si < edgeCount; si = si + 1)
+                {
+                    ref LFPG_ElecEdge softEdge = outEdges[si];
+                    if (!softEdge)
+                        continue;
+                    if ((softEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                        continue;
+
+                    ref LFPG_ElecNode softTarget;
+                    if (!m_Nodes.Find(softEdge.m_TargetNodeId, softTarget))
+                        continue;
+                    if (!softTarget)
+                        continue;
+                    if (softTarget.m_SoftDemandRatio < LFPG_PROPAGATION_EPSILON)
+                        continue;
+
+                    // Proportional share: this edge's soft / totalSoft * surplus
+                    float thisEdgeSoft = softEdge.m_Demand * softTarget.m_SoftDemandRatio;
+                    float softBonus = surplus * thisEdgeSoft / totalSoftDemand;
+                    if (softBonus < 0.0)
+                    {
+                        softBonus = 0.0;
+                    }
+
+                    float prevAlloc = softEdge.m_AllocatedPower;
+                    softEdge.m_AllocatedPower = prevAlloc + softBonus;
+                    totalAllocated = totalAllocated + softBonus;
+
+                    if (!m_AllocChanged)
+                    {
+                        if (softBonus > LFPG_PROPAGATION_EPSILON)
+                        {
+                            m_AllocChanged = true;
+                        }
+                    }
+                }
+            }
+        }
+
         // Update node load metrics.
+        // v2.0: LoadRatio uses totalAllocated (hard+soft) for accurate display.
+        // Overloaded flag uses totalHardDemand (soft never causes overload).
         ref LFPG_ElecNode srcNode;
         if (m_Nodes.Find(nodeId, srcNode) && srcNode)
         {
             if (srcNode.m_DeviceType == LFPG_DeviceType.SOURCE || srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                // LoadRatio: demand / capacity (for inspector display)
+                // LoadRatio: actual usage / capacity (for inspector display + cable color)
                 float capacity = srcNode.m_MaxOutput;
                 if (srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
@@ -2949,7 +3154,7 @@ class LFPG_ElecGraph
 
                 if (capacity > LFPG_PROPAGATION_EPSILON)
                 {
-                    float rawRatio = totalDemand / capacity;
+                    float rawRatio = totalAllocated / capacity;
                     if (rawRatio < 0.0)
                     {
                         rawRatio = 0.0;
@@ -2962,7 +3167,7 @@ class LFPG_ElecGraph
                 }
                 else
                 {
-                    if (totalDemand > LFPG_PROPAGATION_EPSILON)
+                    if (totalHardDemand > LFPG_PROPAGATION_EPSILON)
                     {
                         srcNode.m_LoadRatio = 100.0;
                     }
@@ -2975,6 +3180,8 @@ class LFPG_ElecGraph
             }
         }
 
+        // v2.0: Return totalDemand (hard + soft) for upstream demand signaling.
+        // The demand signal carries the full picture; the ratio separates them.
         return totalDemand;
         #else
         return 0.0;

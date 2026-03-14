@@ -133,6 +133,12 @@ class LFPG_NetworkManager
     // v1.9.0: Laser Detector dedicated registry
     protected ref array<LFPG_LaserDetector> m_RegisteredLasers;
 
+    // v2.0: Battery energy accounting timer state.
+    // Registered batteries are iterated every LFPG_BATTERY_TICK_MS.
+    // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
+    protected ref array<EntityAI> m_RegisteredBatteries;
+    protected float m_BatteryLastTickMs;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -208,6 +214,7 @@ class LFPG_NetworkManager
         m_RegisteredSensors = new array<LFPG_MotionSensor>;
         m_RegisteredPads = new array<LFPG_PressurePad>;
         m_RegisteredLasers = new array<LFPG_LaserDetector>;
+        m_RegisteredBatteries = new array<EntityAI>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -271,6 +278,10 @@ class LFPG_NetworkManager
 
         // v1.9.0: Laser detector player crossing (300ms — thin beam, fast poll)
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickLaserCrossing, LFPG_LASER_CROSS_TICK_MS, bTrue);
+
+        // v2.0: Battery energy accounting timer (5s — balance charge/discharge)
+        m_BatteryLastTickMs = GetGame().GetTime();
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBatteries, LFPG_BATTERY_TICK_MS, bTrue);
         #endif
     }
 
@@ -3999,6 +4010,300 @@ class LFPG_NetworkManager
             laserMsg = laserMsg + changed.ToString();
             laserMsg = laserMsg + " lasers changed state";
             LFPG_Util.Debug(laserMsg);
+        }
+        #endif
+    }
+
+    // ===========================
+    // v2.0: Battery Registration + Energy Timer
+    // ===========================
+    // Pattern: identical to Sensor/Laser registration.
+    // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
+    // Timer runs every LFPG_BATTERY_TICK_MS (~5s), uses real delta time.
+    //
+    // Energy accounting per battery per tick:
+    //   1. Read node.m_InputPower (actual received from upstream)
+    //   2. Sum outgoing edge allocations (actual delivered downstream)
+    //   3. netFlow = received - delivered (+ = charging, - = discharging)
+    //   4. Apply efficiency (charge only), self-discharge, health cap
+    //   5. Hysteresis: toggle m_DischargeEnabled at 1%/5% thresholds
+    //   6. Recompute m_VirtualGeneration + m_SoftDemand on graph node
+    //   7. MarkNodeDirty if changed significantly
+
+    void RegisterBattery(EntityAI battery)
+    {
+        if (!battery)
+            return;
+        if (m_RegisteredBatteries.Find(battery) < 0)
+        {
+            m_RegisteredBatteries.Insert(battery);
+        }
+    }
+
+    void UnregisterBattery(EntityAI battery)
+    {
+        if (!battery)
+            return;
+        int idx = m_RegisteredBatteries.Find(battery);
+        if (idx >= 0)
+        {
+            m_RegisteredBatteries.Remove(idx);
+        }
+    }
+
+    protected void LFPG_TickBatteries()
+    {
+        #ifdef SERVER
+        int batCount = m_RegisteredBatteries.Count();
+        if (batCount <= 0)
+            return;
+
+        if (!m_Graph)
+            return;
+
+        // Real delta time (prevents drift on laggy servers).
+        // GetGame().GetTime() returns milliseconds (same as water pump / tank timers).
+        float nowMs = GetGame().GetTime();
+        float deltaMs = nowMs - m_BatteryLastTickMs;
+        m_BatteryLastTickMs = nowMs;
+
+        // Guard: skip if delta is nonsensical (first tick, time travel, etc.)
+        if (deltaMs < 100.0)
+            return;
+        if (deltaMs > 30000.0)
+        {
+            deltaMs = 30000.0;
+        }
+
+        float deltaSec = deltaMs / 1000.0;
+
+        // Enforce Script: hoist all string function names BEFORE the loop.
+        // Avoids 9 string allocations per battery per tick.
+        string fnGetStored = "LFPG_GetStoredEnergy";
+        string fnGetMaxStored = "LFPG_GetMaxStoredEnergy";
+        string fnGetMaxCharge = "LFPG_GetMaxChargeRate";
+        string fnGetMaxDisch = "LFPG_GetMaxDischargeRate";
+        string fnGetEfficiency = "LFPG_GetEfficiency";
+        string fnGetSelfDisch = "LFPG_GetSelfDischargeRate";
+        string fnIsDischEnabled = "LFPG_IsDischargeEnabled";
+        string fnSetStored = "LFPG_SetStoredEnergy";
+        string fnSetDisch = "LFPG_SetDischargeEnabled";
+        string fnSetChargeRate = "LFPG_SetChargeRateCurrent";
+        string hpZone = "";
+        string hpPart = "";
+
+        // Iterate all registered batteries.
+        int bi;
+        int dirtyCount = 0;
+        for (bi = 0; bi < batCount; bi = bi + 1)
+        {
+            EntityAI batEnt = m_RegisteredBatteries[bi];
+            if (!batEnt)
+                continue;
+
+            // Get deviceId via dynamic dispatch.
+            string batId = LFPG_DeviceAPI.GetDeviceId(batEnt);
+            if (batId == "")
+                continue;
+
+            // Get graph node. Battery must be wired to have a node.
+            ref LFPG_ElecNode node = m_Graph.GetNode(batId);
+            if (!node)
+                continue;
+
+            // --- Read battery entity state via dynamic dispatch ---
+            // Uses GameScript.CallFunctionParams directly (DeviceAPI.CallFloat is protected).
+            // String function names hoisted before loop (GC reduction).
+            float storedEnergy = 0.0;
+            float maxStored = 0.0;
+            float maxCharge = 0.0;
+            float maxDischarge = 0.0;
+            float efficiency = 1.0;
+            float selfDischargeRate = 0.0;
+            bool dischargeEnabled = true;
+
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetStored, storedEnergy, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxStored, maxStored, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxCharge, maxCharge, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxDisch, maxDischarge, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetEfficiency, efficiency, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnGetSelfDisch, selfDischargeRate, null);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnIsDischEnabled, dischargeEnabled, null);
+
+            // Skip if not a real battery (maxStored = 0 means entity doesn't implement battery API).
+            if (maxStored < LFPG_PROPAGATION_EPSILON)
+                continue;
+
+            // --- Health-based capacity reduction ---
+            float healthRatio = 1.0;
+            float maxHP = batEnt.GetMaxHealth(hpZone, hpPart);
+            if (maxHP > 0.1)
+            {
+                float curHP = batEnt.GetHealth(hpZone, hpPart);
+                healthRatio = curHP / maxHP;
+                if (healthRatio < 0.0)
+                {
+                    healthRatio = 0.0;
+                }
+                if (healthRatio > 1.0)
+                {
+                    healthRatio = 1.0;
+                }
+            }
+            float effectiveMax = maxStored * healthRatio;
+
+            // --- Compute net energy flow ---
+            // Input: what the battery actually received from upstream.
+            float inputReceived = node.m_InputPower;
+
+            // Output: sum of allocated power on outgoing edges (actual downstream delivery).
+            float outputDelivered = m_Graph.SumOutgoingAllocations(batId);
+
+            // Net flow: positive = surplus (charge), negative = deficit (discharge).
+            // Subtract selfConsumption: input that was consumed by the battery device
+            // itself (e.g. monitoring circuits). For current tiers consumption=0,
+            // but architecturally correct for future self-consuming battery variants.
+            float selfCons = node.m_Consumption;
+            float netFlow = inputReceived - outputDelivered - selfCons;
+
+            // --- Apply energy delta ---
+            float energyDelta = 0.0;
+            if (netFlow > LFPG_PROPAGATION_EPSILON)
+            {
+                // Charging: apply efficiency loss.
+                // Cap by maxChargeRate.
+                float chargeWatts = netFlow;
+                if (chargeWatts > maxCharge)
+                {
+                    chargeWatts = maxCharge;
+                }
+                energyDelta = chargeWatts * efficiency * deltaSec;
+            }
+            else if (netFlow < -LFPG_PROPAGATION_EPSILON)
+            {
+                // Discharging: 1:1 from storage (loss was on charge side).
+                // Cap by maxDischargeRate.
+                float dischargeWatts = -netFlow;
+                if (dischargeWatts > maxDischarge)
+                {
+                    dischargeWatts = maxDischarge;
+                }
+                energyDelta = -dischargeWatts * deltaSec;
+            }
+
+            // Self-discharge (idle drain).
+            float selfDrain = storedEnergy * selfDischargeRate * deltaSec / 3600.0;
+            energyDelta = energyDelta - selfDrain;
+
+            // Apply delta and clamp.
+            float newStored = storedEnergy + energyDelta;
+            if (newStored < 0.0)
+            {
+                newStored = 0.0;
+            }
+            if (newStored > effectiveMax)
+            {
+                newStored = effectiveMax;
+            }
+
+            // --- Hysteresis: toggle discharge enable ---
+            float offThreshold = effectiveMax * LFPG_BATTERY_DISCHARGE_OFF_PCT;
+            float onThreshold = effectiveMax * LFPG_BATTERY_DISCHARGE_ON_PCT;
+            bool newDischargeEnabled = dischargeEnabled;
+
+            if (dischargeEnabled && newStored < offThreshold)
+            {
+                // Depleted below 1% → disable discharge.
+                newDischargeEnabled = false;
+            }
+            else if (!dischargeEnabled && newStored > onThreshold)
+            {
+                // Recovered above 5% → re-enable discharge.
+                newDischargeEnabled = true;
+            }
+
+            // --- Compute new graph node fields ---
+            float newVirtualGen = 0.0;
+            if (newDischargeEnabled && newStored > LFPG_PROPAGATION_EPSILON)
+            {
+                // Cap by energy budget: can't promise more than storage can sustain
+                // for the duration of one tick.
+                float energyBudgetW = newStored / deltaSec;
+                newVirtualGen = maxDischarge;
+                if (newVirtualGen > energyBudgetW)
+                {
+                    newVirtualGen = energyBudgetW;
+                }
+            }
+
+            float newSoftDemand = 0.0;
+            float freeSpace = effectiveMax - newStored;
+            if (freeSpace > LFPG_PROPAGATION_EPSILON)
+            {
+                // Cap by charge rate AND by what can be stored in one tick.
+                float spaceBudgetW = freeSpace / deltaSec;
+                newSoftDemand = maxCharge;
+                if (newSoftDemand > spaceBudgetW)
+                {
+                    newSoftDemand = spaceBudgetW;
+                }
+            }
+
+            // --- Write back to entity (Sprint 3 implements these) ---
+            // String function names hoisted before loop.
+            ref Param1<float> pStored = new Param1<float>(newStored);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnSetStored, null, pStored);
+
+            if (newDischargeEnabled != dischargeEnabled)
+            {
+                ref Param1<bool> pDischarge = new Param1<bool>(newDischargeEnabled);
+                GetGame().GameScript.CallFunctionParams(batEnt, fnSetDisch, null, pDischarge);
+            }
+
+            // Write charge rate for UI SyncVar (positive = charging, negative = discharging).
+            float chargeRateDisplay = netFlow;
+            ref Param1<float> pChargeRate = new Param1<float>(chargeRateDisplay);
+            GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, pChargeRate);
+
+            // --- Update graph node + mark dirty if changed ---
+            float vgDelta = newVirtualGen - node.m_VirtualGeneration;
+            if (vgDelta < 0.0)
+            {
+                vgDelta = -vgDelta;
+            }
+            float sdDelta = newSoftDemand - node.m_SoftDemand;
+            if (sdDelta < 0.0)
+            {
+                sdDelta = -sdDelta;
+            }
+
+            bool needsDirty = false;
+            if (vgDelta > LFPG_PROPAGATION_EPSILON)
+            {
+                needsDirty = true;
+            }
+            if (sdDelta > LFPG_PROPAGATION_EPSILON)
+            {
+                needsDirty = true;
+            }
+
+            node.m_VirtualGeneration = newVirtualGen;
+            node.m_SoftDemand = newSoftDemand;
+
+            if (needsDirty)
+            {
+                m_Graph.MarkNodeDirty(batId, LFPG_DIRTY_INPUT);
+                dirtyCount = dirtyCount + 1;
+            }
+        }
+
+        if (dirtyCount > 0)
+        {
+            string batMsg = "[Battery] Tick: ";
+            batMsg = batMsg + dirtyCount.ToString();
+            batMsg = batMsg + "/" + batCount.ToString();
+            batMsg = batMsg + " batteries triggered propagation";
+            LFPG_Util.Debug(batMsg);
         }
         #endif
     }
