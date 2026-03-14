@@ -112,7 +112,10 @@ modded class ActionConstructor
         // --- v2.0.0: Electronic Counter Kit placement ---
         actions.Insert(LFPG_ActionPlaceElectronicCounter);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (47)");
+        // --- v2.0: Battery Medium Kit placement ---
+        actions.Insert(LFPG_ActionPlaceBatteryMedium);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (48)");
     }
 };
 

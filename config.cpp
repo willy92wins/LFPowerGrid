@@ -99,7 +99,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers" };
@@ -1183,6 +1183,79 @@ class CfgVehicles
                     class Health
                     {
                         hitpoints = 100;
+                    };
+                };
+            };
+        };
+    };
+
+    // =========================================================
+    // v2.0: BATTERY MEDIUM (PASSTHROUGH + energy storage, UPS model)
+    // =========================================================
+
+    // ---- BatteryMedium Kit (holdable, deployable, same-model) ----
+    class LF_BatteryMedium_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_BatteryMediumKit";
+        descriptionShort = "$STR_LFPG_BatteryMediumKit_Desc";
+        model = "\LFPowerGrid\data\battery_medium\ups.p3d";
+        weight = 8000;
+        itemSize[] = {3, 3};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- BatteryMedium (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
+    class LF_BatteryMedium : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_BatteryMedium";
+        descriptionShort = "$STR_LFPG_BatteryMedium_Desc";
+        model = "\LFPowerGrid\data\battery_medium\ups.p3d";
+        weight = 12000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"light_led_0", "light_led_1", "light_led_2", "light_led_3", "light_led_4", "light_led_5", "light_led_6"};
+        hiddenSelectionsTextures[] = {"", "", "", "", "", "", ""};
+        hiddenSelectionsMaterials[] = {
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat",
+            "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat"
+        };
+
+        class AnimationSources
+        {
+            class switch
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 200;
                     };
                 };
             };

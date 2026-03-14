@@ -202,7 +202,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
     // ---- Helper: check if item type is an LFPG kit ----
     protected bool LFPG_IsLFPGKit(string typeName)
     {
-        // Check known LFPG kit patterns
+        // Check ALL known LFPG kit types (must match config.cpp units[])
         if (typeName == "LF_Splitter_Kit")
             return true;
         if (typeName == "LF_CeilingLight_Kit")
@@ -222,6 +222,26 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (typeName == "LFPG_PushButton_Kit")
             return true;
         if (typeName == "LF_Sorter_Kit")
+            return true;
+        if (typeName == "LF_Searchlight_Kit")
+            return true;
+        if (typeName == "LFPG_SwitchV2_Kit")
+            return true;
+        if (typeName == "LFPG_MotionSensor_Kit")
+            return true;
+        if (typeName == "LFPG_PressurePad_Kit")
+            return true;
+        if (typeName == "LFPG_AND_Gate_Kit")
+            return true;
+        if (typeName == "LFPG_OR_Gate_Kit")
+            return true;
+        if (typeName == "LFPG_XOR_Gate_Kit")
+            return true;
+        if (typeName == "LFPG_LaserDetector_Kit")
+            return true;
+        if (typeName == "LFPG_ElectronicCounter_Kit")
+            return true;
+        if (typeName == "LF_BatteryMedium_Kit")
             return true;
 
         return false;

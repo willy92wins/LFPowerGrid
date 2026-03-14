@@ -66,6 +66,109 @@ class LF_Battery_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
+// KIT (MEDIUM): deployable item that spawns LF_BatteryMedium.
+// Same-model pattern (Splitter_Kit / Combiner_Kit).
+// Has its own SetActions + OnPlacementComplete that spawns
+// the correct tier entity (LF_BatteryMedium).
+// ---------------------------------------------------------
+class LF_BatteryMedium_Kit : Inventory_Base
+{
+    override bool IsDeployable()
+    {
+        return true;
+    }
+
+    override bool CanDisplayCargo()
+    {
+        return false;
+    }
+
+    override bool CanBePlaced(Man player, vector position)
+    {
+        return true;
+    }
+
+    override bool DoPlacingHeightCheck()
+    {
+        return false;
+    }
+
+    override string GetDeploySoundset()
+    {
+        string snd = "placeBarbedWire_SoundSet";
+        return snd;
+    }
+
+    // v0.7.48 pattern: Empty loop sound prevents orphan audio.
+    override string GetLoopDeploySoundset()
+    {
+        string empty = "";
+        return empty;
+    }
+
+    override void SetActions()
+    {
+        super.SetActions();
+        // ActionTogglePlaceObject enters hologram mode.
+        // LFPG_ActionPlaceBatteryMedium confirms placement.
+        // ActionPlaceObject pipeline passes hologram pos as parameter
+        // to OnPlacementComplete. Use parameter, NOT GetPosition().
+        AddAction(ActionTogglePlaceObject);
+        AddAction(LFPG_ActionPlaceBatteryMedium);
+    }
+
+    // ActionPlaceObject inherits ActionDeployObject pipeline.
+    // OnFinishProgressClient passes GetLocalProjectionPosition()
+    // (hologram pos) as the position parameter.
+    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
+    {
+        super.OnPlacementComplete(player, position, orientation);
+
+        #ifdef SERVER
+        vector finalPos = position;
+        vector finalOri = orientation;
+
+        string tLog = "[BatteryMedium_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
+        LFPG_Util.Info(tLog);
+
+        // Do NOT use ECE_PLACE_ON_SURFACE — it forces ground snap.
+        // Do NOT zero pitch/roll — hologram orientation already correct.
+        string spawnClass = "LF_BatteryMedium";
+        EntityAI battery = GetGame().CreateObjectEx(spawnClass, finalPos, ECE_CREATEPHYSICS);
+        if (battery)
+        {
+            battery.SetPosition(finalPos);
+            battery.SetOrientation(finalOri);
+            battery.Update();
+
+            string okLog = "[BatteryMedium_Kit] Deployed LF_BatteryMedium at ";
+            okLog = okLog + finalPos.ToString();
+            okLog = okLog + " ori=";
+            okLog = okLog + finalOri.ToString();
+            LFPG_Util.Info(okLog);
+
+            // v0.7.32 pattern: Only delete kit on successful spawn.
+            GetGame().ObjectDelete(this);
+        }
+        else
+        {
+            string failLog = "[BatteryMedium_Kit] Failed to create LF_BatteryMedium! Kit preserved.";
+            LFPG_Util.Error(failLog);
+            PlayerBase pb = PlayerBase.Cast(player);
+            if (pb)
+            {
+                string errMsg = "[LFPG] Battery placement failed. Kit preserved.";
+                pb.MessageStatus(errMsg);
+            }
+        }
+        #endif
+    }
+};
+
+// ---------------------------------------------------------
 // DEVICE BASE: PASSTHROUGH with energy storage
 // Tiers inherit and override capacity/rates.
 // ---------------------------------------------------------
@@ -586,6 +689,14 @@ class LF_BatteryBase : Inventory_Base
         SetSynchDirty();
     }
 
+    // v2.0: Virtual hook for tier-specific LED visual updates.
+    // Called from OnVariablesSynchronized (client only).
+    // Tier classes with LED models override this (e.g. BatteryMedium 7-LED bar).
+    // Base no-op: BatterySmall uses vanilla model, no LED selections.
+    void LFPG_UpdateLEDs()
+    {
+    }
+
     // ---- Block vanilla CompEM callbacks ----
     // EnergyManager exists in config.cpp ONLY for the inventory energy bar.
     // All energy logic is handled by LFPG timer. These empty overrides
@@ -667,6 +778,9 @@ class LF_BatteryBase : Inventory_Base
         LFPG_TryRegister();
 
         #ifndef SERVER
+        // v2.0: Update charge LEDs (overridden by tier classes with LED models).
+        LFPG_UpdateLEDs();
+
         if (m_DeviceId != "")
         {
             LFPG_CableRenderer r = LFPG_CableRenderer.Get();
@@ -823,8 +937,14 @@ class LF_BatterySmall : LF_BatteryBase
 };
 
 // =========================================================
-// TIER 2: Medium (base standard)
+// TIER 2: Medium (base standard) — UPS model with 7 LEDs
 // =========================================================
+
+// LED rvmat paths for BatteryMedium charge bar
+static const string LFPG_BAT_MED_LED_GREEN = "\\LFPowerGrid\\data\\battery_medium\\ups_led_green.rvmat";
+static const string LFPG_BAT_MED_LED_OFF   = "\\LFPowerGrid\\data\\battery_medium\\ups_led_off.rvmat";
+static const int    LFPG_BAT_MED_LED_COUNT  = 7;
+
 class LF_BatteryMedium : LF_BatteryBase
 {
     override float LFPG_GetMaxStoredEnergy()
@@ -850,6 +970,58 @@ class LF_BatteryMedium : LF_BatteryBase
     override float LFPG_GetCapacity()
     {
         return LFPG_BATTERY_MEDIUM_MAX_OUTPUT;
+    }
+
+    // v2.0: 7-LED charge bar visual update (client only).
+    // LED 0 = lowest, LED 6 = highest.
+    // Ratio mapped to 0..7 lit LEDs. If stored > 0 but ratio rounds to 0,
+    // still show 1 LED (avoid "looks dead but isn't" confusion).
+    // Called from LF_BatteryBase.OnVariablesSynchronized via virtual dispatch.
+    override void LFPG_UpdateLEDs()
+    {
+        #ifndef SERVER
+        float maxStored = LFPG_GetMaxStoredEnergy();
+        float ratio = 0.0;
+        if (maxStored > 0.1)
+        {
+            ratio = m_StoredEnergy / maxStored;
+        }
+        if (ratio > 1.0)
+        {
+            ratio = 1.0;
+        }
+
+        // Compute how many LEDs should be lit (0..7)
+        float litFloat = ratio * 7.0;
+        int numLit = litFloat;
+        if (numLit < 0)
+        {
+            numLit = 0;
+        }
+        // Ensure at least 1 LED if battery has any charge
+        if (numLit < 1 && m_StoredEnergy > 0.1)
+        {
+            numLit = 1;
+        }
+        if (numLit > LFPG_BAT_MED_LED_COUNT)
+        {
+            numLit = LFPG_BAT_MED_LED_COUNT;
+        }
+
+        // Apply material to each LED selection (hiddenSelections indices 0..6)
+        int i = 0;
+        for (i = 0; i < LFPG_BAT_MED_LED_COUNT; i = i + 1)
+        {
+            if (i < numLit)
+            {
+                SetObjectMaterial(i, LFPG_BAT_MED_LED_GREEN);
+            }
+            else
+            {
+                SetObjectMaterial(i, LFPG_BAT_MED_LED_OFF);
+            }
+        }
+        #endif
     }
 };
 

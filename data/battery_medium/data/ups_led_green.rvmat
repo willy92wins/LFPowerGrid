@@ -1,0 +1,45 @@
+// LF_PowerGrid - Battery Medium LED Green ON material
+// Super shader 7-stage. Used by SetObjectMaterial in LFPG_UpdateLEDs.
+ambient[]={0.02,0.15,0.02,1};
+diffuse[]={0.05,0.65,0.05,1};
+forcedDiffuse[]={0.05,0.65,0.05,1};
+emmisive[]={8,60,8,1};
+specular[]={0.05,0.45,0.05,1};
+specularPower=20;
+PixelShaderID="Super";
+VertexShaderID="Super";
+class Stage1
+{
+	texture="#(argb,8,8,3)color(1,1,1,1,CO)";
+	uvSource="tex";
+};
+class Stage2
+{
+	texture="#(argb,8,8,3)color(0.5,0.5,1,1,NOHQ)";
+	uvSource="tex";
+};
+class Stage3
+{
+	texture="#(argb,8,8,3)color(0,0,0,0,MC)";
+	uvSource="tex";
+};
+class Stage4
+{
+	texture="#(argb,8,8,3)color(1,1,1,1,AS)";
+	uvSource="tex";
+};
+class Stage5
+{
+	texture="#(argb,8,8,3)color(1,0,0,1,SMDI)";
+	uvSource="tex";
+};
+class Stage6
+{
+	texture="#(ai,64,64,1)fresnel(1.3,7)";
+	uvSource="none";
+};
+class Stage7
+{
+	texture="#(argb,8,8,3)color(0,0,0,1,NOHQ)";
+	uvSource="tex";
+};
