@@ -48,6 +48,16 @@ class LFPG_ActionToggleSwitchV2 : ActionInteractBase
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
+        // Dynamic text: show current → target state
+        if (sw.LFPG_GetSwitchOn())
+        {
+            m_Text = "#STR_LFPG_ACTION_SWITCH_OFF";
+        }
+        else
+        {
+            m_Text = "#STR_LFPG_ACTION_SWITCH_ON";
+        }
+
         return true;
     }
 

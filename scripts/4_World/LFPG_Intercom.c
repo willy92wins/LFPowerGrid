@@ -284,6 +284,11 @@ class LF_Intercom : Inventory_Base
 
         LFPG_UpdateDeviceIdString();
         LFPG_TryRegister();
+
+        // Apply initial visual state (client-side).
+        // Ensures microphone proxy is hidden at spawn even if
+        // config "" material falls back to baked p3d material.
+        LFPG_UpdateVisuals();
     }
 
     override void EEKilled(Object killer)

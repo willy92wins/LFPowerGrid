@@ -233,19 +233,12 @@ class LF_Furnace : Inventory_Base
         // Stack quantity: only multiply for genuinely stackable items.
         // Items like Chemlights have GetQuantity() = charge (e.g. 100)
         // but are NOT stackable — using qty would inflate fuel x100.
-        // A real stackable item has canBeSplit=1 AND quantityMax > 1.
+        // A real stackable item has canBeSplit=1 in config.
+        // ConfigGetInt returns 0 for missing paths, which is correct default.
         qty = 1;
         string splitPath = "CfgVehicles " + itemType + " canBeSplit";
-        bool canSplit = false;
-        if (GetGame().ConfigIsExisting(splitPath))
-        {
-            int splitVal = GetGame().ConfigGetInt(splitPath);
-            if (splitVal > 0)
-            {
-                canSplit = true;
-            }
-        }
-        if (canSplit)
+        int splitVal = GetGame().ConfigGetInt(splitPath);
+        if (splitVal > 0)
         {
             int rawQty = item.GetQuantity();
             if (rawQty > 1)

@@ -147,3 +147,7 @@
 "STR_LFPG_ACTION_INSTALL_MIC","Install Microphone","Install Microphone","Instalar Micrófono","Mikrofon installieren","Установить микрофон"
 "STR_LFPG_ACTION_TOGGLE_BROADCAST","Toggle Broadcast","Toggle Broadcast","Activar/Desactivar Transmisión","Übertragung umschalten","Переключить трансляцию"
 "STR_LFPG_ACTION_CYCLE_FREQ","Tune Frequency","Tune Frequency","Cambiar Frecuencia","Frequenz ändern","Сменить частоту"
+"STR_LFPG_ACTION_INTERCOM_ON","Turn ON Intercom","Turn ON Intercom","Encender Intercomunicador","Intercom einschalten","Включить интерком"
+"STR_LFPG_ACTION_INTERCOM_OFF","Turn OFF Intercom","Turn OFF Intercom","Apagar Intercomunicador","Intercom ausschalten","Выключить интерком"
+"STR_LFPG_ACTION_SWITCH_ON","Turn ON Switch","Turn ON Switch","Encender Interruptor","Schalter einschalten","Включить переключатель"
+"STR_LFPG_ACTION_SWITCH_OFF","Turn OFF Switch","Turn OFF Switch","Apagar Interruptor","Schalter ausschalten","Выключить переключатель"
