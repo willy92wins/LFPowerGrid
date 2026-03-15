@@ -53,6 +53,16 @@ class LFPG_ActionToggleIntercom : ActionInteractBase
         if (distSq > maxDistSq)
             return false;
 
+        // Dynamic text: show current → target state
+        if (ic.LFPG_GetSwitchOn())
+        {
+            m_Text = "Turn OFF Intercom";
+        }
+        else
+        {
+            m_Text = "Turn ON Intercom";
+        }
+
         return true;
     }
 

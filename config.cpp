@@ -646,9 +646,11 @@ class CfgVehicles
         inventorySlot[] += {"LF_SolarNails", "LF_PumpNails"};
     };
     // v1.1.0: GasMask_Filter (vanilla NBC filter) can go in pump filter slot
+    // NOTE: vanilla defines inventorySlot as scalar "GasMask_Filter".
+    // Using += on scalar base corrupts config. Must redefine as full array.
     class GasMask_Filter
     {
-        inventorySlot[] += {"LF_PumpFilter"};
+        inventorySlot[] = {"GasMask_Filter", "LF_PumpFilter"};
     };
 
     // =========================================================
@@ -931,9 +933,9 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"model_0", "pressure_pad", "port_input_0", "port_output_0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelections[] = {"port_input_0", "port_output_0"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
     };
 
     // ---- PressurePad (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -952,9 +954,9 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"model_0", "pressure_pad", "port_input_0", "port_output_0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_co.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelections[] = {"port_input_0", "port_output_0"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
 
         class AnimationSources
         {
@@ -1561,7 +1563,7 @@ class CfgVehicles
             "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
             "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
             "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat"
+            ""
         };
 
         class AnimationSources

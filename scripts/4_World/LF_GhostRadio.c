@@ -1,27 +1,31 @@
 // =========================================================
-// LF_PowerGrid - Ghost Radio (v3.0.0 - Sprint 3)
+// LF_PowerGrid - Ghost Radio (v3.0.0)
 //
 // Invisible radio entity used by LF_Intercom for bidirectional VOIP.
-// Inherits from TransmitterBase (PersonalRadio script class).
+// Inherits from TransmitterBase (script) / PersonalRadio (config).
 //
-// Behavior:
-//   - CompEM disabled (no battery drain)
-//   - No player actions (cannot be picked up, interacted with)
-//   - Controlled entirely by LF_Intercom lifecycle:
-//     spawn → SwitchOn + EnableBroadcast + EnableReceive + SetFrequency
-//     destroy → ObjectDelete when conditions lost
-//   - NOT persisted — re-created in AfterStoreLoad if conditions met
+// Config inherits PersonalRadio so the C++ engine creates an
+// ItemTransmitter object with native radio methods:
+//   EnableBroadcast(), EnableReceive(), SetFrequencyByIndex(),
+//   GetTunedFrequencyIndex(), SwitchOn()
 //
-// Config: scope=1 (not spawnable), Stone.p3d (tiny invisible model)
+// Activation flow:
+//   1. EEInit: SetEnergy(9999) — pseudo-infinite power
+//   2. Intercom calls GetCompEM().SwitchOn() on the ghost
+//   3. Engine checks CanWork() → true (has energy)
+//   4. Engine calls OnWorkStart() → we enable broadcast+receive
+//   5. Intercom calls SetFrequencyByIndex() separately
+//
+// OnWorkStart overridden to suppress vanilla radio static sound.
+// OnWorkStop overridden to suppress vanilla radio sound stop.
+//
+// NOT persisted — re-created in AfterStoreLoad if conditions met.
+// Config: scope=1 (not spawnable), Stone.p3d (tiny invisible model).
 // =========================================================
 
 class LF_GhostRadio : TransmitterBase
 {
-    // Give CompEM pseudo-infinite energy so the radio can transmit
-    // without a battery. We do NOT SwitchOff — that would prevent
-    // TurnOnTransmitter from working. Instead we set energy very high.
-    // The ghost is deleted by the intercom when power is lost, so
-    // energy drain is irrelevant (ghost lifetime = seconds to hours).
+    // Give CompEM pseudo-infinite energy so CanWork() returns true.
     override void EEInit()
     {
         super.EEInit();
@@ -35,10 +39,30 @@ class LF_GhostRadio : TransmitterBase
         #endif
     }
 
-    // Block all player interaction
+    // Override OnWorkStart: enable broadcast+receive but NO vanilla sound.
+    // Vanilla TransmitterBase.OnWorkStart() calls SoundTurnedOnNoiseStart()
+    // which plays static noise — we skip that entirely.
+    override void OnWorkStart()
+    {
+        EnableBroadcast(true);
+        EnableReceive(true);
+        SwitchOn(true);
+        // No SoundTurnedOnNoiseStart() — ghost is silent
+    }
+
+    // Override OnWorkStop: disable broadcast+receive, no sound cleanup.
+    override void OnWorkStop()
+    {
+        GetCompEM().SwitchOff();
+        EnableBroadcast(false);
+        EnableReceive(false);
+        SwitchOn(false);
+        // No SoundTurnedOnNoiseStop() — ghost has no sound to stop
+    }
+
+    // Block all player interaction — no actions available
     override void SetActions()
     {
-        // Empty — no actions available
     }
 
     override bool CanPutInCargo(EntityAI parent)
@@ -56,7 +80,6 @@ class LF_GhostRadio : TransmitterBase
         return false;
     }
 
-    // Prevent vanilla inventory operations
     override bool CanReceiveItemIntoCargo(EntityAI item)
     {
         return false;

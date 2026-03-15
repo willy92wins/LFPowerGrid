@@ -634,6 +634,7 @@ static const string LFPG_PUMP_WATER_SOUNDSET           = "LFPG_WaterPump_Water_S
 static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output while burning
 static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
 static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns
+static const int   LFPG_FURNACE_POLL_MS               = 5000;    // v3.1: centralized tick poll rate (per-furnace timing filters)
 
 // ---- v1.5.1: Searchlight (CONSUMER, grab system) ----
 static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s

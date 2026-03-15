@@ -142,8 +142,23 @@ class LFPG_NetworkManager
     // v3.0: Intercom toggle input evaluation registry
     protected ref array<LF_Intercom> m_RegisteredIntercoms;
 
+    // v3.1: Furnace centralized burn timer registry
+    // Replaces per-device CallLater (N timers → 1 timer)
+    protected ref array<LF_Furnace> m_RegisteredFurnaces;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
+
+    // v3.1 (GC reduction): Reusable arrays for high-frequency tick functions.
+    // Hoisted from local scope to class members. .Clear() each tick instead of new.
+    // Prevents heap fragmentation on long-running servers (>44K abandoned objects/hr).
+    protected ref array<Man>      m_ReusablePlayers;
+    protected ref array<string>   m_ReusableMovedIds;
+    protected ref array<EntityAI> m_ReusableMovedDevs;
+    protected ref array<string>   m_ReusableDisappearedIds;
+    protected ref array<EntityAI> m_ReusableAllDevs;
+    protected ref Param1<float>   m_ReusableParamFloat;
+    protected ref Param1<bool>    m_ReusableParamBool;
 
     // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
@@ -219,6 +234,16 @@ class LFPG_NetworkManager
         m_RegisteredLasers = new array<LFPG_LaserDetector>;
         m_RegisteredBatteries = new array<EntityAI>;
         m_RegisteredIntercoms = new array<LF_Intercom>;
+        m_RegisteredFurnaces = new array<LF_Furnace>;
+
+        // v3.1 (GC reduction): Initialize reusable tick arrays
+        m_ReusablePlayers = new array<Man>;
+        m_ReusableMovedIds = new array<string>;
+        m_ReusableMovedDevs = new array<EntityAI>;
+        m_ReusableDisappearedIds = new array<string>;
+        m_ReusableAllDevs = new array<EntityAI>;
+        m_ReusableParamFloat = new Param1<float>(0.0);
+        m_ReusableParamBool = new Param1<bool>(false);
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -289,6 +314,9 @@ class LFPG_NetworkManager
 
         // v3.0: Intercom toggle input evaluation (1s — rising edge detection)
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickIntercoms, LFPG_INTERCOM_TOGGLE_TICK_MS, bTrue);
+
+        // v3.1: Centralized furnace burn timer (5s poll — per-furnace timing at 30s)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickFurnaces, LFPG_FURNACE_POLL_MS, bTrue);
         #endif
     }
 
@@ -2291,9 +2319,9 @@ class LFPG_NetworkManager
         }
 
         // Collect moved/disappeared devices (can't modify tracked array during iteration)
-        ref array<string> movedIds = new array<string>;
-        ref array<EntityAI> movedDevs = new array<EntityAI>;
-        ref array<string> disappearedIds = new array<string>;
+        m_ReusableMovedIds.Clear();
+        m_ReusableMovedDevs.Clear();
+        m_ReusableDisappearedIds.Clear();
 
         int i;
         for (i = m_TrackCursor; i < batchEnd; i = i + 1)
@@ -2306,7 +2334,7 @@ class LFPG_NetworkManager
             if (!dev)
             {
                 // Device disappeared from registry — mark for untrack
-                disappearedIds.Insert(devId);
+                m_ReusableDisappearedIds.Insert(devId);
                 continue;
             }
 
@@ -2319,8 +2347,8 @@ class LFPG_NetworkManager
                 float distSq = LFPG_WorldUtil.DistSq(currentPos, lastPos);
                 if (distSq > LFPG_MOVE_DETECT_THRESHOLD_SQ)
                 {
-                    movedIds.Insert(devId);
-                    movedDevs.Insert(dev);
+                    m_ReusableMovedIds.Insert(devId);
+                    m_ReusableMovedDevs.Insert(dev);
                 }
                 // v0.7.33 (Fix #21): Do NOT update baseline position every tick.
                 // Previous behavior reset m_LastKnownPos each tick, so micro-drift
@@ -2352,9 +2380,9 @@ class LFPG_NetworkManager
         // these hooks, so their wires become orphans when they disappear.
         // Clean vanilla wires immediately instead of waiting for self-heal.
         int di;
-        for (di = 0; di < disappearedIds.Count(); di = di + 1)
+        for (di = 0; di < m_ReusableDisappearedIds.Count(); di = di + 1)
         {
-            string goneId = disappearedIds[di];
+            string goneId = m_ReusableDisappearedIds[di];
 
             if (goneId.IndexOf("vp:") == 0)
             {
@@ -2367,10 +2395,10 @@ class LFPG_NetworkManager
 
         // Process moved devices
         int mi;
-        for (mi = 0; mi < movedIds.Count(); mi = mi + 1)
+        for (mi = 0; mi < m_ReusableMovedIds.Count(); mi = mi + 1)
         {
-            EntityAI movedDev = movedDevs[mi];
-            string movedId = movedIds[mi];
+            EntityAI movedDev = m_ReusableMovedDevs[mi];
+            string movedId = m_ReusableMovedIds[mi];
 
             string mvMsg = "[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires";
             LFPG_Util.Warn(mvMsg);
@@ -2391,9 +2419,9 @@ class LFPG_NetworkManager
         }
 
         // Trigger self-heal if any devices moved
-        if (movedIds.Count() > 0)
+        if (m_ReusableMovedIds.Count() > 0)
         {
-            string mvCntMsg = "[Movement] " + movedIds.Count().ToString() + " devices moved, requesting self-heal";
+            string mvCntMsg = "[Movement] " + m_ReusableMovedIds.Count().ToString() + " devices moved, requesting self-heal";
             LFPG_Util.Info(mvCntMsg);
             RequestGlobalSelfHeal();
         }
@@ -3372,14 +3400,14 @@ class LFPG_NetworkManager
             return;
 
         // Sun state changed — update all solar panels
-        array<EntityAI> allDevs = new array<EntityAI>;
-        LFPG_DeviceRegistry.Get().GetAll(allDevs);
+        m_ReusableAllDevs.Clear();
+        LFPG_DeviceRegistry.Get().GetAll(m_ReusableAllDevs);
 
         int i;
         int updated = 0;
-        for (i = 0; i < allDevs.Count(); i = i + 1)
+        for (i = 0; i < m_ReusableAllDevs.Count(); i = i + 1)
         {
-            LF_SolarPanel panel = LF_SolarPanel.Cast(allDevs[i]);
+            LF_SolarPanel panel = LF_SolarPanel.Cast(m_ReusableAllDevs[i]);
             if (!panel)
                 continue;
 
@@ -3433,8 +3461,8 @@ class LFPG_NetworkManager
         }
 
         // --- Single iteration: filter degradation + tank fill ---
-        array<EntityAI> allDevs = new array<EntityAI>;
-        LFPG_DeviceRegistry.Get().GetAll(allDevs);
+        m_ReusableAllDevs.Clear();
+        LFPG_DeviceRegistry.Get().GetAll(m_ReusableAllDevs);
 
         int i;
         bool isPump;
@@ -3442,11 +3470,11 @@ class LFPG_NetworkManager
         LF_WaterPump_T2 pump2;
         float elapsed;
 
-        for (i = 0; i < allDevs.Count(); i = i + 1)
+        for (i = 0; i < m_ReusableAllDevs.Count(); i = i + 1)
         {
             // --- T1: filter degradation only ---
             isPump = false;
-            pump1 = LF_WaterPump.Cast(allDevs[i]);
+            pump1 = LF_WaterPump.Cast(m_ReusableAllDevs[i]);
             if (pump1)
             {
                 isPump = true;
@@ -3461,7 +3489,7 @@ class LFPG_NetworkManager
             // --- T2: filter degradation + tank fill (separate class) ---
             if (!isPump)
             {
-                pump2 = LF_WaterPump_T2.Cast(allDevs[i]);
+                pump2 = LF_WaterPump_T2.Cast(m_ReusableAllDevs[i]);
                 if (pump2)
                 {
                     // T2 filter degradation (same logic as T1)
@@ -3894,6 +3922,61 @@ class LFPG_NetworkManager
         #endif
     }
 
+    // ===========================
+    // v3.1: Furnace Centralized Burn Timer
+    // ===========================
+    // Replaces per-device CallLater (N timers → 1 timer).
+    // Pattern: identical to Sensor/Intercom registration.
+    // Only active furnaces (m_SourceOn) are ticked.
+
+    void RegisterFurnace(LF_Furnace furnace)
+    {
+        if (!furnace)
+            return;
+        if (m_RegisteredFurnaces.Find(furnace) < 0)
+        {
+            m_RegisteredFurnaces.Insert(furnace);
+        }
+    }
+
+    void UnregisterFurnace(LF_Furnace furnace)
+    {
+        if (!furnace)
+            return;
+        int idx = m_RegisteredFurnaces.Find(furnace);
+        if (idx >= 0)
+        {
+            m_RegisteredFurnaces.Remove(idx);
+        }
+    }
+
+    // Centralized burn tick (every LFPG_FURNACE_POLL_MS = 5s).
+    // Per-furnace timing via m_BurnNextMs ensures exact 30s burn intervals.
+    // Iterates all registered furnaces; BurnTick skips if not yet due.
+    protected void LFPG_TickFurnaces()
+    {
+        #ifdef SERVER
+        int totalFurnaces = m_RegisteredFurnaces.Count();
+        if (totalFurnaces == 0)
+            return;
+
+        int i;
+        LF_Furnace furnace;
+
+        for (i = 0; i < totalFurnaces; i = i + 1)
+        {
+            if (i >= m_RegisteredFurnaces.Count())
+                break;
+
+            furnace = m_RegisteredFurnaces[i];
+            if (!furnace)
+                continue;
+
+            furnace.LFPG_BurnTick();
+        }
+        #endif
+    }
+
     // Motion sensor detection tick (v1.5.0, split from unified v1.8.1).
     // Runs at LFPG_SENSOR_TICK_MS (3s) — sensors have large range, no need for fast poll.
     protected void LFPG_TickMotionSensors()
@@ -3903,8 +3986,8 @@ class LFPG_NetworkManager
         if (totalSensors == 0)
             return;
 
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
+        m_ReusablePlayers.Clear();
+        GetGame().GetPlayers(m_ReusablePlayers);
 
         int i;
         int changed = 0;
@@ -3921,7 +4004,7 @@ class LFPG_NetworkManager
             if (!sensor)
                 continue;
 
-            sensorChanged = sensor.LFPG_EvaluateDetection(players);
+            sensorChanged = sensor.LFPG_EvaluateDetection(m_ReusablePlayers);
             if (sensorChanged)
             {
                 sensorId = sensor.LFPG_GetDeviceId();
@@ -3953,8 +4036,8 @@ class LFPG_NetworkManager
         if (totalPads == 0)
             return;
 
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
+        m_ReusablePlayers.Clear();
+        GetGame().GetPlayers(m_ReusablePlayers);
 
         int i;
         int changed = 0;
@@ -3971,7 +4054,7 @@ class LFPG_NetworkManager
             if (!pad)
                 continue;
 
-            padChanged = pad.LFPG_EvaluatePresence(players);
+            padChanged = pad.LFPG_EvaluatePresence(m_ReusablePlayers);
             if (padChanged)
             {
                 padId = pad.LFPG_GetDeviceId();
@@ -4030,8 +4113,8 @@ class LFPG_NetworkManager
         if (totalLasers == 0)
             return;
 
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
+        m_ReusablePlayers.Clear();
+        GetGame().GetPlayers(m_ReusablePlayers);
 
         int i;
         int changed = 0;
@@ -4048,7 +4131,7 @@ class LFPG_NetworkManager
             if (!laser)
                 continue;
 
-            laserChanged = laser.LFPG_EvaluateCrossing(players);
+            laserChanged = laser.LFPG_EvaluateCrossing(m_ReusablePlayers);
             if (laserChanged)
             {
                 laserId = laser.LFPG_GetDeviceId();
@@ -4313,19 +4396,20 @@ class LFPG_NetworkManager
 
             // --- Write back to entity (Sprint 3 implements these) ---
             // String function names hoisted before loop.
-            ref Param1<float> pStored = new Param1<float>(newStored);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnSetStored, null, pStored);
+            // v3.1 (GC reduction): Reuse Param1 objects instead of allocating per battery.
+            m_ReusableParamFloat.param1 = newStored;
+            GetGame().GameScript.CallFunctionParams(batEnt, fnSetStored, null, m_ReusableParamFloat);
 
             if (newDischargeEnabled != dischargeEnabled)
             {
-                ref Param1<bool> pDischarge = new Param1<bool>(newDischargeEnabled);
-                GetGame().GameScript.CallFunctionParams(batEnt, fnSetDisch, null, pDischarge);
+                m_ReusableParamBool.param1 = newDischargeEnabled;
+                GetGame().GameScript.CallFunctionParams(batEnt, fnSetDisch, null, m_ReusableParamBool);
             }
 
             // Write charge rate for UI SyncVar (positive = charging, negative = discharging).
             float chargeRateDisplay = netFlow;
-            ref Param1<float> pChargeRate = new Param1<float>(chargeRateDisplay);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, pChargeRate);
+            m_ReusableParamFloat.param1 = chargeRateDisplay;
+            GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, m_ReusableParamFloat);
 
             // --- Update graph node + mark dirty if changed ---
             float vgDelta = newVirtualGen - node.m_VirtualGeneration;

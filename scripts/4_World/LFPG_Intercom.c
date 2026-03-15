@@ -43,6 +43,7 @@ static const string LFPG_INTERCOM_RVMAT_BLUE   = "\\LFPowerGrid\\rf_broadcaster\
 
 // Microphone texture path (hiddenSelection index 4)
 static const string LFPG_INTERCOM_MIC_TEX      = "\\LFPowerGrid\\rf_broadcaster\\data\\rf_broadcaster_microphone_co.paa";
+static const string LFPG_INTERCOM_MIC_RVMAT    = "\\LFPowerGrid\\rf_broadcaster\\data\\rf_broadcaster.rvmat";
 
 // ---------------------------------------------------------
 // Constants
@@ -433,11 +434,14 @@ class LF_Intercom : Inventory_Base
         if (m_RadioInstalled)
         {
             SetObjectTexture(LFPG_INTERCOM_HS_MIC, LFPG_INTERCOM_MIC_TEX);
+            SetObjectMaterial(LFPG_INTERCOM_HS_MIC, LFPG_INTERCOM_MIC_RVMAT);
         }
         else
         {
             string emptyTex = "";
             SetObjectTexture(LFPG_INTERCOM_HS_MIC, emptyTex);
+            string emptyMat = "";
+            SetObjectMaterial(LFPG_INTERCOM_HS_MIC, emptyMat);
         }
         #endif
     }

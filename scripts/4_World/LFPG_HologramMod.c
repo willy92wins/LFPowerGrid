@@ -283,6 +283,10 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LF_BatteryMedium_Kit"))
             return true;
+        if (proj.IsKindOf("LF_DoorController_Kit"))
+            return true;
+        if (proj.IsKindOf("LF_Intercom_Kit"))
+            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
@@ -322,6 +326,10 @@ modded class Hologram
         if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
             return 1;
         if (projection.IsKindOf("LFPG_ElectronicCounter_Kit"))
+            return 1;
+        if (projection.IsKindOf("LF_DoorController_Kit"))
+            return 1;
+        if (projection.IsKindOf("LF_Intercom_Kit"))
             return 1;
 
         // Different-model kits and everything else: floor only
