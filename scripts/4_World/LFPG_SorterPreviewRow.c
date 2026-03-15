@@ -47,10 +47,16 @@ class LFPG_SorterPreviewRow extends ScriptView
 
         ctrl.ItemName = itemName;
         ctrl.CatIcon = GetCatIcon(catKey);
-        ctrl.SlotText = slotCount.ToString() + "s";
-        ctrl.NotifyPropertyChanged("ItemName");
-        ctrl.NotifyPropertyChanged("CatIcon");
-        ctrl.NotifyPropertyChanged("SlotText");
+        string slotSuffix = "s";
+        string slotVal = slotCount.ToString();
+        slotVal = slotVal + slotSuffix;
+        ctrl.SlotText = slotVal;
+        string propIN = "ItemName";
+        ctrl.NotifyPropertyChanged(propIN);
+        string propCI = "CatIcon";
+        ctrl.NotifyPropertyChanged(propCI);
+        string propST = "SlotText";
+        ctrl.NotifyPropertyChanged(propST);
 
         // Style — shared constants (Bug #14)
         string procWhite = LFPG_SorterView.PROC_WHITE;

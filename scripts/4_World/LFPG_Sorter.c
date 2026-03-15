@@ -103,7 +103,8 @@ class LF_Sorter_Kit : Inventory_Base
 
         string tLog = "[Sorter_Kit] OnPlacementComplete: param=";
         tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
         EntityAI sorter = GetGame().CreateObjectEx("LF_Sorter", finalPos, ECE_CREATEPHYSICS);
@@ -120,17 +121,20 @@ class LF_Sorter_Kit : Inventory_Base
                 sorterObj.LFPG_LinkNearestContainer(finalPos);
             }
 
-            string deployMsg = "[Sorter_Kit] Deployed LF_Sorter at " + finalPos.ToString();
+            string deployMsg = "[Sorter_Kit] Deployed LF_Sorter at ";
+            deployMsg = deployMsg + finalPos.ToString();
             LFPG_Util.Info(deployMsg);
             GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[Sorter_Kit] Failed to create LF_Sorter! Kit preserved.");
+            string errCreate = "[Sorter_Kit] Failed to create LF_Sorter! Kit preserved.";
+            LFPG_Util.Error(errCreate);
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
-                pb.MessageStatus("[LFPG] Sorter placement failed. Kit preserved.");
+                string failMsg = "[LFPG] Sorter placement failed. Kit preserved.";
+                pb.MessageStatus(failMsg);
             }
         }
         #endif
@@ -288,7 +292,8 @@ class LF_Sorter : Inventory_Base
                 m_LinkedContainerLow = 0;
                 m_LinkedContainerHigh = 0;
                 LFPG_LinkNearestContainer(GetPosition());
-                relinkMsg = "[LF_Sorter] Post-restart re-link attempted at " + GetPosition().ToString();
+                relinkMsg = "[LF_Sorter] Post-restart re-link attempted at ";
+                relinkMsg = relinkMsg + GetPosition().ToString();
                 LFPG_Util.Info(relinkMsg);
             }
             else
@@ -298,7 +303,9 @@ class LF_Sorter : Inventory_Base
                 rLow = 0;
                 rHigh = 0;
                 existCheck.GetNetworkID(rLow, rHigh);
-                rKey = rLow.ToString() + ":" + rHigh.ToString();
+                rKey = rLow.ToString();
+                rKey = rKey + ":";
+                rKey = rKey + rHigh.ToString();
                 s_ContainerMap.Set(rKey, this);
 
                 // Update stored IDs to current
@@ -499,7 +506,9 @@ class LF_Sorter : Inventory_Base
             int candLow = 0;
             int candHigh = 0;
             candidate.GetNetworkID(candLow, candHigh);
-            string candKey = candLow.ToString() + ":" + candHigh.ToString();
+            string candKey = candLow.ToString();
+            candKey = candKey + ":";
+            candKey = candKey + candHigh.ToString();
 
             if (s_ContainerMap.Contains(candKey))
             {
@@ -526,18 +535,27 @@ class LF_Sorter : Inventory_Base
             m_LinkedContainerHigh = linkHigh;
 
             // Register in uniqueness map
-            string key = linkLow.ToString() + ":" + linkHigh.ToString();
+            string key = linkLow.ToString();
+            key = key + ":";
+            key = key + linkHigh.ToString();
             s_ContainerMap.Set(key, this);
 
             SetSynchDirty();
 
-            string linkLog = "[LF_Sorter] Linked container: " + bestContainer.GetType();
-            linkLog = linkLog + " netId=" + linkLow.ToString() + ":" + linkHigh.ToString();
+            string linkLog = "[LF_Sorter] Linked container: ";
+            linkLog = linkLog + bestContainer.GetType();
+            linkLog = linkLog + " netId=";
+            linkLog = linkLog + linkLow.ToString();
+            linkLog = linkLog + ":";
+            linkLog = linkLog + linkHigh.ToString();
             LFPG_Util.Info(linkLog);
         }
         else
         {
-            LFPG_Util.Warn("[LF_Sorter] No container found within " + LFPG_SORTER_LINK_RADIUS.ToString() + "m");
+            string noFoundMsg = "[LF_Sorter] No container found within ";
+            noFoundMsg = noFoundMsg + LFPG_SORTER_LINK_RADIUS.ToString();
+            noFoundMsg = noFoundMsg + "m";
+            LFPG_Util.Warn(noFoundMsg);
         }
         #endif
     }
@@ -571,7 +589,9 @@ class LF_Sorter : Inventory_Base
         if (m_LinkedContainerLow == 0 && m_LinkedContainerHigh == 0)
             return;
 
-        string key = m_LinkedContainerLow.ToString() + ":" + m_LinkedContainerHigh.ToString();
+        string key = m_LinkedContainerLow.ToString();
+        key = key + ":";
+        key = key + m_LinkedContainerHigh.ToString();
         if (s_ContainerMap && s_ContainerMap.Contains(key))
         {
             EntityAI owner = s_ContainerMap.Get(key);
@@ -633,7 +653,8 @@ class LF_Sorter : Inventory_Base
         bool parseOk = testConfig.FromJSON(json);
         if (!parseOk)
         {
-            LFPG_Util.Warn("[LF_Sorter] SetFilterJSON rejected: malformed JSON");
+            string rejectMsg = "[LF_Sorter] SetFilterJSON rejected: malformed JSON";
+            LFPG_Util.Warn(rejectMsg);
             return false;
         }
 
@@ -711,7 +732,8 @@ class LF_Sorter : Inventory_Base
 
     vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint = "port_" + portName;
+        string memPoint = "port_";
+        memPoint = memPoint + portName;
         if (MemoryPointExists(memPoint))
         {
             return ModelToWorld(GetMemoryPointPos(memPoint));
@@ -725,7 +747,9 @@ class LF_Sorter : Inventory_Base
             string beforeLast = portName.Substring(len - 2, 1);
             if (beforeLast == "_")
             {
-                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
+                string compact = "port_";
+                compact = compact + portName.Substring(0, len - 2);
+                compact = compact + lastChar;
                 if (MemoryPointExists(compact))
                 {
                     return ModelToWorld(GetMemoryPointPos(compact));
@@ -738,7 +762,9 @@ class LF_Sorter : Inventory_Base
             return ModelToWorld(GetMemoryPointPos(portName));
         }
 
-        LFPG_Util.Warn("[LF_Sorter] Missing memory point for port: " + portName);
+        string missMsg = "[LF_Sorter] Missing memory point for port: ";
+        missMsg = missMsg + portName;
+        LFPG_Util.Warn(missMsg);
         vector p = GetPosition();
         p[1] = p[1] + 0.5;
         return p;
@@ -789,7 +815,8 @@ class LF_Sorter : Inventory_Base
 
         string dbg = "[LF_Sorter] SetPowered(";
         dbg = dbg + powered.ToString();
-        dbg = dbg + ") id=" + m_DeviceId;
+        dbg = dbg + ") id=";
+        dbg = dbg + m_DeviceId;
         LFPG_Util.Debug(dbg);
         #endif
     }
@@ -861,7 +888,9 @@ class LF_Sorter : Inventory_Base
 
         if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
         {
-            LFPG_Util.Warn("[LF_Sorter] AddWire rejected: not an output port: " + wd.m_SourcePort);
+            string wireReject = "[LF_Sorter] AddWire rejected: not an output port: ";
+            wireReject = wireReject + wd.m_SourcePort;
+            LFPG_Util.Warn(wireReject);
             return false;
         }
 
@@ -955,15 +984,19 @@ class LF_Sorter : Inventory_Base
         if (!super.OnStoreLoad(ctx, version))
             return false;
 
+        string loadErr = "";
+
         if (!ctx.Read(m_DeviceIdLow))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read m_DeviceIdLow");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read m_DeviceIdLow";
+            LFPG_Util.Error(loadErr);
             return false;
         }
 
         if (!ctx.Read(m_DeviceIdHigh))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read m_DeviceIdHigh");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read m_DeviceIdHigh";
+            LFPG_Util.Error(loadErr);
             return false;
         }
 
@@ -971,13 +1004,15 @@ class LF_Sorter : Inventory_Base
 
         if (!ctx.Read(m_LinkedContainerLow))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read m_LinkedContainerLow");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read m_LinkedContainerLow";
+            LFPG_Util.Error(loadErr);
             return false;
         }
 
         if (!ctx.Read(m_LinkedContainerHigh))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read m_LinkedContainerHigh");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read m_LinkedContainerHigh";
+            LFPG_Util.Error(loadErr);
             return false;
         }
 
@@ -989,14 +1024,17 @@ class LF_Sorter : Inventory_Base
         string wiresJson;
         if (!ctx.Read(wiresJson))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read wires json");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read wires json";
+            LFPG_Util.Error(loadErr);
             return false;
         }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, wiresJson, "LF_Sorter");
+        string wireOwner = "LF_Sorter";
+        LFPG_WireHelper.DeserializeJSON(m_Wires, wiresJson, wireOwner);
 
         if (!ctx.Read(m_FilterJSON))
         {
-            LFPG_Util.Error("[LF_Sorter] OnStoreLoad: failed to read filter json");
+            loadErr = "[LF_Sorter] OnStoreLoad: failed to read filter json";
+            LFPG_Util.Error(loadErr);
             return false;
         }
 

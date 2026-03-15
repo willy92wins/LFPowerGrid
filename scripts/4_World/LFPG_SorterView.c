@@ -217,10 +217,11 @@ class LFPG_SorterView extends ScriptView
         if (GetGame())
         {
             // v2.4 Bug D: Restore player actions on destruction
-            Human localHuman = Human.Cast(GetGame().GetPlayer());
-            if (localHuman)
+            // BUG 7 fix: unified cast to PlayerBase (matches DoOpen/DoClose)
+            PlayerBase dtorPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            if (dtorPlayer)
             {
-                HumanInputController hicDtor = localHuman.GetInputController();
+                HumanInputController hicDtor = dtorPlayer.GetInputController();
                 if (hicDtor)
                 {
                     hicDtor.SetDisabled(false);

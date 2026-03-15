@@ -26,13 +26,16 @@
 //   3. At show_9, toggle rising edge → disable show_9, pulse output
 //      for LFPG_COUNTER_PULSE_MS, then reset counter to 0 / show_0.
 //   4. Power OFF (input_0 loses power) → all animations off, LED off.
+//      Debounce: if power returns within LFPG_COUNTER_DEBOUNCE_MS (200ms),
+//      counter value is preserved (prevents false resets from graph
+//      re-propagation cycles).
 //
 // LED states (hiddenSelections[2] = "light_led"):
 //   Red  = powered (counter active, showing a digit)
 //   Off  = not powered
 //
-// Persistence: DeviceIdLow, DeviceIdHigh + wires JSON.
-//   m_CounterValue NOT persisted (resets on power cycle / restart).
+// Persistence: DeviceIdLow, DeviceIdHigh + wires JSON + m_CounterValue.
+//   m_CounterValue persisted (v2.0.1) — survives server restart.
 //   m_PoweredNet NOT persisted (derived by graph propagation).
 //   m_PulseActive NOT persisted (momentary).
 // =========================================================
@@ -43,6 +46,10 @@ static const string LFPG_COUNTER_RVMAT_RED = "\\LFPowerGrid\\electronic_counter\
 
 // Duration in milliseconds that the output pulse stays active after 9→wrap.
 static const int LFPG_COUNTER_PULSE_MS = 2000;
+
+// Minimum power-off duration (ms) before a power-ON resets the counter.
+// Prevents false resets from graph re-propagation cycles within the same frame.
+static const int LFPG_COUNTER_DEBOUNCE_MS = 200;
 
 // Capacity and consumption
 static const float LFPG_COUNTER_CAPACITY    = 20.0;
@@ -167,6 +174,12 @@ class LFPG_ElectronicCounter : Inventory_Base
 
     // ---- Edge detection for toggle input (server only, NOT synced) ----
     protected bool m_ToggleWasHigh = false;
+
+    // ---- Debounce: game time (ms) when power was last lost (server only) ----
+    protected int m_PowerOffTime = 0;
+
+    // ---- Flag: counter was restored from persistence, skip first power-on reset ----
+    protected bool m_RestoredFromSave = false;
 
     // ---- Overload state ----
     protected bool m_Overloaded = false;
@@ -730,20 +743,77 @@ class LFPG_ElectronicCounter : Inventory_Base
         // ---- Power state transition ----
         if (!wasPowered && mainPower)
         {
-            // Just turned ON → reset counter to 0
-            m_CounterValue = 0;
-            m_PulseActive = false;
+            // Just turned ON — check if power was off long enough to be real
+            int nowMs = 0;
+            if (GetGame())
+            {
+                nowMs = GetGame().GetTime();
+            }
+            int offDuration = nowMs - m_PowerOffTime;
+
+            if (offDuration > LFPG_COUNTER_DEBOUNCE_MS || m_PowerOffTime == 0)
+            {
+                // Check if value was just restored from persistence
+                if (m_RestoredFromSave)
+                {
+                    // First power-on after server restart — preserve loaded value
+                    m_RestoredFromSave = false;
+                    m_PulseActive = false;
+
+                    string restMsg = "[Counter] Power ON (restored from save, val=";
+                    restMsg = restMsg + m_CounterValue.ToString();
+                    restMsg = restMsg + ") id=";
+                    restMsg = restMsg + m_DeviceId;
+                    LFPG_Util.Info(restMsg);
+                }
+                else
+                {
+                    // Real power-on (genuine outage or first boot) → reset counter
+                    m_CounterValue = 0;
+                    m_PulseActive = false;
+
+                    string onMsg = "[Counter] Power ON (real), reset to 0 id=";
+                    onMsg = onMsg + m_DeviceId;
+                    onMsg = onMsg + " offDur=";
+                    onMsg = onMsg + offDuration.ToString();
+                    LFPG_Util.Debug(onMsg);
+                }
+            }
+            else
+            {
+                // False power cycle from graph re-propagation → preserve counter
+                m_RestoredFromSave = false;
+                // Still cancel any stale pulse (safety)
+                if (m_PulseActive)
+                {
+                    if (GetGame())
+                    {
+                        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+                    }
+                    m_PulseActive = false;
+                }
+
+                string debMsg = "[Counter] Power ON (debounced, preserved val=";
+                debMsg = debMsg + m_CounterValue.ToString();
+                debMsg = debMsg + ") id=";
+                debMsg = debMsg + m_DeviceId;
+                debMsg = debMsg + " offDur=";
+                debMsg = debMsg + offDuration.ToString();
+                LFPG_Util.Info(debMsg);
+            }
+
             // Capture current toggle state to prevent false rising edge
             m_ToggleWasHigh = newIn1;
             changed = true;
-
-            string onMsg = "[Counter] Power ON, reset to 0 id=";
-            onMsg = onMsg + m_DeviceId;
-            LFPG_Util.Debug(onMsg);
         }
         else if (wasPowered && !mainPower)
         {
-            // Just turned OFF → cancel pulse, reset toggle tracking
+            // Just turned OFF → record timestamp, cancel pulse, reset toggle
+            if (GetGame())
+            {
+                m_PowerOffTime = GetGame().GetTime();
+            }
+
             if (m_PulseActive)
             {
                 if (GetGame())
@@ -958,12 +1028,14 @@ class LFPG_ElectronicCounter : Inventory_Base
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
         // m_PoweredNet: NOT persisted (derived state)
-        // m_CounterValue: NOT persisted (resets on power cycle)
         // m_PulseActive: NOT persisted (momentary)
 
         string json = "";
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
         ctx.Write(json);
+
+        // v2.0.1: Persist counter value across restarts
+        ctx.Write(m_CounterValue);
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -997,6 +1069,30 @@ class LFPG_ElectronicCounter : Inventory_Base
         }
         string tag = "LFPG_ElectronicCounter";
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, tag);
+
+        // v2.0.1: Read persisted counter value (soft read for backward compat)
+        int loadedCounter = 0;
+        if (ctx.Read(loadedCounter))
+        {
+            // Clamp to valid range 0-9
+            if (loadedCounter < 0 || loadedCounter > 9)
+            {
+                loadedCounter = 0;
+            }
+            m_CounterValue = loadedCounter;
+            m_RestoredFromSave = true;
+
+            string cntMsg = "[Counter] OnStoreLoad: restored counter=";
+            cntMsg = cntMsg + m_CounterValue.ToString();
+            cntMsg = cntMsg + " id=";
+            cntMsg = cntMsg + m_DeviceId;
+            LFPG_Util.Debug(cntMsg);
+        }
+        else
+        {
+            // Old save format without counter — default to 0
+            m_CounterValue = 0;
+        }
 
         return true;
     }

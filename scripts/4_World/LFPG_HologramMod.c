@@ -322,7 +322,7 @@ modded class Hologram
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return 1;
         if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
-            return 1;
+            return 2;
         if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
             return 1;
         if (projection.IsKindOf("LFPG_ElectronicCounter_Kit"))
@@ -357,6 +357,19 @@ modded class Hologram
         if (!projection)
             return 0.0;
         if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
+            return 90.0;
+        return 0.0;
+    }
+
+    // ---- Helper: per-kit WALL pitch offset (degrees) ----
+    // Applied only in wall mode. MotionSensor is ceiling-oriented
+    // (sensor on bottom), so on a wall we pitch 90° to face
+    // sensor outward (toward player) and top against wall.
+    protected float LFPG_GetKitWallPitchOffset(EntityAI projection)
+    {
+        if (!projection)
+            return 0.0;
+        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
             return 90.0;
         return 0.0;
     }
@@ -590,7 +603,9 @@ modded class Hologram
         float scrollWall = GetProjectionRotation()[0];
         wallYaw = wallYaw + scrollWall;
 
-        vector wallOri = Vector(wallYaw, 0, 0);
+        // Per-kit wall pitch (e.g. MotionSensor 90° so sensor faces out)
+        float wallPitchOff = LFPG_GetKitWallPitchOffset(projection);
+        vector wallOri = Vector(wallYaw, wallPitchOff, 0);
 
         LFPG_ApplySmoothed(wallPos, wallOri, timeslice, projection);
     }

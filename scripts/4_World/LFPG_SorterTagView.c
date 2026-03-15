@@ -54,7 +54,8 @@ class LFPG_SorterTagView extends ScriptView
             ctrl.m_RuleIndex = ruleIndex;
             ctrl.m_OutputIndex = outputIndex;
             ctrl.m_OwnerController = ownerCtrl;
-            ctrl.NotifyPropertyChanged("TagLabel");
+            string propTL = "TagLabel";
+            ctrl.NotifyPropertyChanged(propTL);
         }
 
         if (TagBg)

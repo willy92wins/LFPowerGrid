@@ -530,7 +530,8 @@ class LFPG_SorterController extends ViewController
         if (minVal < 1) { minVal = 1; }
         if (maxVal < minVal) { maxVal = minVal; }
         string dash = "-";
-        string slotValue = minVal.ToString() + dash;
+        string slotValue = minVal.ToString();
+        slotValue = slotValue + dash;
         slotValue = slotValue + maxVal.ToString();
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
@@ -598,7 +599,8 @@ class LFPG_SorterController extends ViewController
             return;
 
         string json = m_Config.ToJSON();
-        string saveMsg = "[SorterCtrl] SAVE: " + json;
+        string saveMsg = "[SorterCtrl] SAVE: ";
+        saveMsg = saveMsg + json;
         LFPG_Util.Info(saveMsg);
         string stSaving = "SAVING...";
         SetStatus(stSaving);
@@ -693,6 +695,8 @@ class LFPG_SorterController extends ViewController
         RefreshCatchAllButton();
         RefreshTagsList();
         RefreshRuleCount();
+        RefreshMatchCount();
+        RefreshPreviewCount();
         RefreshDestIndicator();
         // Apply disabled visual after all refreshes (v2.2)
         SetControlsEnabled(m_IsPaired);
@@ -721,7 +725,8 @@ class LFPG_SorterController extends ViewController
             if (isSel) { bgCol = LFPG_SorterView.COL_BG_ELEVATED; txtCol = LFPG_SorterView.COL_GREEN; }
             num = i + 1;
             numStr = num.ToString();
-            label = prefix + numStr;
+            label = prefix;
+            label = label + numStr;
             if (num >= 10) { label = numStr; }
 
             // V2: Indicate tabs with rules/catch-all (non-selected only)
@@ -838,7 +843,7 @@ class LFPG_SorterController extends ViewController
         int ri;
         for (ri = 0; ri < ruleCount; ri = ri + 1)
         {
-            ref LFPG_SortFilterRule rule = outCfg.m_Rules[ri];
+            LFPG_SortFilterRule rule = outCfg.m_Rules[ri];
             if (!rule) continue;
             string label = rule.GetDisplayLabel();
             int color = GetRuleColor(rule.m_Type);
@@ -874,7 +879,8 @@ class LFPG_SorterController extends ViewController
         int count = 0;
         if (outCfg) { count = outCfg.GetRuleCount(); }
         string suffix = "/8";
-        RuleCount = count.ToString() + suffix;
+        RuleCount = count.ToString();
+        RuleCount = RuleCount + suffix;
         string propRC = "RuleCount";
         NotifyPropertyChanged(propRC, false);
     }
@@ -891,7 +897,8 @@ class LFPG_SorterController extends ViewController
             DestName = dest;
             NotifyPropertyChanged(propDN, false);
             string sorterPrefix = "SORTER  ";
-            HeaderTitle = sorterPrefix + dest;
+            HeaderTitle = sorterPrefix;
+            HeaderTitle = HeaderTitle + dest;
         }
         else
         {
@@ -907,6 +914,47 @@ class LFPG_SorterController extends ViewController
         if (idx == 2) return m_Dest2; if (idx == 3) return m_Dest3;
         if (idx == 4) return m_Dest4; if (idx == 5) return m_Dest5;
         return "";
+    }
+
+    // =========================================================
+    // BUG #1 fix: MatchCount was never updated — show rule total
+    // for current output so the RulesPanel footer is not blank.
+    // =========================================================
+    protected void RefreshMatchCount()
+    {
+        LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
+        int total = 0;
+        if (outCfg)
+        {
+            total = outCfg.GetRuleCount();
+            if (outCfg.m_IsCatchAll)
+            {
+                total = total + 1;
+            }
+        }
+        string suffix = " rules";
+        MatchCount = total.ToString();
+        MatchCount = MatchCount + suffix;
+        string propMC = "MatchCount";
+        NotifyPropertyChanged(propMC, false);
+    }
+
+    // =========================================================
+    // BUG #2 fix: PreviewCount was never updated — show count
+    // of items in the PreviewItems collection.
+    // =========================================================
+    protected void RefreshPreviewCount()
+    {
+        int count = 0;
+        if (PreviewItems)
+        {
+            count = PreviewItems.Count();
+        }
+        string suffix = " items";
+        PreviewCount = count.ToString();
+        PreviewCount = PreviewCount + suffix;
+        string propPC = "PreviewCount";
+        NotifyPropertyChanged(propPC, false);
     }
 
     protected void TintBg(ImageWidget bg, int color)
