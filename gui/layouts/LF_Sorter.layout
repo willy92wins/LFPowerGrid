@@ -120,49 +120,6 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 
-						ButtonWidgetClass BtnSort {
-							position 562 6
-							size 120 30
-							hexactpos 1
-							vexactpos 1
-							hexactsize 1
-							vexactsize 1
-							{
-								ImageWidgetClass BtnSortBg {
-									position 0 0
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									stretch 1
-									ignorepointer 1
-									{
-									}
-								}
-								TextWidgetClass BtnSortText {
-									position 0 0
-									size 1 1
-									hexactpos 0
-									vexactpos 0
-									hexactsize 0
-									vexactsize 0
-									font "gui/fonts/Metron"
-									"text halign" center
-									"text valign" center
-									text "SORT NOW"
-									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "BtnSort"
-									{
-									}
-								}
-							}
-						}
-
 						ButtonWidgetClass BtnCloseX {
 							position 688 8
 							size 26 26
@@ -1375,7 +1332,7 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
-							text "No matches"
+							text "Sort preview not yet available"
 							ignorepointer 1
 							{
 							}
@@ -1480,7 +1437,7 @@ FrameWidgetClass SorterRoot {
 
 						ButtonWidgetClass BtnClearOut {
 							position 12 8
-							size 140 28
+							size 120 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1492,8 +1449,8 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 						ButtonWidgetClass BtnResetAll {
-							position 160 8
-							size 110 28
+							position 138 8
+							size 95 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1505,9 +1462,37 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 
-						ButtonWidgetClass BtnSave {
-							position 548 8
+						// D4: Visual separator between destructive (left) and constructive (right) actions
+						ImageWidgetClass FooterMidSep {
+							position 340 10
+							size 1 24
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+
+						// D3: BtnSort moved from header to footer for UX safety
+						ButtonWidgetClass BtnSort {
+							position 448 8
 							size 90 28
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnSortBg { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 stretch 1 ignorepointer 1 { } }
+								TextWidgetClass BtnSortText { position 0 0 size 1 1 hexactpos 0 vexactpos 0 hexactsize 0 vexactsize 0 font "gui/fonts/Metron" "text halign" center "text valign" center text "SORT" ignorepointer 1 { } }
+								ScriptParamsClass { Relay_Command "BtnSort" { } }
+							}
+						}
+						ButtonWidgetClass BtnSave {
+							position 544 8
+							size 86 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1519,8 +1504,8 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 						ButtonWidgetClass BtnClose {
-							position 646 8
-							size 62 28
+							position 636 8
+							size 72 28
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1

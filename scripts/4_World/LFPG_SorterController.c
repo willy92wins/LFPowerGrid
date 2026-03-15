@@ -716,6 +716,9 @@ class LFPG_SorterController extends ViewController
         string prefix = "0";
         string label = "";
         string indicator = " *";
+        string destName = "";
+        int destLen = 0;
+        int maxDestChars = 4;
         TextWidget tt = null;
         for (i = 0; i < 6; i = i + 1)
         {
@@ -728,6 +731,19 @@ class LFPG_SorterController extends ViewController
             label = prefix;
             label = label + numStr;
             if (num >= 10) { label = numStr; }
+
+            // D5: Append truncated dest name when available
+            destName = GetDestName(i);
+            if (destName != "")
+            {
+                destLen = destName.Length();
+                if (destLen > maxDestChars)
+                {
+                    destLen = maxDestChars;
+                }
+                label = label + ":";
+                label = label + destName.Substring(0, destLen);
+            }
 
             // V2: Indicate tabs with rules/catch-all (non-selected only)
             tabCfg = m_Config.GetOutput(i);
@@ -942,6 +958,7 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     // BUG #2 fix: PreviewCount was never updated — show count
     // of items in the PreviewItems collection.
+    // D6: Also manages PreviewEmpty state and placeholder text.
     // =========================================================
     protected void RefreshPreviewCount()
     {
@@ -955,6 +972,21 @@ class LFPG_SorterController extends ViewController
         PreviewCount = PreviewCount + suffix;
         string propPC = "PreviewCount";
         NotifyPropertyChanged(propPC, false);
+
+        // D6: Show placeholder when no preview data
+        if (PreviewEmpty)
+        {
+            if (count == 0)
+            {
+                string emptyMsg = "Sort preview not yet available";
+                PreviewEmpty.SetText(emptyMsg);
+                PreviewEmpty.Show(true);
+            }
+            else
+            {
+                PreviewEmpty.Show(false);
+            }
+        }
     }
 
     protected void TintBg(ImageWidget bg, int color)

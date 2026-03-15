@@ -67,6 +67,7 @@ class LFPG_SorterView extends ScriptView
     ImageWidget PreviewPanelBg;
     ImageWidget FooterBg;
     ImageWidget FooterSep;
+    ImageWidget FooterMidSep;
     ImageWidget SepCat;
     ImageWidget SepSlot;
     ImageWidget SepCatchAll;
@@ -276,6 +277,7 @@ class LFPG_SorterView extends ScriptView
         Tint(PreviewPanelBg, COL_BG_DEEP);
         Tint(FooterBg, COL_BG_PANEL);
         Tint(FooterSep, COL_SEPARATOR);
+        Tint(FooterMidSep, COL_SEPARATOR);
         Tint(SepCat, COL_SEPARATOR);
         Tint(SepSlot, COL_SEPARATOR);
         Tint(SepCatchAll, COL_SEPARATOR);
@@ -497,7 +499,8 @@ class LFPG_SorterView extends ScriptView
             Tint(PairingDot, COL_GREEN);
             if (PairingText)
             {
-                string linkedMsg = "Linked: " + containerDisplayName;
+                string linkedMsg = "Linked: ";
+                linkedMsg = linkedMsg + containerDisplayName;
                 PairingText.SetText(linkedMsg);
                 PairingText.SetColor(COL_GREEN);
             }
@@ -688,7 +691,8 @@ class LFPG_SorterView extends ScriptView
             ctrl.InitFromRPC(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
         }
 
-        string openMsg = "[SorterView] Opened for: " + containerName;
+        string openMsg = "[SorterView] Opened for: ";
+        openMsg = openMsg + containerName;
         LFPG_Util.Info(openMsg);
     }
 
