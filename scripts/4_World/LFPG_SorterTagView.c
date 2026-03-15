@@ -1,7 +1,9 @@
 // =========================================================
-// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.1)
+// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.5)
 //
 // Bug 10 fix: tag bg alpha 0x12→0x26 for visibility in DayZ
+// R1 fix: destructor breaks TagController→OwnerController
+//         circular reference (refcount GC leak)
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -42,6 +44,17 @@ class LFPG_SorterTagView extends ScriptView
         return LFPG_SorterTagController;
     }
 
+    // R1 fix: break circular ref (Controller → TagsList → TagView → TagController → m_OwnerController → Controller)
+    // Without this, refcount GC never frees tags after ObservableCollection.Clear().
+    void ~LFPG_SorterTagView()
+    {
+        LFPG_SorterTagController ctrl = LFPG_SorterTagController.Cast(GetController());
+        if (ctrl)
+        {
+            ctrl.m_OwnerController = null;
+        }
+    }
+
     // ownerCtrl passed directly from Controller.RefreshTagsList
     void SetData(string label, int color, int ruleIndex, int outputIndex, LFPG_SorterController ownerCtrl)
     {
@@ -69,5 +82,11 @@ class LFPG_SorterTagView extends ScriptView
         {
             TagLabel.SetColor(color);
         }
+
+        // v2.5 B3: Scale dynamic tag to match current resolution.
+        // ScaleWidget is a no-op at scale ~1.0 (1080p).
+        Widget tagRoot = GetLayoutRoot();
+        float tagScale = LFPG_UIScaler.ComputeScale();
+        LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
     }
 };

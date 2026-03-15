@@ -1,6 +1,6 @@
 // =========================================================
 // LF_PowerGrid — Sorter UI v2.0 (Dabs MVC)
-// Main layout — 720x560px panel centered at 1080p
+// Main layout — 720x590px panel centered at 1080p
 // scriptclass "ViewBinding" enables auto-binding
 // Relay_Command routes button clicks to controller methods
 // =========================================================
@@ -1346,8 +1346,8 @@ FrameWidgetClass SorterRoot {
 				// Hidden by default; shown/hidden by UpdatePairingState.
 				// ════════════════════════════════
 				FrameWidgetClass UnpairedOverlay {
-					position 0 105
-					size 720 440
+					position 0 102
+					size 720 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1

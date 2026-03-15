@@ -87,6 +87,12 @@ class LFPG_SorterPreviewRow extends ScriptView
         {
             SlotText.SetColor(LFPG_SorterView.COL_TEXT_MID);
         }
+
+        // v2.5 B3: Scale dynamic row to match current resolution.
+        // ScaleWidget is a no-op at scale ~1.0 (1080p).
+        Widget rowRoot = GetLayoutRoot();
+        float rowScale = LFPG_UIScaler.ComputeScale();
+        LFPG_UIScaler.ScaleWidget(rowRoot, rowScale);
     }
 
     protected string GetCatIcon(string catKey)

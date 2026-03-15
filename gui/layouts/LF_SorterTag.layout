@@ -26,7 +26,7 @@ FrameWidgetClass TagRoot {
 		TextWidgetClass TagLabel {
 			scriptclass "ViewBinding"
 			position 8 0
-			size 0.75 1
+			size 0.72 1
 			hexactpos 1
 			vexactpos 0
 			hexactsize 0
@@ -38,7 +38,7 @@ FrameWidgetClass TagRoot {
 			}
 		}
 		ButtonWidgetClass BtnRemove {
-			position 0.82 2
+			position 0.78 2
 			size 18 20
 			hexactpos 0
 			vexactpos 1

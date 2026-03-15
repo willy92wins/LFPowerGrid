@@ -114,6 +114,31 @@ modded class MissionGameplay
         if (GetGame().IsDedicatedServer())
             return;
 
+        // ---- R2: Force-close Sorter UI if player dies or goes unconscious ----
+        // SetDisabled(true) would remain stuck without this guard.
+        // Pattern: TraderPlus, Expansion Trader use same OnUpdate check.
+        if (LFPG_SorterView.IsOpen())
+        {
+            PlayerBase sorterPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            bool shouldClose = false;
+            if (!sorterPlayer)
+            {
+                shouldClose = true;
+            }
+            else if (!sorterPlayer.IsAlive())
+            {
+                shouldClose = true;
+            }
+            else if (sorterPlayer.IsUnconscious())
+            {
+                shouldClose = true;
+            }
+            if (shouldClose)
+            {
+                LFPG_SorterView.Close();
+            }
+        }
+
         // ---- FullSync: once when player position is valid ----
         if (!m_LFPG_SyncRequested)
         {

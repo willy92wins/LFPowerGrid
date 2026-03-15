@@ -1,10 +1,15 @@
 // =========================================================
-// LF_PowerGrid — Sorter View (Dabs MVC, v2.4 Sprint)
+// LF_PowerGrid — Sorter View (Dabs MVC, v2.5 Sprint)
 //
 // CREATION: LFPG_SorterView.Init() from MissionGameplay.OnInit
 //   pre-creates the view HIDDEN (safe context). Avoids
 //   RPC-context CreateWidgets corruption.
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
+//
+// v2.5 changes:
+//   B1-B3: UIScaler — resolution-proportional scaling via
+//          Capture(design values) + Apply(scale) on every Open.
+//          Dynamic items (tags, preview rows) scaled in SetData.
 //
 // v2.4 changes:
 //   Bug A: ESC via MissionGameplay.OnKeyPress (LocalPress blocked by ChangeGameFocus)
@@ -548,6 +553,14 @@ class LFPG_SorterView extends ScriptView
         }
         string initMsg = "[SorterView] Pre-created (hidden)";
         LFPG_Util.Info(initMsg);
+
+        // v2.5 B1: Capture design-time widget values for resolution scaling.
+        // Must happen AFTER ScriptView creates widgets (constructor) and
+        // BEFORE any Apply call. SorterPanel and all children are captured.
+        if (s_Instance.SorterPanel)
+        {
+            LFPG_UIScaler.Capture(s_Instance.SorterPanel);
+        }
         #endif
     }
 
@@ -609,6 +622,9 @@ class LFPG_SorterView extends ScriptView
     // GetGame() null guard for safe shutdown.
     static void Cleanup()
     {
+        // v2.5 B3: Release scaler arrays before destroying widgets
+        LFPG_UIScaler.Reset();
+
         if (s_Instance)
         {
             s_Instance.m_IsOpen = false;
@@ -649,6 +665,12 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_HoveredBg = null;
         root.Show(true);
+
+        // v2.5 B3: Apply resolution scaling BEFORE centering.
+        // Apply reads from captured design values (never accumulates error).
+        // CenterPanel then reads the scaled SorterPanel size to center correctly.
+        float uiScale = LFPG_UIScaler.ComputeScale();
+        LFPG_UIScaler.Apply(uiScale);
         CenterPanel();
 
         // Fade-in (v2.2)
