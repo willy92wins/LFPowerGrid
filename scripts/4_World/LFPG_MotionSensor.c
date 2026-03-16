@@ -477,9 +477,49 @@ class LFPG_MotionSensor : Inventory_Base
         }
 
         vector sensorPos = GetPosition();
-        // Raycast origin slightly above ground to avoid terrain collision
+
+        // Compute ray origin that is clearly in open space (room-side).
+        // Old code just added +0.5 Y, which on a wall mount leaves the
+        // eye at ~3cm from the wall surface — inside the collision hull.
+        //
+        // Strategy: use the model's dome direction (-Y local) transformed
+        // to world space. The horizontal component pushes the eye away
+        // from the wall, while a vertical baseline ensures floor mounts
+        // still work (dome points down → no horizontal component).
+        vector localDomeDir = Vector(0, -1, 0);
+        vector domePt = ModelToWorld(localDomeDir);
+        float domeX = domePt[0] - sensorPos[0];
+        float domeY = domePt[1] - sensorPos[1];
+        float domeZ = domePt[2] - sensorPos[2];
+
+        // Horizontal component of dome direction (XZ plane)
+        float horizLenSq = domeX * domeX + domeZ * domeZ;
+        float horizLen = Math.Sqrt(horizLenSq);
+
         vector sensorEye = sensorPos;
-        sensorEye[1] = sensorEye[1] + 0.5;
+
+        if (horizLen > 0.1)
+        {
+            // Wall mount: significant horizontal dome component.
+            // Push eye 0.4m horizontally into the room (away from wall).
+            float hNorm = 0.4 / horizLen;
+            sensorEye[0] = sensorEye[0] + domeX * hNorm;
+            sensorEye[2] = sensorEye[2] + domeZ * hNorm;
+            // Small vertical offset above sensor center
+            sensorEye[1] = sensorEye[1] + 0.15;
+        }
+        else if (domeY > 0.5)
+        {
+            // Ceiling mount: pitch=180 flips model, dome(-Y local) maps
+            // to +Y world → domeY is positive. Offset downward into room.
+            sensorEye[1] = sensorEye[1] - 0.5;
+        }
+        else
+        {
+            // Floor mount: dome faces down, no horizontal component.
+            // +0.5 Y above ground clears terrain collision.
+            sensorEye[1] = sensorEye[1] + 0.5;
+        }
 
         bool detected = false;
 

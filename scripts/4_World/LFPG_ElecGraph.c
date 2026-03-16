@@ -2274,14 +2274,18 @@ class LFPG_ElecGraph
                         if (gateIsClosed)
                         {
                             // Override demand signal: closed gate cannot serve
-                            // downstream, so only report self needs.
-                            // selfConsumption: 0 for PushButton/LogicGates, 5 for
-                            //   Counter/Laser (keeps device itself running).
-                            // selfSoftDemand: 0 for most, >0 for Battery
-                            //   (continues charging from surplus with output off).
-                            float gatedDemand = node.m_Consumption + node.m_SoftDemand;
+                            // downstream, so report only a small probe trickle.
+                            // Using selfConsumption (e.g. 5.0 for PressurePad)
+                            // creates a feedback loop: m_LastStableOutput=5 →
+                            // upstream allocates 5 → device fully powers on →
+                            // cable green. Probe=1.0 keeps a minimal trickle
+                            // so the gate can re-evaluate when toggled, without
+                            // powering the device (1.0 < 5.0 consumption).
+                            // Battery soft demand (charging) added on top of
+                            // probe so charging continues even with output off.
+                            float gatedDemand = LFPG_GATE_PROBE_DEMAND + node.m_SoftDemand;
                             newOutput = gatedDemand;
-                            if (gatedDemand > LFPG_PROPAGATION_EPSILON)
+                            if (node.m_SoftDemand > LFPG_PROPAGATION_EPSILON)
                             {
                                 node.m_SoftDemandRatio = node.m_SoftDemand / gatedDemand;
                             }
@@ -3044,24 +3048,20 @@ class LFPG_ElecGraph
 
                         // v2.1: Gated PASSTHROUGH with gate closed cannot
                         // serve downstream, so cold-start must NOT inflate
-                        // demand to m_MaxOutput. Use probe demand instead:
-                        // max(selfConsumption, LFPG_GATE_PROBE_DEMAND).
-                        // Probe keeps a trickle flowing so the gate can
-                        // re-evaluate when toggled. For non-zero consumption
-                        // devices (Laser=5, Counter=5) the consumption itself
-                        // is sufficient; for zero-consumption (PushButton,
-                        // LogicGates) the 1.0 probe prevents a 0-demand
-                        // deadlock. Non-gated PASSthrough (Splitter, Combiner,
-                        // CeilingLight, Monitor) has m_GateClosed=false always
-                        // → zero regression.
+                        // demand to m_MaxOutput OR to selfConsumption.
+                        // Using consumption (e.g. 5.0 for PressurePad) creates
+                        // a feedback loop: upstream allocates 5.0 → device
+                        // powers on → cable green → wrong. Instead, use only
+                        // the small probe trickle. The device stays unpowered
+                        // (probe < consumption) but can re-evaluate its gate
+                        // when toggled. On gate open, demand signal jumps to
+                        // real value → upstream re-allocates → converges in
+                        // 2-3 requeue cycles. Non-gated PASSTHROUGH (Splitter,
+                        // Combiner, CeilingLight, Monitor) has m_GateClosed=
+                        // false always → zero regression.
                         if (targetNode.m_GateClosed)
                         {
-                            float probeDemand = targetNode.m_Consumption;
-                            if (probeDemand < LFPG_GATE_PROBE_DEMAND)
-                            {
-                                probeDemand = LFPG_GATE_PROBE_DEMAND;
-                            }
-                            edgeDemand = probeDemand;
+                            edgeDemand = LFPG_GATE_PROBE_DEMAND;
                         }
                         else
                         {

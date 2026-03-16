@@ -535,6 +535,139 @@ class LFPG_SorterView extends ScriptView
         return true;
     }
 
+    // =========================================================
+    // v2.7: Manual OnClick dispatch — robust fallback.
+    // Dabs MVC Relay_Command is processed by ScriptView.OnClick.
+    // This override intercepts FIRST, dispatches known buttons
+    // directly to the controller, and returns true to prevent
+    // the base class from ALSO dispatching (which would cause
+    // double-fire → toggles cancel out).
+    //
+    // For unrecognized buttons: delegates to super.OnClick so
+    // Relay_Command still works (future-proofing).
+    // =========================================================
+    override bool OnClick(Widget w, int x, int y, int button)
+    {
+        if (!m_IsOpen)
+        {
+            bool baseNotOpen = super.OnClick(w, x, y, button);
+            return baseNotOpen;
+        }
+        if (!w)
+        {
+            bool baseNoW = super.OnClick(w, x, y, button);
+            return baseNoW;
+        }
+        if (button != 0)
+        {
+            bool baseNotLMB = super.OnClick(w, x, y, button);
+            return baseNotLMB;
+        }
+
+        // Find the enclosing ButtonWidget (click may land on a child)
+        Widget check = w;
+        ButtonWidget btn = null;
+        while (check)
+        {
+            btn = ButtonWidget.Cast(check);
+            if (btn)
+            {
+                break;
+            }
+            check = check.GetParent();
+        }
+        if (!btn)
+        {
+            bool baseNoBtn = super.OnClick(w, x, y, button);
+            return baseNoBtn;
+        }
+
+        string bName = btn.GetName();
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
+        if (!ctrl)
+        {
+            bool baseNoCtrl = super.OnClick(w, x, y, button);
+            return baseNoCtrl;
+        }
+
+        // Output tabs
+        string nTabOut0 = "TabOut0";
+        string nTabOut1 = "TabOut1";
+        string nTabOut2 = "TabOut2";
+        string nTabOut3 = "TabOut3";
+        string nTabOut4 = "TabOut4";
+        string nTabOut5 = "TabOut5";
+        if (bName == nTabOut0) { ctrl.TabOut0(); return true; }
+        if (bName == nTabOut1) { ctrl.TabOut1(); return true; }
+        if (bName == nTabOut2) { ctrl.TabOut2(); return true; }
+        if (bName == nTabOut3) { ctrl.TabOut3(); return true; }
+        if (bName == nTabOut4) { ctrl.TabOut4(); return true; }
+        if (bName == nTabOut5) { ctrl.TabOut5(); return true; }
+
+        // View tabs
+        string nTabRules = "TabRules";
+        string nTabPreview = "TabPreview";
+        if (bName == nTabRules) { ctrl.TabRules(); return true; }
+        if (bName == nTabPreview) { ctrl.TabPreview(); return true; }
+
+        // Category buttons
+        string nCat0 = "CatBtn0";
+        string nCat1 = "CatBtn1";
+        string nCat2 = "CatBtn2";
+        string nCat3 = "CatBtn3";
+        string nCat4 = "CatBtn4";
+        string nCat5 = "CatBtn5";
+        string nCat6 = "CatBtn6";
+        string nCat7 = "CatBtn7";
+        if (bName == nCat0) { ctrl.CatBtn0(); return true; }
+        if (bName == nCat1) { ctrl.CatBtn1(); return true; }
+        if (bName == nCat2) { ctrl.CatBtn2(); return true; }
+        if (bName == nCat3) { ctrl.CatBtn3(); return true; }
+        if (bName == nCat4) { ctrl.CatBtn4(); return true; }
+        if (bName == nCat5) { ctrl.CatBtn5(); return true; }
+        if (bName == nCat6) { ctrl.CatBtn6(); return true; }
+        if (bName == nCat7) { ctrl.CatBtn7(); return true; }
+
+        // Slot presets
+        string nSlot0 = "SlotPre0";
+        string nSlot1 = "SlotPre1";
+        string nSlot2 = "SlotPre2";
+        string nSlot3 = "SlotPre3";
+        if (bName == nSlot0) { ctrl.SlotPre0(); return true; }
+        if (bName == nSlot1) { ctrl.SlotPre1(); return true; }
+        if (bName == nSlot2) { ctrl.SlotPre2(); return true; }
+        if (bName == nSlot3) { ctrl.SlotPre3(); return true; }
+
+        // Add buttons
+        string nPrefixAdd = "BtnPrefixAdd";
+        string nContainsAdd = "BtnContainsAdd";
+        string nSlotAdd = "BtnSlotAdd";
+        if (bName == nPrefixAdd) { ctrl.BtnPrefixAdd(); return true; }
+        if (bName == nContainsAdd) { ctrl.BtnContainsAdd(); return true; }
+        if (bName == nSlotAdd) { ctrl.BtnSlotAdd(); return true; }
+
+        // Action buttons
+        string nCatchAll = "BtnCatchAll";
+        string nClearOut = "BtnClearOut";
+        string nResetAll = "BtnResetAll";
+        string nSave = "BtnSave";
+        string nSort = "BtnSort";
+        string nClose = "BtnClose";
+        string nCloseX = "BtnCloseX";
+        if (bName == nCatchAll) { ctrl.BtnCatchAll(); return true; }
+        if (bName == nClearOut) { ctrl.BtnClearOut(); return true; }
+        if (bName == nResetAll) { ctrl.BtnResetAll(); return true; }
+        if (bName == nSave) { ctrl.BtnSave(); return true; }
+        if (bName == nSort) { ctrl.BtnSort(); return true; }
+        if (bName == nClose) { ctrl.BtnClose(); return true; }
+        if (bName == nCloseX) { ctrl.BtnCloseX(); return true; }
+
+        // Unrecognized button — delegate to ScriptView base class
+        // so Relay_Command still works for any future buttons
+        bool baseFallback = super.OnClick(w, x, y, button);
+        return baseFallback;
+    }
+
     // Walk the parent chain to see if widget is in the HeaderFrame
     // Stops if we hit a ButtonWidget (don't drag on buttons inside header)
     protected bool IsHeaderWidget(Widget w)
@@ -649,7 +782,9 @@ class LFPG_SorterView extends ScriptView
                 string linkedMsg = "Linked: ";
                 linkedMsg = linkedMsg + containerDisplayName;
                 PairingText.SetText(linkedMsg);
-                PairingText.SetColor(COL_GREEN);
+                // v2.7: Use COL_TEXT (white) — COL_GREEN on green bg
+                // was invisible in DayZ's dark renderer
+                PairingText.SetColor(COL_TEXT);
             }
         }
         else

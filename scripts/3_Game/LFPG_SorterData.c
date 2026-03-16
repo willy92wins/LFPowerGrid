@@ -339,8 +339,21 @@ class LFPG_SortConfig
         if (jsonLen < 10)
             return false;
 
+        // JSON needle strings (Enforce: no string literals as function params)
+        string kOArr = "\"o\":[";
+        string kRArr = "\"r\":[";
+        string kOpenBrace = "{";
+        string kCloseBrace = "}";
+        string kCloseBracket = "]";
+        string kTypeKey = "\"t\":";
+        string kComma = ",";
+        string kValKey = "\"v\":\"";
+        string kQuote = "\"";
+        string kCaKey = "\"ca\":";
+        string kTrue = "true";
+
         // Find the outputs array start: "o":[
-        int oArrStart = json.IndexOf("\"o\":[");
+        int oArrStart = json.IndexOf(kOArr);
         if (oArrStart < 0)
             return false;
 
@@ -350,12 +363,12 @@ class LFPG_SortConfig
         while (pos < jsonLen && outIdx < LFPG_SORT_MAX_OUTPUTS)
         {
             // Find next output object start {
-            int objStart = IndexOfFrom(json, pos, "{");
+            int objStart = IndexOfFrom(json, pos, kOpenBrace);
             if (objStart < 0)
                 break;
 
             // Find the rules array "r":[
-            int rArrStart = IndexOfFrom(json, objStart, "\"r\":[");
+            int rArrStart = IndexOfFrom(json, objStart, kRArr);
             if (rArrStart < 0)
                 break;
 
@@ -365,23 +378,23 @@ class LFPG_SortConfig
             while (rPos < jsonLen)
             {
                 // Find next rule object {
-                int ruleStart = IndexOfFrom(json, rPos, "{");
+                int ruleStart = IndexOfFrom(json, rPos, kOpenBrace);
                 if (ruleStart < 0)
                     break;
 
                 // Check if we hit ] before { (end of rules array)
-                int rArrEnd = IndexOfFrom(json, rPos, "]");
+                int rArrEnd = IndexOfFrom(json, rPos, kCloseBracket);
                 if (rArrEnd >= 0 && rArrEnd < ruleStart)
                     break;
 
                 // Parse "t":N (supports multi-digit types)
-                int tStart = IndexOfFrom(json, ruleStart, "\"t\":");
+                int tStart = IndexOfFrom(json, ruleStart, kTypeKey);
                 if (tStart < 0)
                     break;
                 int tValStart = tStart + 4;
                 if (tValStart >= jsonLen)
                     break;
-                int tEnd = IndexOfFrom(json, tValStart, ",");
+                int tEnd = IndexOfFrom(json, tValStart, kComma);
                 if (tEnd < 0)
                     break;
                 int tLen = tEnd - tValStart;
@@ -391,13 +404,13 @@ class LFPG_SortConfig
                 int ruleType = tStr.ToInt();
 
                 // Parse "v":"..."
-                int vStart = IndexOfFrom(json, tValStart, "\"v\":\"");
+                int vStart = IndexOfFrom(json, tValStart, kValKey);
                 if (vStart < 0)
                     break;
                 int vValStart = vStart + 5;
                 if (vValStart >= jsonLen)
                     break;
-                int vEnd = IndexOfFrom(json, vValStart, "\"");
+                int vEnd = IndexOfFrom(json, vValStart, kQuote);
                 if (vEnd < 0)
                     break;
 
@@ -416,14 +429,14 @@ class LFPG_SortConfig
                 }
 
                 // Skip past this rule's closing }
-                int ruleEnd = IndexOfFrom(json, vEnd, "}");
+                int ruleEnd = IndexOfFrom(json, vEnd, kCloseBrace);
                 if (ruleEnd < 0)
                     break;
                 rPos = ruleEnd + 1;
             }
 
             // Parse catch-all: "ca":true/false
-            int caStart = IndexOfFrom(json, rArrStart, "\"ca\":");
+            int caStart = IndexOfFrom(json, rArrStart, kCaKey);
             if (caStart >= 0)
             {
                 int caValStart = caStart + 5;
@@ -433,7 +446,7 @@ class LFPG_SortConfig
                     LFPG_SortOutputConfig outCfgCa = GetOutput(outIdx);
                     if (outCfgCa)
                     {
-                        if (caVal == "true")
+                        if (caVal == kTrue)
                         {
                             outCfgCa.m_IsCatchAll = true;
                         }
@@ -450,7 +463,7 @@ class LFPG_SortConfig
             {
                 searchFrom = caStart;
             }
-            int objEnd = IndexOfFrom(json, searchFrom, "}");
+            int objEnd = IndexOfFrom(json, searchFrom, kCloseBrace);
             if (objEnd < 0)
                 break;
 

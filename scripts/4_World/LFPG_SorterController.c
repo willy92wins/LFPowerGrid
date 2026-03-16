@@ -156,44 +156,83 @@ class LFPG_SorterController extends ViewController
             return;
 
         string wName = "";
+        string btnN = "";
 
-        // Output tab backgrounds
+        // v2.7: Force all tab lookups (no null guards).
+        // Dabs MVC auto-bind can set non-null but WRONG refs
+        // for widgets inside ButtonWidget (observed on odd-indexed
+        // tabs: 1,3,5). Forcing the lookup overwrites any stale ref.
+        // Fallback: find the ButtonWidget by name, walk children.
+
+        // Output tab backgrounds — force lookup
         wName = "TabOut0Bg";
-        if (!TabOut0Bg) { TabOut0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut0";
+        if (!TabOut0Bg) { TabOut0Bg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabOut1Bg";
-        if (!TabOut1Bg) { TabOut1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut1";
+        if (!TabOut1Bg) { TabOut1Bg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabOut2Bg";
-        if (!TabOut2Bg) { TabOut2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut2";
+        if (!TabOut2Bg) { TabOut2Bg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabOut3Bg";
-        if (!TabOut3Bg) { TabOut3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut3";
+        if (!TabOut3Bg) { TabOut3Bg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabOut4Bg";
-        if (!TabOut4Bg) { TabOut4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut4";
+        if (!TabOut4Bg) { TabOut4Bg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabOut5Bg";
-        if (!TabOut5Bg) { TabOut5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut5";
+        if (!TabOut5Bg) { TabOut5Bg = FindBtnChildBg(layoutRoot, btnN); }
 
-        // Output tab text
+        // Output tab text — force lookup
         wName = "TabOut0Text";
-        if (!TabOut0Text) { TabOut0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut0";
+        if (!TabOut0Text) { TabOut0Text = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabOut1Text";
-        if (!TabOut1Text) { TabOut1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut1";
+        if (!TabOut1Text) { TabOut1Text = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabOut2Text";
-        if (!TabOut2Text) { TabOut2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut2";
+        if (!TabOut2Text) { TabOut2Text = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabOut3Text";
-        if (!TabOut3Text) { TabOut3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut3";
+        if (!TabOut3Text) { TabOut3Text = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabOut4Text";
-        if (!TabOut4Text) { TabOut4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut4";
+        if (!TabOut4Text) { TabOut4Text = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabOut5Text";
-        if (!TabOut5Text) { TabOut5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabOut5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabOut5";
+        if (!TabOut5Text) { TabOut5Text = FindBtnChildText(layoutRoot, btnN); }
 
-        // View tabs
+        // View tabs — force lookup
         wName = "TabRulesBg";
-        if (!TabRulesBg) { TabRulesBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabRulesBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabRules";
+        if (!TabRulesBg) { TabRulesBg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabPreviewBg";
-        if (!TabPreviewBg) { TabPreviewBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabPreviewBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabPreview";
+        if (!TabPreviewBg) { TabPreviewBg = FindBtnChildBg(layoutRoot, btnN); }
         wName = "TabRulesText";
-        if (!TabRulesText) { TabRulesText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabRulesText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabRules";
+        if (!TabRulesText) { TabRulesText = FindBtnChildText(layoutRoot, btnN); }
         wName = "TabPreviewText";
-        if (!TabPreviewText) { TabPreviewText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        TabPreviewText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
+        btnN = "TabPreview";
+        if (!TabPreviewText) { TabPreviewText = FindBtnChildText(layoutRoot, btnN); }
 
         // Category button bgs
         wName = "CatBtn0Bg";
@@ -322,6 +361,56 @@ class LFPG_SorterController extends ViewController
         if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wName); }
         wName = "DestIndicator";
         if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wName); }
+    }
+
+    // v2.7: Fallback helpers — find a ButtonWidget by name,
+    // then walk its immediate children to find the ImageWidget
+    // (Bg) or TextWidget (Text). Handles cases where
+    // FindAnyWidget fails for widgets nested inside ButtonWidget.
+    protected ImageWidget FindBtnChildBg(Widget layoutRoot, string btnName)
+    {
+        if (!layoutRoot)
+            return null;
+
+        Widget btnW = layoutRoot.FindAnyWidget(btnName);
+        if (!btnW)
+            return null;
+
+        Widget child = btnW.GetChildren();
+        ImageWidget imgChild = null;
+        while (child)
+        {
+            imgChild = ImageWidget.Cast(child);
+            if (imgChild)
+            {
+                return imgChild;
+            }
+            child = child.GetSibling();
+        }
+        return null;
+    }
+
+    protected TextWidget FindBtnChildText(Widget layoutRoot, string btnName)
+    {
+        if (!layoutRoot)
+            return null;
+
+        Widget btnW = layoutRoot.FindAnyWidget(btnName);
+        if (!btnW)
+            return null;
+
+        Widget child = btnW.GetChildren();
+        TextWidget txtChild = null;
+        while (child)
+        {
+            txtChild = TextWidget.Cast(child);
+            if (txtChild)
+            {
+                return txtChild;
+            }
+            child = child.GetSibling();
+        }
+        return null;
     }
 
     // =========================================================

@@ -363,15 +363,37 @@ modded class Hologram
 
     // ---- Helper: per-kit WALL pitch offset (degrees) ----
     // Applied only in wall mode. MotionSensor is ceiling-oriented
-    // (sensor on bottom), so on a wall we pitch 90° to face
-    // sensor outward (toward player) and top against wall.
+    // (sensor dome at -Y), so on a wall we pitch -90° to rotate
+    // dome outward (toward room) and housing top against wall.
+    // DayZ pitch convention: +pitch rotates +Y toward +Z (outward),
+    // which puts dome(-Y) INTO wall. -90° is the correct sign:
+    // +Y→-Z (top against wall), -Y→+Z (dome outward).
     protected float LFPG_GetKitWallPitchOffset(EntityAI projection)
     {
         if (!projection)
             return 0.0;
         if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
-            return 90.0;
+            return -90.0;
         return 0.0;
+    }
+
+    // ---- Helper: per-kit WALL surface offset (metres) ----
+    // Distance from wall surface to model origin along the normal.
+    // Default LFPG_HOLO_SURFACE_OFFSET (0.03m) works for small/flat kits.
+    // Larger models need more offset to avoid embedding in the wall.
+    // Value = backHalf depth of model in local -Z + small margin.
+    protected float LFPG_GetKitWallSurfaceOffset(EntityAI projection)
+    {
+        if (!projection)
+            return LFPG_HOLO_SURFACE_OFFSET;
+        // Camera model: Z extends -0.057 to +0.057, backHalf=0.057
+        // Offset 0.08 places back face 2.3cm from wall (clean gap).
+        if (projection.IsKindOf("LF_Camera_Kit"))
+            return 0.08;
+        // Monitor model: Z extends -0.307, very deep
+        if (projection.IsKindOf("LF_Monitor_Kit"))
+            return 0.32;
+        return LFPG_HOLO_SURFACE_OFFSET;
     }
 
     // ============================================
@@ -576,8 +598,9 @@ modded class Hologram
         m_LFPG_IsWallMode = true;
         m_LFPG_WasWallMode = true;
 
-        // Position: hit point + small offset along surface normal (away from wall)
-        vector wallPos = hitPos + (hitNormal * LFPG_HOLO_SURFACE_OFFSET);
+        // Position: hit point + per-kit offset along surface normal (away from wall)
+        float wallSurfOff = LFPG_GetKitWallSurfaceOffset(projection);
+        vector wallPos = hitPos + (hitNormal * wallSurfOff);
 
         // Orientation: model faces outward from wall.
         // Use HORIZONTAL component of the normal for stable yaw.
@@ -603,7 +626,7 @@ modded class Hologram
         float scrollWall = GetProjectionRotation()[0];
         wallYaw = wallYaw + scrollWall;
 
-        // Per-kit wall pitch (e.g. MotionSensor 90° so sensor faces out)
+        // Per-kit wall pitch (e.g. MotionSensor -90° so dome faces out)
         float wallPitchOff = LFPG_GetKitWallPitchOffset(projection);
         vector wallOri = Vector(wallYaw, wallPitchOff, 0);
 

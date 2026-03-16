@@ -1513,11 +1513,12 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2"};
+        hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
         hiddenSelectionsTextures[] =
         {
             "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_co.paa",
             "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_glass.paa",
+            "",
             "",
             ""
         };
@@ -1526,7 +1527,8 @@ class CfgVehicles
             "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
             "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
             "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat"
+            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            ""
         };
     };
 

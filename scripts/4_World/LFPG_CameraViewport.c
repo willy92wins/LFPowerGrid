@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - CCTV Viewport Manager (v1.2.0)
+// LF_PowerGrid - CCTV Viewport Manager (v1.3.1)
 //
 // EXIT STRATEGY: COT DEDICATED SERVER PATTERN
 //
@@ -15,11 +15,15 @@
 //     SetActive(true) + SetPosition + SetOrientation
 //
 //   EXIT (client-side):
-//     Phase 1: m_Active=false, overlay off, RPC EXIT_REQUEST → server
+//     Phase 1: deactivate spectator cam + re-enable HIC + RPC EXIT_REQUEST
 //     Phase 2: WAITING for server CCTV_EXIT_CONFIRM
-//     DoExitCleanup: SetActive(false) + null (NO ObjectDeleteOnClient)
-//       COT: only ObjectDeleteOnClient for custom JMCinematicCamera
-//       staticcamera is engine-managed → engine cleans up via SelectPlayer
+//     DoExitCleanup: null refs, restore HUD (idempotent safety)
+//
+//     CRITICAL (v1.3.1): Camera deactivation + HIC re-enable MUST happen
+//     in Phase 1, BEFORE the RPC roundtrip. SelectPlayer on the server
+//     immediately activates DayZPlayerCamera3rdPersonErc on client,
+//     which calls UpdateUDAngleUnlocked reading player state. If HIC
+//     is still disabled or spectator cam still active → crash 0x54.
 //
 //   EXIT (server-side):
 //     SelectPlayer(sender, player) → engine restaura player cam
@@ -690,20 +694,16 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM.
-    // Server has already called SelectPlayer(sender, player)
-    // → engine updated internal camera pointer.
-    // NOW safe to deactivate and release the spectator camera.
-    //
-    // COT: does NOT call ObjectDeleteOnClient for engine spectator
-    // cameras. Only deletes custom JMCinematicCamera. Engine manages
-    // spectator lifecycle via SelectPlayer.
-    // We follow the same pattern: SetActive(false) + null. No delete.
+    // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM or timeout.
+    // Camera deactivation + HIC re-enable already done in Phase 1.
+    // This only cleans up remaining references and restores HUD.
+    // Kept idempotent — safe to call even if Phase 1 already cleaned up.
     // =========================================================
     void DoExitCleanup()
     {
         Print("[CameraViewport] DIAG: DoExitCleanup — server confirmed");
 
+        // Safety: if camera wasn't cleaned up in Phase 1 (e.g. timeout path)
         if (m_ViewCamObj)
         {
             Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
@@ -711,14 +711,10 @@ class LFPG_CameraViewport
             {
                 viewCamTyped.SetActive(false);
             }
-            // NO ObjectDeleteOnClient — staticcamera is engine-managed.
-            // COT: IsInherited(JMCinematicCamera) check → only deletes custom.
-            // staticcamera ≠ JMCinematicCamera → COT would NOT delete it.
-            // Engine cleans up spectator camera when SelectPlayer restores player.
             m_ViewCamObj = null;
         }
 
-        // Re-enable input controller (COT: SetDisabled(false) in Client_Leave)
+        // Safety: re-enable HIC if still disabled
         Human localPlayer = Human.Cast(GetGame().GetPlayer());
         if (localPlayer)
         {
@@ -768,11 +764,23 @@ class LFPG_CameraViewport
             }
         }
 
-        // ---- Phase 1: send exit request to server ----
-        // Camera STAYS ACTIVE — mods safe in next super.OnUpdate.
+        // ---- Phase 1: prepare player + send exit request to server ----
+        // CRITICAL FIX (v1.3.1): Deactivate spectator camera AND re-enable
+        // HumanInputController HERE, BEFORE sending EXIT_REQUEST.
+        //
+        // Race condition: server calls SelectPlayer → engine activates
+        // DayZPlayerCamera3rdPersonErc on client → OnUpdate runs
+        // UpdateUDAngleUnlocked → reads player state at offset 0x54.
+        // If HIC is still disabled or spectator cam still active,
+        // the player's internal command objects (HumanCommandMove etc.)
+        // may be null → Access Violation crash.
+        //
+        // By deactivating the spectator camera and re-enabling HIC
+        // before the RPC roundtrip, the player state is clean when
+        // SelectPlayer takes effect on the client.
         if (m_ExitPhase == 1)
         {
-            Print("[CameraViewport] DIAG: Phase 1 — m_Active=false + RPC EXIT_REQUEST");
+            Print("[CameraViewport] DIAG: Phase 1 — cleanup + RPC EXIT_REQUEST");
 
             m_Active       = false;
             m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
@@ -792,6 +800,31 @@ class LFPG_CameraViewport
             m_CameraList     = null;
             m_CameraIndex    = 0;
             m_CameraTotal    = 0;
+
+            // Deactivate spectator camera BEFORE RPC roundtrip.
+            // This prevents two active cameras coexisting when
+            // SelectPlayer activates the 3rd-person camera.
+            if (m_ViewCamObj)
+            {
+                Camera phase1Cam = Camera.Cast(m_ViewCamObj);
+                if (phase1Cam)
+                {
+                    phase1Cam.SetActive(false);
+                }
+                m_ViewCamObj = null;
+            }
+
+            // Re-enable HIC BEFORE SelectPlayer takes effect.
+            // The 3rd-person camera reads player input state in
+            // UpdateUDAngleUnlocked — must not be disabled.
+            if (m_PlayerRef)
+            {
+                HumanInputController phase1Hic = m_PlayerRef.GetInputController();
+                if (phase1Hic)
+                {
+                    phase1Hic.SetDisabled(false);
+                }
+            }
 
             // Send EXIT_REQUEST — server will SelectPlayer then send CONFIRM
             if (m_PlayerRef)
