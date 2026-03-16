@@ -825,9 +825,8 @@ class LF_Intercom : Inventory_Base
 
         vector pos = GetPosition();
         string ghostClass = "LF_GhostRadio";
-        m_GhostRadio = LF_GhostRadio.Cast(
-            GetGame().CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS)
-        );
+        Object ghostObj = GetGame().CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
+        m_GhostRadio = LF_GhostRadio.Cast(ghostObj);
         if (!m_GhostRadio)
         {
             LFPG_Util.Error("[LF_Intercom] Failed to spawn GhostRadio at " + pos.ToString());
@@ -844,7 +843,6 @@ class LF_Intercom : Inventory_Base
             ghostCEM.SetEnergy(9999);
             ghostCEM.SwitchOn();
         }
-        m_GhostRadio.TurnOnTransmitter();
         m_GhostRadio.EnableBroadcast(true);
         m_GhostRadio.EnableReceive(true);
         m_GhostRadio.SetFrequencyByIndex(m_FrequencyIndex);

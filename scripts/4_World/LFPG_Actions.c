@@ -1138,6 +1138,22 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         if (!dev)
             return false;
 
+        // v2.6: Suppress DebugStatus on linked Sorters — the Sorter
+        // has its own full config panel (LFPG_ActionOpenSorterPanel).
+        // Showing both DebugStatus + Port actions clutters the scroll menu.
+        string sorterType = "LF_Sorter";
+        if (dev.IsKindOf(sorterType))
+        {
+            LF_Sorter sorterCast = LF_Sorter.Cast(dev);
+            if (sorterCast)
+            {
+                if (sorterCast.LFPG_IsLinked())
+                {
+                    return false;
+                }
+            }
+        }
+
         return LFPG_DeviceAPI.IsElectricDevice(dev);
     }
 

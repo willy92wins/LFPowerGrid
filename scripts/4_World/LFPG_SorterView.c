@@ -172,12 +172,25 @@ class LFPG_SorterView extends ScriptView
             {
                 newX = 0.0;
             }
-            if (newY < 0.0)
+            // v2.6: Keep header visible — small safety margin at top.
+            // Combined with z-sort 50000 this prevents header hiding
+            // behind other mod/admin HUD bars.
+            if (newY < 5.0)
             {
-                newY = 0.0;
+                newY = 5.0;
             }
             float maxX = scrW - panW;
             float maxY = scrH - panH;
+            // v2.6: At very low resolutions, max could be < min.
+            // Clamp to min values so the panel stays on screen.
+            if (maxX < 0.0)
+            {
+                maxX = 0.0;
+            }
+            if (maxY < 5.0)
+            {
+                maxY = 5.0;
+            }
             if (newX > maxX)
             {
                 newX = maxX;
@@ -257,6 +270,83 @@ class LFPG_SorterView extends ScriptView
     override void OnWidgetScriptInit(Widget w)
     {
         super.OnWidgetScriptInit(w);
+    }
+
+    // =========================================================
+    // v2.6: Manual binding fallback for View-level widget refs.
+    // Dabs MVC auto-bind can miss widgets inside ButtonWidget
+    // children or deeply nested structures.
+    // =========================================================
+    protected void EnsureViewBindings()
+    {
+        Widget root = GetLayoutRoot();
+        if (!root)
+            return;
+
+        string wn = "";
+
+        wn = "SorterPanel";
+        if (!SorterPanel) { SorterPanel = root.FindAnyWidget(wn); }
+        wn = "HeaderFrame";
+        if (!HeaderFrame) { HeaderFrame = root.FindAnyWidget(wn); }
+        wn = "PanelBg";
+        if (!PanelBg) { PanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "AccentLine";
+        if (!AccentLine) { AccentLine = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "HeaderBg";
+        if (!HeaderBg) { HeaderBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "TabBarBg";
+        if (!TabBarBg) { TabBarBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "TabSep";
+        if (!TabSep) { TabSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "ColumnSep";
+        if (!ColumnSep) { ColumnSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "RulesPanelBg";
+        if (!RulesPanelBg) { RulesPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PreviewPanelBg";
+        if (!PreviewPanelBg) { PreviewPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "FooterBg";
+        if (!FooterBg) { FooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "FooterSep";
+        if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "FooterMidSep";
+        if (!FooterMidSep) { FooterMidSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "SepCat";
+        if (!SepCat) { SepCat = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "SepSlot";
+        if (!SepSlot) { SepSlot = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "SepCatchAll";
+        if (!SepCatchAll) { SepCatchAll = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditPrefixBg";
+        if (!EditPrefixBg) { EditPrefixBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditContainsBg";
+        if (!EditContainsBg) { EditContainsBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMinBg";
+        if (!EditSlotMinBg) { EditSlotMinBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMaxBg";
+        if (!EditSlotMaxBg) { EditSlotMaxBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "DestIndicatorBg";
+        if (!DestIndicatorBg) { DestIndicatorBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "MatchFooterBg";
+        if (!MatchFooterBg) { MatchFooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "BtnCloseXBg";
+        if (!BtnCloseXBg) { BtnCloseXBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "BtnCloseXText";
+        if (!BtnCloseXText) { BtnCloseXText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PairingBannerBg";
+        if (!PairingBannerBg) { PairingBannerBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PairingDot";
+        if (!PairingDot) { PairingDot = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PairingText";
+        if (!PairingText) { PairingText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "UnpairedOverlay";
+        if (!UnpairedOverlay) { UnpairedOverlay = root.FindAnyWidget(wn); }
+        wn = "UnpairedOverlayBg";
+        if (!UnpairedOverlayBg) { UnpairedOverlayBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "UnpairedLabel";
+        if (!UnpairedLabel) { UnpairedLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "UnpairedHint";
+        if (!UnpairedHint) { UnpairedHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
     }
 
     protected void ApplyColors()
@@ -410,10 +500,20 @@ class LFPG_SorterView extends ScriptView
             }
         }
 
-        // ALWAYS consume clicks when open — prevents game from receiving
-        // mouse events (animations, attacks, interactions).
-        // Button Relay_Commands fire at the ButtonWidget level BEFORE
-        // this handler, so buttons still respond normally.
+        // v2.6 fix: If the click landed on an interactive widget
+        // (ButtonWidget or EditBoxWidget), return false so the widget's
+        // internal handler can process it → OnClick → Relay_Command.
+        // Returning true was consuming the event BEFORE ButtonWidget
+        // could generate OnClick, breaking ALL button clicks.
+        // ChangeGameFocus(1) + SetDisabled(true) already prevent
+        // game-side click-through (movement, attacks, interactions).
+        if (IsInteractiveWidget(w))
+        {
+            return false;
+        }
+
+        // Consume non-interactive clicks (panel bg, headers, labels)
+        // so mouse events don't leak to game layer.
         return true;
     }
 
@@ -425,7 +525,13 @@ class LFPG_SorterView extends ScriptView
         }
         if (!m_IsOpen)
             return false;
-        // Consume release too — prevents game from seeing mouse-up events
+
+        // v2.6 fix: Let interactive widgets receive mouse-up too
+        // (ButtonWidget needs both down+up to fire OnClick).
+        if (IsInteractiveWidget(w))
+        {
+            return false;
+        }
         return true;
     }
 
@@ -449,6 +555,42 @@ class LFPG_SorterView extends ScriptView
                 return false;
             }
             if (check == HeaderFrame)
+            {
+                return true;
+            }
+            check = check.GetParent();
+        }
+        return false;
+    }
+
+    // v2.6: Walk the parent chain to check if w is (or is inside)
+    // a ButtonWidget, EditBoxWidget, or ScrollWidget.
+    // Used by OnMouseButtonDown/Up to decide whether to consume
+    // the event (return true) or let the widget handle it
+    // (return false → Relay_Command / scroll / text input fires).
+    protected bool IsInteractiveWidget(Widget w)
+    {
+        if (!w)
+            return false;
+
+        Widget check = w;
+        ButtonWidget btnCast = null;
+        EditBoxWidget editCast = null;
+        ScrollWidget scrollCast = null;
+        while (check)
+        {
+            btnCast = ButtonWidget.Cast(check);
+            if (btnCast)
+            {
+                return true;
+            }
+            editCast = EditBoxWidget.Cast(check);
+            if (editCast)
+            {
+                return true;
+            }
+            scrollCast = ScrollWidget.Cast(check);
+            if (scrollCast)
             {
                 return true;
             }
@@ -549,7 +691,7 @@ class LFPG_SorterView extends ScriptView
         if (root)
         {
             root.Show(false);
-            root.SetSort(10003);
+            root.SetSort(50000);
         }
         string initMsg = "[SorterView] Pre-created (hidden)";
         LFPG_Util.Info(initMsg);
@@ -701,13 +843,21 @@ class LFPG_SorterView extends ScriptView
         }
         #endif
 
+        // v2.6: Manual binding fallback — fixes white tabs (Dabs auto-bind miss).
+        // Must run BEFORE ApplyColors/InitFromRPC so all widget refs are available.
+        EnsureViewBindings();
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
+        if (ctrl)
+        {
+            ctrl.EnsureBindings(root);
+        }
+
         // S3: ApplyColors here (not in OnWidgetScriptInit) — avoids flash
         ApplyColors();
 
         // Update pairing banner (Bug #5)
         UpdatePairingState(containerName);
 
-        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
         if (ctrl)
         {
             ctrl.InitFromRPC(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);

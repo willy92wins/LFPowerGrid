@@ -146,6 +146,185 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
+    // v2.6: Manual binding fallback for widgets that Dabs MVC
+    // auto-binding sometimes fails to resolve (observed on
+    // odd-indexed tab ImageWidgets). Called from View.DoOpen.
+    // =========================================================
+    void EnsureBindings(Widget layoutRoot)
+    {
+        if (!layoutRoot)
+            return;
+
+        string wName = "";
+
+        // Output tab backgrounds
+        wName = "TabOut0Bg";
+        if (!TabOut0Bg) { TabOut0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut1Bg";
+        if (!TabOut1Bg) { TabOut1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut2Bg";
+        if (!TabOut2Bg) { TabOut2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut3Bg";
+        if (!TabOut3Bg) { TabOut3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut4Bg";
+        if (!TabOut4Bg) { TabOut4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut5Bg";
+        if (!TabOut5Bg) { TabOut5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Output tab text
+        wName = "TabOut0Text";
+        if (!TabOut0Text) { TabOut0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut1Text";
+        if (!TabOut1Text) { TabOut1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut2Text";
+        if (!TabOut2Text) { TabOut2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut3Text";
+        if (!TabOut3Text) { TabOut3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut4Text";
+        if (!TabOut4Text) { TabOut4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabOut5Text";
+        if (!TabOut5Text) { TabOut5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // View tabs
+        wName = "TabRulesBg";
+        if (!TabRulesBg) { TabRulesBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabPreviewBg";
+        if (!TabPreviewBg) { TabPreviewBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabRulesText";
+        if (!TabRulesText) { TabRulesText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TabPreviewText";
+        if (!TabPreviewText) { TabPreviewText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Category button bgs
+        wName = "CatBtn0Bg";
+        if (!CatBtn0Bg) { CatBtn0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn1Bg";
+        if (!CatBtn1Bg) { CatBtn1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn2Bg";
+        if (!CatBtn2Bg) { CatBtn2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn3Bg";
+        if (!CatBtn3Bg) { CatBtn3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn4Bg";
+        if (!CatBtn4Bg) { CatBtn4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn5Bg";
+        if (!CatBtn5Bg) { CatBtn5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn6Bg";
+        if (!CatBtn6Bg) { CatBtn6Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn7Bg";
+        if (!CatBtn7Bg) { CatBtn7Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Category button text
+        wName = "CatBtn0Text";
+        if (!CatBtn0Text) { CatBtn0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn1Text";
+        if (!CatBtn1Text) { CatBtn1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn2Text";
+        if (!CatBtn2Text) { CatBtn2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn3Text";
+        if (!CatBtn3Text) { CatBtn3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn4Text";
+        if (!CatBtn4Text) { CatBtn4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn5Text";
+        if (!CatBtn5Text) { CatBtn5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn6Text";
+        if (!CatBtn6Text) { CatBtn6Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "CatBtn7Text";
+        if (!CatBtn7Text) { CatBtn7Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Slot preset bgs
+        wName = "SlotPre0Bg";
+        if (!SlotPre0Bg) { SlotPre0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre1Bg";
+        if (!SlotPre1Bg) { SlotPre1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre2Bg";
+        if (!SlotPre2Bg) { SlotPre2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre3Bg";
+        if (!SlotPre3Bg) { SlotPre3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Slot preset text
+        wName = "SlotPre0Text";
+        if (!SlotPre0Text) { SlotPre0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre1Text";
+        if (!SlotPre1Text) { SlotPre1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre2Text";
+        if (!SlotPre2Text) { SlotPre2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "SlotPre3Text";
+        if (!SlotPre3Text) { SlotPre3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Catch-all
+        wName = "BtnCatchAllBg";
+        if (!BtnCatchAllBg) { BtnCatchAllBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnCatchAllText";
+        if (!BtnCatchAllText) { BtnCatchAllText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Footer buttons
+        wName = "BtnSortBg";
+        if (!BtnSortBg) { BtnSortBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnSaveBg";
+        if (!BtnSaveBg) { BtnSaveBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnResetAllBg";
+        if (!BtnResetAllBg) { BtnResetAllBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnClearOutBg";
+        if (!BtnClearOutBg) { BtnClearOutBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnCloseBg";
+        if (!BtnCloseBg) { BtnCloseBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnPrefixAddBg";
+        if (!BtnPrefixAddBg) { BtnPrefixAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnContainsAddBg";
+        if (!BtnContainsAddBg) { BtnContainsAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnSlotAddBg";
+        if (!BtnSlotAddBg) { BtnSlotAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Footer text
+        wName = "BtnSortText";
+        if (!BtnSortText) { BtnSortText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnSaveText";
+        if (!BtnSaveText) { BtnSaveText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnResetAllText";
+        if (!BtnResetAllText) { BtnResetAllText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnClearOutText";
+        if (!BtnClearOutText) { BtnClearOutText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "BtnCloseText";
+        if (!BtnCloseText) { BtnCloseText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Status
+        wName = "StatusLabel";
+        if (!StatusLabel) { StatusLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "StatusDot";
+        if (!StatusDot) { StatusDot = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Labels
+        wName = "LblCategory";
+        if (!LblCategory) { LblCategory = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblPrefix";
+        if (!LblPrefix) { LblPrefix = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblContains";
+        if (!LblContains) { LblContains = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblSlot";
+        if (!LblSlot) { LblSlot = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblSlotDash";
+        if (!LblSlotDash) { LblSlotDash = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblActiveRules";
+        if (!LblActiveRules) { LblActiveRules = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "DestLabel";
+        if (!DestLabel) { DestLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "LblPreview";
+        if (!LblPreview) { LblPreview = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "TagsEmpty";
+        if (!TagsEmpty) { TagsEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wName = "PreviewEmpty";
+        if (!PreviewEmpty) { PreviewEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+
+        // Panels
+        wName = "RulesPanel";
+        if (!RulesPanel) { RulesPanel = layoutRoot.FindAnyWidget(wName); }
+        wName = "PreviewPanel";
+        if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wName); }
+        wName = "DestIndicator";
+        if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wName); }
+    }
+
+    // =========================================================
     void InitFromRPC(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         m_SorterNetLow = netLow;

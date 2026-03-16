@@ -1103,6 +1103,19 @@ class LFPG_ElecGraph
                 node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
                 // P1: Cache gate capability to avoid entity lookup every tick.
                 node.m_IsGated = LFPG_DeviceAPI.IsGateCapable(obj);
+
+                // v2.1: Initialize gate-closed state at rebuild time so the
+                // first AllocateOutput pass uses probe demand instead of
+                // m_MaxOutput for closed gates. Without this, the first epoch
+                // has a 1-pass inflation before converging.
+                if (node.m_IsGated)
+                {
+                    bool initGateOpen = LFPG_DeviceAPI.IsGateOpen(obj);
+                    if (!initGateOpen)
+                    {
+                        node.m_GateClosed = true;
+                    }
+                }
             }
             else if (node.m_DeviceType == LFPG_DeviceType.CONSUMER || node.m_DeviceType == LFPG_DeviceType.CAMERA)
             {
@@ -2101,11 +2114,58 @@ class LFPG_ElecGraph
             // to compute totalDemand for upstream demand signaling.
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE || node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                float downstreamDemand = AllocateOutput(nodeId, newOutput);
+                // v2.1: Pre-gate check — determine if gate blocks downstream.
+                // Must run BEFORE AllocateOutput so we pass availableOutput=0
+                // for closed gates. This prevents the allocate→zero→requeue
+                // ping-pong: AllocateOutput with 0 produces overload→all-edges-0,
+                // matching steady-state for closed gates → no allocDelta →
+                // no m_AllocChanged → no wasted requeue cycles per epoch.
+                // Non-gated devices (Splitter, Combiner, CeilingLight, Monitor):
+                // m_IsGated=false → gateIsClosed stays false → zero regression.
+                bool gateIsClosed = false;
+                bool gateEntityResolved = false;
+                if (node.m_IsGated)
+                {
+                    EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
+                    if (gateEnt)
+                    {
+                        gateEntityResolved = true;
+                        bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
+                        if (!gateOpen)
+                        {
+                            gateIsClosed = true;
+                        }
+                    }
+                    else
+                    {
+                        // Entity unresolvable (streamed out / registry stale).
+                        // Preserve last known gate state to avoid phantom
+                        // transition (closed→open surge or open→closed blackout).
+                        gateIsClosed = node.m_GateClosed;
+                    }
+                }
+
+                float allocAvail = newOutput;
+                if (gateIsClosed)
+                {
+                    allocAvail = 0.0;
+                }
+
+                float downstreamDemand = AllocateOutput(nodeId, allocAvail);
 
                 // Off source/passthrough: clear overload state.
                 // "Off" is not "overloaded" — cables should show IDLE, not CRITICAL.
                 if (newOutput < LFPG_PROPAGATION_EPSILON)
+                {
+                    node.m_Overloaded = false;
+                    node.m_LoadRatio = 0.0;
+                }
+
+                // v2.1: Closed gate is not "overloaded". AllocateOutput with 0
+                // as available marks the node overloaded (0 < demand), but a
+                // closed gate is blocking by design, not overloaded. Clear the
+                // stale overload state so cables show IDLE, not CRITICAL.
+                if (gateIsClosed)
                 {
                     node.m_Overloaded = false;
                     node.m_LoadRatio = 0.0;
@@ -2185,36 +2245,61 @@ class LFPG_ElecGraph
                             newOutput = 0.0;
                         }
                     }
-                    // P1: Only look up entity and check gate for devices that
-                    // actually implement gate logic (e.g. PushButton). Skips
-                    // FindById + CallBool for Splitter/Combiner/CeilingLight/Monitor.
+
+                    // v2.1: Post-gate — override demand signal for closed gates
+                    // and track gate state transitions for re-evaluation.
+                    // This runs AFTER the demand signal section so it can override
+                    // newOutput cleanly. The pre-gate check already prevented
+                    // AllocateOutput from producing non-zero allocations.
                     if (node.m_IsGated)
                     {
-                        EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
-                        if (gateEnt)
+                        bool prevGateClosed = node.m_GateClosed;
+
+                        // Only update m_GateClosed when entity was resolved.
+                        // If stale (streamed out), preserve last known state —
+                        // gateIsClosed already copied from node.m_GateClosed in
+                        // pre-gate, so behavior is consistent but no false transition.
+                        if (gateEntityResolved)
                         {
-                            bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
-                            if (!gateOpen)
+                            if (gateIsClosed)
                             {
-                                ref array<ref LFPG_ElecEdge> gateEdges;
-                                if (m_Outgoing.Find(nodeId, gateEdges) && gateEdges)
-                                {
-                                    int gi;
-                                    for (gi = 0; gi < gateEdges.Count(); gi = gi + 1)
-                                    {
-                                        ref LFPG_ElecEdge gEdge = gateEdges[gi];
-                                        if (gEdge)
-                                        {
-                                            gEdge.m_AllocatedPower = 0.0;
-                                        }
-                                    }
-                                }
-                                // B2 fix: Gate override zeroed allocations AFTER
-                                // AllocateOutput ran. Without m_AllocChanged=true,
-                                // Step 3 skips downstream re-enqueue when outputDelta=0,
-                                // leaving consumers Powered=true for 1-2 ticks.
-                                m_AllocChanged = true;
+                                node.m_GateClosed = true;
                             }
+                            else
+                            {
+                                node.m_GateClosed = false;
+                            }
+                        }
+
+                        if (gateIsClosed)
+                        {
+                            // Override demand signal: closed gate cannot serve
+                            // downstream, so only report self needs.
+                            // selfConsumption: 0 for PushButton/LogicGates, 5 for
+                            //   Counter/Laser (keeps device itself running).
+                            // selfSoftDemand: 0 for most, >0 for Battery
+                            //   (continues charging from surplus with output off).
+                            float gatedDemand = node.m_Consumption + node.m_SoftDemand;
+                            newOutput = gatedDemand;
+                            if (gatedDemand > LFPG_PROPAGATION_EPSILON)
+                            {
+                                node.m_SoftDemandRatio = node.m_SoftDemand / gatedDemand;
+                            }
+                            else
+                            {
+                                node.m_SoftDemandRatio = 0.0;
+                            }
+                        }
+
+                        // Force upstream re-evaluation on gate state transition.
+                        // Without this, opening a gate after steady-state (demand=0)
+                        // produces no outputDelta, so upstream never re-allocates
+                        // and the chain stays dead.
+                        // Only fire on real transitions (entity resolved), not
+                        // stale reads where m_GateClosed is preserved unchanged.
+                        if (gateEntityResolved && prevGateClosed != node.m_GateClosed)
+                        {
+                            m_AllocChanged = true;
                         }
                     }
                 }
@@ -2956,31 +3041,56 @@ class LFPG_ElecGraph
                         // Without this, disabled edges make ptHasDown=true
                         // and the fallback uses m_MaxOutput (200) as demand
                         // instead of consumption (0), inflating upstream load.
-                        bool ptHasDown = false;
-                        ref array<ref LFPG_ElecEdge> ptOutEdges;
-                        if (m_Outgoing.Find(edge.m_TargetNodeId, ptOutEdges) && ptOutEdges)
-                        {
-                            int pti;
-                            for (pti = 0; pti < ptOutEdges.Count(); pti = pti + 1)
-                            {
-                                if (!ptHasDown)
-                                {
-                                    ref LFPG_ElecEdge ptEdge = ptOutEdges[pti];
-                                    if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
-                                    {
-                                        ptHasDown = true;
-                                    }
-                                }
-                            }
-                        }
 
-                        if (ptHasDown && targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                        // v2.1: Gated PASSTHROUGH with gate closed cannot
+                        // serve downstream, so cold-start must NOT inflate
+                        // demand to m_MaxOutput. Use probe demand instead:
+                        // max(selfConsumption, LFPG_GATE_PROBE_DEMAND).
+                        // Probe keeps a trickle flowing so the gate can
+                        // re-evaluate when toggled. For non-zero consumption
+                        // devices (Laser=5, Counter=5) the consumption itself
+                        // is sufficient; for zero-consumption (PushButton,
+                        // LogicGates) the 1.0 probe prevents a 0-demand
+                        // deadlock. Non-gated PASSthrough (Splitter, Combiner,
+                        // CeilingLight, Monitor) has m_GateClosed=false always
+                        // → zero regression.
+                        if (targetNode.m_GateClosed)
                         {
-                            edgeDemand = targetNode.m_MaxOutput;
+                            float probeDemand = targetNode.m_Consumption;
+                            if (probeDemand < LFPG_GATE_PROBE_DEMAND)
+                            {
+                                probeDemand = LFPG_GATE_PROBE_DEMAND;
+                            }
+                            edgeDemand = probeDemand;
                         }
                         else
                         {
-                            edgeDemand = targetNode.m_Consumption;
+                            bool ptHasDown = false;
+                            ref array<ref LFPG_ElecEdge> ptOutEdges;
+                            if (m_Outgoing.Find(edge.m_TargetNodeId, ptOutEdges) && ptOutEdges)
+                            {
+                                int pti;
+                                for (pti = 0; pti < ptOutEdges.Count(); pti = pti + 1)
+                                {
+                                    if (!ptHasDown)
+                                    {
+                                        ref LFPG_ElecEdge ptEdge = ptOutEdges[pti];
+                                        if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
+                                        {
+                                            ptHasDown = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (ptHasDown && targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
+                            {
+                                edgeDemand = targetNode.m_MaxOutput;
+                            }
+                            else
+                            {
+                                edgeDemand = targetNode.m_Consumption;
+                            }
                         }
                     }
 

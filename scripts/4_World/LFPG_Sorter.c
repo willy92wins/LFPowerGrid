@@ -107,7 +107,8 @@ class LF_Sorter_Kit : Inventory_Base
         tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        EntityAI sorter = GetGame().CreateObjectEx("LF_Sorter", finalPos, ECE_CREATEPHYSICS);
+        string kSorterType = "LF_Sorter";
+        EntityAI sorter = GetGame().CreateObjectEx(kSorterType, finalPos, ECE_CREATEPHYSICS);
         if (sorter)
         {
             sorter.SetPosition(finalPos);
@@ -849,7 +850,8 @@ class LF_Sorter : Inventory_Base
             return false;
 
         // Restriction: only LF_Sorter as downstream target
-        if (!other.IsKindOf("LF_Sorter"))
+        string kSorter = "LF_Sorter";
+        if (!other.IsKindOf(kSorter))
             return false;
 
         EntityAI otherEntity = EntityAI.Cast(other);

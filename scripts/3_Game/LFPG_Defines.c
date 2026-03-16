@@ -411,6 +411,13 @@ static const int LFPG_VALIDATE_BATCH_SIZE = 32;
 // Prevents cascading updates from floating point noise.
 static const float LFPG_PROPAGATION_EPSILON = 0.001;
 
+// v2.1: Minimum demand for a gated PASSTHROUGH whose gate is closed.
+// Used in AllocateOutput cold-start to replace m_MaxOutput inflation.
+// Must be > LFPG_PROPAGATION_EPSILON so power reaches the device,
+// allowing gate condition re-evaluation when upstream sends power.
+// Small enough to never cause overload on any source (min 50 u/s).
+static const float LFPG_GATE_PROBE_DEMAND = 1.0;
+
 // ---- Propagation tick interval (Sprint 4.2) ----
 // Milliseconds between ProcessDirtyQueue calls. 100ms = 10Hz.
 static const float LFPG_PROPAGATE_TICK_MS = 100.0;

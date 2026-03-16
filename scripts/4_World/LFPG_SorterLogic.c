@@ -180,7 +180,8 @@ class LFPG_SorterLogic
             return false;
 
         // CodeLock and vanilla CombinationLock both use this slot
-        EntityAI lockAtt = container.FindAttachmentBySlotName("Att_CombinationLock");
+        string slotName = "Att_CombinationLock";
+        EntityAI lockAtt = container.FindAttachmentBySlotName(slotName);
         if (!lockAtt)
             return false;
 
@@ -221,10 +222,17 @@ class LFPG_SorterLogic
         // Unknown types → treated as always-open (no false positives).
         float phase;
 
+        string kBarrel = "Barrel_ColorBase";
+        string kDoors = "Doors";
+        string kTent = "TentBase";
+        string kEntrance = "EntranceO";
+        string kFence = "Fence";
+        string kDoors1 = "Doors1";
+
         // Barrel_ColorBase: "Doors" animation, phase 0=closed, 1=open
-        if (container.IsKindOf("Barrel_ColorBase"))
+        if (container.IsKindOf(kBarrel))
         {
-            phase = container.GetAnimationPhase("Doors");
+            phase = container.GetAnimationPhase(kDoors);
             if (phase < 0.5)
                 return true;
         }
@@ -232,18 +240,18 @@ class LFPG_SorterLogic
         // TentBase: "EntranceO" animation.
         // CodeLock TentBase.GetDoorAnimState() checks GetAnimationPhase("EntranceO"):
         //   if truthy (non-zero) → entrance closed → return false (not accessible)
-        if (container.IsKindOf("TentBase"))
+        if (container.IsKindOf(kTent))
         {
-            phase = container.GetAnimationPhase("EntranceO");
+            phase = container.GetAnimationPhase(kEntrance);
             if (phase > 0.5)
                 return true;
         }
 
         // Fence: gate door. "Doors1" phase 0=closed, 1=open.
         // Fence with CodeLock blocks CanOpenFence() but we check directly.
-        if (container.IsKindOf("Fence"))
+        if (container.IsKindOf(kFence))
         {
-            phase = container.GetAnimationPhase("Doors1");
+            phase = container.GetAnimationPhase(kDoors1);
             if (phase < 0.5)
                 return true;
         }
@@ -385,6 +393,8 @@ class LFPG_SorterLogic
         int minVal;
         int maxVal;
         int remainLen;
+        string kHardlineCfg = "CfgPatches ExpansionHardline";
+        string kDash = "-";
 
         if (rule.m_Type == LFPG_SORT_FILTER_CATEGORY)
         {
@@ -425,7 +435,7 @@ class LFPG_SorterLogic
         {
             // S-006: RARITY stub — not exposed in UI (no button creates type 3 rules).
             // Safe as-is. When implemented, requires Expansion-Hardline mod.
-            hasHardline = GetGame().ConfigIsExisting("CfgPatches ExpansionHardline");
+            hasHardline = GetGame().ConfigIsExisting(kHardlineCfg);
             if (!hasHardline)
                 return false;
 
@@ -438,7 +448,7 @@ class LFPG_SorterLogic
             slotSize = GetItemSlotSize(item);
 
             // Parse "min-max" from rule.m_Value
-            dashPos = rule.m_Value.IndexOf("-");
+            dashPos = rule.m_Value.IndexOf(kDash);
             if (dashPos < 0)
                 return false;
 
@@ -501,150 +511,204 @@ class LFPG_SorterLogic
         if (item.IsWeapon())
             return LFPG_SORT_CAT_WEAPON;
 
-        if (item.IsKindOf("Magazine_Base"))
+        // All class name strings declared as local variables (Enforce Script rule)
+        string k;
+
+        k = "Magazine_Base";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_AMMO;
 
         // Weapon attachments — optics, suppressors, buttstocks, handguards, etc.
-        if (item.IsKindOf("ItemOptics"))
+        k = "ItemOptics";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
 
-        if (item.IsKindOf("ItemSuppressor"))
+        k = "ItemSuppressor";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
 
         // E11: Expanded attachment coverage — common vanilla weapon parts
         // that inherit directly from Inventory_Base (no shared base class).
         // Buttstocks
-        if (item.IsKindOf("M4_OEBttstck"))
+        k = "M4_OEBttstck";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_WoodBttstck"))
+        k = "AK_WoodBttstck";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_FoldingBttstck"))
+        k = "AK_FoldingBttstck";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_PlasticBttstck"))
+        k = "AK_PlasticBttstck";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("Fal_OeBttstck"))
+        k = "Fal_OeBttstck";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
         // Handguards
-        if (item.IsKindOf("M4_RISHndgrd"))
+        k = "M4_RISHndgrd";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("M4_PlasticHndgrd"))
+        k = "M4_PlasticHndgrd";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_WoodHndgrd"))
+        k = "AK_WoodHndgrd";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_RailHndgrd"))
+        k = "AK_RailHndgrd";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("AK_PlasticHndgrd"))
+        k = "AK_PlasticHndgrd";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
         // Bayonets
-        if (item.IsKindOf("Bayonet_Mosin"))
+        k = "Bayonet_Mosin";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("Bayonet_AK"))
+        k = "Bayonet_AK";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("Bayonet_SKS"))
+        k = "Bayonet_SKS";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
         // Wraps/lights
-        if (item.IsKindOf("GhillieSuit_ColorBase"))
+        k = "GhillieSuit_ColorBase";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("UniversalLight"))
+        k = "UniversalLight";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        if (item.IsKindOf("TLRLight"))
+        k = "TLRLight";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
 
-        if (item.IsKindOf("ItemGrenade"))
+        k = "ItemGrenade";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_WEAPON;
 
-        if (item.IsKindOf("Clothing_Base"))
+        k = "Clothing_Base";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_CLOTHING;
 
-        if (item.IsKindOf("Edible_Base"))
+        k = "Edible_Base";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_FOOD;
 
-        if (item.IsKindOf("Bottle_Base"))
+        k = "Bottle_Base";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_FOOD;
 
-        if (item.IsKindOf("Bandage_Base"))
+        k = "Bandage_Base";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("Morphine"))
+        k = "Morphine";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("Epinephrine"))
+        k = "Epinephrine";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("Saline"))
+        k = "Saline";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("BloodBagBase"))
+        k = "BloodBagBase";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("CharcoalTablets"))
+        k = "CharcoalTablets";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("Tetracycline"))
+        k = "Tetracycline";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("PainkillerTablets"))
+        k = "PainkillerTablets";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("VitaminBottle"))
+        k = "VitaminBottle";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("DisinfectantSpray"))
+        k = "DisinfectantSpray";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("IodineTincture"))
+        k = "IodineTincture";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        if (item.IsKindOf("DisinfectantAlcohol"))
+        k = "DisinfectantAlcohol";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
         // Tools
-        if (item.IsKindOf("Toolbox"))
+        k = "Toolbox";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Wrench"))
+        k = "Wrench";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Pliers"))
+        k = "Pliers";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Hacksaw"))
+        k = "Hacksaw";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Hammer"))
+        k = "Hammer";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Shovel"))
+        k = "Shovel";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Hatchet"))
+        k = "Hatchet";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Pickaxe"))
+        k = "Pickaxe";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("SewingKit"))
+        k = "SewingKit";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("LeatherSewingKit"))
+        k = "LeatherSewingKit";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("WhetStone"))
+        k = "WhetStone";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Lockpick"))
+        k = "Lockpick";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("KitchenKnife"))
+        k = "KitchenKnife";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("HuntingKnife"))
+        k = "HuntingKnife";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("CombatKnife"))
+        k = "CombatKnife";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        if (item.IsKindOf("Duct_Tape"))
+        k = "Duct_Tape";
+        if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
         return LFPG_SORT_CAT_MISC;
@@ -675,14 +739,20 @@ class LFPG_SorterLogic
         if (!item)
             return;
 
-        string cfgPath = "CfgVehicles " + item.GetType() + " itemSize";
+        string cfgPrefix = "CfgVehicles ";
+        string cfgSuffix = " itemSize";
+        string cfgPath = cfgPrefix;
+        cfgPath = cfgPath + item.GetType();
+        cfgPath = cfgPath + cfgSuffix;
         string pathX;
         string pathY;
+        string sZero = " 0";
+        string sOne = " 1";
 
         if (GetGame().ConfigIsExisting(cfgPath))
         {
-            pathX = cfgPath + " 0";
-            pathY = cfgPath + " 1";
+            pathX = cfgPath + sZero;
+            pathY = cfgPath + sOne;
             outW = GetGame().ConfigGetInt(pathX);
             outH = GetGame().ConfigGetInt(pathY);
         }
