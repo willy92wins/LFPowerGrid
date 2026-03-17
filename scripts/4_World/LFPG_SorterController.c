@@ -88,6 +88,7 @@ class LFPG_SorterController extends ViewController
     // View tabs
     ImageWidget TabRulesBg; ImageWidget TabPreviewBg;
     TextWidget TabRulesText; TextWidget TabPreviewText;
+    ImageWidget TabIndicator;
     // Category
     ImageWidget CatBtn0Bg; ImageWidget CatBtn1Bg; ImageWidget CatBtn2Bg; ImageWidget CatBtn3Bg;
     ImageWidget CatBtn4Bg; ImageWidget CatBtn5Bg; ImageWidget CatBtn6Bg; ImageWidget CatBtn7Bg;
@@ -233,6 +234,10 @@ class LFPG_SorterController extends ViewController
         TabPreviewText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
         btnN = "TabPreview";
         if (!TabPreviewText) { TabPreviewText = FindBtnChildText(layoutRoot, btnN); }
+
+        // Tab active indicator
+        wName = "TabIndicator";
+        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
 
         // Category button bgs
         wName = "CatBtn0Bg";
@@ -1031,6 +1036,14 @@ class LFPG_SorterController extends ViewController
             TintBg(GetTabBg(i), bgCol);
             tt = GetTabText(i);
             if (tt) { tt.SetColor(txtCol); tt.SetText(label); }
+        }
+
+        // Position active-tab indicator (80px per tab, y=28 from layout)
+        if (TabIndicator)
+        {
+            float indX = m_SelectedOutput * 80.0;
+            float indY = 28.0;
+            TabIndicator.SetPos(indX, indY);
         }
     }
 

@@ -9,7 +9,6 @@ FrameWidgetClass PreviewRowRoot {
 	vexactpos 0
 	hexactsize 0
 	vexactsize 1
-	scriptclass "LFPG_SorterPreviewRow"
 	{
 		ImageWidgetClass RowSep {
 			position 0 29

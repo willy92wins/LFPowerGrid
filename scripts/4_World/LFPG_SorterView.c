@@ -67,6 +67,7 @@ class LFPG_SorterView extends ScriptView
     ImageWidget HeaderBg;
     ImageWidget TabBarBg;
     ImageWidget TabSep;
+    ImageWidget TabIndicator;
     ImageWidget ColumnSep;
     ImageWidget RulesPanelBg;
     ImageWidget PreviewPanelBg;
@@ -80,6 +81,10 @@ class LFPG_SorterView extends ScriptView
     ImageWidget EditContainsBg;
     ImageWidget EditSlotMinBg;
     ImageWidget EditSlotMaxBg;
+    ImageWidget EditPrefixBorder;
+    ImageWidget EditContainsBorder;
+    ImageWidget EditSlotMinBorder;
+    ImageWidget EditSlotMaxBorder;
     ImageWidget DestIndicatorBg;
     ImageWidget MatchFooterBg;
     ImageWidget BtnCloseXBg;
@@ -98,7 +103,8 @@ class LFPG_SorterView extends ScriptView
     static const int COL_BG_PANEL     = 0xF50D1528;
     static const int COL_BG_SECTION   = 0xEB101828;
     static const int COL_BG_ELEVATED  = 0xE6162030;
-    static const int COL_BG_INPUT     = 0xFF253550;
+    static const int COL_BG_INPUT     = 0xFF182238;
+    static const int COL_INPUT_BORDER = 0x38CBD5E1;
     static const int COL_GREEN        = 0xFF34D399;
     static const int COL_GREEN_DIM    = 0x0F34D399;
     static const int COL_GREEN_BORDER = 0x2634D399;
@@ -299,6 +305,8 @@ class LFPG_SorterView extends ScriptView
         if (!TabBarBg) { TabBarBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "TabSep";
         if (!TabSep) { TabSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "TabIndicator";
+        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "ColumnSep";
         if (!ColumnSep) { ColumnSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "RulesPanelBg";
@@ -325,6 +333,14 @@ class LFPG_SorterView extends ScriptView
         if (!EditSlotMinBg) { EditSlotMinBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditSlotMaxBg";
         if (!EditSlotMaxBg) { EditSlotMaxBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditPrefixBorder";
+        if (!EditPrefixBorder) { EditPrefixBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditContainsBorder";
+        if (!EditContainsBorder) { EditContainsBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMinBorder";
+        if (!EditSlotMinBorder) { EditSlotMinBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMaxBorder";
+        if (!EditSlotMaxBorder) { EditSlotMaxBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "DestIndicatorBg";
         if (!DestIndicatorBg) { DestIndicatorBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "MatchFooterBg";
@@ -367,6 +383,7 @@ class LFPG_SorterView extends ScriptView
         Tint(HeaderBg, COL_HEADER);
         Tint(TabBarBg, COL_BG_DEEP);
         Tint(TabSep, COL_SEPARATOR);
+        Tint(TabIndicator, COL_GREEN);
         Tint(ColumnSep, COL_SEPARATOR);
         Tint(RulesPanelBg, COL_BG_DEEP);
         Tint(PreviewPanelBg, COL_BG_DEEP);
@@ -380,6 +397,10 @@ class LFPG_SorterView extends ScriptView
         Tint(EditContainsBg, COL_BG_INPUT);
         Tint(EditSlotMinBg, COL_BG_INPUT);
         Tint(EditSlotMaxBg, COL_BG_INPUT);
+        Tint(EditPrefixBorder, COL_INPUT_BORDER);
+        Tint(EditContainsBorder, COL_INPUT_BORDER);
+        Tint(EditSlotMinBorder, COL_INPUT_BORDER);
+        Tint(EditSlotMaxBorder, COL_INPUT_BORDER);
         Tint(DestIndicatorBg, COL_GREEN_DIM);
         Tint(MatchFooterBg, COL_SEPARATOR);
         // BtnCloseX default color

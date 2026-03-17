@@ -614,6 +614,20 @@ FrameWidgetClass SorterRoot {
 							{
 							}
 						}
+
+						// Active tab indicator (2px green line, repositioned by script)
+						ImageWidgetClass TabIndicator {
+							position 0 28
+							size 80 2
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
 					}
 				}
 
@@ -781,6 +795,18 @@ FrameWidgetClass SorterRoot {
 							{
 							}
 						}
+						ImageWidgetClass EditPrefixBorder {
+							position 13 115
+							size 288 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
 						ImageWidgetClass EditPrefixBg {
 							position 14 116
 							size 286 28
@@ -830,6 +856,18 @@ FrameWidgetClass SorterRoot {
 							vexactsize 1
 							font "gui/fonts/Metron"
 							text "NAME CONTAINS"
+							ignorepointer 1
+							{
+							}
+						}
+						ImageWidgetClass EditContainsBorder {
+							position 13 169
+							size 288 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
 							ignorepointer 1
 							{
 							}
@@ -957,6 +995,18 @@ FrameWidgetClass SorterRoot {
 						}
 
 						// Custom slot min-max
+						ImageWidgetClass EditSlotMinBorder {
+							position 13 267
+							size 54 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
 						ImageWidgetClass EditSlotMinBg {
 							position 14 268
 							size 52 28
@@ -992,6 +1042,18 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/MetronBook"
 							text "-"
 							"text halign" center
+							ignorepointer 1
+							{
+							}
+						}
+						ImageWidgetClass EditSlotMaxBorder {
+							position 87 267
+							size 54 30
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
 							ignorepointer 1
 							{
 							}
