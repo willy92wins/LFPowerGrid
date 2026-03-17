@@ -118,6 +118,11 @@ class LFPG_LogicGate_Kit : Inventory_Base
             return "LFPG_XOR_Gate";
         }
 
+        if (kitType == "LFPG_MemoryCell_Kit")
+        {
+            return "LFPG_MemoryCell";
+        }
+
         LFPG_Util.Error("[LogicGate_Kit] Unknown kit type: " + kitType);
         return "";
     }

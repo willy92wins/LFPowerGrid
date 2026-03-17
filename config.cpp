@@ -147,7 +147,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables"};
@@ -1097,6 +1097,49 @@ class CfgVehicles
         isDeployable = 0;
         hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "", "", ""};
+        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+    };
+
+    // =========================================================
+    // v3.1.0: MEMORY CELL (PASSTHROUGH, stateful latch)
+    //   4 IN + 2 OUT, capacity 20 u/s, consumption 0 u/s
+    //   Latches on/off state; routes power to normal or inverted output.
+    // =========================================================
+
+    // ---- Memory Cell Kit ----
+    class LFPG_MemoryCell_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_MemoryCell_Kit";
+        descriptionShort = "$STR_LFPG_MemoryCell_Kit_Desc";
+        model = "\LFPowerGrid\data\logic_gate\AND_OR_XOR_Memory_cell.p3d";
+        weight = 800;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"camo"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
+    };
+
+    // ---- Memory Cell (placed device) ----
+    class LFPG_MemoryCell : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_MemoryCell";
+        descriptionShort = "$STR_LFPG_MemoryCell_Desc";
+        model = "\LFPowerGrid\data\logic_gate\AND_OR_XOR_Memory_cell.p3d";
+        weight = 1200;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "", "", ""};
         hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
     };
 

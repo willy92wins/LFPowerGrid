@@ -3428,4 +3428,55 @@ class LFPG_ElecGraph
 
         return false;
     }
+
+    // v3.1: Enable/disable outgoing edges for a specific output port.
+    // Used by MemoryCell to route power to output_0 or output_1.
+    void SetOutputPortEnabled(string deviceId, string portName, bool enabled)
+    {
+        #ifdef SERVER
+        ref array<ref LFPG_ElecEdge> outEdges;
+        if (!m_Outgoing.Find(deviceId, outEdges))
+            return;
+
+        if (!outEdges)
+            return;
+
+        int i;
+        int count = outEdges.Count();
+        bool anyChanged = false;
+        for (i = 0; i < count; i = i + 1)
+        {
+            ref LFPG_ElecEdge edge = outEdges[i];
+            if (!edge)
+                continue;
+
+            if (edge.m_SourcePort != portName)
+                continue;
+
+            bool wasEnabled = ((edge.m_Flags & LFPG_EDGE_ENABLED) != 0);
+            if (enabled && !wasEnabled)
+            {
+                edge.m_Flags = edge.m_Flags | LFPG_EDGE_ENABLED;
+                anyChanged = true;
+            }
+            else if (!enabled && wasEnabled)
+            {
+                edge.m_Flags = 0;
+                edge.m_AllocatedPower = 0.0;
+                anyChanged = true;
+            }
+        }
+
+        if (anyChanged)
+        {
+            MarkNodeDirty(deviceId, LFPG_DIRTY_TOPOLOGY);
+
+            string dbg = "[ElecGraph] SetOutputPortEnabled: ";
+            dbg = dbg + deviceId;
+            dbg = dbg + " port=" + portName;
+            dbg = dbg + " enabled=" + enabled.ToString();
+            LFPG_Util.Debug(dbg);
+        }
+        #endif
+    }
 };
