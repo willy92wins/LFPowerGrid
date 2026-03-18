@@ -275,7 +275,9 @@ enum LFPG_RPC_SubId
 	SEARCHLIGHT_EXIT_REQUEST   = 27,  // v1.4.0: Client→Server: request exit
 	SEARCHLIGHT_EXIT_CONFIRM   = 28,  // v1.4.0: Server→Client: confirm exit
 	SORTER_RESYNC              = 29,  // v2.4: Client→Server: re-link nearest container
-	SORTER_RESYNC_ACK          = 30   // v2.4: Server→Client: result (containerName)
+	SORTER_RESYNC_ACK          = 30,  // v2.4: Server→Client: result (containerName)
+	SORTER_PREVIEW_REQUEST     = 31,  // v2.6: Client→Server: request matching items for preview
+	SORTER_PREVIEW_RESPONSE    = 32   // v2.6: Server→Client: matched item list (cap 50)
 };
 
 // ---- Sorter tick constants (Sprint S3) ----
@@ -283,6 +285,7 @@ static const int LFPG_SORTER_TICK_MS        = 5000;   // 5s between sorter ticks
 static const int LFPG_SORTER_ITEMS_PER_TICK = 3;      // max items moved per sorter per tick
 static const int LFPG_SORTER_BATCH_SIZE     = 8;      // max sorters processed per tick
 static const int LFPG_SORTER_MAX_EVAL       = 20;     // max rule evaluations per sorter per tick
+static const int LFPG_SORTER_PREVIEW_CAP    = 50;     // max items in preview RPC response
 
 // ---- Motion Sensor tick constants (v1.5.0) ----
 static const int   LFPG_SENSOR_TICK_MS      = 3000;   // 3s between scan ticks

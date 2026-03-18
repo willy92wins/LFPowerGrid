@@ -1162,6 +1162,20 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
+    // v2.6: Server preview response → delegate to Controller
+    static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_IsOpen)
+            return;
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
+        if (ctrl)
+        {
+            ctrl.PopulatePreview(outputIdx, totalMatched, names, cats, slots);
+        }
+    }
+
     protected void DoOpen(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         if (m_IsOpen)

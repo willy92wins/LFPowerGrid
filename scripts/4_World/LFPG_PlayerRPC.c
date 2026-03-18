@@ -126,6 +126,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterResync(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_PREVIEW_REQUEST)
+        {
+            HandleLFPG_SorterPreviewRequest(sender, ctx);
+        }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_AIM)
         {
             HandleLFPG_SearchlightAim(sender, ctx);
@@ -170,6 +174,10 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.SORTER_RESYNC_ACK)
         {
             HandleLFPG_SorterResyncAck(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.SORTER_PREVIEW_RESPONSE)
+        {
+            HandleLFPG_SorterPreviewResponse(ctx);
         }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM)
         {
@@ -2712,5 +2720,235 @@ modded class PlayerBase
             string failMsg = "[LFPG] No container found nearby";
             player.MessageStatus(failMsg);
         }
+    }
+
+    // =====================================
+    // SERVER: Sorter PREVIEW_REQUEST (SubId 31)
+    // Client requests matching items for preview panel.
+    // v2.6
+    // =====================================
+    protected void HandleLFPG_SorterPreviewRequest(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
+        int netLow = 0;
+        int netHigh = 0;
+        int selectedOutput = 0;
+        if (!ctx.Read(netLow))
+            return;
+        if (!ctx.Read(netHigh))
+            return;
+        if (!ctx.Read(selectedOutput))
+            return;
+
+        // Validate output index
+        if (selectedOutput < 0 || selectedOutput >= 6)
+            return;
+
+        // Resolve sorter
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        if (!devEnt)
+            return;
+
+        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        if (!sorter)
+            return;
+
+        // Proximity check
+        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+            return;
+
+        // Parse filter config from sorter
+        string filterJSON = sorter.LFPG_GetFilterJSON();
+        LFPG_SortConfig config = new LFPG_SortConfig();
+        config.FromJSON(filterJSON);
+        LFPG_SortOutputConfig outCfg = config.GetOutput(selectedOutput);
+        if (!outCfg)
+            return;
+
+        bool isCatchAll = outCfg.m_IsCatchAll;
+        int ruleCount = outCfg.GetRuleCount();
+        bool hasRules = (ruleCount > 0 || isCatchAll);
+
+        // Resolve linked container
+        EntityAI container = sorter.LFPG_GetLinkedContainer();
+
+        // Build matched items list
+        int totalMatched = 0;
+        array<string> matchNames = new array<string>;
+        array<string> matchCats = new array<string>;
+        array<int> matchSlots = new array<int>;
+
+        if (container && hasRules)
+        {
+            GameInventory inv = container.GetInventory();
+            if (inv)
+            {
+                CargoBase cargo = inv.GetCargo();
+                if (cargo)
+                {
+                    int cargoCount = cargo.GetItemCount();
+                    int ci = 0;
+                    EntityAI cItem = null;
+                    bool matched = false;
+                    string typeName = "";
+                    string cat = "";
+                    int slotSize = 0;
+
+                    for (ci = 0; ci < cargoCount; ci = ci + 1)
+                    {
+                        cItem = cargo.GetItem(ci);
+                        if (!cItem)
+                            continue;
+
+                        matched = false;
+                        if (isCatchAll)
+                        {
+                            matched = true;
+                        }
+                        else
+                        {
+                            matched = LFPG_SorterLogic.MatchesAnyRule(cItem, outCfg);
+                        }
+
+                        if (!matched)
+                            continue;
+
+                        totalMatched = totalMatched + 1;
+
+                        // Only collect up to cap for the RPC payload
+                        if (matchNames.Count() < LFPG_SORTER_PREVIEW_CAP)
+                        {
+                            typeName = cItem.GetType();
+                            cat = LFPG_SorterLogic.ResolveCategory(cItem);
+                            slotSize = LFPG_SorterLogic.GetItemSlotSize(cItem);
+                            matchNames.Insert(typeName);
+                            matchCats.Insert(cat);
+                            matchSlots.Insert(slotSize);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build response RPC
+        int sentCount = matchNames.Count();
+        ScriptRPC rpc = new ScriptRPC();
+        int respSubId = LFPG_RPC_SubId.SORTER_PREVIEW_RESPONSE;
+        rpc.Write(respSubId);
+        rpc.Write(selectedOutput);
+        rpc.Write(totalMatched);
+        rpc.Write(sentCount);
+
+        int si = 0;
+        for (si = 0; si < sentCount; si = si + 1)
+        {
+            rpc.Write(matchNames[si]);
+            rpc.Write(matchCats[si]);
+            rpc.Write(matchSlots[si]);
+        }
+
+        bool bRpcGuaranteed = true;
+        rpc.Send(this, LFPG_RPC_CHANNEL, bRpcGuaranteed, sender);
+
+        string logMsg = "[SorterPreviewRequest] output=";
+        logMsg = logMsg + selectedOutput.ToString();
+        logMsg = logMsg + " matched=";
+        logMsg = logMsg + totalMatched.ToString();
+        logMsg = logMsg + " sent=";
+        logMsg = logMsg + sentCount.ToString();
+        LFPG_Util.Info(logMsg);
+    }
+
+    // =====================================
+    // CLIENT: Sorter PREVIEW_RESPONSE (SubId 32)
+    // Server sends matching items for preview panel.
+    // v2.6
+    // =====================================
+    protected void HandleLFPG_SorterPreviewResponse(ParamsReadContext ctx)
+    {
+        int outputIdx = 0;
+        int totalMatched = 0;
+        int sentCount = 0;
+
+        if (!ctx.Read(outputIdx))
+        {
+            string errOut = "[SorterPreviewResponse] read outputIdx FAIL";
+            LFPG_Util.Warn(errOut);
+            return;
+        }
+        if (!ctx.Read(totalMatched))
+        {
+            string errTotal = "[SorterPreviewResponse] read totalMatched FAIL";
+            LFPG_Util.Warn(errTotal);
+            return;
+        }
+        if (!ctx.Read(sentCount))
+        {
+            string errSent = "[SorterPreviewResponse] read sentCount FAIL";
+            LFPG_Util.Warn(errSent);
+            return;
+        }
+
+        // Sanity cap
+        if (sentCount > LFPG_SORTER_PREVIEW_CAP)
+        {
+            sentCount = LFPG_SORTER_PREVIEW_CAP;
+        }
+
+        array<string> names = new array<string>;
+        array<string> cats = new array<string>;
+        array<int> slots = new array<int>;
+
+        int si = 0;
+        string itemName = "";
+        string itemCat = "";
+        int itemSlot = 0;
+        bool readOk = true;
+
+        for (si = 0; si < sentCount; si = si + 1)
+        {
+            if (!ctx.Read(itemName))
+            {
+                readOk = false;
+                break;
+            }
+            if (!ctx.Read(itemCat))
+            {
+                readOk = false;
+                break;
+            }
+            if (!ctx.Read(itemSlot))
+            {
+                readOk = false;
+                break;
+            }
+            names.Insert(itemName);
+            cats.Insert(itemCat);
+            slots.Insert(itemSlot);
+        }
+
+        if (!readOk)
+        {
+            string errRead = "[SorterPreviewResponse] item read FAIL at index ";
+            errRead = errRead + si.ToString();
+            LFPG_Util.Warn(errRead);
+            return;
+        }
+
+        LFPG_SorterView.OnPreviewData(outputIdx, totalMatched, names, cats, slots);
+
+        string logMsg = "[SorterPreviewResponse] output=";
+        logMsg = logMsg + outputIdx.ToString();
+        logMsg = logMsg + " total=";
+        logMsg = logMsg + totalMatched.ToString();
+        logMsg = logMsg + " received=";
+        logMsg = logMsg + sentCount.ToString();
+        LFPG_Util.Info(logMsg);
     }
 };

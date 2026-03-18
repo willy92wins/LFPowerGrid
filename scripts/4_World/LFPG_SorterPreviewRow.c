@@ -1,6 +1,7 @@
 // =========================================================
-// LF_PowerGrid — Sorter Preview Row (Dabs MVC prefab, v2.1)
+// LF_PowerGrid — Sorter Preview Row (Dabs MVC prefab, v2.6)
 //
+// v2.6: m_Scaled guard for pool-safe reuse (future).
 // Bug 9 fix: separator alpha 0x14→0x30 (via shared constant)
 // Bug 14 fix: hardcoded colors replaced with shared constants
 //
@@ -28,6 +29,7 @@ class LFPG_SorterPreviewRow extends ScriptView
     TextWidget CatIcon;
     TextWidget ItemName;
     TextWidget SlotText;
+    protected bool m_Scaled;
 
     override string GetLayoutFile()
     {
@@ -88,11 +90,14 @@ class LFPG_SorterPreviewRow extends ScriptView
             SlotText.SetColor(LFPG_SorterView.COL_TEXT_MID);
         }
 
-        // v2.5 B3: Scale dynamic row to match current resolution.
-        // ScaleWidget is a no-op at scale ~1.0 (1080p).
-        Widget rowRoot = GetLayoutRoot();
-        float rowScale = LFPG_UIScaler.ComputeScale();
-        LFPG_UIScaler.ScaleWidget(rowRoot, rowScale);
+        // v2.6: Scale only on first use (pool-safe for future reuse).
+        if (!m_Scaled)
+        {
+            Widget rowRoot = GetLayoutRoot();
+            float rowScale = LFPG_UIScaler.ComputeScale();
+            LFPG_UIScaler.ScaleWidget(rowRoot, rowScale);
+            m_Scaled = true;
+        }
     }
 
     protected string GetCatIcon(string catKey)

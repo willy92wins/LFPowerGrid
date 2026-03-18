@@ -1,5 +1,10 @@
 // =========================================================
-// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.3 P3 Sprint)
+// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.6 Pool Sprint)
+//
+// v2.6 changes (Tag Pool — Fase 5):
+//   - m_TagPool: reuse TagViews via pool (eliminates new/delete
+//     per RefreshTagsList call). Max 9 = 8 rules + 1 catch-all.
+//   - ClearCollections: pool cleared on DoClose to break refs.
 //
 // v2.3 changes (P3 Performance & Polish):
 //   S5: Extracted GetStatusColor (eliminates 40-line duplication)
@@ -41,6 +46,9 @@ class LFPG_SorterController extends ViewController
     // ── ObservableCollections ──
     ref ObservableCollection<ref LFPG_SorterTagView> TagsList;
     ref ObservableCollection<ref LFPG_SorterPreviewRow> PreviewItems;
+
+    // ── Tag pool (v2.6 — reuse TagViews across RefreshTagsList calls) ──
+    ref array<ref LFPG_SorterTagView> m_TagPool;
 
     // ── Internal state ──
     protected ref LFPG_SortConfig m_Config;
@@ -136,6 +144,7 @@ class LFPG_SorterController extends ViewController
     {
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
+        m_TagPool = new array<ref LFPG_SorterTagView>;
         m_Config = new LFPG_SortConfig();
         m_SelectedOutput = 0;
         m_ShowRules = true;
@@ -723,7 +732,7 @@ class LFPG_SorterController extends ViewController
     // Relay_Commands — view tabs
     // =========================================================
     void TabRules()  { m_ShowRules = true;  LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); }
-    void TabPreview() { m_ShowRules = false; LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); }
+    void TabPreview() { m_ShowRules = false; LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); RequestPreview(); }
 
     // =========================================================
     // Relay_Commands — category toggles (Bug #6: guard unpaired)
@@ -985,7 +994,15 @@ class LFPG_SorterController extends ViewController
         RefreshTagsList();
         RefreshRuleCount();
         RefreshMatchCount();
-        RefreshPreviewCount();
+        // v2.6: Request server preview if on preview tab, else just count
+        if (!m_ShowRules)
+        {
+            RequestPreview();
+        }
+        else
+        {
+            RefreshPreviewCount();
+        }
         RefreshDestIndicator();
         // v3: Refresh edit hints
         LFPG_SorterView.RefreshHints();
@@ -1236,33 +1253,67 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
-    // Tags list rebuild (passes 'this' for direct parent ref)
+    // Tags list rebuild — v2.6 pool pattern.
+    // Clear() detaches widgets from WrapSpacer but pool refs
+    // keep TagViews alive. SetData reuses existing instances.
+    // Only creates new TagViews when pool is too small.
+    // Max 9 tags per output (8 rules + 1 catch-all).
     // =========================================================
     protected void RefreshTagsList()
     {
         TagsList.Clear();
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
-        if (!outCfg) return;
-
-        int ruleCount = outCfg.GetRuleCount();
-        int ri;
-        for (ri = 0; ri < ruleCount; ri = ri + 1)
+        if (!outCfg)
         {
-            LFPG_SortFilterRule rule = outCfg.m_Rules[ri];
-            if (!rule) continue;
-            string label = rule.GetDisplayLabel();
-            int color = GetRuleColor(rule.m_Type);
-            LFPG_SorterTagView tag = new LFPG_SorterTagView();
-            tag.SetData(label, color, ri, m_SelectedOutput, this);
-            TagsList.Insert(tag);
+            bool emptyAll = true;
+            if (TagsEmpty) { TagsEmpty.Show(emptyAll); }
+            if (TagsEmptyIcon) { TagsEmptyIcon.Show(emptyAll); }
+            if (TagsEmptyHint) { TagsEmptyHint.Show(emptyAll); }
+            return;
         }
 
+        int ruleCount = outCfg.GetRuleCount();
+        int needed = ruleCount;
         if (outCfg.m_IsCatchAll)
         {
-            LFPG_SorterTagView caTag = new LFPG_SorterTagView();
+            needed = needed + 1;
+        }
+
+        // Grow pool if needed (tags persist across tab switches)
+        int poolSize = m_TagPool.Count();
+        int pi;
+        for (pi = poolSize; pi < needed; pi = pi + 1)
+        {
+            LFPG_SorterTagView newTag = new LFPG_SorterTagView();
+            m_TagPool.Insert(newTag);
+        }
+
+        // Populate from rules
+        int ri;
+        int tagIdx = 0;
+        LFPG_SorterTagView tag = null;
+        LFPG_SortFilterRule rule = null;
+        string label = "";
+        int color = 0;
+        for (ri = 0; ri < ruleCount; ri = ri + 1)
+        {
+            rule = outCfg.m_Rules[ri];
+            if (!rule) continue;
+            label = rule.GetDisplayLabel();
+            color = GetRuleColor(rule.m_Type);
+            tag = m_TagPool[tagIdx];
+            tag.SetData(label, color, ri, m_SelectedOutput, this);
+            TagsList.Insert(tag);
+            tagIdx = tagIdx + 1;
+        }
+
+        // Catch-all tag (always last)
+        if (outCfg.m_IsCatchAll)
+        {
             string caLabel = "* CATCH-ALL";
-            caTag.SetData(caLabel, LFPG_SorterView.COL_AMBER, -1, m_SelectedOutput, this);
-            TagsList.Insert(caTag);
+            tag = m_TagPool[tagIdx];
+            tag.SetData(caLabel, LFPG_SorterView.COL_AMBER, -1, m_SelectedOutput, this);
+            TagsList.Insert(tag);
         }
 
         bool isEmpty = (ruleCount == 0 && !outCfg.m_IsCatchAll);
@@ -1383,6 +1434,115 @@ class LFPG_SorterController extends ViewController
         if (PreviewEmptyHint) { PreviewEmptyHint.Show(showEmpty); }
     }
 
+    // =========================================================
+    // v2.6: Preview Items — server-authoritative
+    // =========================================================
+    protected void RequestPreview()
+    {
+        if (!m_IsPaired)
+        {
+            // Show "not linked" empty state immediately
+            PreviewItems.Clear();
+            string noLink = "No container linked";
+            if (PreviewEmpty) { PreviewEmpty.SetText(noLink); PreviewEmpty.Show(true); }
+            if (PreviewEmptyIcon) { PreviewEmptyIcon.Show(true); }
+            if (PreviewEmptyHint) { PreviewEmptyHint.Show(false); }
+            string zeroPrev = "0 items";
+            PreviewCount = zeroPrev;
+            string propPC = "PreviewCount";
+            NotifyPropertyChanged(propPC, false);
+            return;
+        }
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (player)
+        {
+            ScriptRPC rpc = new ScriptRPC();
+            int subId = LFPG_RPC_SubId.SORTER_PREVIEW_REQUEST;
+            rpc.Write(subId);
+            rpc.Write(m_SorterNetLow);
+            rpc.Write(m_SorterNetHigh);
+            rpc.Write(m_SelectedOutput);
+            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        }
+        #endif
+    }
+
+    // Called from View.OnPreviewData (static delegate from PlayerRPC)
+    void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
+    {
+        // Guard: if user switched output tab while RPC was in flight, ignore
+        if (outputIdx != m_SelectedOutput)
+            return;
+
+        PreviewItems.Clear();
+
+        int sentCount = names.Count();
+        int si;
+        string itemName = "";
+        string itemCat = "";
+        int itemSlot = 0;
+        for (si = 0; si < sentCount; si = si + 1)
+        {
+            itemName = names[si];
+            itemCat = cats[si];
+            itemSlot = slots[si];
+            LFPG_SorterPreviewRow row = new LFPG_SorterPreviewRow();
+            row.SetData(itemName, itemCat, itemSlot);
+            PreviewItems.Insert(row);
+        }
+
+        // Update count display
+        bool showEmpty = (sentCount == 0);
+        string countStr = "";
+        if (totalMatched > LFPG_SORTER_PREVIEW_CAP)
+        {
+            string capStr = LFPG_SORTER_PREVIEW_CAP.ToString();
+            countStr = capStr;
+            countStr = countStr + "+ items";
+        }
+        else
+        {
+            countStr = totalMatched.ToString();
+            string suffItems = " items";
+            countStr = countStr + suffItems;
+        }
+        PreviewCount = countStr;
+        string propPC = "PreviewCount";
+        NotifyPropertyChanged(propPC, false);
+
+        // Empty states
+        if (PreviewEmpty)
+        {
+            if (showEmpty)
+            {
+                string emptyMsg = "No matching items";
+                PreviewEmpty.SetText(emptyMsg);
+                PreviewEmpty.Show(true);
+            }
+            else
+            {
+                PreviewEmpty.Show(false);
+            }
+        }
+        if (PreviewEmptyIcon) { PreviewEmptyIcon.Show(showEmpty); }
+        if (PreviewEmptyHint)
+        {
+            if (showEmpty)
+            {
+                string hintMsg = "Add rules or enable catch-all";
+                PreviewEmptyHint.SetText(hintMsg);
+                PreviewEmptyHint.Show(true);
+            }
+            else
+            {
+                PreviewEmptyHint.Show(false);
+            }
+        }
+    }
+
     protected void TintBg(ImageWidget bg, int color)
     {
         if (!bg) return;
@@ -1401,11 +1561,17 @@ class LFPG_SorterController extends ViewController
     // FIX 2: Release tag/preview views on close to break circular refs.
     // Called from View.DoClose. Safe: destructor of TagView already
     // nulls m_OwnerController, so Clear triggers clean teardown.
+    // v2.6: Pool must be cleared AFTER TagsList.Clear() so destructors
+    // fire when refcount drops to 0 (pool held the last strong ref).
     void ClearCollections()
     {
         if (TagsList)
         {
             TagsList.Clear();
+        }
+        if (m_TagPool)
+        {
+            m_TagPool.Clear();
         }
         if (PreviewItems)
         {

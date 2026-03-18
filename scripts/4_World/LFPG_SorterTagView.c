@@ -1,6 +1,9 @@
 // =========================================================
-// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.5)
+// LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.6)
 //
+// v2.6: Pool-safe reuse. m_Scaled guards ScaleWidget so it
+//       only runs once per instance (ScaleWidget multiplies
+//       current values — calling twice corrupts geometry).
 // Bug 10 fix: tag bg alpha 0x12→0x26 for visibility in DayZ
 // R1 fix: destructor breaks TagController→OwnerController
 //         circular reference (refcount GC leak)
@@ -33,6 +36,7 @@ class LFPG_SorterTagView extends ScriptView
     ImageWidget TagBg;
     TextWidget TagLabel;
     protected int m_TagColor;
+    protected bool m_Scaled;
 
     override string GetLayoutFile()
     {
@@ -83,10 +87,14 @@ class LFPG_SorterTagView extends ScriptView
             TagLabel.SetColor(color);
         }
 
-        // v2.5 B3: Scale dynamic tag to match current resolution.
-        // ScaleWidget is a no-op at scale ~1.0 (1080p).
-        Widget tagRoot = GetLayoutRoot();
-        float tagScale = LFPG_UIScaler.ComputeScale();
-        LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
+        // v2.6: Scale only on first use. Pool reuse calls SetData again
+        // but ScaleWidget multiplies current values — double-call corrupts.
+        if (!m_Scaled)
+        {
+            Widget tagRoot = GetLayoutRoot();
+            float tagScale = LFPG_UIScaler.ComputeScale();
+            LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
+            m_Scaled = true;
+        }
     }
 };
