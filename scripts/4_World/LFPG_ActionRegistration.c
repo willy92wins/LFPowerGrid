@@ -74,6 +74,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPlaceSwitchRemote);
         actions.Insert(LFPG_ActionToggleSwitchRemote);
 
+        // --- v3.1: Switch V2 Remote (RF-capable latching lever) ---
+        actions.Insert(LFPG_ActionPlaceSwitchV2Remote);
+        actions.Insert(LFPG_ActionToggleSwitchV2Remote);
+
         // --- v1.1.0: Water Pump upgrade + water actions ---
         actions.Insert(LFPG_ActionUpgradeWaterPump);
         actions.Insert(LFPG_ActionDrinkPump);
@@ -133,7 +137,7 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionToggleBroadcast);
         actions.Insert(LFPG_ActionCycleFrequency);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (57)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (59)");
     }
 };
 

@@ -2749,95 +2749,107 @@ modded class PlayerBase
         if (selectedOutput < 0 || selectedOutput >= 6)
             return;
 
-        // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
-        if (!devEnt)
-            return;
-
-        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
-        if (!sorter)
-            return;
-
-        // Proximity check
-        float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
-        if (dist > LFPG_INTERACT_DIST_M)
-            return;
-
-        // Parse filter config from sorter
-        string filterJSON = sorter.LFPG_GetFilterJSON();
-        LFPG_SortConfig config = new LFPG_SortConfig();
-        config.FromJSON(filterJSON);
-        LFPG_SortOutputConfig outCfg = config.GetOutput(selectedOutput);
-        if (!outCfg)
-            return;
-
-        bool isCatchAll = outCfg.m_IsCatchAll;
-        int ruleCount = outCfg.GetRuleCount();
-        bool hasRules = (ruleCount > 0 || isCatchAll);
-
-        // Resolve linked container
-        EntityAI container = sorter.LFPG_GetLinkedContainer();
-
-        // Build matched items list
+        // From this point, always send a response (even if empty).
+        // Silent return would leave the client waiting with stale data.
         int totalMatched = 0;
+        int sentCount = 0;
         array<string> matchNames = new array<string>;
         array<string> matchCats = new array<string>;
         array<int> matchSlots = new array<int>;
 
-        if (container && hasRules)
+        // Resolve sorter
+        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        LF_Sorter sorter = null;
+        if (devEnt)
         {
-            GameInventory inv = container.GetInventory();
-            if (inv)
+            sorter = LF_Sorter.Cast(devEnt);
+        }
+
+        bool canProceed = false;
+        if (sorter)
+        {
+            float dist = vector.Distance(this.GetPosition(), devEnt.GetPosition());
+            if (dist <= LFPG_INTERACT_DIST_M)
             {
-                CargoBase cargo = inv.GetCargo();
-                if (cargo)
+                canProceed = true;
+            }
+        }
+
+        if (canProceed)
+        {
+            // Parse filter config from sorter
+            string filterJSON = sorter.LFPG_GetFilterJSON();
+            LFPG_SortConfig config = new LFPG_SortConfig();
+            config.FromJSON(filterJSON);
+            LFPG_SortOutputConfig outCfg = config.GetOutput(selectedOutput);
+
+            bool isCatchAll = false;
+            bool hasRules = false;
+            if (outCfg)
+            {
+                isCatchAll = outCfg.m_IsCatchAll;
+                int ruleCount = outCfg.GetRuleCount();
+                hasRules = (ruleCount > 0 || isCatchAll);
+            }
+
+            // Resolve linked container
+            EntityAI container = sorter.LFPG_GetLinkedContainer();
+
+            if (container && hasRules)
+            {
+                GameInventory inv = container.GetInventory();
+                if (inv)
                 {
-                    int cargoCount = cargo.GetItemCount();
-                    int ci = 0;
-                    EntityAI cItem = null;
-                    bool matched = false;
-                    string typeName = "";
-                    string cat = "";
-                    int slotSize = 0;
-
-                    for (ci = 0; ci < cargoCount; ci = ci + 1)
+                    CargoBase cargo = inv.GetCargo();
+                    if (cargo)
                     {
-                        cItem = cargo.GetItem(ci);
-                        if (!cItem)
-                            continue;
+                        int cargoCount = cargo.GetItemCount();
+                        int ci = 0;
+                        EntityAI cItem = null;
+                        bool matched = false;
+                        string typeName = "";
+                        string cat = "";
+                        int slotSize = 0;
 
-                        matched = false;
-                        if (isCatchAll)
+                        for (ci = 0; ci < cargoCount; ci = ci + 1)
                         {
-                            matched = true;
-                        }
-                        else
-                        {
-                            matched = LFPG_SorterLogic.MatchesAnyRule(cItem, outCfg);
-                        }
+                            cItem = cargo.GetItem(ci);
+                            if (!cItem)
+                                continue;
 
-                        if (!matched)
-                            continue;
+                            matched = false;
+                            if (isCatchAll)
+                            {
+                                matched = true;
+                            }
+                            else
+                            {
+                                matched = LFPG_SorterLogic.MatchesAnyRule(cItem, outCfg);
+                            }
 
-                        totalMatched = totalMatched + 1;
+                            if (!matched)
+                                continue;
 
-                        // Only collect up to cap for the RPC payload
-                        if (matchNames.Count() < LFPG_SORTER_PREVIEW_CAP)
-                        {
-                            typeName = cItem.GetType();
-                            cat = LFPG_SorterLogic.ResolveCategory(cItem);
-                            slotSize = LFPG_SorterLogic.GetItemSlotSize(cItem);
-                            matchNames.Insert(typeName);
-                            matchCats.Insert(cat);
-                            matchSlots.Insert(slotSize);
+                            totalMatched = totalMatched + 1;
+
+                            // Only collect up to cap for the RPC payload
+                            if (matchNames.Count() < LFPG_SORTER_PREVIEW_CAP)
+                            {
+                                typeName = cItem.GetType();
+                                cat = LFPG_SorterLogic.ResolveCategory(cItem);
+                                slotSize = LFPG_SorterLogic.GetItemSlotSize(cItem);
+                                matchNames.Insert(typeName);
+                                matchCats.Insert(cat);
+                                matchSlots.Insert(slotSize);
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Build response RPC
-        int sentCount = matchNames.Count();
+        // Always send response (empty if guards failed)
+        sentCount = matchNames.Count();
         ScriptRPC rpc = new ScriptRPC();
         int respSubId = LFPG_RPC_SubId.SORTER_PREVIEW_RESPONSE;
         rpc.Write(respSubId);

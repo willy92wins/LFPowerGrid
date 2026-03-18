@@ -267,6 +267,8 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LF_SwitchRemote_Kit"))
             return true;
+        if (proj.IsKindOf("LFPG_SwitchV2Remote_Kit"))
+            return true;
         if (proj.IsKindOf("LFPG_MotionSensor_Kit"))
             return true;
         if (proj.IsKindOf("LFPG_PressurePad_Kit"))
@@ -321,6 +323,8 @@ modded class Hologram
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return 1;
         if (projection.IsKindOf("LF_SwitchRemote_Kit"))
+            return 1;
+        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
             return 1;
         if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
             return 2;
