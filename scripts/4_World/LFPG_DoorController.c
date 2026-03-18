@@ -34,8 +34,8 @@
 // Enforce Script: no ternaries, no ++/--, no foreach, no +=/-=.
 // =========================================================
 
-static const string LFPG_DC_RVMAT_OFF = "\\LFPowerGrid\\door_controller\\data\\door_controller_red.rvmat";
-static const string LFPG_DC_RVMAT_ON  = "\\LFPowerGrid\\door_controller\\data\\door_controller_green.rvmat";
+static const string LFPG_DC_RVMAT_OFF = "\\LFPowerGrid\\data\\door_controller\\data\\door_controller_red.rvmat";
+static const string LFPG_DC_RVMAT_ON  = "\\LFPowerGrid\\data\\door_controller\\data\\door_controller_green.rvmat";
 
 // Door type constants (Enforce Script has no enums in user scripts)
 static const int LFPG_DOORTYPE_NONE     = 0;

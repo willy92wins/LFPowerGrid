@@ -1470,7 +1470,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_DoorController_Kit";
         descriptionShort = "$STR_LFPG_DoorController_Kit_Desc";
-        model = "\LFPowerGrid\door_controller\door_controller.p3d";
+        model = "\LFPowerGrid\data\door_controller\door_controller.p3d";
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -1488,7 +1488,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_DoorController";
         descriptionShort = "$STR_LFPG_DoorController_Desc";
-        model = "\LFPowerGrid\door_controller\door_controller.p3d";
+        model = "\LFPowerGrid\data\door_controller\door_controller.p3d";
         weight = 500;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -1499,17 +1499,17 @@ class CfgVehicles
         hiddenSelections[] = {"bolt", "light_led", "screen", "camo"};
         hiddenSelectionsTextures[] =
         {
-            "\LFPowerGrid\door_controller\data\door_controller_grey.paa",
-            "\LFPowerGrid\door_controller\data\door_controller_red.paa",
-            "\LFPowerGrid\door_controller\data\door_controller_grey.paa",
-            "\LFPowerGrid\door_controller\data\door_controller_grey.paa"
+            "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa",
+            "\LFPowerGrid\data\door_controller\data\door_controller_red.paa",
+            "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa",
+            "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa"
         };
         hiddenSelectionsMaterials[] =
         {
-            "\LFPowerGrid\door_controller\data\door_controller.rvmat",
-            "\LFPowerGrid\door_controller\data\door_controller_red.rvmat",
-            "\LFPowerGrid\door_controller\data\door_controller.rvmat",
-            "\LFPowerGrid\door_controller\data\door_controller.rvmat"
+            "\LFPowerGrid\data\door_controller\data\door_controller.rvmat",
+            "\LFPowerGrid\data\door_controller\data\door_controller_red.rvmat",
+            "\LFPowerGrid\data\door_controller\data\door_controller.rvmat",
+            "\LFPowerGrid\data\door_controller\data\door_controller.rvmat"
         };
 
         class AnimationSources
