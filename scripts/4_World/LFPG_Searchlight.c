@@ -439,8 +439,10 @@ class LF_Searchlight : Inventory_Base
         if (!m_LightBeamCore)
             return;
 
-        // Total world yaw = base deployment yaw + local aim offset.
-        float totalYaw = m_BaseOriYaw + m_AimYaw;
+        // Total world yaw = base deployment yaw + local aim offset + 180° flip.
+        // The +180 ensures the beam points AWAY from the player at m_AimYaw=0,
+        // since deployment orientation faces toward the player.
+        float totalYaw = m_BaseOriYaw + m_AimYaw + 180.0;
 
         // ---- Rotate entity model (yaw only, pitch=0, roll=0) ----
         vector entOri = Vector(totalYaw, 0, 0);
@@ -566,6 +568,69 @@ class LF_Searchlight : Inventory_Base
         // Rotation is client-side only (ApplyOrientation in OnVariablesSynchronized).
         // Server entity keeps deployment orientation — simplifies persistence + JIP.
         // NOTE: caller (HandleSearchlightAim) calls SetSynchDirty once after SetSplash
+        #endif
+    }
+
+    // ============================================
+    // Client: local prediction (no SyncVars, visual only)
+    // Called from SearchlightController.Tick() for immediate
+    // feedback. OnVariablesSynchronized still corrects/confirms.
+    // ============================================
+    void LFPG_ApplyAimLocal(float yaw, float pitch)
+    {
+        #ifndef SERVER
+        if (!m_LightBeamCore)
+            return;
+
+        float totalYaw = m_BaseOriYaw + yaw + 180.0;
+
+        vector entOri = Vector(totalYaw, 0, 0);
+        SetOrientation(entOri);
+
+        float pitchPhase = 0.5 - (pitch / 180.0);
+        string animName = "light_main";
+        SetAnimationPhase(animName, pitchPhase);
+
+        float totalYawRad = totalYaw * Math.DEG2RAD;
+        float pitchRad = pitch * Math.DEG2RAD;
+        float cosPitch = Math.Cos(pitchRad);
+
+        float dirX = Math.Sin(totalYawRad) * cosPitch;
+        float dirY = Math.Sin(pitchRad);
+        float dirZ = Math.Cos(totalYawRad) * cosPitch;
+
+        vector beamDir = Vector(dirX, dirY, dirZ);
+        beamDir.Normalize();
+        vector beamOri = beamDir.VectorToAngles();
+
+        string mpAxis = "light_main_axis";
+        string mpBeam = "light_main";
+        vector axisP0 = GetMemoryPointPos(mpAxis);
+        vector beamStatic = GetMemoryPointPos(mpBeam);
+
+        float offY = beamStatic[1] - axisP0[1];
+        float offZ = beamStatic[2] - axisP0[2];
+
+        float cosPitchR = Math.Cos(pitchRad);
+        float sinPitchR = Math.Sin(pitchRad);
+        float rotY = offY * cosPitchR - offZ * sinPitchR;
+        float rotZ = offY * sinPitchR + offZ * cosPitchR;
+
+        float localX = beamStatic[0];
+        float localY = axisP0[1] + rotY;
+        float localZ = axisP0[2] + rotZ;
+        vector beamLocal = Vector(localX, localY, localZ);
+
+        vector mpWorld = ModelToWorld(beamLocal);
+
+        m_LightBeamCore.SetPosition(mpWorld);
+        m_LightBeamCore.SetOrientation(beamOri);
+
+        if (m_LightBeamSpill)
+        {
+            m_LightBeamSpill.SetPosition(mpWorld);
+            m_LightBeamSpill.SetOrientation(beamOri);
+        }
         #endif
     }
 

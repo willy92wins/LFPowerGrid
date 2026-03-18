@@ -253,6 +253,14 @@ class LFPG_LogicGateBase : Inventory_Base
     }
 
     // ============================================
+    // Symbol texture (overridden per gate subclass)
+    // ============================================
+    string LFPG_GetSymbolTexturePath()
+    {
+        return "";
+    }
+
+    // ============================================
     // Lifecycle
     // ============================================
     override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
@@ -772,10 +780,18 @@ class LFPG_LogicGateBase : Inventory_Base
     {
         #ifndef SERVER
         // hiddenSelections indices:
-        //   0 = camo (symbol texture, never changed)
+        //   0 = camo (symbol texture — force per-subclass to fix MLOD cache)
         //   1 = light_led_input0
         //   2 = light_led_input1
         //   3 = light_led_output0
+
+        // Force correct symbol texture (MLOD cache bug: all gates share same p3d,
+        // DayZ caches hiddenSelectionsTextures from first entity spawned)
+        string symTex = LFPG_GetSymbolTexturePath();
+        if (symTex != "")
+        {
+            SetObjectTexture(0, symTex);
+        }
 
         // Input 0 LED: green if powered, off otherwise
         if (m_Input0Powered)
@@ -907,6 +923,26 @@ class LFPG_LogicGateBase : Inventory_Base
 // class → script class resolution.  All logic is in the base
 // class, dispatched via GetType().
 // =========================================================
-class LFPG_AND_Gate : LFPG_LogicGateBase {};
-class LFPG_OR_Gate  : LFPG_LogicGateBase {};
-class LFPG_XOR_Gate : LFPG_LogicGateBase {};
+class LFPG_AND_Gate : LFPG_LogicGateBase
+{
+    override string LFPG_GetSymbolTexturePath()
+    {
+        return "\\LFPowerGrid\\data\\logic_gate\\data\\memory_cell_symbol_and.paa";
+    }
+};
+
+class LFPG_OR_Gate : LFPG_LogicGateBase
+{
+    override string LFPG_GetSymbolTexturePath()
+    {
+        return "\\LFPowerGrid\\data\\logic_gate\\data\\memory_cell_symbol_or.paa";
+    }
+};
+
+class LFPG_XOR_Gate : LFPG_LogicGateBase
+{
+    override string LFPG_GetSymbolTexturePath()
+    {
+        return "\\LFPowerGrid\\data\\logic_gate\\data\\memory_cell_symbol_xor.paa";
+    }
+};

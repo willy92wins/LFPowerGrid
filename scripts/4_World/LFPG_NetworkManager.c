@@ -3792,29 +3792,164 @@ class LFPG_NetworkManager
         #ifdef SERVER
         if (!sorter)
         {
-            LFPG_Util.Warn("[Sorter] REQUEST_SORT: null sorter");
+            string w0 = "[Sorter] REQUEST_SORT: null sorter";
+            LFPG_Util.Warn(w0);
             return;
         }
 
         // Must be powered
         if (!sorter.LFPG_IsPowered())
         {
-            LFPG_Util.Debug("[Sorter] REQUEST_SORT: sorter not powered");
+            string d0 = "[Sorter] REQUEST_SORT: sorter not powered";
+            LFPG_Util.Debug(d0);
             return;
         }
 
-        // Resolve container
+        // Resolve source container
         EntityAI container = sorter.LFPG_GetLinkedContainer();
         if (!container)
         {
-            LFPG_Util.Warn("[Sorter] REQUEST_SORT: no linked container");
+            string w1 = "[Sorter] REQUEST_SORT: no linked container";
+            LFPG_Util.Warn(w1);
             return;
         }
 
-        // Bin-pack
-        int moved = LFPG_SorterLogic.BinPackCargo(container);
-        string sortLog = "[Sorter] BinPack complete: repositioned " + moved.ToString() + " items";
+        // S3.1: Source container must be accessible
+        if (!LFPG_SorterLogic.CanTakeFromContainer(container, null))
+        {
+            string w2 = "[Sorter] REQUEST_SORT: container not accessible";
+            LFPG_Util.Warn(w2);
+            return;
+        }
+
+        // Must have filter config
+        LFPG_SortConfig filterConfig = sorter.LFPG_GetFilterConfig();
+        if (!filterConfig)
+        {
+            string w3 = "[Sorter] REQUEST_SORT: no filter config";
+            LFPG_Util.Warn(w3);
+            return;
+        }
+
+        // Must have cargo
+        if (!container.GetInventory())
+        {
+            string w4 = "[Sorter] REQUEST_SORT: no inventory";
+            LFPG_Util.Warn(w4);
+            return;
+        }
+        CargoBase srcCargo = container.GetInventory().GetCargo();
+        if (!srcCargo)
+        {
+            string w5 = "[Sorter] REQUEST_SORT: no cargo";
+            LFPG_Util.Warn(w5);
+            return;
+        }
+
+        int itemCount = srcCargo.GetItemCount();
+        if (itemCount <= 0)
+        {
+            string d1 = "[Sorter] REQUEST_SORT: cargo empty";
+            LFPG_Util.Debug(d1);
+            return;
+        }
+
+        // Build wire mask — which outputs have wires connected
+        int hasWireMask = 0;
+        int portBit = 1;
+        int pi = 0;
+        EntityAI wireCheck = null;
+        for (pi = 0; pi < 6; pi = pi + 1)
+        {
+            wireCheck = LFPG_SorterLogic.ResolveOutputContainer(sorter, pi);
+            if (wireCheck)
+            {
+                hasWireMask = hasWireMask | portBit;
+            }
+            portBit = portBit * 2;
+        }
+
+        if (hasWireMask == 0)
+        {
+            string d2 = "[Sorter] REQUEST_SORT: no wired outputs";
+            LFPG_Util.Debug(d2);
+            // Still do BinPack even without outputs
+            int bpOnly = LFPG_SorterLogic.BinPackCargo(container);
+            string bpLog = "[Sorter] BinPack only (no wires): ";
+            bpLog = bpLog + bpOnly.ToString();
+            LFPG_Util.Info(bpLog);
+            return;
+        }
+
+        // Collect items into cache (index mutation safe)
+        array<EntityAI> sortCache = new array<EntityAI>;
+        int ci = 0;
+        EntityAI sortItem = null;
+        for (ci = 0; ci < itemCount; ci = ci + 1)
+        {
+            sortItem = srcCargo.GetItem(ci);
+            if (sortItem)
+            {
+                sortCache.Insert(sortItem);
+            }
+        }
+
+        // Sort pass: evaluate all items, move matched ones
+        int moved = 0;
+        int evaluated = 0;
+        int maxEval = 200;
+        int outputIdx = 0;
+        EntityAI destContainer = null;
+        bool moveResult = false;
+
+        for (ci = 0; ci < sortCache.Count(); ci = ci + 1)
+        {
+            if (evaluated >= maxEval)
+                break;
+
+            sortItem = sortCache[ci];
+            if (!sortItem)
+                continue;
+
+            evaluated = evaluated + 1;
+
+            // Per-item source release check
+            if (!container.CanReleaseCargo(sortItem))
+                continue;
+
+            // Evaluate filter rules
+            outputIdx = LFPG_SorterLogic.EvaluateItem(sortItem, filterConfig, hasWireMask);
+            if (outputIdx < 0)
+                continue;
+
+            // Resolve destination via wire topology
+            destContainer = LFPG_SorterLogic.ResolveOutputContainer(sorter, outputIdx);
+            if (!destContainer)
+                continue;
+
+            // Skip self
+            if (destContainer == container)
+                continue;
+
+            // Move item
+            moveResult = LFPG_SorterLogic.MoveItemToContainer(sortItem, destContainer);
+            if (moveResult)
+            {
+                moved = moved + 1;
+            }
+        }
+
+        string sortLog = "[Sorter] REQUEST_SORT: evaluated=";
+        sortLog = sortLog + evaluated.ToString();
+        sortLog = sortLog + " moved=";
+        sortLog = sortLog + moved.ToString();
         LFPG_Util.Info(sortLog);
+
+        // Bin-pack remaining items in source container
+        int packed = LFPG_SorterLogic.BinPackCargo(container);
+        string packLog = "[Sorter] BinPack after sort: repositioned=";
+        packLog = packLog + packed.ToString();
+        LFPG_Util.Info(packLog);
         #endif
     }
 

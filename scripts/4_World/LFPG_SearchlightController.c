@@ -236,7 +236,7 @@ class LFPG_SearchlightController
         float worldRad = Math.Atan2(awayX, awayZ);
         float worldDeg = worldRad * Math.RAD2DEG;
         float slBaseYaw = m_TargetSl.LFPG_GetBaseYaw();
-        float localYaw = worldDeg - slBaseYaw;
+        float localYaw = worldDeg - slBaseYaw - 180.0;
 
         // Normalize to [-180, 180]
         while (localYaw > 180.0)
@@ -286,6 +286,9 @@ class LFPG_SearchlightController
                 m_AimDirty = true;
             }
         }
+
+        // ---- Local prediction: immediate visual feedback ----
+        m_TargetSl.LFPG_ApplyAimLocal(m_AimYaw, m_AimPitch);
 
         // ---- RPC throttle ----
         m_RpcAccum = m_RpcAccum + timeslice * 1000.0;

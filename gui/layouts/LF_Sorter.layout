@@ -190,10 +190,10 @@ FrameWidgetClass SorterRoot {
 						}
 
 
-						// Pairing badge (H — replaces PairingBanner)
+						// Pairing badge (H — shows container name when linked)
 						ImageWidgetClass PairingBadgeBg {
 							position 228 12
-							size 56 18
+							size 200 18
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -204,14 +204,14 @@ FrameWidgetClass SorterRoot {
 							}
 						}
 						TextWidgetClass PairingBadgeText {
-							position 228 12
-							size 56 18
+							position 232 12
+							size 196 18
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
 							font "gui/fonts/MetronBook"
-							"text halign" center
+							"text halign" left
 							"text valign" center
 							ignorepointer 1
 							{
@@ -253,11 +253,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnCloseX"
-									{
-									}
-								}
 							}
 						}
 
@@ -294,11 +289,6 @@ FrameWidgetClass SorterRoot {
 									"text valign" center
 									text "SORT NOW"
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "BtnSortHeader"
 									{
 									}
 								}
@@ -366,11 +356,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "TabOut0"
-									{
-									}
-								}
 								// Tab dot (P-III)
 								ImageWidgetClass TabDot0 {
 									position 66 4
@@ -419,11 +404,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "TabOut1"
 									{
 									}
 								}
@@ -478,11 +458,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "TabOut2"
-									{
-									}
-								}
 								// Tab dot (P-III)
 								ImageWidgetClass TabDot2 {
 									position 66 4
@@ -531,11 +506,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "TabOut3"
 									{
 									}
 								}
@@ -590,11 +560,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "TabOut4"
-									{
-									}
-								}
 								// Tab dot (P-III)
 								ImageWidgetClass TabDot4 {
 									position 66 4
@@ -643,11 +608,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "TabOut5"
 									{
 									}
 								}
@@ -705,11 +665,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "TabRules"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass TabPreview {
@@ -744,11 +699,6 @@ FrameWidgetClass SorterRoot {
 									"text valign" center
 									text "PREVIEW"
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "TabPreview"
 									{
 									}
 								}
@@ -964,11 +914,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn0"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass CatBtn1 {
@@ -1002,11 +947,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn1"
 									{
 									}
 								}
@@ -1046,11 +986,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn2"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass CatBtn3 {
@@ -1084,11 +1019,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn3"
 									{
 									}
 								}
@@ -1128,11 +1058,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn4"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass CatBtn5 {
@@ -1166,11 +1091,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn5"
 									{
 									}
 								}
@@ -1210,11 +1130,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn6"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass CatBtn7 {
@@ -1248,11 +1163,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "CatBtn7"
 									{
 									}
 								}
@@ -1361,11 +1271,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnPrefixAdd"
-									{
-									}
-								}
 							}
 						}
 
@@ -1470,11 +1375,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnContainsAdd"
-									{
-									}
-								}
 							}
 						}
 
@@ -1529,11 +1429,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "SlotPre0"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass SlotPre1 {
@@ -1567,11 +1462,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "SlotPre1"
 									{
 									}
 								}
@@ -1611,11 +1501,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "SlotPre2"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass SlotPre3 {
@@ -1649,11 +1534,6 @@ FrameWidgetClass SorterRoot {
 									"text halign" center
 									"text valign" center
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "SlotPre3"
 									{
 									}
 								}
@@ -1814,11 +1694,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnSlotAdd"
-									{
-									}
-								}
 							}
 						}
 
@@ -1869,11 +1744,6 @@ FrameWidgetClass SorterRoot {
 									"text valign" center
 									text "CATCH-ALL"
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "BtnCatchAll"
 									{
 									}
 								}
@@ -2378,11 +2248,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnClearOut"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass BtnResetAll {
@@ -2417,11 +2282,6 @@ FrameWidgetClass SorterRoot {
 									"text valign" center
 									text "Reset All"
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "BtnResetAll"
 									{
 									}
 								}
@@ -2495,11 +2355,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnSort"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass BtnSave {
@@ -2537,11 +2392,6 @@ FrameWidgetClass SorterRoot {
 									{
 									}
 								}
-								ScriptParamsClass {
-									Relay_Command "BtnSave"
-									{
-									}
-								}
 							}
 						}
 						ButtonWidgetClass BtnClose {
@@ -2576,11 +2426,6 @@ FrameWidgetClass SorterRoot {
 									"text valign" center
 									text "Close"
 									ignorepointer 1
-									{
-									}
-								}
-								ScriptParamsClass {
-									Relay_Command "BtnClose"
 									{
 									}
 								}

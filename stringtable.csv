@@ -166,3 +166,7 @@
 "STR_LFPG_ACTION_TOGGLE_FRIDGE","Toggle Fridge","Toggle Fridge","Abrir/Cerrar Nevera","Kühlschrank öffnen/schließen","Открыть/Закрыть холодильник"
 "STR_LFPG_ACTION_OPEN_FRIDGE","Open Fridge","Open Fridge","Abrir Nevera","Kühlschrank öffnen","Открыть холодильник"
 "STR_LFPG_ACTION_CLOSE_FRIDGE","Close Fridge","Close Fridge","Cerrar Nevera","Kühlschrank schließen","Закрыть холодильник"
+"STR_LFPG_SWITCHREMOTE_KIT","Push Button Remote Kit","Push Button Remote Kit","Kit Botón Remoto","Push Button Remote Kit","Push Button Remote Kit"
+"STR_LFPG_SWITCHREMOTE_KIT_DESC","A momentary push button with RF antenna. Place to deploy.","A momentary push button with RF antenna. Place to deploy.","Un botón momentáneo con antena RF. Colócalo para desplegar.","A momentary push button with RF antenna. Place to deploy.","A momentary push button with RF antenna. Place to deploy."
+"STR_LFPG_SWITCHREMOTE","Push Button Remote","Push Button Remote","Botón Remoto","Push Button Remote","Push Button Remote"
+"STR_LFPG_SWITCHREMOTE_DESC","A momentary push button with RF capability. Pulses power for 2 seconds, toggleable remotely via Intercom.","A momentary push button with RF capability. Pulses power for 2 seconds, toggleable remotely via Intercom.","Un botón momentáneo con capacidad RF. Pulsa energía durante 2 segundos, conmutable remotamente vía Intercomunicador.","A momentary push button with RF capability. Pulses power for 2 seconds, toggleable remotely via Intercom.","A momentary push button with RF capability. Pulses power for 2 seconds, toggleable remotely via Intercom."

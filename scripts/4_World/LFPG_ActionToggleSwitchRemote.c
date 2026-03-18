@@ -5,7 +5,7 @@
 // No item required (CCINone) — player walks up and interacts.
 //
 // Conditions:
-//   - Target must be LF_SwitchRemote
+//   - Target must be LFPG_SwitchRemote
 //   - Within interact distance
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
@@ -39,7 +39,7 @@ class LFPG_ActionToggleSwitchRemote : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_SwitchRemote sw = LF_SwitchRemote.Cast(targetObj);
+        LFPG_SwitchRemote sw = LFPG_SwitchRemote.Cast(targetObj);
         if (!sw)
             return false;
 
@@ -74,7 +74,7 @@ class LFPG_ActionToggleSwitchRemote : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_SwitchRemote sw = LF_SwitchRemote.Cast(targetObj);
+        LFPG_SwitchRemote sw = LFPG_SwitchRemote.Cast(targetObj);
         if (!sw)
             return;
 

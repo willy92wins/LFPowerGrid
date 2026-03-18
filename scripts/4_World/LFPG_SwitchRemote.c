@@ -1,9 +1,9 @@
 // =========================================================
 // LF_PowerGrid - Switch V1 Remote / RF Toggle (v1.0.0)
 //
-// LF_SwitchRemote_Kit: Holdable, deployable (same-model pattern).
-// LF_SwitchRemote:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
-//                      Zero self-consumption. Latching toggle (stays ON/OFF).
+// LFPG_SwitchRemote_Kit: Holdable, deployable (same-model pattern).
+// LFPG_SwitchRemote:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
+//                      Zero self-consumption. Momentary pulse (ON for 2s, then OFF).
 //                      RF-CAPABLE: toggleable remotely via LF_Intercom broadcast.
 //
 // Model: switch_v1_remote.p3d (toggle switch with LED + antenna)
@@ -29,10 +29,10 @@
 // Port names: input_1/output_1 (LFPG logical names).
 // GetPortWorldPos maps to p3d memory points port_input_0/port_output_0.
 //
-// Persistence: DeviceIdLow, DeviceIdHigh, m_SwitchOn + wires JSON.
-//   m_SwitchOn IS persisted (latching state survives restart).
+// Persistence: DeviceIdLow, DeviceIdHigh + wires JSON.
+//   m_SwitchOn NOT persisted (momentary, defaults false on restart).
 //   m_PoweredNet NOT persisted (derived by graph propagation).
-//   Save wipe required (new persistence format).
+//   Save wipe required (persistence format changed).
 // =========================================================
 
 static const string LFPG_SWREMOTE_RVMAT_OFF   = "\\LFPowerGrid\\data\\switch_v1_remote\\data\\led_off.rvmat";
@@ -42,7 +42,7 @@ static const string LFPG_SWREMOTE_RVMAT_RED    = "\\LFPowerGrid\\data\\switch_v1
 // ---------------------------------------------------------
 // KIT - same-model deploy pattern
 // ---------------------------------------------------------
-class LF_SwitchRemote_Kit : Inventory_Base
+class LFPG_SwitchRemote_Kit : Inventory_Base
 {
     override bool IsDeployable()
     {
@@ -95,7 +95,7 @@ class LF_SwitchRemote_Kit : Inventory_Base
         tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        string spawnType = "LF_SwitchRemote";
+        string spawnType = "LFPG_SwitchRemote";
         EntityAI sw = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
         if (sw)
         {
@@ -103,7 +103,7 @@ class LF_SwitchRemote_Kit : Inventory_Base
             sw.SetOrientation(finalOri);
             sw.Update();
 
-            string deployMsg = "[SwitchRemote_Kit] Deployed LF_SwitchRemote at ";
+            string deployMsg = "[SwitchRemote_Kit] Deployed LFPG_SwitchRemote at ";
             deployMsg = deployMsg + finalPos.ToString();
             deployMsg = deployMsg + " ori=";
             deployMsg = deployMsg + finalOri.ToString();
@@ -113,7 +113,7 @@ class LF_SwitchRemote_Kit : Inventory_Base
         }
         else
         {
-            LFPG_Util.Error("[SwitchRemote_Kit] Failed to create LF_SwitchRemote! Kit preserved.");
+            LFPG_Util.Error("[SwitchRemote_Kit] Failed to create LFPG_SwitchRemote! Kit preserved.");
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
@@ -128,7 +128,7 @@ class LF_SwitchRemote_Kit : Inventory_Base
 // ---------------------------------------------------------
 // DEVICE: PASSTHROUGH (1 IN + 1 OUT), latching toggle, RF-capable
 // ---------------------------------------------------------
-class LF_SwitchRemote : Inventory_Base
+class LFPG_SwitchRemote : Inventory_Base
 {
     // ---- Device identity ----
     protected int m_DeviceIdLow = 0;
@@ -153,7 +153,7 @@ class LF_SwitchRemote : Inventory_Base
     // ============================================
     // Constructor - SyncVars en constructor, NO EEInit
     // ============================================
-    void LF_SwitchRemote()
+    void LFPG_SwitchRemote()
     {
         m_Wires = new array<ref LFPG_WireData>;
         RegisterNetSyncVariableInt("m_DeviceIdLow");
@@ -252,6 +252,7 @@ class LF_SwitchRemote : Inventory_Base
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
         #ifdef SERVER
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         bool dirty = false;
         if (m_PoweredNet)
         {
@@ -275,6 +276,7 @@ class LF_SwitchRemote : Inventory_Base
     override void EEDelete(EntityAI parent)
     {
         m_LFPG_Deleting = true;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
 
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -291,6 +293,7 @@ class LF_SwitchRemote : Inventory_Base
         bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
         if (wiresCut)
         {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
             bool locDirty = false;
             if (m_PoweredNet)
             {
@@ -373,26 +376,32 @@ class LF_SwitchRemote : Inventory_Base
         #ifdef SERVER
         if (m_SwitchOn)
         {
-            m_SwitchOn = false;
+            // Already pulsing — ignore (timer will reset it)
+            return;
         }
-        else
-        {
-            m_SwitchOn = true;
-        }
+        m_SwitchOn = true;
         SetSynchDirty();
 
-        string togMsg = "[LF_SwitchRemote] Toggle ";
-        if (m_SwitchOn)
-        {
-            togMsg = togMsg + "ON";
-        }
-        else
-        {
-            togMsg = togMsg + "OFF";
-        }
-        togMsg = togMsg + " id=";
+        string togMsg = "[LFPG_SwitchRemote] Pulse ON id=";
         togMsg = togMsg + m_DeviceId;
         LFPG_Util.Info(togMsg);
+
+        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_BUTTON_PULSE_MS, false);
+        #endif
+    }
+
+    void LFPG_PulseOff()
+    {
+        #ifdef SERVER
+        if (!m_SwitchOn)
+            return;
+        m_SwitchOn = false;
+        SetSynchDirty();
+
+        string offMsg = "[LFPG_SwitchRemote] Pulse OFF id=";
+        offMsg = offMsg + m_DeviceId;
+        LFPG_Util.Info(offMsg);
 
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         #endif
@@ -413,7 +422,7 @@ class LF_SwitchRemote : Inventory_Base
         #ifdef SERVER
         LFPG_ToggleSwitch();
 
-        string rfMsg = "[LF_SwitchRemote] RF RemoteToggle id=";
+        string rfMsg = "[LFPG_SwitchRemote] RF RemoteToggle id=";
         rfMsg = rfMsg + m_DeviceId;
         LFPG_Util.Info(rfMsg);
         #endif
@@ -549,9 +558,16 @@ class LF_SwitchRemote : Inventory_Base
             return;
 
         m_PoweredNet = powered;
+
+        if (!powered && m_SwitchOn)
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            m_SwitchOn = false;
+        }
+
         SetSynchDirty();
 
-        string pwrMsg = "[LF_SwitchRemote] SetPowered(";
+        string pwrMsg = "[LFPG_SwitchRemote] SetPowered(";
         pwrMsg = pwrMsg + powered.ToString();
         pwrMsg = pwrMsg + ") id=";
         pwrMsg = pwrMsg + m_DeviceId;
@@ -621,7 +637,7 @@ class LF_SwitchRemote : Inventory_Base
 
         if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
         {
-            string warnMsg = "[LF_SwitchRemote] AddWire rejected: not an output port: ";
+            string warnMsg = "[LFPG_SwitchRemote] AddWire rejected: not an output port: ";
             warnMsg = warnMsg + wd.m_SourcePort;
             LFPG_Util.Warn(warnMsg);
             return false;
@@ -699,7 +715,6 @@ class LF_SwitchRemote : Inventory_Base
 
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        ctx.Write(m_SwitchOn);
 
         string json = "";
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
@@ -713,19 +728,13 @@ class LF_SwitchRemote : Inventory_Base
 
         if (!ctx.Read(m_DeviceIdLow))
         {
-            LFPG_Util.Error("[LF_SwitchRemote] OnStoreLoad: failed to read m_DeviceIdLow");
+            LFPG_Util.Error("[LFPG_SwitchRemote] OnStoreLoad: failed to read m_DeviceIdLow");
             return false;
         }
 
         if (!ctx.Read(m_DeviceIdHigh))
         {
-            LFPG_Util.Error("[LF_SwitchRemote] OnStoreLoad: failed to read m_DeviceIdHigh");
-            return false;
-        }
-
-        if (!ctx.Read(m_SwitchOn))
-        {
-            LFPG_Util.Error("[LF_SwitchRemote] OnStoreLoad: failed to read m_SwitchOn");
+            LFPG_Util.Error("[LFPG_SwitchRemote] OnStoreLoad: failed to read m_DeviceIdHigh");
             return false;
         }
 
@@ -734,10 +743,10 @@ class LF_SwitchRemote : Inventory_Base
         string json = "";
         if (!ctx.Read(json))
         {
-            LFPG_Util.Error("[LF_SwitchRemote] OnStoreLoad: failed to read wires json for " + m_DeviceId);
+            LFPG_Util.Error("[LFPG_SwitchRemote] OnStoreLoad: failed to read wires json for " + m_DeviceId);
             return false;
         }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_SwitchRemote");
+        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_SwitchRemote");
 
         return true;
     }

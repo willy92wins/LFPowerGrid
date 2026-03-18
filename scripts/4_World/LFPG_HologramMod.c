@@ -305,7 +305,7 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LFPG_SwitchV2_Kit"))
             return true;
-        if (proj.IsKindOf("LF_SwitchRemote_Kit"))
+        if (proj.IsKindOf("LFPG_SwitchRemote_Kit"))
             return true;
         if (proj.IsKindOf("LFPG_SwitchV2Remote_Kit"))
             return true;
@@ -364,7 +364,7 @@ modded class Hologram
             return 1;
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return 1;
-        if (projection.IsKindOf("LF_SwitchRemote_Kit"))
+        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
             return 1;
         if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
             return 1;
@@ -430,6 +430,8 @@ modded class Hologram
         // +Y outward from wall so symbol faces the player.
         if (projection.IsKindOf("LFPG_LogicGate_Kit"))
             return 90.0;
+        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
+            return 90.0;
         return 0.0;
     }
 
@@ -453,6 +455,8 @@ modded class Hologram
         // 0.05m offset keeps back face off the wall surface.
         if (projection.IsKindOf("LFPG_LogicGate_Kit"))
             return 0.05;
+        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
+            return 0.04;
         return LFPG_HOLO_SURFACE_OFFSET;
     }
 
@@ -549,6 +553,15 @@ modded class Hologram
 
             LFPG_ApplySmoothed(noHitGroundPos, noHitOri, timeslice, projection);
             return;
+        }
+
+        // --- BBP normal fix: single-sided walls may return inverted normals ---
+        // If the normal points in the same direction as the camera (dot > 0),
+        // the raycast hit the backface. Flip the normal so it faces the player.
+        float dotNormCam = hitNormal[0] * camDir[0] + hitNormal[1] * camDir[1] + hitNormal[2] * camDir[2];
+        if (dotNormCam > 0.0)
+        {
+            hitNormal = Vector(-hitNormal[0], -hitNormal[1], -hitNormal[2]);
         }
 
         // --- Surface classification with hysteresis ---

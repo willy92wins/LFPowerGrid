@@ -144,8 +144,8 @@ class LFPG_SorterView extends ScriptView
     static const int COL_BLUE_BTN     = 0xFF274B7C;
     static const int COL_GREEN_BTN    = 0xFF087C5B;
     static const int COL_RED_BTN      = 0xFFC72323;
-    static const int COL_PAIRING_OK   = 0x2334D399;
-    static const int COL_PAIRING_ERR  = 0x23F87171;
+    static const int COL_PAIRING_OK   = 0x5034D399;
+    static const int COL_PAIRING_ERR  = 0x50F87171;
     // v3: New constants
     static const int COL_BG_SECTION_CARD = 0x08FFFFFF;
     static const int COL_BG_RULES_PANEL  = 0xFF1E2B41;
@@ -973,7 +973,10 @@ class LFPG_SorterView extends ScriptView
             Tint(PairingBadgeBg, COL_PAIRING_OK);
             if (PairingBadgeText)
             {
-                string pairedLabel = "PAIRED";
+                // v3.1: Show container name instead of generic "PAIRED"
+                string badgePrefix = ">> ";
+                string pairedLabel = badgePrefix;
+                pairedLabel = pairedLabel + containerDisplayName;
                 PairingBadgeText.SetText(pairedLabel);
                 PairingBadgeText.SetColor(COL_GREEN);
             }
@@ -1508,12 +1511,9 @@ class LFPG_SorterView extends ScriptView
         if (!GetGame())
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
-        if (!player)
-            return;
-
-        string sndClick = "pickUpItem_SoundSet";
-        SEffectManager.PlaySoundOnObject(sndClick, player);
+        // v3.1: "pickUpItem_SoundSet" is likely invalid in vanilla DayZ
+        // (same convention as attachmentAdded_SoundSet which is confirmed invalid).
+        // TODO: Define custom CfgSoundSets or find validated vanilla set.
         #endif
     }
 
@@ -1523,12 +1523,9 @@ class LFPG_SorterView extends ScriptView
         if (!GetGame())
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
-        if (!player)
-            return;
-
-        string sndAction = "attachmentAdded_SoundSet";
-        SEffectManager.PlaySoundOnObject(sndAction, player);
+        // v3.1: "attachmentAdded_SoundSet" is invalid in vanilla DayZ.
+        // TODO: Define custom CfgSoundSets in config.cpp with a real .ogg
+        // for reliable UI feedback. For now, no-op to prevent log spam.
         #endif
     }
 

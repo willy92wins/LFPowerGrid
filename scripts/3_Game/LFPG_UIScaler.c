@@ -128,6 +128,9 @@ class LFPG_UIScaler
 
     // ─────────────────────────────────────────────
     // ComputeScale: derive factor from current resolution
+    // v3.1: Additional clamp ensures scaled panel fits within
+    // the actual screen (guards against DPI mismatch between
+    // GetScreenSize reporting and UIScaler design assumptions).
     // ─────────────────────────────────────────────
     static float ComputeScale()
     {
@@ -145,6 +148,28 @@ class LFPG_UIScaler
             scale = scaleH;
         }
 
+        // v3.1: Panel-fit clamp — ensure 720×590 × scale fits in
+        // the reported screen with 5% vertical margin.
+        // At 4K with DPI scaling, GetScreenSize may report logical
+        // pixels (e.g. 1920×1080) while the UIScaler tries to scale
+        // up to 2.0×. This causes vertical overflow.
+        float panelW = 720.0 * scale;
+        float panelH = 590.0 * scale;
+        float maxH = scrH * 0.92;
+        float maxW = scrW * 0.92;
+        if (panelH > maxH)
+        {
+            scale = maxH / 590.0;
+        }
+        if (panelW > maxW)
+        {
+            float altScale = maxW / 720.0;
+            if (altScale < scale)
+            {
+                scale = altScale;
+            }
+        }
+
         // Clamp
         if (scale < SCALE_MIN)
         {
@@ -154,6 +179,14 @@ class LFPG_UIScaler
         {
             scale = SCALE_MAX;
         }
+
+        string scaleMsg = "[UIScaler] screen=";
+        scaleMsg = scaleMsg + scrW.ToString();
+        scaleMsg = scaleMsg + "x";
+        scaleMsg = scaleMsg + scrH.ToString();
+        scaleMsg = scaleMsg + " scale=";
+        scaleMsg = scaleMsg + scale.ToString();
+        Print(scaleMsg);
 
         return scale;
     }

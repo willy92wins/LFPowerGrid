@@ -361,6 +361,7 @@ class LFPG_SorterController extends ViewController
     // then walk its immediate children to find the ImageWidget
     // (Bg) or TextWidget (Text). Handles cases where
     // FindAnyWidget fails for widgets nested inside ButtonWidget.
+    // v3.1: Added diagnostic logging + fallback via direct name lookup.
     protected ImageWidget FindBtnChildBg(Widget layoutRoot, string btnName)
     {
         if (!layoutRoot)
@@ -368,7 +369,12 @@ class LFPG_SorterController extends ViewController
 
         Widget btnW = layoutRoot.FindAnyWidget(btnName);
         if (!btnW)
+        {
+            string warnBtn = "[EnsureBindings] ButtonWidget NOT FOUND: ";
+            warnBtn = warnBtn + btnName;
+            LFPG_Util.Warn(warnBtn);
             return null;
+        }
 
         Widget child = btnW.GetChildren();
         ImageWidget imgChild = null;
@@ -381,6 +387,22 @@ class LFPG_SorterController extends ViewController
             }
             child = child.GetSibling();
         }
+
+        // v3.1 Fallback: try direct FindAnyWidget for "<btnName>Bg"
+        string bgName = btnName;
+        bgName = bgName + "Bg";
+        ImageWidget fallback = ImageWidget.Cast(layoutRoot.FindAnyWidget(bgName));
+        if (fallback)
+        {
+            string fbMsg = "[EnsureBindings] child-walk null, fallback OK: ";
+            fbMsg = fbMsg + bgName;
+            LFPG_Util.Info(fbMsg);
+            return fallback;
+        }
+
+        string warnNull = "[EnsureBindings] Bg NULL for: ";
+        warnNull = warnNull + btnName;
+        LFPG_Util.Warn(warnNull);
         return null;
     }
 
@@ -404,6 +426,22 @@ class LFPG_SorterController extends ViewController
             }
             child = child.GetSibling();
         }
+
+        // v3.1 Fallback: try direct FindAnyWidget for "<btnName>Text"
+        string txtName = btnName;
+        txtName = txtName + "Text";
+        TextWidget fallbackTxt = TextWidget.Cast(layoutRoot.FindAnyWidget(txtName));
+        if (fallbackTxt)
+        {
+            string fbMsg2 = "[EnsureBindings] child-walk null, fallback OK: ";
+            fbMsg2 = fbMsg2 + txtName;
+            LFPG_Util.Info(fbMsg2);
+            return fallbackTxt;
+        }
+
+        string warnNullTxt = "[EnsureBindings] Text NULL for: ";
+        warnNullTxt = warnNullTxt + btnName;
+        LFPG_Util.Warn(warnNullTxt);
         return null;
     }
 

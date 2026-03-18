@@ -510,7 +510,17 @@ class LFPG_SwitchV2Remote : Inventory_Base
 
     bool LFPG_IsSource()
     {
-        return false;
+        return true;
+    }
+
+    bool LFPG_GetSourceOn()
+    {
+        return m_PoweredNet;
+    }
+
+    bool LFPG_IsGateOpen()
+    {
+        return m_SwitchOn;
     }
 
     // Gate-capable: graph checks m_SwitchOn to decide pass-through

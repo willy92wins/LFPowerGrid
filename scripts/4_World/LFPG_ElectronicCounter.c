@@ -43,6 +43,7 @@
 // ---- LED rvmat paths (reuse shared materials) ----
 static const string LFPG_COUNTER_RVMAT_OFF = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
 static const string LFPG_COUNTER_RVMAT_RED = "\\LFPowerGrid\\data\\electronic_counter\\electronic_counter_red.rvmat";
+static const string LFPG_COUNTER_RVMAT_BASE = "\\LFPowerGrid\\data\\electronic_counter\\electronic_counter.rvmat";
 
 // Duration in milliseconds that the output pulse stays active after 9→wrap.
 static const int LFPG_COUNTER_PULSE_MS = 2000;
@@ -434,10 +435,14 @@ class LFPG_ElectronicCounter : Inventory_Base
         if (m_PoweredNet)
         {
             SetObjectMaterial(2, LFPG_COUNTER_RVMAT_RED);
+            // Segments (index 1 = camo2): emissive red when powered
+            SetObjectMaterial(1, LFPG_COUNTER_RVMAT_RED);
         }
         else
         {
             SetObjectMaterial(2, LFPG_COUNTER_RVMAT_OFF);
+            // Segments (index 1 = camo2): restore base (non-emissive) when off
+            SetObjectMaterial(1, LFPG_COUNTER_RVMAT_BASE);
         }
 
         // 7-segment display animation

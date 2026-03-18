@@ -678,10 +678,14 @@ class LFPG_MemoryCell : Inventory_Base
     {
         #ifndef SERVER
         // hiddenSelections indices:
-        //   0 = camo (symbol texture — set by config, never changed)
+        //   0 = camo (symbol texture — force per-subclass to fix MLOD cache)
         //   1 = light_led_input0 (reused as single central LED)
         //   2 = light_led_input1 (unused)
         //   3 = light_led_output0 (unused)
+
+        // Force correct symbol texture (MLOD cache bug: shared p3d with gates)
+        string symTex = "\\LFPowerGrid\\data\\logic_gate\\data\\memory_cell_symbol_mem.paa";
+        SetObjectTexture(0, symTex);
 
         int desiredState = 0; // off
         if (m_PoweredNet)
