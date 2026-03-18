@@ -2,7 +2,7 @@
 // LF_PowerGrid - Searchlight device (v2.0.0)
 //
 // LF_Searchlight_Kit:  Holdable, deployable (same-model pattern = Splitter/Camera).
-// LF_Searchlight:      CONSUMER, 1 IN (input_1), 25 u/s, no OUT, no wire store.
+// LF_Searchlight:      CONSUMER, 1 IN (input_0), 25 u/s, no OUT, no wire store.
 //
 // Memory points (LOD Memory in p3d):
 //   port_input_0      — cable anchor (base of tripod)
@@ -114,7 +114,7 @@ class LF_Searchlight_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
-// DEVICE — CONSUMER, 1 IN (input_1), 25 u/s
+// DEVICE — CONSUMER, 1 IN (input_0), 25 u/s
 // ---------------------------------------------------------
 class LF_Searchlight : Inventory_Base
 {
@@ -366,7 +366,8 @@ class LF_Searchlight : Inventory_Base
         // cycling which causes 1-frame light disappearance on each aim update.
         ScriptedLightBase tmpLight;
 
-        vector mpStart = ModelToWorld(GetMemoryPointPos("light_main"));
+        string mpName = "light_main";
+        vector mpStart = ModelToWorld(GetMemoryPointPos(mpName));
 
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, mpStart);
         m_LightBeamCore = LFPG_SearchlightBeamCore.Cast(tmpLight);
@@ -376,7 +377,7 @@ class LF_Searchlight : Inventory_Base
 
         // Halo: point light at lens center — attached to entity (follows position,
         // no orientation changes needed for omnidirectional light).
-        vector mpStartLocal = GetMemoryPointPos("light_main");
+        vector mpStartLocal = GetMemoryPointPos(mpName);
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, "0 0 0");
         m_LightHalo = LFPG_SearchlightHalo.Cast(tmpLight);
         if (m_LightHalo)
@@ -477,8 +478,10 @@ class LF_Searchlight : Inventory_Base
         // At pitch=+90: beam origin moves up (+Y from axis)
         // At pitch=-90: beam origin moves down (-Y from axis)
 
-        vector axisP0 = GetMemoryPointPos("light_main_axis");
-        vector beamStatic = GetMemoryPointPos("light_main");
+        string mpAxis = "light_main_axis";
+        string mpBeam = "light_main";
+        vector axisP0 = GetMemoryPointPos(mpAxis);
+        vector beamStatic = GetMemoryPointPos(mpBeam);
 
         // Offset from axis center in local model space (Y and Z)
         float offY = beamStatic[1] - axisP0[1];
@@ -759,7 +762,7 @@ class LF_Searchlight : Inventory_Base
     string LFPG_GetPortName(int idx)
     {
         if (idx == 0)
-            return "input_1";
+            return "input_0";
         return "";
     }
 
@@ -779,15 +782,15 @@ class LF_Searchlight : Inventory_Base
 
     bool LFPG_HasPort(string portName, int dir)
     {
-        if (dir == LFPG_PortDir.IN && portName == "input_1")
+        string inName = "input_0";
+        if (dir == LFPG_PortDir.IN && portName == inName)
             return true;
         return false;
     }
 
     vector LFPG_GetPortWorldPos(string portName)
     {
-        // p3d memory point is "port_input_0" regardless of portName convention.
-        // Old model used "port_input_1"; new model uses "port_input_0".
+        // Port "input_0" → memory point "port_input_0"
         string memPoint = "port_input_0";
 
         if (MemoryPointExists(memPoint))
