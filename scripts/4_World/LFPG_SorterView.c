@@ -49,6 +49,9 @@ class LFPG_SorterView extends ScriptView
     protected ref array<int> m_CacheColors;
     // Currently hovered bg (null if none)
     protected ImageWidget m_HoveredBg;
+    // N3: Tracks whether controls are enabled (unpaired = false).
+    // Set from Controller via static setter; read by OnMouseEnter.
+    protected bool m_ControlsEnabled;
 
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
@@ -454,6 +457,38 @@ class LFPG_SorterView extends ScriptView
         {
             UnpairedHint.SetColor(COL_TEXT_DIM);
         }
+
+        // FIX L1: EditBox text color — engine default is white puro,
+        // inconsistent with COL_TEXT scheme. Resolved via FindAnyWidget
+        // (one-shot per Open, acceptable here).
+        Widget root = GetLayoutRoot();
+        if (root)
+        {
+            string wnEP = "EditPrefix";
+            EditBoxWidget ebPfx = EditBoxWidget.Cast(root.FindAnyWidget(wnEP));
+            if (ebPfx)
+            {
+                ebPfx.SetColor(COL_TEXT);
+            }
+            string wnEC = "EditContains";
+            EditBoxWidget ebCon = EditBoxWidget.Cast(root.FindAnyWidget(wnEC));
+            if (ebCon)
+            {
+                ebCon.SetColor(COL_TEXT);
+            }
+            string wnSM = "EditSlotMin";
+            EditBoxWidget ebMin = EditBoxWidget.Cast(root.FindAnyWidget(wnSM));
+            if (ebMin)
+            {
+                ebMin.SetColor(COL_TEXT);
+            }
+            string wnSX = "EditSlotMax";
+            EditBoxWidget ebMax = EditBoxWidget.Cast(root.FindAnyWidget(wnSX));
+            if (ebMax)
+            {
+                ebMax.SetColor(COL_TEXT);
+            }
+        }
     }
 
     protected void Tint(ImageWidget img, int color)
@@ -518,6 +553,15 @@ class LFPG_SorterView extends ScriptView
         s_Instance.CacheColorLocal(w, color);
     }
 
+    // N3: Static setter — called from Controller.SetControlsEnabled
+    // so OnMouseEnter can skip hover on disabled buttons.
+    static void SetControlsFlag(bool enabled)
+    {
+        if (!s_Instance)
+            return;
+        s_Instance.m_ControlsEnabled = enabled;
+    }
+
     // =========================================================
     // Drag: MouseDown on header starts drag (Bug #4)
     // =========================================================
@@ -532,6 +576,16 @@ class LFPG_SorterView extends ScriptView
             if (IsHeaderWidget(w))
             {
                 m_Dragging = true;
+                // FIX 4: Restore hover color before drag moves panel
+                if (m_HoveredBg)
+                {
+                    int restoreCol = FindCachedColor(m_HoveredBg);
+                    if (restoreCol >= 0)
+                    {
+                        m_HoveredBg.SetColor(restoreCol);
+                    }
+                    m_HoveredBg = null;
+                }
                 float px = 0.0;
                 float py = 0.0;
                 if (SorterPanel)
@@ -952,10 +1006,9 @@ class LFPG_SorterView extends ScriptView
             s_Instance.m_IsOpen = false;
             s_Instance.m_Dragging = false;
             s_Instance.m_FadingIn = false;
-            // delete triggers ~LFPG_SorterView (input release) then
-            // ~ScriptView (Unlink + removes from All)
-            delete s_Instance;
         }
+        // FIX 3: null decrements refcount → GC runs destructor safely.
+        // Explicit delete risked segfault if callback still held ref.
         s_Instance = null;
     }
 
@@ -986,6 +1039,7 @@ class LFPG_SorterView extends ScriptView
         m_IsOpen = true;
         m_Dragging = false;
         m_HoveredBg = null;
+        m_ControlsEnabled = true;
         root.Show(true);
 
         // v2.5 B3: Apply resolution scaling BEFORE centering.
@@ -1056,6 +1110,14 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_FadingIn = false;
         m_HoveredBg = null;
+
+        // FIX 2: Release tag/preview views now (breaks circular refs).
+        // Without this, views survive until next Open or full Cleanup.
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
+        if (ctrl)
+        {
+            ctrl.ClearCollections();
+        }
 
         Widget root = GetLayoutRoot();
         if (root)
@@ -1138,6 +1200,9 @@ class LFPG_SorterView extends ScriptView
     {
         if (!m_IsOpen)
             return false;
+        // N3: No hover flash on disabled/dimmed buttons
+        if (!m_ControlsEnabled)
+            return false;
 
         ImageWidget bg = FindButtonBg(w);
         int baseColor = 0;
@@ -1169,6 +1234,10 @@ class LFPG_SorterView extends ScriptView
 
     override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
     {
+        // FIX 5: Guard symmetric with OnMouseEnter
+        if (!m_IsOpen)
+            return false;
+
         int baseColor = 0;
         if (m_HoveredBg)
         {

@@ -550,6 +550,8 @@ class LFPG_SorterController extends ViewController
             TintBg(BtnCatchAllBg, dimBg);
             SetTxtCol(BtnCatchAllText, dimTxt);
         }
+        // N3: Sync flag to View so OnMouseEnter skips hover on dimmed buttons
+        LFPG_SorterView.SetControlsFlag(enabled);
     }
 
     // =========================================================
@@ -660,6 +662,9 @@ class LFPG_SorterController extends ViewController
 
     protected void SelectOutput(int idx)
     {
+        // N2: No output tab switching when unpaired
+        if (!m_IsPaired)
+            return;
         if (idx < 0 || idx >= LFPG_SORT_MAX_OUTPUTS)
             return;
         m_SelectedOutput = idx;
@@ -851,30 +856,8 @@ class LFPG_SorterController extends ViewController
 
     void BtnSort()
     {
-        if (!m_IsPaired) return;
-        string sortMsg = "[SorterCtrl] REQUEST_SORT";
-        LFPG_Util.Info(sortMsg);
-        // Sort feedback — immediate client-side status
-        string stSorting = "SORTING...";
-        SetStatus(stSorting);
-        // S6: Single feedback timer (last-write-wins over save)
-        m_FeedbackTimer = 3.0;
-        LFPG_SorterView.PlayUIAction();
-        #ifndef SERVER
-        // R4: GetGame guard
-        if (!GetGame())
-            return;
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
-        if (player)
-        {
-            ScriptRPC rpc = new ScriptRPC();
-            int subId = LFPG_RPC_SubId.SORTER_REQUEST_SORT;
-            rpc.Write(subId);
-            rpc.Write(m_SorterNetLow);
-            rpc.Write(m_SorterNetHigh);
-            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        }
-        #endif
+        string label = "[SorterCtrl] REQUEST_SORT";
+        DoSort(label);
     }
 
     void BtnClose() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
@@ -882,17 +865,25 @@ class LFPG_SorterController extends ViewController
     // Bug #3: X close button in header
     void BtnCloseX() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
 
-    // v2.8: Header quick-sort button (same logic as footer BtnSort)
+    // v2.8: Header quick-sort button
     void BtnSortHeader()
     {
+        string label = "[SorterCtrl] REQUEST_SORT (header)";
+        DoSort(label);
+    }
+
+    // N1: Shared sort logic (was duplicated in BtnSort + BtnSortHeader)
+    protected void DoSort(string logLabel)
+    {
         if (!m_IsPaired) return;
-        string sortMsg = "[SorterCtrl] REQUEST_SORT (header)";
-        LFPG_Util.Info(sortMsg);
+        LFPG_Util.Info(logLabel);
         string stSorting = "SORTING...";
         SetStatus(stSorting);
+        // S6: Single feedback timer (last-write-wins over save)
         m_FeedbackTimer = 3.0;
         LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
+        // R4: GetGame guard
         if (!GetGame())
             return;
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
@@ -1275,5 +1266,20 @@ class LFPG_SorterController extends ViewController
     {
         if (!txt) return;
         txt.SetColor(color);
+    }
+
+    // FIX 2: Release tag/preview views on close to break circular refs.
+    // Called from View.DoClose. Safe: destructor of TagView already
+    // nulls m_OwnerController, so Clear triggers clean teardown.
+    void ClearCollections()
+    {
+        if (TagsList)
+        {
+            TagsList.Clear();
+        }
+        if (PreviewItems)
+        {
+            PreviewItems.Clear();
+        }
     }
 };
