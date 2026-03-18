@@ -147,7 +147,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LF_SwitchRemote_Kit", "LF_SwitchRemote"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LF_SwitchRemote_Kit", "LF_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables"};
@@ -675,6 +675,84 @@ class CfgVehicles
         hiddenSelections[] = {"camo", "camoswitch", "light_led"};
         hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v1_remote\data\switch_v1_remote_co.paa", "\LFPowerGrid\data\switch_v1_remote\data\switch_v1_remote_co.paa", ""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v1_remote\data\switch_v1_remote.rvmat", "\LFPowerGrid\data\switch_v1_remote\data\switch_v1_remote.rvmat", "\LFPowerGrid\data\switch_v1_remote\data\led_off.rvmat"};
+
+        class AnimationSources
+        {
+            class switch
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 100;
+                    healthLevels[] =
+                    {
+                        {1.0, {}},
+                        {0.7, {}},
+                        {0.5, {}},
+                        {0.3, {}},
+                        {0.0, {}}
+                    };
+                };
+                componentNames[] = {"Component01"};
+                fatalInjuryCoef = -1;
+            };
+        };
+    };
+
+    // =========================================================
+    // v3.1: SWITCH V2 REMOTE (PASSTHROUGH, latching toggle lever, RF-capable)
+    // =========================================================
+
+    // ---- SwitchV2Remote Kit (holdable, same-model deploy, RF-capable) ----
+    class LFPG_SwitchV2Remote_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SWITCHV2REMOTE_KIT";
+        descriptionShort = "$STR_LFPG_SWITCHV2REMOTE_KIT_DESC";
+        model = "\LFPowerGrid\data\switch_v2_remote\switch_v2_remote.p3d";
+        weight = 500;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"camo"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v2_remote\data\switch_v2_remote_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v2_remote\data\switch_v2_remote.rvmat"};
+    };
+
+    // ---- SwitchV2Remote (placed device, PASSTHROUGH 1 IN + 1 OUT, RF-capable) ----
+    // Ports: input_1, output_1 (memory points: port_input_0, port_output_0)
+    // Toggle: latching ON/OFF (persisted across restart).
+    // LED: green (passing power), red (blocking), off (disconnected)
+    // RF: toggleable remotely via LF_Intercom broadcast
+    class LFPG_SwitchV2Remote : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SWITCHV2REMOTE";
+        descriptionShort = "$STR_LFPG_SWITCHV2REMOTE_DESC";
+        model = "\LFPowerGrid\data\switch_v2_remote\switch_v2_remote.p3d";
+        weight = 800;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        hiddenSelections[] = {"camo", "light_led"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v2_remote\data\switch_v2_remote_co.paa", ""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v2_remote\data\switch_v2_remote.rvmat", "\LFPowerGrid\data\switch_v2\data\led_off.rvmat"};
 
         class AnimationSources
         {
