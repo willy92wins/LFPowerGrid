@@ -68,7 +68,7 @@ class CfgSoundShaders
     // v3.0: Intercom RF beep (one-shot, short electronic tone)
     class LFPG_Intercom_RFBeep_Shader
     {
-        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\rf_beep", 1 }};
+        samples[] = {{ "\LFPowerGrid\data\rf_broadcaster\sounds\rf_beep", 1 }};
         volume = 0.6;
         range = 15;
         rangeCurve[] = {{ 0, 1 }, { 8, 0.4 }, { 15, 0 }};
@@ -76,7 +76,7 @@ class CfgSoundShaders
     // v3.0: Intercom knob click (one-shot, mechanical)
     class LFPG_Intercom_KnobClick_Shader
     {
-        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\knob_click", 1 }};
+        samples[] = {{ "\LFPowerGrid\data\rf_broadcaster\sounds\knob_click", 1 }};
         volume = 0.4;
         range = 5;
         rangeCurve[] = {{ 0, 1 }, { 3, 0.3 }, { 5, 0 }};
@@ -84,7 +84,7 @@ class CfgSoundShaders
     // v3.0: Intercom static burst (one-shot, radio noise)
     class LFPG_Intercom_Static_Shader
     {
-        samples[] = {{ "\LFPowerGrid\rf_broadcaster\sounds\static_burst", 1 }};
+        samples[] = {{ "\LFPowerGrid\data\rf_broadcaster\sounds\static_burst", 1 }};
         volume = 0.5;
         range = 10;
         rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
@@ -1547,7 +1547,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_INTERCOM_KIT";
         descriptionShort = "$STR_LFPG_INTERCOM_KIT_DESC";
-        model = "\LFPowerGrid\rf_broadcaster\rf_broadcaster.p3d";
+        model = "\LFPowerGrid\data\rf_broadcaster\rf_broadcaster.p3d";
         weight = 2000;
         itemSize[] = {3, 3};
         rotationFlags = 17;
@@ -1559,18 +1559,18 @@ class CfgVehicles
         hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
         hiddenSelectionsTextures[] =
         {
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_co.paa",
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_glass.paa",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_co.paa",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_glass.paa",
             "",
             "",
             ""
         };
         hiddenSelectionsMaterials[] =
         {
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\led_off.rvmat",
             ""
         };
     };
@@ -1585,7 +1585,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_INTERCOM";
         descriptionShort = "$STR_LFPG_INTERCOM_DESC";
-        model = "\LFPowerGrid\rf_broadcaster\rf_broadcaster.p3d";
+        model = "\LFPowerGrid\data\rf_broadcaster\rf_broadcaster.p3d";
         weight = 3000;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -1596,18 +1596,18 @@ class CfgVehicles
         hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
         hiddenSelectionsTextures[] =
         {
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_co.paa",
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster_glass.paa",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_co.paa",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_glass.paa",
             "",
             "",
             ""
         };
         hiddenSelectionsMaterials[] =
         {
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\rf_broadcaster.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
-            "\LFPowerGrid\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\led_off.rvmat",
+            "\LFPowerGrid\data\rf_broadcaster\data\led_off.rvmat",
             ""
         };
 

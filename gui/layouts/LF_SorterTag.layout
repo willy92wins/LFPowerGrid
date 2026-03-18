@@ -1,7 +1,12 @@
 // =========================================================
 // LF_PowerGrid — Sorter Tag Chip prefab (Dabs MVC)
 // Used as item in ObservableCollection<ref LFPG_SorterTagView>
-// Renders inside WrapSpacerWidget "TagsList"
+// Renders inside WrapSpacerWidget "TagsList" (295px wide)
+//
+// FIX L2: All children now use pixel positioning (hexactpos/size 1).
+// Eliminates fragile pixel/proportional mix that could cause
+// text-button overlap at extreme resolutions. UIScaler handles
+// resolution adaptation uniformly post-creation.
 // =========================================================
 FrameWidgetClass TagRoot {
 	size 1 28
@@ -25,11 +30,11 @@ FrameWidgetClass TagRoot {
 		TextWidgetClass TagLabel {
 			scriptclass "ViewBinding"
 			position 8 0
-			size 0.72 1
+			size 250 28
 			hexactpos 1
-			vexactpos 0
-			hexactsize 0
-			vexactsize 0
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
 			font "gui/fonts/Metron"
 			"text valign" center
 			ignorepointer 1
@@ -37,9 +42,9 @@ FrameWidgetClass TagRoot {
 			}
 		}
 		ButtonWidgetClass BtnRemove {
-			position 0.78 2
+			position 265 4
 			size 18 20
-			hexactpos 0
+			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
