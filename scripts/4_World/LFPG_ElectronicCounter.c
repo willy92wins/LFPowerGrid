@@ -42,7 +42,7 @@
 
 // ---- LED rvmat paths (reuse shared materials) ----
 static const string LFPG_COUNTER_RVMAT_OFF = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
-static const string LFPG_COUNTER_RVMAT_RED = "\\LFPowerGrid\\electronic_counter\\data\\electronic_counter_red.rvmat";
+static const string LFPG_COUNTER_RVMAT_RED = "\\LFPowerGrid\\data\\electronic_counter\\electronic_counter_red.rvmat";
 
 // Duration in milliseconds that the output pulse stays active after 9→wrap.
 static const int LFPG_COUNTER_PULSE_MS = 2000;

@@ -1216,7 +1216,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_ElectronicCounter_Kit";
         descriptionShort = "$STR_LFPG_ElectronicCounter_Kit_Desc";
-        model = "\LFPowerGrid\electronic_counter\electronic_counter.p3d";
+        model = "\LFPowerGrid\data\electronic_counter\electronic_counter.p3d";
         weight = 600;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -1226,8 +1226,8 @@ class CfgVehicles
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
         hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\electronic_counter\data\electronic_counter_grey.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\electronic_counter\data\electronic_counter.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\electronic_counter\electronic_counter_grey.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\electronic_counter\electronic_counter.rvmat"};
     };
 
     // ---- ElectronicCounter (placed device, PASSTHROUGH 2 IN + 1 OUT) ----
@@ -1236,7 +1236,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_ElectronicCounter";
         descriptionShort = "$STR_LFPG_ElectronicCounter_Desc";
-        model = "\LFPowerGrid\electronic_counter\electronic_counter.p3d";
+        model = "\LFPowerGrid\data\electronic_counter\electronic_counter.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -1245,8 +1245,8 @@ class CfgVehicles
         isDeployable = 0;
 
         hiddenSelections[] = {"camo", "camo2", "light_led"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\electronic_counter\data\electronic_counter_grey.paa", "\LFPowerGrid\electronic_counter\data\electronic_counter_black.paa", ""};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\electronic_counter\data\electronic_counter.rvmat", "\LFPowerGrid\electronic_counter\data\electronic_counter.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\electronic_counter\electronic_counter_grey.paa", "\LFPowerGrid\data\electronic_counter\electronic_counter_black.paa", ""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\electronic_counter\electronic_counter.rvmat", "\LFPowerGrid\data\electronic_counter\electronic_counter.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
 
         class AnimationSources
         {

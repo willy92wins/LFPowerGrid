@@ -20,7 +20,7 @@ class Stage1
 };
 class Stage2
 {
-	texture = "\LFPowerGrid\electronic_counter\data\electronic_counter_grey.paa";
+	texture = "\LFPowerGrid\data\electronic_counter\electronic_counter_grey.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
