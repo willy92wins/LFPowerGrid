@@ -91,6 +91,12 @@ modded class Hologram
             {
                 return furnaceKit.GetDeployedClassname();
             }
+
+            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+            if (fridgeKit)
+            {
+                return fridgeKit.GetDeployedClassname();
+            }
         }
 
         return super.ProjectionBasedOnParent();
@@ -116,6 +122,12 @@ modded class Hologram
             if (furnaceKit)
             {
                 return furnaceKit.GetDeployedClassname();
+            }
+
+            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+            if (fridgeKit)
+            {
+                return fridgeKit.GetDeployedClassname();
             }
         }
 
@@ -143,6 +155,12 @@ modded class Hologram
 
             LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
             if (furnaceKit)
+            {
+                return entity_for_placing;
+            }
+
+            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+            if (fridgeKit)
             {
                 return entity_for_placing;
             }
@@ -197,6 +215,19 @@ modded class Hologram
                 }
                 return;
             }
+
+            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+            if (fridgeKit)
+            {
+                vector fridgeOffset = fridgeKit.GetDeployPositionOffset();
+                vector fridgeFinal = position + fridgeOffset;
+
+                if (m_Projection)
+                {
+                    m_Projection.SetPosition(fridgeFinal);
+                }
+                return;
+            }
         }
 
         super.SetProjectionPosition(position);
@@ -232,6 +263,15 @@ modded class Hologram
                 vector furnaceOriOff = furnaceKit.GetDeployOrientationOffset();
                 vector furnaceResult = furnaceBase + furnaceOriOff;
                 return furnaceResult;
+            }
+
+            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+            if (fridgeKit)
+            {
+                vector fridgeBase = super.GetDefaultOrientation();
+                vector fridgeOriOff = fridgeKit.GetDeployOrientationOffset();
+                vector fridgeResult = fridgeBase + fridgeOriOff;
+                return fridgeResult;
             }
         }
 
@@ -294,6 +334,8 @@ modded class Hologram
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_Furnace_Kit"))
             return true;
+        if (m_Parent && m_Parent.IsKindOf("LF_Fridge_Kit"))
+            return true;
 
         return false;
     }
@@ -354,6 +396,8 @@ modded class Hologram
         if (m_Parent.IsKindOf("LF_WaterPump_Kit"))
             return true;
         if (m_Parent.IsKindOf("LF_Furnace_Kit"))
+            return true;
+        if (m_Parent.IsKindOf("LF_Fridge_Kit"))
             return true;
         return false;
     }
@@ -736,6 +780,14 @@ modded class Hologram
             vector furnaceOff = furnaceKit.GetDeployPositionOffset();
             vector furnaceOut = pos + furnaceOff;
             return furnaceOut;
+        }
+
+        LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
+        if (fridgeKit)
+        {
+            vector fridgeOff = fridgeKit.GetDeployPositionOffset();
+            vector fridgeOut = pos + fridgeOff;
+            return fridgeOut;
         }
 
         return pos;

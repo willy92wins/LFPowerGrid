@@ -1,0 +1,11 @@
+ambient[]       = {0.15, 0.02, 0.02, 1};
+diffuse[]       = {0.65, 0.05, 0.05, 1};
+forcedDiffuse[] = {0.65, 0.05, 0.05, 1};
+
+emmisive[]      = {60, 8, 8, 1};    // subtle deep-red glow
+
+specular[]      = {0.45, 0.05, 0.05, 1};
+specularPower   = 20;               // slightly sharper highlight
+
+PixelShaderID   = "Normal";
+VertexShaderID  = "Basic";

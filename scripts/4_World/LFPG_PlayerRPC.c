@@ -1455,7 +1455,7 @@ modded class PlayerBase
         // Splash raycast — beam direction in WORLD space.
         // aimYaw is LOCAL to searchlight, must add BASE yaw for world direction.
         // NOT GetOrientation()[0] which changes with SetOrientation.
-        vector beamStart = sl.ModelToWorld(sl.GetMemoryPointPos("beamStart"));
+        vector beamStart = sl.ModelToWorld(sl.GetMemoryPointPos("light_main"));
         float worldYaw = sl.LFPG_GetBaseYaw() + aimYaw;
         float yawRad = worldYaw * Math.DEG2RAD;
         float pitchRad = aimPitch * Math.DEG2RAD;

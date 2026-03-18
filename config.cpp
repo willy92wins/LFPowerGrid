@@ -147,7 +147,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LF_SwitchRemote_Kit", "LF_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LF_SwitchRemote_Kit", "LF_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables"};
@@ -1005,9 +1005,19 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = { "lens_glow" };
+        hiddenSelections[] = { "light" };
         hiddenSelectionsTextures[] = { "" };
         hiddenSelectionsMaterials[] = { "\LFPowerGrid\data\searchlight\lf_searchlight_lens_off.rvmat" };
+
+        class AnimationSources
+        {
+            class light_main
+            {
+                source = "user";
+                initPhase = 0.5;
+                animPeriod = 1;
+            };
+        };
     };
 	
     // =========================================================
@@ -1824,5 +1834,56 @@ class CfgVehicles
         model = "\dz\gear\consumables\Stone.p3d";
         weight = 0;
         itemSize[] = {0, 0};
+    };
+
+    // =========================================================
+    // v4.0: FRIDGE (CONSUMER, powered cooling container)
+    //   input_1 = power input (20 u/s)
+    //   Cargo: 10x50 = 500 slots, food/drink only
+    //   Door animation, LED indicator, cooling when powered + closed
+    //   Temperature target: 5 C
+    // =========================================================
+
+    // ---- Fridge Kit (holdable box, hologram shows fridge) ----
+    class LF_Fridge_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_FridgeKit";
+        descriptionShort = "$STR_LFPG_FridgeKit_Desc";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        weight = 8000;
+        itemSize[] = {4, 4};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {"zbytek"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {""};
+    };
+
+    // ---- Fridge (placed device, CONSUMER 1 IN, 20 u/s) ----
+    class LF_Fridge : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_Fridge";
+        descriptionShort = "$STR_LFPG_Fridge_Desc";
+        model = "\LFPowerGrid\data\fridge\fridge.p3d";
+        weight = 15000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        // Cargo: 10 wide x 50 tall = 500 slots
+        itemsCargoSize[] = {10, 50};
+
+        // hiddenSelections[0] = "light_led" -> LED material swap
+        hiddenSelections[] = {"light_led"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\fridge\led_off.rvmat"};
     };
 };

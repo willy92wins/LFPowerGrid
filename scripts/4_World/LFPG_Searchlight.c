@@ -1,23 +1,24 @@
 // =========================================================
-// LF_PowerGrid - Searchlight device (v1.5.0)
+// LF_PowerGrid - Searchlight device (v2.0.0)
 //
 // LF_Searchlight_Kit:  Holdable, deployable (same-model pattern = Splitter/Camera).
 // LF_Searchlight:      CONSUMER, 1 IN (input_1), 25 u/s, no OUT, no wire store.
 //
 // Memory points (LOD Memory in p3d):
-//   port_input_1  — cable anchor (base of tripod)
-//   beamStart     — lens center (light origin)
-//   beamEnd       — 1m forward (beam direction)
+//   port_input_0      — cable anchor (base of tripod)
+//   port_input_0_dir  — cable direction
+//   light_main        — lens center (light/beam origin)
+//   light_main_dir    — beam direction (1m forward)
+//   light_main_axis   — pitch rotation axis (2 points, X-aligned)
 //
 // Named selections (LOD Visual 0 in p3d):
-//   lens_glow     — hiddenSelections[0]: rvmat swap on/off
-//   beamEnd       — for AttachOnMemoryPoint (View LOD named selection)
+//   light       — hiddenSelections[0]: rvmat swap on/off (lens glow)
+//   light_main  — animated bone (pitch ±90°)
+//   camo        — body texture
 //
-// Phase 1: static CONSUMER — lights on when powered, no rotation.
-// Phase 2 (next sprint): rotation via SyncVars + spectator COT + splash.
-//
-// SyncVars reserved for Phase 2 are registered here but unused.
-// Persistence includes yaw/pitch for Phase 2 restore.
+// Rotation model:
+//   YAW:   entity SetOrientation (whole model rotates)
+//   PITCH: SetAnimationPhase("light_main", phase) — head tilts
 //
 // Enforce Script: no ternaries, no ++/--, no foreach, no +=/-=.
 // =========================================================
@@ -165,9 +166,9 @@ class LF_Searchlight : Inventory_Base
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
 
-        // v1.5.1: yaw full 360, pitch +-45
+        // v2.0: yaw full 360, pitch +-90
         RegisterNetSyncVariableFloat("m_AimYaw", -180.0, 180.0, 9);
-        RegisterNetSyncVariableFloat("m_AimPitch", -45.0, 45.0, 7);
+        RegisterNetSyncVariableFloat("m_AimPitch", -90.0, 90.0, 8);
 
         // Phase 2: splash SyncVars
         RegisterNetSyncVariableBool("m_SplashHit");
@@ -328,7 +329,7 @@ class LF_Searchlight : Inventory_Base
             UpdateSplashFromSync();
         }
 
-        // Rvmat swap: lens_glow = hiddenSelections[0]
+        // Rvmat swap: light = hiddenSelections[0]
         if (m_PoweredNet)
         {
             SetObjectMaterial(0, LFPG_SL_RVMAT_ON);
@@ -365,7 +366,7 @@ class LF_Searchlight : Inventory_Base
         // cycling which causes 1-frame light disappearance on each aim update.
         ScriptedLightBase tmpLight;
 
-        vector mpStart = ModelToWorld(GetMemoryPointPos("beamStart"));
+        vector mpStart = ModelToWorld(GetMemoryPointPos("light_main"));
 
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightBeamCore, mpStart);
         m_LightBeamCore = LFPG_SearchlightBeamCore.Cast(tmpLight);
@@ -375,7 +376,7 @@ class LF_Searchlight : Inventory_Base
 
         // Halo: point light at lens center — attached to entity (follows position,
         // no orientation changes needed for omnidirectional light).
-        vector mpStartLocal = GetMemoryPointPos("beamStart");
+        vector mpStartLocal = GetMemoryPointPos("light_main");
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, "0 0 0");
         m_LightHalo = LFPG_SearchlightHalo.Cast(tmpLight);
         if (m_LightHalo)
@@ -427,6 +428,9 @@ class LF_Searchlight : Inventory_Base
 
     // ============================================
     // Client: apply light orientation from SyncVars
+    // v2.0: YAW = entity SetOrientation (whole model)
+    //        PITCH = SetAnimationPhase("light_main") (head bone)
+    //        Beam origin computed from axis rotation math
     // ============================================
     protected void ApplyOrientation()
     {
@@ -435,14 +439,18 @@ class LF_Searchlight : Inventory_Base
             return;
 
         // Total world yaw = base deployment yaw + local aim offset.
-        // m_BaseOriYaw is frozen at EEInit, never changes.
         float totalYaw = m_BaseOriYaw + m_AimYaw;
 
-        // ---- Rotate the entity model (yaw only, pitch=0, roll=0) ----
-        // The tripod + head rotate together. Pitch is light-only
-        // (a real searchlight tilts its head, not the whole tripod).
+        // ---- Rotate entity model (yaw only, pitch=0, roll=0) ----
         vector entOri = Vector(totalYaw, 0, 0);
         SetOrientation(entOri);
+
+        // ---- Pitch: animate the head bone ----
+        // phase = 0.5 - (pitch / 180) maps [-90,+90] to [1.0, 0.0]
+        // angle0=+pi/2 (phase 0 = looking up), angle1=-pi/2 (phase 1 = looking down)
+        float pitchPhase = 0.5 - (m_AimPitch / 180.0);
+        string animName = "light_main";
+        SetAnimationPhase(animName, pitchPhase);
 
         // ---- Compute beam direction in world space ----
         float totalYawRad = totalYaw * Math.DEG2RAD;
@@ -457,8 +465,39 @@ class LF_Searchlight : Inventory_Base
         beamDir.Normalize();
         vector beamOri = beamDir.VectorToAngles();
 
-        // ---- Position lights at lens center (uses rotated entity transform) ----
-        vector mpWorld = ModelToWorld(GetMemoryPointPos("beamStart"));
+        // ---- Compute animated beam origin ----
+        // GetMemoryPointPos returns STATIC position (ignores animation).
+        // The axis center does not move, but the beam origin orbits
+        // around it when pitched. Compute the offset rotation manually.
+        //
+        // light_main_axis: pitch rotation axis center (Y~1.356)
+        // light_main: beam origin (offset ~0.16m in local +Z)
+        //
+        // At pitch=0:   beam origin is forward (+Z from axis)
+        // At pitch=+90: beam origin moves up (+Y from axis)
+        // At pitch=-90: beam origin moves down (-Y from axis)
+
+        vector axisP0 = GetMemoryPointPos("light_main_axis");
+        vector beamStatic = GetMemoryPointPos("light_main");
+
+        // Offset from axis center in local model space (Y and Z)
+        float offY = beamStatic[1] - axisP0[1];
+        float offZ = beamStatic[2] - axisP0[2];
+
+        // Rotate offset by pitch around X axis
+        float cosPitchR = Math.Cos(pitchRad);
+        float sinPitchR = Math.Sin(pitchRad);
+        float rotY = offY * cosPitchR - offZ * sinPitchR;
+        float rotZ = offY * sinPitchR + offZ * cosPitchR;
+
+        // Reconstruct local position
+        float localX = beamStatic[0];
+        float localY = axisP0[1] + rotY;
+        float localZ = axisP0[2] + rotZ;
+        vector beamLocal = Vector(localX, localY, localZ);
+
+        // Transform to world (accounts for entity yaw via SetOrientation)
+        vector mpWorld = ModelToWorld(beamLocal);
 
         m_LightBeamCore.SetPosition(mpWorld);
         m_LightBeamCore.SetOrientation(beamOri);
@@ -747,34 +786,16 @@ class LF_Searchlight : Inventory_Base
 
     vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint = "port_" + portName;
+        // p3d memory point is "port_input_0" regardless of portName convention.
+        // Old model used "port_input_1"; new model uses "port_input_0".
+        string memPoint = "port_input_0";
+
         if (MemoryPointExists(memPoint))
         {
             return ModelToWorld(GetMemoryPointPos(memPoint));
         }
 
-        // Compact fallback: "port_input1" vs "port_input_1"
-        int len = portName.Length();
-        if (len >= 3)
-        {
-            string lastChar   = portName.Substring(len - 1, 1);
-            string beforeLast = portName.Substring(len - 2, 1);
-            if (beforeLast == "_")
-            {
-                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
-                if (MemoryPointExists(compact))
-                {
-                    return ModelToWorld(GetMemoryPointPos(compact));
-                }
-            }
-        }
-
-        if (MemoryPointExists(portName))
-        {
-            return ModelToWorld(GetMemoryPointPos(portName));
-        }
-
-        LFPG_Util.Warn("[LF_Searchlight] Missing memory point for port: " + portName);
+        LFPG_Util.Warn("[LF_Searchlight] Missing memory point: " + memPoint);
         vector p = GetPosition();
         p[1] = p[1] + 0.3;
         return p;

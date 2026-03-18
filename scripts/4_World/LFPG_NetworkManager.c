@@ -146,6 +146,12 @@ class LFPG_NetworkManager
     // Replaces per-device CallLater (N timers → 1 timer)
     protected ref array<LF_Furnace> m_RegisteredFurnaces;
 
+    // v4.0: Fridge centralized cooling timer registry
+    protected ref array<LF_Fridge> m_RegisteredFridges;
+
+    // v4.0: DoorController centralized poll timer registry
+    protected ref array<LF_DoorController> m_RegisteredDoorControllers;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -235,6 +241,8 @@ class LFPG_NetworkManager
         m_RegisteredBatteries = new array<EntityAI>;
         m_RegisteredIntercoms = new array<LF_Intercom>;
         m_RegisteredFurnaces = new array<LF_Furnace>;
+        m_RegisteredFridges = new array<LF_Fridge>;
+        m_RegisteredDoorControllers = new array<LF_DoorController>;
 
         // v3.1 (GC reduction): Initialize reusable tick arrays
         m_ReusablePlayers = new array<Man>;
@@ -317,6 +325,12 @@ class LFPG_NetworkManager
 
         // v3.1: Centralized furnace burn timer (5s poll — per-furnace timing at 30s)
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickFurnaces, LFPG_FURNACE_POLL_MS, bTrue);
+
+        // v4.0: Centralized fridge cooling timer (10s)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickFridges, LFPG_FRIDGE_TICK_MS, bTrue);
+
+        // v4.0: Centralized door controller poll timer (2s)
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickDoorControllers, LFPG_DC_TICK_MS, bTrue);
         #endif
     }
 
@@ -3973,6 +3987,104 @@ class LFPG_NetworkManager
                 continue;
 
             furnace.LFPG_BurnTick();
+        }
+        #endif
+    }
+
+    // ===========================
+    // v4.0: Fridge Centralized Cooling Timer
+    // ===========================
+
+    void RegisterFridge(LF_Fridge fridge)
+    {
+        if (!fridge)
+            return;
+        if (m_RegisteredFridges.Find(fridge) < 0)
+        {
+            m_RegisteredFridges.Insert(fridge);
+        }
+    }
+
+    void UnregisterFridge(LF_Fridge fridge)
+    {
+        if (!fridge)
+            return;
+        int idx = m_RegisteredFridges.Find(fridge);
+        if (idx >= 0)
+        {
+            m_RegisteredFridges.Remove(idx);
+        }
+    }
+
+    protected void LFPG_TickFridges()
+    {
+        #ifdef SERVER
+        int totalFridges = m_RegisteredFridges.Count();
+        if (totalFridges == 0)
+            return;
+
+        int i;
+        LF_Fridge fridge;
+
+        for (i = 0; i < totalFridges; i = i + 1)
+        {
+            if (i >= m_RegisteredFridges.Count())
+                break;
+
+            fridge = m_RegisteredFridges[i];
+            if (!fridge)
+                continue;
+
+            fridge.LFPG_OnCoolTick();
+        }
+        #endif
+    }
+
+    // ===========================
+    // v4.0: DoorController Centralized Poll Timer
+    // ===========================
+
+    void RegisterDoorController(LF_DoorController dc)
+    {
+        if (!dc)
+            return;
+        if (m_RegisteredDoorControllers.Find(dc) < 0)
+        {
+            m_RegisteredDoorControllers.Insert(dc);
+        }
+    }
+
+    void UnregisterDoorController(LF_DoorController dc)
+    {
+        if (!dc)
+            return;
+        int idx = m_RegisteredDoorControllers.Find(dc);
+        if (idx >= 0)
+        {
+            m_RegisteredDoorControllers.Remove(idx);
+        }
+    }
+
+    protected void LFPG_TickDoorControllers()
+    {
+        #ifdef SERVER
+        int totalDCs = m_RegisteredDoorControllers.Count();
+        if (totalDCs == 0)
+            return;
+
+        int i;
+        LF_DoorController dc;
+
+        for (i = 0; i < totalDCs; i = i + 1)
+        {
+            if (i >= m_RegisteredDoorControllers.Count())
+                break;
+
+            dc = m_RegisteredDoorControllers[i];
+            if (!dc)
+                continue;
+
+            dc.LFPG_OnDoorPoll();
         }
         #endif
     }

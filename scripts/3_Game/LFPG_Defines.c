@@ -648,8 +648,8 @@ static const int   LFPG_FURNACE_POLL_MS               = 5000;    // v3.1: centra
 
 // ---- v1.5.1: Searchlight (CONSUMER, grab system) ----
 static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s
-static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -45.0;   // degrees (scroll down)
-static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 45.0;    // degrees (scroll up)
+static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -90.0;   // degrees (scroll down)
+static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 90.0;    // degrees (scroll up)
 static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 0.5;     // degrees per scroll tick (slow)
 static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 150.0;   // ms between aim RPCs
 static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 2.5;     // auto-exit distance
@@ -696,3 +696,7 @@ static const int   LFPG_INTERCOM_RF_COOLDOWN_MS        = 2000;    // ms between 
 static const int   LFPG_INTERCOM_INSTALL_TIME_MS       = 5000;    // ms for mic install action
 static const int   LFPG_INTERCOM_FREQ_COUNT            = 7;       // vanilla frequency count
 static const int   LFPG_INTERCOM_TOGGLE_TICK_MS        = 1000;    // 1s between toggle input evaluation ticks
+
+// v4.0: Fridge + DoorController centralized tick intervals
+static const int   LFPG_FRIDGE_TICK_MS                 = 10000;   // 10s between fridge cooling ticks
+static const int   LFPG_DC_TICK_MS                     = 2000;    // 2s between door controller poll ticks

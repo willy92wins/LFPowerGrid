@@ -47,10 +47,8 @@ static const float LFPG_DC_PAIR_RADIUS     = 1.0;
 // DistanceSq threshold = radius^2
 static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
 
-// Poll interval (seconds) — v2.1: reduced from 5s to 2s.
-// Now only handles pairing discovery + validation (door alive/range).
-// Power reactions are immediate via LFPG_ApplyDoorState in LFPG_SetPowered.
-static const float LFPG_DC_POLL_INTERVAL   = 2.0;
+// v4.0: Poll interval moved to LFPG_Defines.c (LFPG_DC_TICK_MS = 2000ms)
+// Centralized in NetworkManager — no per-device Timer.
 
 // Max door index to scan for vanilla buildings
 static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
@@ -161,9 +159,6 @@ class LF_DoorController : Inventory_Base
     protected int    m_DoorType     = 0;   // LFPG_DOORTYPE_*
     protected int    m_DoorIndex    = -1;  // Only for BUILDING type
 
-    // ---- Poll timer (server only) ----
-    protected ref Timer m_PollTimer;
-
     // ============================================
     // Constructor — registro de SyncVars
     // MUST be constructor, NOT EEInit.
@@ -223,12 +218,8 @@ class LF_DoorController : Inventory_Base
         // CONSUMER: no BroadcastOwnerWires (no OUT port, no wire store)
 
         #ifdef SERVER
-        // Start door poll timer (server only).
-        // Timer ref auto-cleans if device is deleted without explicit stop.
-        m_PollTimer = new Timer(CALL_CATEGORY_SYSTEM);
-        bool bRepeat = true;
-        string pollMethod = "LFPG_OnDoorPoll";
-        m_PollTimer.Run(LFPG_DC_POLL_INTERVAL, this, pollMethod, null, bRepeat);
+        // v4.0: Centralized poll via NetworkManager (replaces per-device Timer)
+        LFPG_NetworkManager.Get().RegisterDoorController(this);
 
         // Attempt immediate pairing on spawn/load
         LFPG_SearchAndPairDoor();
@@ -243,7 +234,7 @@ class LF_DoorController : Inventory_Base
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
 
         #ifdef SERVER
-        LFPG_StopPollTimer();
+        LFPG_NetworkManager.Get().UnregisterDoorController(this);
         LFPG_UnpairDoor();
 
         if (m_PoweredNet)
@@ -264,7 +255,7 @@ class LF_DoorController : Inventory_Base
         m_LFPG_Deleting = true;
 
         #ifdef SERVER
-        LFPG_StopPollTimer();
+        LFPG_NetworkManager.Get().UnregisterDoorController(this);
         LFPG_UnpairDoor();
         #endif
 
@@ -511,17 +502,6 @@ class LF_DoorController : Inventory_Base
     bool LFPG_HasWireStore()
     {
         return false;
-    }
-
-    // ============================================
-    // Timer management (server only)
-    // ============================================
-    protected void LFPG_StopPollTimer()
-    {
-        if (m_PollTimer)
-        {
-            m_PollTimer.Stop();
-        }
     }
 
     // ============================================
