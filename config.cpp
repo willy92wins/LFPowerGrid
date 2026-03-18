@@ -60,7 +60,7 @@ class CfgSoundShaders
     // v1.8.0: Pressure Pad press click (one-shot)
     class LFPG_PressurePad_Press_Shader
     {
-        samples[] = {{ "\LFPowerGrid\pressure_pad\sounds\pressure_pad_press", 1 }};
+        samples[] = {{ "\LFPowerGrid\data\pressure_pad\sounds\pressure_pad_press", 1 }};
         volume = 0.5;
         range = 8;
         rangeCurve[] = {{ 0, 1 }, { 4, 0.4 }, { 8, 0 }};
@@ -924,7 +924,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_PressurePadKit";
         descriptionShort = "$STR_LFPG_PressurePadKit_Desc";
-        model = "\LFPowerGrid\pressure_pad\pressure_pad.p3d";
+        model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -934,8 +934,8 @@ class CfgVehicles
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
         hiddenSelections[] = {"port_input_0", "port_output_0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\data\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\data\pressure_pad.rvmat"};
     };
 
     // ---- PressurePad (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -946,7 +946,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_PressurePad";
         descriptionShort = "$STR_LFPG_PressurePad_Desc";
-        model = "\LFPowerGrid\pressure_pad\pressure_pad.p3d";
+        model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -955,8 +955,8 @@ class CfgVehicles
         isDeployable = 0;
 
         hiddenSelections[] = {"port_input_0", "port_output_0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\pressure_pad\data\pressure_pad_black.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\pressure_pad\data\pressure_pad.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\pressure_pad\data\pressure_pad_grey.paa", "\LFPowerGrid\data\pressure_pad\data\pressure_pad_black.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\pressure_pad\data\pressure_pad.rvmat", "\LFPowerGrid\data\pressure_pad\data\pressure_pad.rvmat"};
 
         class AnimationSources
         {
