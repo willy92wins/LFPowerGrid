@@ -118,6 +118,17 @@ class LFPG_SorterController extends ViewController
     Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
+    // v3: Tab dots (P-III)
+    ImageWidget TabDot0; ImageWidget TabDot1; ImageWidget TabDot2;
+    ImageWidget TabDot3; ImageWidget TabDot4; ImageWidget TabDot5;
+    // v3: View tab indicator (C)
+    ImageWidget ViewTabIndicator;
+    // v3: Empty state extras (P-IV)
+    TextWidget TagsEmptyIcon;
+    TextWidget TagsEmptyHint;
+    TextWidget PreviewEmptyIcon;
+    TextWidget PreviewEmptyHint;
+
     // E3: PROC constant removed — use LFPG_SorterView.PROC_WHITE instead
 
     // =========================================================
@@ -309,6 +320,32 @@ class LFPG_SorterController extends ViewController
         if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wn); }
         wn = "DestIndicator";
         if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wn); }
+
+        // v3: Tab dots
+        wn = "TabDot0";
+        if (!TabDot0) { TabDot0 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TabDot1";
+        if (!TabDot1) { TabDot1 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TabDot2";
+        if (!TabDot2) { TabDot2 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TabDot3";
+        if (!TabDot3) { TabDot3 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TabDot4";
+        if (!TabDot4) { TabDot4 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TabDot5";
+        if (!TabDot5) { TabDot5 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        // v3: View tab indicator
+        wn = "ViewTabIndicator";
+        if (!ViewTabIndicator) { ViewTabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        // v3: Empty state extras
+        wn = "TagsEmptyIcon";
+        if (!TagsEmptyIcon) { TagsEmptyIcon = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TagsEmptyHint";
+        if (!TagsEmptyHint) { TagsEmptyHint = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "PreviewEmptyIcon";
+        if (!PreviewEmptyIcon) { PreviewEmptyIcon = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "PreviewEmptyHint";
+        if (!PreviewEmptyHint) { PreviewEmptyHint = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
     }
 
     // v2.7: Fallback helpers — find a ButtonWidget by name,
@@ -431,14 +468,16 @@ class LFPG_SorterController extends ViewController
         TintBg(BtnSortBg, B);
         TintBg(BtnSaveBg, G);
         TintBg(BtnResetAllBg, R);
-        TintBg(BtnClearOutBg, V);
+        // v3: BtnClearOut destructive tint (was neutral grey)
+        int RS = LFPG_SorterView.COL_RED_BTN_SOFT;
+        TintBg(BtnClearOutBg, RS);
         TintBg(BtnCloseBg, V);
 
         // Footer text colors
         SetTxtCol(BtnSortText, WHT);
         SetTxtCol(BtnSaveText, GRN);
         SetTxtCol(BtnResetAllText, WHT);
-        SetTxtCol(BtnClearOutText, MID);
+        SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_RED);
         SetTxtCol(BtnCloseText, DIM);
 
         // Header sort button (blue, like footer BtnSort)
@@ -461,6 +500,12 @@ class LFPG_SorterController extends ViewController
         SetTxtCol(LblPreview, DIM);
         SetTxtCol(TagsEmpty, DIM);
         SetTxtCol(PreviewEmpty, DIM);
+
+        // v3: Empty state extras
+        SetTxtCol(TagsEmptyIcon, LFPG_SorterView.COL_SEPARATOR);
+        SetTxtCol(TagsEmptyHint, DIM);
+        SetTxtCol(PreviewEmptyIcon, LFPG_SorterView.COL_SEPARATOR);
+        SetTxtCol(PreviewEmptyHint, DIM);
     }
 
     protected void ApplyInitialLabels()
@@ -497,17 +542,18 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     protected void SetControlsEnabled(bool enabled)
     {
-        int dimBg = 0xFF151E2E;
+        int dimBg = 0xFF1C293E;
         int dimTxt = LFPG_SorterView.COL_TEXT_DIM;
 
         // Footer action buttons
         if (enabled)
         {
             TintBg(BtnSortBg, LFPG_SorterView.COL_BLUE_BTN);
-            TintBg(BtnClearOutBg, LFPG_SorterView.COL_BTN);
+            // v3: BtnClearOut destructive tint when enabled
+            TintBg(BtnClearOutBg, LFPG_SorterView.COL_RED_BTN_SOFT);
+            SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_RED);
             TintBg(BtnSaveBg, LFPG_SorterView.COL_GREEN_BTN);
             SetTxtCol(BtnSortText, LFPG_SorterView.COL_TEXT);
-            SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_TEXT_MID);
             SetTxtCol(BtnSaveText, LFPG_SorterView.COL_GREEN);
             // Header sort
             TintBg(BtnSortHeaderBg, LFPG_SorterView.COL_BLUE_BTN);
@@ -941,6 +987,8 @@ class LFPG_SorterController extends ViewController
         RefreshMatchCount();
         RefreshPreviewCount();
         RefreshDestIndicator();
+        // v3: Refresh edit hints
+        LFPG_SorterView.RefreshHints();
         // Apply disabled visual after all refreshes (v2.2)
         SetControlsEnabled(m_IsPaired);
     }
@@ -958,7 +1006,6 @@ class LFPG_SorterController extends ViewController
         string numStr = "";
         string prefix = "0";
         string label = "";
-        string indicator = " *";
         string destName = "";
         int destLen = 0;
         int maxDestChars = 4;
@@ -988,7 +1035,7 @@ class LFPG_SorterController extends ViewController
                 label = label + destName.Substring(0, destLen);
             }
 
-            // V2: Indicate tabs with rules/catch-all (non-selected only)
+            // V2: Check tabs with rules/catch-all
             tabCfg = m_Config.GetOutput(i);
             tabHasContent = false;
             if (tabCfg)
@@ -997,15 +1044,39 @@ class LFPG_SorterController extends ViewController
                 if (tabRules > 0) { tabHasContent = true; }
                 if (tabCfg.m_IsCatchAll) { tabHasContent = true; }
             }
-            if (tabHasContent && !isSel)
-            {
-                label = label + indicator;
-                txtCol = LFPG_SorterView.COL_TEXT;
-            }
 
             TintBg(GetTabBg(i), bgCol);
             tt = GetTabText(i);
             if (tt) { tt.SetColor(txtCol); tt.SetText(label); }
+
+            // v3: Tab dot indicator (replaces " *" suffix)
+            ImageWidget dot = GetTabDot(i);
+            if (dot)
+            {
+                dot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                if (tabHasContent && !isSel)
+                {
+                    dot.Show(true);
+                    int dotCol = LFPG_SorterView.COL_GREEN;
+                    bool onlyCatchAll = false;
+                    if (tabCfg)
+                    {
+                        if (tabRules == 0 && tabCfg.m_IsCatchAll)
+                        {
+                            onlyCatchAll = true;
+                        }
+                    }
+                    if (onlyCatchAll)
+                    {
+                        dotCol = LFPG_SorterView.COL_AMBER;
+                    }
+                    dot.SetColor(dotCol);
+                }
+                else
+                {
+                    dot.Show(false);
+                }
+            }
         }
 
         // Position active-tab indicator under selected tab.
@@ -1045,51 +1116,105 @@ class LFPG_SorterController extends ViewController
         return null;
     }
 
+    // v3: Tab dot accessor
+    protected ImageWidget GetTabDot(int idx)
+    {
+        if (idx == 0) return TabDot0;
+        if (idx == 1) return TabDot1;
+        if (idx == 2) return TabDot2;
+        if (idx == 3) return TabDot3;
+        if (idx == 4) return TabDot4;
+        if (idx == 5) return TabDot5;
+        return null;
+    }
+
     protected void RefreshViewTabs()
     {
         int rBg = LFPG_SorterView.COL_BTN; int rTxt = LFPG_SorterView.COL_TEXT_DIM;
         int pBg = LFPG_SorterView.COL_BTN; int pTxt = LFPG_SorterView.COL_TEXT_DIM;
-        if (m_ShowRules) { rBg = LFPG_SorterView.COL_BG_ELEVATED; rTxt = LFPG_SorterView.COL_GREEN; }
-        else { pBg = LFPG_SorterView.COL_BG_ELEVATED; pTxt = LFPG_SorterView.COL_GREEN; }
+        if (m_ShowRules) { rBg = LFPG_SorterView.COL_BG_ELEVATED; rTxt = LFPG_SorterView.COL_BLUE; }
+        else { pBg = LFPG_SorterView.COL_BG_ELEVATED; pTxt = LFPG_SorterView.COL_BLUE; }
         TintBg(TabRulesBg, rBg); TintBg(TabPreviewBg, pBg);
         if (TabRulesText) { TabRulesText.SetColor(rTxt); }
         if (TabPreviewText) { TabPreviewText.SetColor(pTxt); }
         if (RulesPanel) { RulesPanel.Show(m_ShowRules); }
         if (PreviewPanel) { PreviewPanel.Show(!m_ShowRules); }
+
+        // v3: Position ViewTabIndicator under active view tab
+        if (ViewTabIndicator)
+        {
+            ViewTabIndicator.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+            ViewTabIndicator.SetColor(LFPG_SorterView.COL_BLUE);
+            ImageWidget activeViewBg = TabRulesBg;
+            if (!m_ShowRules)
+            {
+                activeViewBg = TabPreviewBg;
+            }
+            if (activeViewBg)
+            {
+                Widget activeViewBtn = activeViewBg.GetParent();
+                if (activeViewBtn)
+                {
+                    float vx = 0.0;
+                    float vy = 0.0;
+                    activeViewBtn.GetPos(vx, vy);
+                    float ix = 0.0;
+                    float iy = 0.0;
+                    ViewTabIndicator.GetPos(ix, iy);
+                    ViewTabIndicator.SetPos(vx, iy);
+                }
+            }
+        }
     }
 
     protected void RefreshCategoryButtons()
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        RefreshToggleBtn(CatBtn0Bg, CatBtn0Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue0), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn1Bg, CatBtn1Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue1), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn2Bg, CatBtn2Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue2), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn3Bg, CatBtn3Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue3), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn4Bg, CatBtn4Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue4), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn5Bg, CatBtn5Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue5), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn6Bg, CatBtn6Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue6), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
-        RefreshToggleBtn(CatBtn7Bg, CatBtn7Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue7), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN);
+        RefreshToggleBtn(CatBtn0Bg, CatBtn0Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue0), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel0);
+        RefreshToggleBtn(CatBtn1Bg, CatBtn1Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue1), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel1);
+        RefreshToggleBtn(CatBtn2Bg, CatBtn2Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue2), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel2);
+        RefreshToggleBtn(CatBtn3Bg, CatBtn3Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue3), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel3);
+        RefreshToggleBtn(CatBtn4Bg, CatBtn4Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue4), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel4);
+        RefreshToggleBtn(CatBtn5Bg, CatBtn5Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue5), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel5);
+        RefreshToggleBtn(CatBtn6Bg, CatBtn6Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue6), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel6);
+        RefreshToggleBtn(CatBtn7Bg, CatBtn7Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue7), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel7);
     }
 
     protected void RefreshSlotButtons()
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        RefreshToggleBtn(SlotPre0Bg, SlotPre0Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_TINY), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE);
-        RefreshToggleBtn(SlotPre1Bg, SlotPre1Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_SMALL), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE);
-        RefreshToggleBtn(SlotPre2Bg, SlotPre2Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_MEDIUM), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE);
-        RefreshToggleBtn(SlotPre3Bg, SlotPre3Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_LARGE), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE);
+        string lblTiny = "Tiny";
+        string lblSmall = "Small";
+        string lblMed = "Med";
+        string lblLarge = "Large";
+        RefreshToggleBtn(SlotPre0Bg, SlotPre0Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_TINY), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblTiny);
+        RefreshToggleBtn(SlotPre1Bg, SlotPre1Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_SMALL), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblSmall);
+        RefreshToggleBtn(SlotPre2Bg, SlotPre2Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_MEDIUM), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblMed);
+        RefreshToggleBtn(SlotPre3Bg, SlotPre3Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_LARGE), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblLarge);
     }
 
     // Unified toggle button refresh: active/inactive with custom active colors
-    protected void RefreshToggleBtn(ImageWidget bg, TextWidget txt, bool active, int activeBg, int activeTxt)
+    // v3: Added baseLabel param for active state indicator
+    protected void RefreshToggleBtn(ImageWidget bg, TextWidget txt, bool active, int activeBg, int activeTxt, string baseLabel)
     {
         int bgCol = LFPG_SorterView.COL_BTN;
         int txtCol = LFPG_SorterView.COL_TEXT_MID;
-        if (active) { bgCol = activeBg; txtCol = activeTxt; }
+        string displayLabel = baseLabel;
+        if (active)
+        {
+            bgCol = activeBg;
+            txtCol = activeTxt;
+            string suffix = " *";
+            displayLabel = baseLabel + suffix;
+        }
         TintBg(bg, bgCol);
-        if (txt) { txt.SetColor(txtCol); }
+        if (txt)
+        {
+            txt.SetColor(txtCol);
+            txt.SetText(displayLabel);
+        }
     }
 
     protected void RefreshCatchAllButton()
@@ -1142,6 +1267,8 @@ class LFPG_SorterController extends ViewController
 
         bool isEmpty = (ruleCount == 0 && !outCfg.m_IsCatchAll);
         if (TagsEmpty) { TagsEmpty.Show(isEmpty); }
+        if (TagsEmptyIcon) { TagsEmptyIcon.Show(isEmpty); }
+        if (TagsEmptyHint) { TagsEmptyHint.Show(isEmpty); }
     }
 
     protected int GetRuleColor(int ruleType)
@@ -1149,7 +1276,7 @@ class LFPG_SorterController extends ViewController
         if (ruleType == LFPG_SORT_FILTER_CATEGORY) return LFPG_SorterView.COL_GREEN;
         if (ruleType == LFPG_SORT_FILTER_PREFIX) return LFPG_SorterView.COL_BLUE;
         if (ruleType == LFPG_SORT_FILTER_CONTAINS) return LFPG_SorterView.COL_AMBER;
-        if (ruleType == LFPG_SORT_FILTER_SLOT) return 0xFFA78BFA;
+        if (ruleType == LFPG_SORT_FILTER_SLOT) return LFPG_SorterView.COL_PURPLE;
         return LFPG_SorterView.COL_TEXT;
     }
 
@@ -1238,9 +1365,10 @@ class LFPG_SorterController extends ViewController
         NotifyPropertyChanged(propPC, false);
 
         // D6: Show placeholder when no preview data
+        bool showEmpty = (count == 0);
         if (PreviewEmpty)
         {
-            if (count == 0)
+            if (showEmpty)
             {
                 string emptyMsg = "Sort preview not yet available";
                 PreviewEmpty.SetText(emptyMsg);
@@ -1251,6 +1379,8 @@ class LFPG_SorterController extends ViewController
                 PreviewEmpty.Show(false);
             }
         }
+        if (PreviewEmptyIcon) { PreviewEmptyIcon.Show(showEmpty); }
+        if (PreviewEmptyHint) { PreviewEmptyHint.Show(showEmpty); }
     }
 
     protected void TintBg(ImageWidget bg, int color)

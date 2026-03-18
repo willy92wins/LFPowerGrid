@@ -61,10 +61,9 @@ class LFPG_SorterView extends ScriptView
     // ModalOverlay REMOVED (Bug #1)
     Widget SorterPanel;
     Widget HeaderFrame;
-    Widget PairingBanner;
-    ImageWidget PairingBannerBg;
-    ImageWidget PairingDot;
-    TextWidget PairingText;
+    // Pairing badge (v3 — replaces PairingBanner)
+    ImageWidget PairingBadgeBg;
+    TextWidget PairingBadgeText;
     ImageWidget PanelBg;
     ImageWidget AccentLine;
     ImageWidget HeaderBg;
@@ -77,9 +76,6 @@ class LFPG_SorterView extends ScriptView
     ImageWidget FooterBg;
     ImageWidget FooterSep;
     ImageWidget FooterMidSep;
-    ImageWidget SepCat;
-    ImageWidget SepSlot;
-    ImageWidget SepCatchAll;
     ImageWidget EditPrefixBg;
     ImageWidget EditContainsBg;
     ImageWidget EditSlotMinBg;
@@ -99,32 +95,64 @@ class LFPG_SorterView extends ScriptView
     TextWidget UnpairedLabel;
     TextWidget UnpairedHint;
 
+    // v3: Panel frame (P-I)
+    ImageWidget PanelBorderLeft;
+    ImageWidget PanelBorderRight;
+    // v3: Bottom accent (P-VI)
+    ImageWidget AccentLineBottom;
+    // v3: Drag handle (P-II)
+    TextWidget DragHandle;
+    // v3: Section cards (A)
+    ImageWidget CatSectionBg;
+    ImageWidget CatSectionAccent;
+    ImageWidget PrefixSectionBg;
+    ImageWidget PrefixSectionAccent;
+    ImageWidget ContainsSectionBg;
+    ImageWidget ContainsSectionAccent;
+    ImageWidget SlotSectionBg;
+    ImageWidget SlotSectionAccent;
+    ImageWidget CatchAllCardBg;
+    // v3: Edit hints (E)
+    TextWidget EditPrefixHint;
+    TextWidget EditContainsHint;
+    TextWidget EditSlotMinHint;
+    TextWidget EditSlotMaxHint;
+    // v3: Footer ESC (P-V)
+    TextWidget FooterEscHint;
+
     static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
 
-    // ── LFPG Palette (ARGB) — DayZ-adjusted (Bug #7/#8/#9) ──
-    static const int COL_BG_DEEP      = 0xFF0E1520;
-    static const int COL_BG_PANEL     = 0xF50D1528;
-    static const int COL_BG_SECTION   = 0xEB101828;
-    static const int COL_BG_ELEVATED  = 0xE6162030;
-    static const int COL_BG_INPUT     = 0xFF182238;
-    static const int COL_INPUT_BORDER = 0x38CBD5E1;
+    // ── LFPG Palette v2 (ARGB) — DayZ-adjusted (RGB×1.35 bg, ×1.30 btn, alpha×1.40) ──
+    static const int COL_BG_DEEP      = 0xFF131C2B;
+    static const int COL_BG_PANEL     = 0xF5121C36;
+    static const int COL_BG_SECTION   = 0xEB162036;
+    static const int COL_BG_ELEVATED  = 0xE61E2B41;
+    static const int COL_BG_INPUT     = 0xFF202E4C;
+    static const int COL_INPUT_BORDER = 0x4CCBD5E1;
     static const int COL_GREEN        = 0xFF34D399;
-    static const int COL_GREEN_DIM    = 0x0F34D399;
-    static const int COL_GREEN_BORDER = 0x2634D399;
+    static const int COL_GREEN_DIM    = 0x1734D399;
+    static const int COL_GREEN_BORDER = 0x3334D399;
     static const int COL_BLUE         = 0xFF60A5FA;
     static const int COL_AMBER        = 0xFFFBBF24;
     static const int COL_RED          = 0xFFF87171;
-    static const int COL_BTN          = 0xFF2A3A55;
+    static const int COL_BTN          = 0xFF374B6F;
     static const int COL_TEXT         = 0xFFF1F5F9;
     static const int COL_TEXT_DIM     = 0xFF7A8A9B;
     static const int COL_TEXT_MID     = 0xFFB0BEC5;
-    static const int COL_SEPARATOR    = 0x30CBD5E1;
-    static const int COL_HEADER       = 0xF50B1120;
-    static const int COL_BLUE_BTN     = 0xFF1E3A5F;
-    static const int COL_GREEN_BTN    = 0xFF065F46;
-    static const int COL_RED_BTN      = 0xFF991B1B;
-    static const int COL_PAIRING_OK   = 0x1A34D399;
-    static const int COL_PAIRING_ERR  = 0x1AF87171;
+    static const int COL_SEPARATOR    = 0x43CBD5E1;
+    static const int COL_HEADER       = 0xF50F172B;
+    static const int COL_BLUE_BTN     = 0xFF274B7C;
+    static const int COL_GREEN_BTN    = 0xFF087C5B;
+    static const int COL_RED_BTN      = 0xFFC72323;
+    static const int COL_PAIRING_OK   = 0x2334D399;
+    static const int COL_PAIRING_ERR  = 0x23F87171;
+    // v3: New constants
+    static const int COL_BG_SECTION_CARD = 0x08FFFFFF;
+    static const int COL_BG_RULES_PANEL  = 0xFF1E2B41;
+    static const int COL_RED_BTN_SOFT    = 0x26F87171;
+    static const int COL_RED_BTN_BORDER  = 0x40F87171;
+    static const int COL_CATCHALL_BG     = 0x10FBBF24;
+    static const int COL_PURPLE          = 0xFFA78BFA;
 
     override string GetLayoutFile()
     {
@@ -322,12 +350,6 @@ class LFPG_SorterView extends ScriptView
         if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "FooterMidSep";
         if (!FooterMidSep) { FooterMidSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SepCat";
-        if (!SepCat) { SepCat = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SepSlot";
-        if (!SepSlot) { SepSlot = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SepCatchAll";
-        if (!SepCatchAll) { SepCatchAll = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditPrefixBg";
         if (!EditPrefixBg) { EditPrefixBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditContainsBg";
@@ -374,12 +396,10 @@ class LFPG_SorterView extends ScriptView
             BtnCloseXText = closeXTxt;
         }
 
-        wn = "PairingBannerBg";
-        if (!PairingBannerBg) { PairingBannerBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PairingDot";
-        if (!PairingDot) { PairingDot = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PairingText";
-        if (!PairingText) { PairingText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PairingBadgeBg";
+        if (!PairingBadgeBg) { PairingBadgeBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PairingBadgeText";
+        if (!PairingBadgeText) { PairingBadgeText = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "UnpairedOverlay";
         if (!UnpairedOverlay) { UnpairedOverlay = root.FindAnyWidget(wn); }
         wn = "UnpairedOverlayBg";
@@ -388,6 +408,44 @@ class LFPG_SorterView extends ScriptView
         if (!UnpairedLabel) { UnpairedLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "UnpairedHint";
         if (!UnpairedHint) { UnpairedHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+
+        // v3: New widget bindings
+        wn = "PanelBorderLeft";
+        if (!PanelBorderLeft) { PanelBorderLeft = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PanelBorderRight";
+        if (!PanelBorderRight) { PanelBorderRight = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "AccentLineBottom";
+        if (!AccentLineBottom) { AccentLineBottom = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "DragHandle";
+        if (!DragHandle) { DragHandle = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "CatSectionBg";
+        if (!CatSectionBg) { CatSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "CatSectionAccent";
+        if (!CatSectionAccent) { CatSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PrefixSectionBg";
+        if (!PrefixSectionBg) { PrefixSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PrefixSectionAccent";
+        if (!PrefixSectionAccent) { PrefixSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "ContainsSectionBg";
+        if (!ContainsSectionBg) { ContainsSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "ContainsSectionAccent";
+        if (!ContainsSectionAccent) { ContainsSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "SlotSectionBg";
+        if (!SlotSectionBg) { SlotSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "SlotSectionAccent";
+        if (!SlotSectionAccent) { SlotSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "CatchAllCardBg";
+        if (!CatchAllCardBg) { CatchAllCardBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditPrefixHint";
+        if (!EditPrefixHint) { EditPrefixHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditContainsHint";
+        if (!EditContainsHint) { EditContainsHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMinHint";
+        if (!EditSlotMinHint) { EditSlotMinHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "EditSlotMaxHint";
+        if (!EditSlotMaxHint) { EditSlotMaxHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "FooterEscHint";
+        if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
     }
 
     protected void ApplyColors()
@@ -410,14 +468,11 @@ class LFPG_SorterView extends ScriptView
         Tint(TabSep, COL_SEPARATOR);
         Tint(TabIndicator, COL_GREEN);
         Tint(ColumnSep, COL_SEPARATOR);
-        Tint(RulesPanelBg, COL_BG_DEEP);
-        Tint(PreviewPanelBg, COL_BG_DEEP);
+        Tint(RulesPanelBg, COL_BG_RULES_PANEL);
+        Tint(PreviewPanelBg, COL_BG_RULES_PANEL);
         Tint(FooterBg, COL_BG_PANEL);
         Tint(FooterSep, COL_SEPARATOR);
         Tint(FooterMidSep, COL_SEPARATOR);
-        Tint(SepCat, COL_SEPARATOR);
-        Tint(SepSlot, COL_SEPARATOR);
-        Tint(SepCatchAll, COL_SEPARATOR);
         Tint(EditPrefixBg, COL_BG_INPUT);
         Tint(EditContainsBg, COL_BG_INPUT);
         Tint(EditSlotMinBg, COL_BG_INPUT);
@@ -434,20 +489,19 @@ class LFPG_SorterView extends ScriptView
         {
             BtnCloseXText.SetColor(COL_TEXT_DIM);
         }
-        // PairingBanner default (unpaired)
-        Tint(PairingBannerBg, COL_PAIRING_ERR);
-        Tint(PairingDot, COL_RED);
-        if (PairingText)
+        // Pairing badge default (unpaired)
+        Tint(PairingBadgeBg, COL_PAIRING_ERR);
+        if (PairingBadgeText)
         {
-            PairingText.SetColor(COL_RED);
-            string defaultPairingMsg = "No container linked";
-            PairingText.SetText(defaultPairingMsg);
+            string defaultBadge = "UNLINKED";
+            PairingBadgeText.SetText(defaultBadge);
+            PairingBadgeText.SetColor(COL_RED);
         }
 
-        // v2.4 Bug C: Unpaired overlay
+        // v2.4 Bug C: Unpaired overlay (v3: updated hex)
         if (UnpairedOverlayBg)
         {
-            Tint(UnpairedOverlayBg, 0xCC0A0F1A);
+            Tint(UnpairedOverlayBg, 0xCC0E1423);
         }
         if (UnpairedLabel)
         {
@@ -488,6 +542,48 @@ class LFPG_SorterView extends ScriptView
             {
                 ebMax.SetColor(COL_TEXT);
             }
+        }
+
+        // v3: Panel frame
+        Tint(PanelBorderLeft, COL_SEPARATOR);
+        Tint(PanelBorderRight, COL_SEPARATOR);
+        Tint(AccentLineBottom, COL_GREEN);
+        // v3: Drag handle
+        if (DragHandle)
+        {
+            DragHandle.SetColor(COL_TEXT_DIM);
+        }
+        // v3: Section cards
+        Tint(CatSectionBg, COL_BG_SECTION_CARD);
+        Tint(CatSectionAccent, COL_GREEN);
+        Tint(PrefixSectionBg, COL_BG_SECTION_CARD);
+        Tint(PrefixSectionAccent, COL_BLUE);
+        Tint(ContainsSectionBg, COL_BG_SECTION_CARD);
+        Tint(ContainsSectionAccent, COL_AMBER);
+        Tint(SlotSectionBg, COL_BG_SECTION_CARD);
+        Tint(SlotSectionAccent, COL_PURPLE);
+        Tint(CatchAllCardBg, COL_CATCHALL_BG);
+        // v3: Edit hints
+        if (EditPrefixHint)
+        {
+            EditPrefixHint.SetColor(COL_TEXT_DIM);
+        }
+        if (EditContainsHint)
+        {
+            EditContainsHint.SetColor(COL_TEXT_DIM);
+        }
+        if (EditSlotMinHint)
+        {
+            EditSlotMinHint.SetColor(COL_TEXT_DIM);
+        }
+        if (EditSlotMaxHint)
+        {
+            EditSlotMaxHint.SetColor(COL_TEXT_DIM);
+        }
+        // v3: Footer ESC hint
+        if (FooterEscHint)
+        {
+            FooterEscHint.SetColor(COL_TEXT_DIM);
         }
     }
 
@@ -874,27 +970,22 @@ class LFPG_SorterView extends ScriptView
 
         if (paired)
         {
-            Tint(PairingBannerBg, COL_PAIRING_OK);
-            Tint(PairingDot, COL_GREEN);
-            if (PairingText)
+            Tint(PairingBadgeBg, COL_PAIRING_OK);
+            if (PairingBadgeText)
             {
-                string linkedMsg = "Linked: ";
-                linkedMsg = linkedMsg + containerDisplayName;
-                PairingText.SetText(linkedMsg);
-                // v2.7: Use COL_TEXT (white) — COL_GREEN on green bg
-                // was invisible in DayZ's dark renderer
-                PairingText.SetColor(COL_TEXT);
+                string pairedLabel = "PAIRED";
+                PairingBadgeText.SetText(pairedLabel);
+                PairingBadgeText.SetColor(COL_GREEN);
             }
         }
         else
         {
-            Tint(PairingBannerBg, COL_PAIRING_ERR);
-            Tint(PairingDot, COL_RED);
-            if (PairingText)
+            Tint(PairingBadgeBg, COL_PAIRING_ERR);
+            if (PairingBadgeText)
             {
-                string noLinkMsg = "No container linked";
-                PairingText.SetText(noLinkMsg);
-                PairingText.SetColor(COL_RED);
+                string unlinkedLabel = "UNLINKED";
+                PairingBadgeText.SetText(unlinkedLabel);
+                PairingBadgeText.SetColor(COL_RED);
             }
         }
 
@@ -910,6 +1001,52 @@ class LFPG_SorterView extends ScriptView
                 UnpairedOverlay.Show(true);
             }
         }
+    }
+
+    // =========================================================
+    // v3: Edit hint show/hide (E) — event-driven via OnChange
+    // =========================================================
+    protected void RefreshEditHints()
+    {
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
+        if (!ctrl)
+            return;
+        bool pfxEmpty = (ctrl.EditPrefix == "");
+        bool conEmpty = (ctrl.EditContains == "");
+        bool minEmpty = (ctrl.EditSlotMin == "");
+        bool maxEmpty = (ctrl.EditSlotMax == "");
+        if (EditPrefixHint)
+        {
+            EditPrefixHint.Show(pfxEmpty);
+        }
+        if (EditContainsHint)
+        {
+            EditContainsHint.Show(conEmpty);
+        }
+        if (EditSlotMinHint)
+        {
+            EditSlotMinHint.Show(minEmpty);
+        }
+        if (EditSlotMaxHint)
+        {
+            EditSlotMaxHint.Show(maxEmpty);
+        }
+    }
+
+    static void RefreshHints()
+    {
+        if (!s_Instance)
+            return;
+        s_Instance.RefreshEditHints();
+    }
+
+    // v3: OnChange fires on every EditBox keystroke
+    override bool OnChange(Widget w, int x, int y, bool finished)
+    {
+        if (!m_IsOpen)
+            return false;
+        RefreshEditHints();
+        return false;
     }
 
     // =========================================================
@@ -1096,6 +1233,9 @@ class LFPG_SorterView extends ScriptView
         {
             ctrl.InitFromRPC(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
         }
+
+        // v3: Initial hint visibility
+        RefreshEditHints();
 
         string openMsg = "[SorterView] Opened for: ";
         openMsg = openMsg + containerName;

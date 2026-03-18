@@ -70,6 +70,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPlaceSwitchV2);
         actions.Insert(LFPG_ActionToggleSwitchV2);
 
+        // --- Switch V1 Remote (RF-capable latching toggle) ---
+        actions.Insert(LFPG_ActionPlaceSwitchRemote);
+        actions.Insert(LFPG_ActionToggleSwitchRemote);
+
         // --- v1.1.0: Water Pump upgrade + water actions ---
         actions.Insert(LFPG_ActionUpgradeWaterPump);
         actions.Insert(LFPG_ActionDrinkPump);
