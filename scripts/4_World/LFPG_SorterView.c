@@ -345,10 +345,32 @@ class LFPG_SorterView extends ScriptView
         if (!DestIndicatorBg) { DestIndicatorBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "MatchFooterBg";
         if (!MatchFooterBg) { MatchFooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "BtnCloseXBg";
-        if (!BtnCloseXBg) { BtnCloseXBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "BtnCloseXText";
-        if (!BtnCloseXText) { BtnCloseXText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+
+        // v2.8: BtnCloseX — use child-walk (same fix as Controller).
+        // FindAnyWidget returns incorrect refs for widgets inside ButtonWidget.
+        wn = "BtnCloseX";
+        Widget closeXBtn = root.FindAnyWidget(wn);
+        if (closeXBtn)
+        {
+            Widget closeXChild = closeXBtn.GetChildren();
+            ImageWidget closeXImg = null;
+            TextWidget closeXTxt = null;
+            while (closeXChild)
+            {
+                if (!closeXImg)
+                {
+                    closeXImg = ImageWidget.Cast(closeXChild);
+                }
+                if (!closeXTxt)
+                {
+                    closeXTxt = TextWidget.Cast(closeXChild);
+                }
+                closeXChild = closeXChild.GetSibling();
+            }
+            BtnCloseXBg = closeXImg;
+            BtnCloseXText = closeXTxt;
+        }
+
         wn = "PairingBannerBg";
         if (!PairingBannerBg) { PairingBannerBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "PairingDot";
@@ -675,6 +697,7 @@ class LFPG_SorterView extends ScriptView
         string nSort = "BtnSort";
         string nClose = "BtnClose";
         string nCloseX = "BtnCloseX";
+        string nSortHeader = "BtnSortHeader";
         if (bName == nCatchAll) { ctrl.BtnCatchAll(); return true; }
         if (bName == nClearOut) { ctrl.BtnClearOut(); return true; }
         if (bName == nResetAll) { ctrl.BtnResetAll(); return true; }
@@ -682,6 +705,7 @@ class LFPG_SorterView extends ScriptView
         if (bName == nSort) { ctrl.BtnSort(); return true; }
         if (bName == nClose) { ctrl.BtnClose(); return true; }
         if (bName == nCloseX) { ctrl.BtnCloseX(); return true; }
+        if (bName == nSortHeader) { ctrl.BtnSortHeader(); return true; }
 
         // Unrecognized button — delegate to ScriptView base class
         // so Relay_Command still works for any future buttons

@@ -487,7 +487,7 @@ class CfgVehicles
         scope = 2;
         displayName = "Push Button Kit";
         descriptionShort = "A toggle switch. Place to deploy.";
-        model = "\LFPowerGrid\switch_v1\switch_v1.p3d";
+        model = "\LFPowerGrid\data\switch_v1\switch_v1.p3d";
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -497,8 +497,8 @@ class CfgVehicles
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
         hiddenSelections[] = {"camo", "switch"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\switch_v1\data\switch_v1_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\switch_v1.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\data\switch_v1\data\switch_v1_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\data\switch_v1\data\switch_v1.rvmat"};
     };
 
     // ---- PushButton (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -510,7 +510,7 @@ class CfgVehicles
         scope = 2;
         displayName = "Electrical Switch";
         descriptionShort = "A toggle switch with LED status indicator.";
-        model = "\LFPowerGrid\switch_v1\switch_v1.p3d";
+        model = "\LFPowerGrid\data\switch_v1\switch_v1.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -519,8 +519,8 @@ class CfgVehicles
         isDeployable = 0;
 
         hiddenSelections[] = {"camo", "switch", "light_led"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\switch_v1\data\switch_v1_co.paa", ""};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\switch_v1\data\led_off.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v1\data\switch_v1_co.paa", "\LFPowerGrid\data\switch_v1\data\switch_v1_co.paa", ""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\data\switch_v1\data\switch_v1.rvmat", "\LFPowerGrid\data\switch_v1\data\led_off.rvmat"};
 
         class AnimationSources
         {
@@ -567,7 +567,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_SWITCHV2_KIT";
         descriptionShort = "$STR_LFPG_SWITCHV2_KIT_DESC";
-        model = "\LFPowerGrid\switch_v2\switch_v2.p3d";
+        model = "\LFPowerGrid\data\switch_v2\switch_v2.p3d";
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -577,8 +577,8 @@ class CfgVehicles
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
         hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v2\data\switch_v2_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v2\data\switch_v2.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v2\data\switch_v2_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v2\data\switch_v2.rvmat"};
     };
 
     // ---- SwitchV2 (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -590,7 +590,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_SWITCHV2";
         descriptionShort = "$STR_LFPG_SWITCHV2_DESC";
-        model = "\LFPowerGrid\switch_v2\switch_v2.p3d";
+        model = "\LFPowerGrid\data\switch_v2\switch_v2.p3d";
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -599,8 +599,8 @@ class CfgVehicles
         isDeployable = 0;
 
         hiddenSelections[] = {"camo", "light_led"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\switch_v2\data\switch_v2_co.paa", ""};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\switch_v2\data\switch_v2.rvmat", "\LFPowerGrid\switch_v2\data\led_off.rvmat"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\switch_v2\data\switch_v2_co.paa", ""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\switch_v2\data\switch_v2.rvmat", "\LFPowerGrid\data\switch_v2\data\led_off.rvmat"};
 
         class AnimationSources
         {

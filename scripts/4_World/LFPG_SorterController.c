@@ -76,7 +76,7 @@ class LFPG_SorterController extends ViewController
     protected string m_CatLabel6; protected string m_CatValue6;
     protected string m_CatLabel7; protected string m_CatValue7;
 
-    // ── Widget refs (auto-assigned by name match) ──
+    // ── Widget refs (resolved by child-walk in EnsureBindings) ──
     TextWidget StatusLabel;
     ImageWidget StatusDot;
 
@@ -106,6 +106,8 @@ class LFPG_SorterController extends ViewController
     TextWidget BtnResetAllText;
     TextWidget BtnSortText; TextWidget BtnSaveText;
     TextWidget BtnClearOutText; TextWidget BtnCloseText;
+    // Header sort button
+    ImageWidget BtnSortHeaderBg; TextWidget BtnSortHeaderText;
     // Label refs
     TextWidget LblCategory; TextWidget LblPrefix; TextWidget LblContains;
     TextWidget LblSlot; TextWidget LblSlotDash;
@@ -147,225 +149,166 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
-    // v2.6: Manual binding fallback for widgets that Dabs MVC
-    // auto-binding sometimes fails to resolve (observed on
-    // odd-indexed tab ImageWidgets). Called from View.DoOpen.
+    // v2.8: Manual binding — ALL button children resolved via
+    // child-walk. Dabs MVC auto-bind AND FindAnyWidget both
+    // return INCORRECT (non-null) refs for ImageWidget/TextWidget
+    // inside ButtonWidget. This causes null-guard fallbacks to
+    // never trigger, leaving refs pointing to wrong widgets.
+    // Child-walk is 100% reliable: find the ButtonWidget by name
+    // (direct child of container), walk its children to find the
+    // first ImageWidget (Bg) and first TextWidget (Text).
     // =========================================================
     void EnsureBindings(Widget layoutRoot)
     {
         if (!layoutRoot)
             return;
 
-        string wName = "";
-        string btnN = "";
+        string bn = "";
 
-        // v2.7: Force all tab lookups (no null guards).
-        // Dabs MVC auto-bind can set non-null but WRONG refs
-        // for widgets inside ButtonWidget (observed on odd-indexed
-        // tabs: 1,3,5). Forcing the lookup overwrites any stale ref.
-        // Fallback: find the ButtonWidget by name, walk children.
+        // ── Output tabs (child-walk, overwrite any auto-bind) ──
+        bn = "TabOut0";
+        TabOut0Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut0Text = FindBtnChildText(layoutRoot, bn);
+        bn = "TabOut1";
+        TabOut1Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut1Text = FindBtnChildText(layoutRoot, bn);
+        bn = "TabOut2";
+        TabOut2Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut2Text = FindBtnChildText(layoutRoot, bn);
+        bn = "TabOut3";
+        TabOut3Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut3Text = FindBtnChildText(layoutRoot, bn);
+        bn = "TabOut4";
+        TabOut4Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut4Text = FindBtnChildText(layoutRoot, bn);
+        bn = "TabOut5";
+        TabOut5Bg = FindBtnChildBg(layoutRoot, bn);
+        TabOut5Text = FindBtnChildText(layoutRoot, bn);
 
-        // Output tab backgrounds — force lookup
-        wName = "TabOut0Bg";
-        TabOut0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut0";
-        if (!TabOut0Bg) { TabOut0Bg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabOut1Bg";
-        TabOut1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut1";
-        if (!TabOut1Bg) { TabOut1Bg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabOut2Bg";
-        TabOut2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut2";
-        if (!TabOut2Bg) { TabOut2Bg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabOut3Bg";
-        TabOut3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut3";
-        if (!TabOut3Bg) { TabOut3Bg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabOut4Bg";
-        TabOut4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut4";
-        if (!TabOut4Bg) { TabOut4Bg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabOut5Bg";
-        TabOut5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut5";
-        if (!TabOut5Bg) { TabOut5Bg = FindBtnChildBg(layoutRoot, btnN); }
+        // ── View tabs ──
+        bn = "TabRules";
+        TabRulesBg = FindBtnChildBg(layoutRoot, bn);
+        TabRulesText = FindBtnChildText(layoutRoot, bn);
+        bn = "TabPreview";
+        TabPreviewBg = FindBtnChildBg(layoutRoot, bn);
+        TabPreviewText = FindBtnChildText(layoutRoot, bn);
 
-        // Output tab text — force lookup
-        wName = "TabOut0Text";
-        TabOut0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut0";
-        if (!TabOut0Text) { TabOut0Text = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabOut1Text";
-        TabOut1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut1";
-        if (!TabOut1Text) { TabOut1Text = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabOut2Text";
-        TabOut2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut2";
-        if (!TabOut2Text) { TabOut2Text = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabOut3Text";
-        TabOut3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut3";
-        if (!TabOut3Text) { TabOut3Text = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabOut4Text";
-        TabOut4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut4";
-        if (!TabOut4Text) { TabOut4Text = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabOut5Text";
-        TabOut5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabOut5";
-        if (!TabOut5Text) { TabOut5Text = FindBtnChildText(layoutRoot, btnN); }
+        // ── Category buttons ──
+        bn = "CatBtn0";
+        CatBtn0Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn0Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn1";
+        CatBtn1Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn1Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn2";
+        CatBtn2Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn2Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn3";
+        CatBtn3Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn3Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn4";
+        CatBtn4Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn4Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn5";
+        CatBtn5Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn5Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn6";
+        CatBtn6Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn6Text = FindBtnChildText(layoutRoot, bn);
+        bn = "CatBtn7";
+        CatBtn7Bg = FindBtnChildBg(layoutRoot, bn);
+        CatBtn7Text = FindBtnChildText(layoutRoot, bn);
 
-        // View tabs — force lookup
-        wName = "TabRulesBg";
-        TabRulesBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabRules";
-        if (!TabRulesBg) { TabRulesBg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabPreviewBg";
-        TabPreviewBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabPreview";
-        if (!TabPreviewBg) { TabPreviewBg = FindBtnChildBg(layoutRoot, btnN); }
-        wName = "TabRulesText";
-        TabRulesText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabRules";
-        if (!TabRulesText) { TabRulesText = FindBtnChildText(layoutRoot, btnN); }
-        wName = "TabPreviewText";
-        TabPreviewText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName));
-        btnN = "TabPreview";
-        if (!TabPreviewText) { TabPreviewText = FindBtnChildText(layoutRoot, btnN); }
+        // ── Slot presets ──
+        bn = "SlotPre0";
+        SlotPre0Bg = FindBtnChildBg(layoutRoot, bn);
+        SlotPre0Text = FindBtnChildText(layoutRoot, bn);
+        bn = "SlotPre1";
+        SlotPre1Bg = FindBtnChildBg(layoutRoot, bn);
+        SlotPre1Text = FindBtnChildText(layoutRoot, bn);
+        bn = "SlotPre2";
+        SlotPre2Bg = FindBtnChildBg(layoutRoot, bn);
+        SlotPre2Text = FindBtnChildText(layoutRoot, bn);
+        bn = "SlotPre3";
+        SlotPre3Bg = FindBtnChildBg(layoutRoot, bn);
+        SlotPre3Text = FindBtnChildText(layoutRoot, bn);
 
-        // Tab active indicator
-        wName = "TabIndicator";
-        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        // ── Catch-all ──
+        bn = "BtnCatchAll";
+        BtnCatchAllBg = FindBtnChildBg(layoutRoot, bn);
+        BtnCatchAllText = FindBtnChildText(layoutRoot, bn);
 
-        // Category button bgs
-        wName = "CatBtn0Bg";
-        if (!CatBtn0Bg) { CatBtn0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn1Bg";
-        if (!CatBtn1Bg) { CatBtn1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn2Bg";
-        if (!CatBtn2Bg) { CatBtn2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn3Bg";
-        if (!CatBtn3Bg) { CatBtn3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn4Bg";
-        if (!CatBtn4Bg) { CatBtn4Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn5Bg";
-        if (!CatBtn5Bg) { CatBtn5Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn6Bg";
-        if (!CatBtn6Bg) { CatBtn6Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn7Bg";
-        if (!CatBtn7Bg) { CatBtn7Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        // ── Add buttons ──
+        bn = "BtnPrefixAdd";
+        BtnPrefixAddBg = FindBtnChildBg(layoutRoot, bn);
+        bn = "BtnContainsAdd";
+        BtnContainsAddBg = FindBtnChildBg(layoutRoot, bn);
+        bn = "BtnSlotAdd";
+        BtnSlotAddBg = FindBtnChildBg(layoutRoot, bn);
 
-        // Category button text
-        wName = "CatBtn0Text";
-        if (!CatBtn0Text) { CatBtn0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn1Text";
-        if (!CatBtn1Text) { CatBtn1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn2Text";
-        if (!CatBtn2Text) { CatBtn2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn3Text";
-        if (!CatBtn3Text) { CatBtn3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn4Text";
-        if (!CatBtn4Text) { CatBtn4Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn5Text";
-        if (!CatBtn5Text) { CatBtn5Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn6Text";
-        if (!CatBtn6Text) { CatBtn6Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "CatBtn7Text";
-        if (!CatBtn7Text) { CatBtn7Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        // ── Footer buttons ──
+        bn = "BtnSort";
+        BtnSortBg = FindBtnChildBg(layoutRoot, bn);
+        BtnSortText = FindBtnChildText(layoutRoot, bn);
+        bn = "BtnSave";
+        BtnSaveBg = FindBtnChildBg(layoutRoot, bn);
+        BtnSaveText = FindBtnChildText(layoutRoot, bn);
+        bn = "BtnResetAll";
+        BtnResetAllBg = FindBtnChildBg(layoutRoot, bn);
+        BtnResetAllText = FindBtnChildText(layoutRoot, bn);
+        bn = "BtnClearOut";
+        BtnClearOutBg = FindBtnChildBg(layoutRoot, bn);
+        BtnClearOutText = FindBtnChildText(layoutRoot, bn);
+        bn = "BtnClose";
+        BtnCloseBg = FindBtnChildBg(layoutRoot, bn);
+        BtnCloseText = FindBtnChildText(layoutRoot, bn);
 
-        // Slot preset bgs
-        wName = "SlotPre0Bg";
-        if (!SlotPre0Bg) { SlotPre0Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre1Bg";
-        if (!SlotPre1Bg) { SlotPre1Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre2Bg";
-        if (!SlotPre2Bg) { SlotPre2Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre3Bg";
-        if (!SlotPre3Bg) { SlotPre3Bg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        // ── Header sort button ──
+        bn = "BtnSortHeader";
+        BtnSortHeaderBg = FindBtnChildBg(layoutRoot, bn);
+        BtnSortHeaderText = FindBtnChildText(layoutRoot, bn);
 
-        // Slot preset text
-        wName = "SlotPre0Text";
-        if (!SlotPre0Text) { SlotPre0Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre1Text";
-        if (!SlotPre1Text) { SlotPre1Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre2Text";
-        if (!SlotPre2Text) { SlotPre2Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "SlotPre3Text";
-        if (!SlotPre3Text) { SlotPre3Text = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        // ══════════════════════════════════════════════════════
+        // Standalone widgets — FindAnyWidget is reliable for
+        // these (NOT inside ButtonWidget containers).
+        // ══════════════════════════════════════════════════════
+        string wn = "";
 
-        // Catch-all
-        wName = "BtnCatchAllBg";
-        if (!BtnCatchAllBg) { BtnCatchAllBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnCatchAllText";
-        if (!BtnCatchAllText) { BtnCatchAllText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wn = "TabIndicator";
+        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
 
-        // Footer buttons
-        wName = "BtnSortBg";
-        if (!BtnSortBg) { BtnSortBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnSaveBg";
-        if (!BtnSaveBg) { BtnSaveBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnResetAllBg";
-        if (!BtnResetAllBg) { BtnResetAllBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnClearOutBg";
-        if (!BtnClearOutBg) { BtnClearOutBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnCloseBg";
-        if (!BtnCloseBg) { BtnCloseBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnPrefixAddBg";
-        if (!BtnPrefixAddBg) { BtnPrefixAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnContainsAddBg";
-        if (!BtnContainsAddBg) { BtnContainsAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnSlotAddBg";
-        if (!BtnSlotAddBg) { BtnSlotAddBg = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wn = "StatusLabel";
+        if (!StatusLabel) { StatusLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "StatusDot";
+        if (!StatusDot) { StatusDot = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
 
-        // Footer text
-        wName = "BtnSortText";
-        if (!BtnSortText) { BtnSortText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnSaveText";
-        if (!BtnSaveText) { BtnSaveText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnResetAllText";
-        if (!BtnResetAllText) { BtnResetAllText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnClearOutText";
-        if (!BtnClearOutText) { BtnClearOutText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "BtnCloseText";
-        if (!BtnCloseText) { BtnCloseText = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
+        wn = "LblCategory";
+        if (!LblCategory) { LblCategory = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblPrefix";
+        if (!LblPrefix) { LblPrefix = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblContains";
+        if (!LblContains) { LblContains = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblSlot";
+        if (!LblSlot) { LblSlot = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblSlotDash";
+        if (!LblSlotDash) { LblSlotDash = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblActiveRules";
+        if (!LblActiveRules) { LblActiveRules = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "DestLabel";
+        if (!DestLabel) { DestLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "LblPreview";
+        if (!LblPreview) { LblPreview = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "TagsEmpty";
+        if (!TagsEmpty) { TagsEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        wn = "PreviewEmpty";
+        if (!PreviewEmpty) { PreviewEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
 
-        // Status
-        wName = "StatusLabel";
-        if (!StatusLabel) { StatusLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "StatusDot";
-        if (!StatusDot) { StatusDot = ImageWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-
-        // Labels
-        wName = "LblCategory";
-        if (!LblCategory) { LblCategory = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblPrefix";
-        if (!LblPrefix) { LblPrefix = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblContains";
-        if (!LblContains) { LblContains = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblSlot";
-        if (!LblSlot) { LblSlot = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblSlotDash";
-        if (!LblSlotDash) { LblSlotDash = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblActiveRules";
-        if (!LblActiveRules) { LblActiveRules = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "DestLabel";
-        if (!DestLabel) { DestLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "LblPreview";
-        if (!LblPreview) { LblPreview = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "TagsEmpty";
-        if (!TagsEmpty) { TagsEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-        wName = "PreviewEmpty";
-        if (!PreviewEmpty) { PreviewEmpty = TextWidget.Cast(layoutRoot.FindAnyWidget(wName)); }
-
-        // Panels
-        wName = "RulesPanel";
-        if (!RulesPanel) { RulesPanel = layoutRoot.FindAnyWidget(wName); }
-        wName = "PreviewPanel";
-        if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wName); }
-        wName = "DestIndicator";
-        if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wName); }
+        wn = "RulesPanel";
+        if (!RulesPanel) { RulesPanel = layoutRoot.FindAnyWidget(wn); }
+        wn = "PreviewPanel";
+        if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wn); }
+        wn = "DestIndicator";
+        if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wn); }
     }
 
     // v2.7: Fallback helpers — find a ButtonWidget by name,
@@ -498,6 +441,10 @@ class LFPG_SorterController extends ViewController
         SetTxtCol(BtnClearOutText, MID);
         SetTxtCol(BtnCloseText, DIM);
 
+        // Header sort button (blue, like footer BtnSort)
+        TintBg(BtnSortHeaderBg, B);
+        SetTxtCol(BtnSortHeaderText, WHT);
+
         // Add buttons (green)
         TintBg(BtnPrefixAddBg, G);
         TintBg(BtnContainsAddBg, G);
@@ -562,6 +509,9 @@ class LFPG_SorterController extends ViewController
             SetTxtCol(BtnSortText, LFPG_SorterView.COL_TEXT);
             SetTxtCol(BtnClearOutText, LFPG_SorterView.COL_TEXT_MID);
             SetTxtCol(BtnSaveText, LFPG_SorterView.COL_GREEN);
+            // Header sort
+            TintBg(BtnSortHeaderBg, LFPG_SorterView.COL_BLUE_BTN);
+            SetTxtCol(BtnSortHeaderText, LFPG_SorterView.COL_TEXT);
         }
         else
         {
@@ -571,6 +521,9 @@ class LFPG_SorterController extends ViewController
             SetTxtCol(BtnSortText, dimTxt);
             SetTxtCol(BtnClearOutText, dimTxt);
             SetTxtCol(BtnSaveText, dimTxt);
+            // Header sort
+            TintBg(BtnSortHeaderBg, dimBg);
+            SetTxtCol(BtnSortHeaderText, dimTxt);
 
             // Dim all category buttons
             TintBg(CatBtn0Bg, dimBg); SetTxtCol(CatBtn0Text, dimTxt);
@@ -929,6 +882,32 @@ class LFPG_SorterController extends ViewController
     // Bug #3: X close button in header
     void BtnCloseX() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
 
+    // v2.8: Header quick-sort button (same logic as footer BtnSort)
+    void BtnSortHeader()
+    {
+        if (!m_IsPaired) return;
+        string sortMsg = "[SorterCtrl] REQUEST_SORT (header)";
+        LFPG_Util.Info(sortMsg);
+        string stSorting = "SORTING...";
+        SetStatus(stSorting);
+        m_FeedbackTimer = 3.0;
+        LFPG_SorterView.PlayUIAction();
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (player)
+        {
+            ScriptRPC rpc = new ScriptRPC();
+            int subId = LFPG_RPC_SubId.SORTER_REQUEST_SORT;
+            rpc.Write(subId);
+            rpc.Write(m_SorterNetLow);
+            rpc.Write(m_SorterNetHigh);
+            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        }
+        #endif
+    }
+
     // =========================================================
     // Tag removal (called from tag chip via direct ref)
     // =========================================================
@@ -1038,12 +1017,25 @@ class LFPG_SorterController extends ViewController
             if (tt) { tt.SetColor(txtCol); tt.SetText(label); }
         }
 
-        // Position active-tab indicator (80px per tab, y=28 from layout)
+        // Position active-tab indicator under selected tab.
+        // v2.8: Read actual tab button position (UIScaler-compatible).
         if (TabIndicator)
         {
-            float indX = m_SelectedOutput * 80.0;
-            float indY = 28.0;
-            TabIndicator.SetPos(indX, indY);
+            float indCurX = 0.0;
+            float indCurY = 0.0;
+            TabIndicator.GetPos(indCurX, indCurY);
+            ImageWidget selBg = GetTabBg(m_SelectedOutput);
+            if (selBg)
+            {
+                Widget selBtn = selBg.GetParent();
+                if (selBtn)
+                {
+                    float btnPosX = 0.0;
+                    float btnPosY = 0.0;
+                    selBtn.GetPos(btnPosX, btnPosY);
+                    TabIndicator.SetPos(btnPosX, indCurY);
+                }
+            }
         }
     }
 

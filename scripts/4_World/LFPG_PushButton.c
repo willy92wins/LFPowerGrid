@@ -28,9 +28,9 @@
 //   m_PoweredNet NOT persisted (derived by graph propagation).
 // =========================================================
 
-static const string LFPG_BUTTON_RVMAT_OFF   = "\\LFPowerGrid\\switch_v1\\data\\led_off.rvmat";
-static const string LFPG_BUTTON_RVMAT_GREEN  = "\\LFPowerGrid\\switch_v1\\data\\led_green.rvmat";
-static const string LFPG_BUTTON_RVMAT_RED    = "\\LFPowerGrid\\switch_v1\\data\\led_red.rvmat";
+static const string LFPG_BUTTON_RVMAT_OFF   = "\\LFPowerGrid\\data\\switch_v1\\data\\led_off.rvmat";
+static const string LFPG_BUTTON_RVMAT_GREEN  = "\\LFPowerGrid\\data\\switch_v1\\data\\led_green.rvmat";
+static const string LFPG_BUTTON_RVMAT_RED    = "\\LFPowerGrid\\data\\switch_v1\\data\\led_red.rvmat";
 
 // Duration in milliseconds that the button stays ON after toggle.
 static const int LFPG_BUTTON_PULSE_MS = 2000;

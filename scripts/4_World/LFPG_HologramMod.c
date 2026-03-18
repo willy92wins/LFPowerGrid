@@ -271,11 +271,8 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LFPG_LaserDetector_Kit"))
             return true;
-        if (proj.IsKindOf("LFPG_AND_Gate_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_OR_Gate_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_XOR_Gate_Kit"))
+        // Logic gate kits (AND, OR, XOR, MemoryCell all inherit LFPG_LogicGate_Kit)
+        if (proj.IsKindOf("LFPG_LogicGate_Kit"))
             return true;
         if (proj.IsKindOf("LFPG_ElectronicCounter_Kit"))
             return true;
@@ -331,6 +328,9 @@ modded class Hologram
             return 1;
         if (projection.IsKindOf("LF_Intercom_Kit"))
             return 1;
+        // Logic gates (AND, OR, XOR, MemoryCell): floor + wall
+        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
+            return 1;
 
         // Different-model kits and everything else: floor only
         return 0;
@@ -374,6 +374,10 @@ modded class Hologram
             return 0.0;
         if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
             return -90.0;
+        // Logic gates: lid/symbol face is +Y (top). +90° pitches
+        // +Y outward from wall so symbol faces the player.
+        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
+            return 90.0;
         return 0.0;
     }
 
@@ -393,6 +397,10 @@ modded class Hologram
         // Monitor model: Z extends -0.307, very deep
         if (projection.IsKindOf("LF_Monitor_Kit"))
             return 0.32;
+        // Logic gates: origin at base (Y=0), model extends 0.17m.
+        // 0.05m offset keeps back face off the wall surface.
+        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
+            return 0.05;
         return LFPG_HOLO_SURFACE_OFFSET;
     }
 

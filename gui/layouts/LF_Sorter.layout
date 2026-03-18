@@ -189,6 +189,50 @@ FrameWidgetClass SorterRoot {
 								}
 							}
 						}
+
+						// v2.8: Header quick-sort button
+						ButtonWidgetClass BtnSortHeader {
+							position 568 8
+							size 110 26
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnSortHeaderBg {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									stretch 1
+									ignorepointer 1
+									{
+									}
+								}
+								TextWidgetClass BtnSortHeaderText {
+									position 0 0
+									size 1 1
+									hexactpos 0
+									vexactpos 0
+									hexactsize 0
+									vexactsize 0
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									text "SORT NOW"
+									ignorepointer 1
+									{
+									}
+								}
+								ScriptParamsClass {
+									Relay_Command "BtnSortHeader"
+									{
+									}
+								}
+							}
+						}
 					}
 				}
 

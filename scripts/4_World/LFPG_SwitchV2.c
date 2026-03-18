@@ -29,9 +29,9 @@
 //   ⚠ Save wipe required (new persistence format).
 // =========================================================
 
-static const string LFPG_SWITCHV2_RVMAT_OFF   = "\\LFPowerGrid\\switch_v2\\data\\led_off.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_GREEN  = "\\LFPowerGrid\\switch_v2\\data\\led_green.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_RED    = "\\LFPowerGrid\\switch_v2\\data\\led_red.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_OFF   = "\\LFPowerGrid\\data\\switch_v2\\data\\led_off.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_GREEN  = "\\LFPowerGrid\\data\\switch_v2\\data\\led_green.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_RED    = "\\LFPowerGrid\\data\\switch_v2\\data\\led_red.rvmat";
 
 // ---------------------------------------------------------
 // KIT - same-model deploy pattern (Splitter/Combiner parity)
