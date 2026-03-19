@@ -743,7 +743,9 @@ class LFPG_SwitchRemote : Inventory_Base
         string json = "";
         if (!ctx.Read(json))
         {
-            LFPG_Util.Error("[LFPG_SwitchRemote] OnStoreLoad: failed to read wires json for " + m_DeviceId);
+            string jsonErr = "[LFPG_SwitchRemote] OnStoreLoad: failed to read wires json for ";
+            jsonErr = jsonErr + m_DeviceId;
+            LFPG_Util.Error(jsonErr);
             return false;
         }
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_SwitchRemote");

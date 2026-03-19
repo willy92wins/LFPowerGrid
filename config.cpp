@@ -1056,8 +1056,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
 
-        hiddenSelections[] = {"led_indicator"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\sensor\materials\sensor_led_off.rvmat"};
+        hiddenSelections[] = {"light_led"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\sensor\motion_sensor_off.rvmat"};
 
         class DamageSystem
         {

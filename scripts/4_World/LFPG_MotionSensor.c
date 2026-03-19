@@ -21,12 +21,12 @@
 //   Overwritten via hold-F ActionPairSensor.
 //   Requires LBmaster_Groups (#ifdef). Without it, only DETECT_ALL works.
 //
-// LED states (hiddenSelections[0] = "sensor_led"):
+// LED states (hiddenSelections[0] = "light_led"):
 //   Green = m_PoweredNet && m_GateOpen  (detecting, passing power)
 //   Red   = m_PoweredNet && !m_GateOpen (armed, no detection)
 //   Off   = !m_PoweredNet               (no upstream / disconnected)
 //
-// Port positions: Virtual (no memory points in p3d).
+// Port positions: p3d memory points "port_input_0" / "port_output_0".
 //
 // Persistence: DeviceIdLow, DeviceIdHigh, m_DetectMode,
 //              m_PairedGroupName, wiresJSON.
@@ -40,10 +40,10 @@ static const int LFPG_SENSOR_MODE_TEAM  = 1;
 static const int LFPG_SENSOR_MODE_ENEMY = 2;
 static const int LFPG_SENSOR_MODE_COUNT = 3;
 
-// LED rvmat paths (placeholder — reuse button rvmats until sensor-specific assets exist)
-static const string LFPG_SENSOR_RVMAT_OFF   = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
-static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
-static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
+// LED rvmat paths (sensor-specific assets in data/sensor/)
+static const string LFPG_SENSOR_RVMAT_OFF   = "\\LFPowerGrid\\data\\sensor\\motion_sensor_off.rvmat";
+static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\sensor\\motion_sensor_green.rvmat";
+static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\sensor\\motion_sensor_red.rvmat";
 
 // ---------------------------------------------------------
 // KIT - same-model deploy pattern (Splitter/PushButton parity)
@@ -716,21 +716,38 @@ class LFPG_MotionSensor : Inventory_Base
         return false;
     }
 
-    // Virtual port positions
+    // Port positions — map logical names to p3d memory point names.
+    // Logical: "input_1"/"output_1" → p3d: "port_input_0"/"port_output_0"
     vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint = "port_" + portName;
-        if (MemoryPointExists(memPoint))
+        string memPoint = "";
+        string inName = "input_1";
+        string outName = "output_1";
+
+        if (portName == inName)
         {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
+            memPoint = "port_input_0";
+        }
+        else if (portName == outName)
+        {
+            memPoint = "port_output_0";
         }
 
+        if (memPoint != "")
+        {
+            if (MemoryPointExists(memPoint))
+            {
+                return ModelToWorld(GetMemoryPointPos(memPoint));
+            }
+        }
+
+        // Fallback: hardcoded offsets
         vector offset = "0 0.02 0";
-        if (portName == "input_1")
+        if (portName == inName)
         {
             offset = "0 0.02 -0.03";
         }
-        else if (portName == "output_1")
+        else if (portName == outName)
         {
             offset = "0 0.02 0.03";
         }
