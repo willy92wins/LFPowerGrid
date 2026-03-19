@@ -21,12 +21,6 @@ class CfgSlots
         ghostIcon = "missing";
     };
     // v1.1.0: Water Pump slots
-    class Slot_LF_PumpFilter
-    {
-        name = "LF_PumpFilter";
-        displayName = "Water Filter";
-        ghostIcon = "missing";
-    };
     class Slot_LF_PumpPlate
     {
         name = "LF_PumpPlate";
@@ -804,20 +798,15 @@ class CfgVehicles
     {
         inventorySlot[] += {"LF_SolarNails", "LF_PumpNails"};
     };
-    // v1.1.0: GasMask_Filter (vanilla NBC filter) can go in pump filter slot
-    // NOTE: vanilla defines inventorySlot as scalar "GasMask_Filter".
-    // Using += on scalar base corrupts config. Must redefine as full array.
-    class GasMask_Filter
-    {
-        inventorySlot[] = {"GasMask_Filter", "LF_PumpFilter"};
-    };
-    // v3.1.0: PersonalRadio can go into Intercom radio slot
-    // NOTE: vanilla defines inventorySlot as scalar "".
-    // Using += on scalar base corrupts config. Must redefine as full array.
-    class PersonalRadio
-    {
-        inventorySlot[] = {"LF_IntercomRadio"};
-    };
+    // v1.1.0: GasMask_Filter — NO override needed.
+    // Vanilla defines inventorySlot = "GasMask_Filter" (scalar).
+    // WaterPump uses the vanilla slot directly via attachments[]={"GasMask_Filter"}.
+    // Overriding scalar to array crashes the config (engine bug T148506).
+
+    // v3.1.0: PersonalRadio — NO override needed.
+    // Radio install uses action-based system (LFPG_ActionInstallMic),
+    // not inventory drag-and-drop. Overriding inventorySlot would break
+    // compatibility with clothing mods (Forward Operator Gear, etc).
 
     // =========================================================
     // v1.1.0: WATER PUMP (PASSTHROUGH, filter + tank)
@@ -854,7 +843,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"LF_PumpFilter", "LF_PumpPlate", "LF_PumpNails"};
+        attachments[] = {"GasMask_Filter", "LF_PumpPlate", "LF_PumpNails"};
         hiddenSelections[] = {"pump_led"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
@@ -864,7 +853,7 @@ class CfgVehicles
             {
                 name = "Water Filter";
                 description = "";
-                attachmentSlots[] = {"LF_PumpFilter"};
+                attachmentSlots[] = {"GasMask_Filter"};
                 icon = "missing";
             };
             class UpgradeMaterials
@@ -890,7 +879,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"LF_PumpFilter"};
+        attachments[] = {"GasMask_Filter"};
         hiddenSelections[] = {"pump_led"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
@@ -900,7 +889,7 @@ class CfgVehicles
             {
                 name = "Water Filter";
                 description = "";
-                attachmentSlots[] = {"LF_PumpFilter"};
+                attachmentSlots[] = {"GasMask_Filter"};
                 icon = "missing";
             };
         };
