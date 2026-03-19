@@ -1840,7 +1840,6 @@ class CfgVehicles
     // NOT spawnable by players (scope=1). No attachments, no actions.
     // CompEM disabled in script. Tiny invisible model.
     // =========================================================
-	class PersonalRadio;
     class LF_GhostRadio : PersonalRadio
     {
         scope = 1;
