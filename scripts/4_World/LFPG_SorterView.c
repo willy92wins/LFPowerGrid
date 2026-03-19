@@ -154,6 +154,9 @@ class LFPG_SorterView extends ScriptView
     static const int COL_CATCHALL_BG     = 0x10FBBF24;
     static const int COL_PURPLE          = 0xFFA78BFA;
 
+    // ═══════════════════════════════════════════════════════
+    // OVERRIDES (contiguous — Enforce Script rule #24)
+    // ═══════════════════════════════════════════════════════
     override string GetLayoutFile()
     {
         return "LFPowerGrid/gui/layouts/LF_Sorter.layout";
@@ -253,6 +256,327 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
+    // =========================================================
+    // Drag: MouseDown on header starts drag (Bug #4)
+    // =========================================================
+    override bool OnMouseButtonDown(Widget w, int x, int y, int button)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        // Header drag (LMB only)
+        if (button == 0)
+        {
+            if (IsHeaderWidget(w))
+            {
+                m_Dragging = true;
+                // FIX 4: Restore hover color before drag moves panel
+                if (m_HoveredBg)
+                {
+                    int restoreCol = FindCachedColor(m_HoveredBg);
+                    if (restoreCol >= 0)
+                    {
+                        m_HoveredBg.SetColor(restoreCol);
+                    }
+                    m_HoveredBg = null;
+                }
+                float px = 0.0;
+                float py = 0.0;
+                if (SorterPanel)
+                {
+                    SorterPanel.GetPos(px, py);
+                }
+                m_DragOffX = x - px;
+                m_DragOffY = y - py;
+            }
+        }
+
+        // v2.6 fix: If the click landed on an interactive widget
+        // (ButtonWidget or EditBoxWidget), return false so the widget's
+        // internal handler can process it → OnClick → Relay_Command.
+        // Returning true was consuming the event BEFORE ButtonWidget
+        // could generate OnClick, breaking ALL button clicks.
+        // ChangeGameFocus(1) + SetDisabled(true) already prevent
+        // game-side click-through (movement, attacks, interactions).
+        if (IsInteractiveWidget(w))
+        {
+            return false;
+        }
+
+        // Consume non-interactive clicks (panel bg, headers, labels)
+        // so mouse events don't leak to game layer.
+        return true;
+    }
+
+    override bool OnMouseButtonUp(Widget w, int x, int y, int button)
+    {
+        if (button == 0)
+        {
+            m_Dragging = false;
+        }
+        if (!m_IsOpen)
+            return false;
+
+        // v2.6 fix: Let interactive widgets receive mouse-up too
+        // (ButtonWidget needs both down+up to fire OnClick).
+        if (IsInteractiveWidget(w))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    // =========================================================
+    // v2.7: Manual OnClick dispatch — robust fallback.
+    // Dabs MVC Relay_Command is processed by ScriptView.OnClick.
+    // This override intercepts FIRST, dispatches known buttons
+    // directly to the controller, and returns true to prevent
+    // the base class from ALSO dispatching (which would cause
+    // double-fire → toggles cancel out).
+    //
+    // For unrecognized buttons: delegates to super.OnClick so
+    // Relay_Command still works (future-proofing).
+    // =========================================================
+    override bool OnClick(Widget w, int x, int y, int button)
+    {
+        if (!m_IsOpen)
+        {
+            bool baseNotOpen = super.OnClick(w, x, y, button);
+            return baseNotOpen;
+        }
+        if (!w)
+        {
+            bool baseNoW = super.OnClick(w, x, y, button);
+            return baseNoW;
+        }
+        if (button != 0)
+        {
+            bool baseNotLMB = super.OnClick(w, x, y, button);
+            return baseNotLMB;
+        }
+
+        // Find the enclosing ButtonWidget (click may land on a child)
+        Widget check = w;
+        ButtonWidget btn = null;
+        while (check)
+        {
+            btn = ButtonWidget.Cast(check);
+            if (btn)
+            {
+                break;
+            }
+            check = check.GetParent();
+        }
+        if (!btn)
+        {
+            bool baseNoBtn = super.OnClick(w, x, y, button);
+            return baseNoBtn;
+        }
+
+        string bName = btn.GetName();
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
+        if (!ctrl)
+        {
+            bool baseNoCtrl = super.OnClick(w, x, y, button);
+            return baseNoCtrl;
+        }
+
+        // Output tabs
+        string nTabOut0 = "TabOut0";
+        string nTabOut1 = "TabOut1";
+        string nTabOut2 = "TabOut2";
+        string nTabOut3 = "TabOut3";
+        string nTabOut4 = "TabOut4";
+        string nTabOut5 = "TabOut5";
+        if (bName == nTabOut0) { ctrl.TabOut0(); return true; }
+        if (bName == nTabOut1) { ctrl.TabOut1(); return true; }
+        if (bName == nTabOut2) { ctrl.TabOut2(); return true; }
+        if (bName == nTabOut3) { ctrl.TabOut3(); return true; }
+        if (bName == nTabOut4) { ctrl.TabOut4(); return true; }
+        if (bName == nTabOut5) { ctrl.TabOut5(); return true; }
+
+        // View tabs
+        string nTabRules = "TabRules";
+        string nTabPreview = "TabPreview";
+        if (bName == nTabRules) { ctrl.TabRules(); return true; }
+        if (bName == nTabPreview) { ctrl.TabPreview(); return true; }
+
+        // Category buttons
+        string nCat0 = "CatBtn0";
+        string nCat1 = "CatBtn1";
+        string nCat2 = "CatBtn2";
+        string nCat3 = "CatBtn3";
+        string nCat4 = "CatBtn4";
+        string nCat5 = "CatBtn5";
+        string nCat6 = "CatBtn6";
+        string nCat7 = "CatBtn7";
+        if (bName == nCat0) { ctrl.CatBtn0(); return true; }
+        if (bName == nCat1) { ctrl.CatBtn1(); return true; }
+        if (bName == nCat2) { ctrl.CatBtn2(); return true; }
+        if (bName == nCat3) { ctrl.CatBtn3(); return true; }
+        if (bName == nCat4) { ctrl.CatBtn4(); return true; }
+        if (bName == nCat5) { ctrl.CatBtn5(); return true; }
+        if (bName == nCat6) { ctrl.CatBtn6(); return true; }
+        if (bName == nCat7) { ctrl.CatBtn7(); return true; }
+
+        // Slot presets
+        string nSlot0 = "SlotPre0";
+        string nSlot1 = "SlotPre1";
+        string nSlot2 = "SlotPre2";
+        string nSlot3 = "SlotPre3";
+        if (bName == nSlot0) { ctrl.SlotPre0(); return true; }
+        if (bName == nSlot1) { ctrl.SlotPre1(); return true; }
+        if (bName == nSlot2) { ctrl.SlotPre2(); return true; }
+        if (bName == nSlot3) { ctrl.SlotPre3(); return true; }
+
+        // Add buttons
+        string nPrefixAdd = "BtnPrefixAdd";
+        string nContainsAdd = "BtnContainsAdd";
+        string nSlotAdd = "BtnSlotAdd";
+        if (bName == nPrefixAdd) { ctrl.BtnPrefixAdd(); return true; }
+        if (bName == nContainsAdd) { ctrl.BtnContainsAdd(); return true; }
+        if (bName == nSlotAdd) { ctrl.BtnSlotAdd(); return true; }
+
+        // Action buttons
+        string nCatchAll = "BtnCatchAll";
+        string nClearOut = "BtnClearOut";
+        string nResetAll = "BtnResetAll";
+        string nSave = "BtnSave";
+        string nSort = "BtnSort";
+        string nClose = "BtnClose";
+        string nCloseX = "BtnCloseX";
+        string nSortHeader = "BtnSortHeader";
+        if (bName == nCatchAll) { ctrl.BtnCatchAll(); return true; }
+        if (bName == nClearOut) { ctrl.BtnClearOut(); return true; }
+        if (bName == nResetAll) { ctrl.BtnResetAll(); return true; }
+        if (bName == nSave) { ctrl.BtnSave(); return true; }
+        if (bName == nSort) { ctrl.BtnSort(); return true; }
+        if (bName == nClose) { ctrl.BtnClose(); return true; }
+        if (bName == nCloseX) { ctrl.BtnCloseX(); return true; }
+        if (bName == nSortHeader) { ctrl.BtnSortHeader(); return true; }
+
+        // Unrecognized button — delegate to ScriptView base class
+        // so Relay_Command still works for any future buttons
+        bool baseFallback = super.OnClick(w, x, y, button);
+        return baseFallback;
+    }
+
+    // v3: OnChange fires on every EditBox keystroke
+    override bool OnChange(Widget w, int x, int y, bool finished)
+    {
+        if (!m_IsOpen)
+            return false;
+        RefreshEditHints();
+        return false;
+    }
+
+    // =========================================================
+    // Hover feedback (v2.2) — lighten button bg on mouse enter
+    // =========================================================
+    override bool OnMouseEnter(Widget w, int x, int y)
+    {
+        if (!m_IsOpen)
+            return false;
+        // N3: No hover flash on disabled/dimmed buttons
+        if (!m_ControlsEnabled)
+            return false;
+
+        ImageWidget bg = FindButtonBg(w);
+        int baseColor = 0;
+        int hoverColor = 0;
+        if (bg)
+        {
+            // Restore previous hover first (guards against Enter-before-Leave race)
+            if (m_HoveredBg && m_HoveredBg != bg)
+            {
+                baseColor = FindCachedColor(m_HoveredBg);
+                if (baseColor >= 0)
+                {
+                    m_HoveredBg.SetColor(baseColor);
+                }
+                m_HoveredBg = null;
+                baseColor = 0;
+            }
+
+            baseColor = FindCachedColor(bg);
+            if (baseColor >= 0)
+            {
+                m_HoveredBg = bg;
+                hoverColor = LightenARGB(baseColor, 20);
+                bg.SetColor(hoverColor);
+            }
+        }
+        return false;
+    }
+
+    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
+    {
+        // FIX 5: Guard symmetric with OnMouseEnter
+        if (!m_IsOpen)
+            return false;
+
+        int baseColor = 0;
+        if (m_HoveredBg)
+        {
+            baseColor = FindCachedColor(m_HoveredBg);
+            if (baseColor >= 0)
+            {
+                m_HoveredBg.SetColor(baseColor);
+            }
+            m_HoveredBg = null;
+        }
+        return false;
+    }
+
+    // =========================================================
+    // Enter-to-submit on EditBoxes (v2.2)
+    // =========================================================
+    override bool OnKeyDown(Widget w, int x, int y, int key)
+    {
+        if (!m_IsOpen)
+            return false;
+
+        Widget focused = null;
+        LFPG_SorterController ctrl = null;
+        string wName = "";
+
+        // KC_RETURN = 28
+        if (key == KeyCode.KC_RETURN)
+        {
+            focused = GetFocus();
+            if (!focused)
+                return false;
+
+            ctrl = LFPG_SorterController.Cast(GetController());
+            if (!ctrl)
+                return false;
+
+            // Match focused widget to the known EditBoxes
+            wName = focused.GetName();
+            if (wName == "EditPrefix")
+            {
+                ctrl.BtnPrefixAdd();
+                return true;
+            }
+            if (wName == "EditContains")
+            {
+                ctrl.BtnContainsAdd();
+                return true;
+            }
+            if (wName == "EditSlotMin" || wName == "EditSlotMax")
+            {
+                ctrl.BtnSlotAdd();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // CONSTRUCTOR / DESTRUCTOR
+    // ═══════════════════════════════════════════════════════
+
     void LFPG_SorterView()
     {
         m_IsOpen = false;
@@ -301,13 +625,13 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
-    // S3: ApplyColors moved to DoOpen() — calling here caused flash
-    // because colors were painted before data existed, then overwritten by InitFromRPC.
-    // R2: Override kept intentionally to document this design decision.
-    override void OnWidgetScriptInit(Widget w)
-    {
-        super.OnWidgetScriptInit(w);
-    }
+    // ═══════════════════════════════════════════════════════
+    // PROTECTED INSTANCE METHODS
+    // ═══════════════════════════════════════════════════════
+
+    // S3: ApplyColors was originally here but moved to DoOpen() to avoid flash.
+    // Colors were painted before data existed, then overwritten by InitFromRPC.
+    // ApplyColors is now called in DoOpen after EnsureViewBindings + EnsureBindings.
 
     // =========================================================
     // v2.6: Manual binding fallback for View-level widget refs.
@@ -637,127 +961,12 @@ class LFPG_SorterView extends ScriptView
         return -1;
     }
 
-    // =========================================================
-    // Static color cache accessor (called from Controller.TintBg)
-    // =========================================================
-    static void CacheColor(Widget w, int color)
+    // Walk up from w to find enclosing ButtonWidget, then return first ImageWidget child
+    protected ImageWidget FindButtonBg(Widget w)
     {
-        if (!s_Instance)
-            return;
         if (!w)
-            return;
-        s_Instance.CacheColorLocal(w, color);
-    }
+            return null;
 
-    // N3: Static setter — called from Controller.SetControlsEnabled
-    // so OnMouseEnter can skip hover on disabled buttons.
-    static void SetControlsFlag(bool enabled)
-    {
-        if (!s_Instance)
-            return;
-        s_Instance.m_ControlsEnabled = enabled;
-    }
-
-    // =========================================================
-    // Drag: MouseDown on header starts drag (Bug #4)
-    // =========================================================
-    override bool OnMouseButtonDown(Widget w, int x, int y, int button)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        // Header drag (LMB only)
-        if (button == 0)
-        {
-            if (IsHeaderWidget(w))
-            {
-                m_Dragging = true;
-                // FIX 4: Restore hover color before drag moves panel
-                if (m_HoveredBg)
-                {
-                    int restoreCol = FindCachedColor(m_HoveredBg);
-                    if (restoreCol >= 0)
-                    {
-                        m_HoveredBg.SetColor(restoreCol);
-                    }
-                    m_HoveredBg = null;
-                }
-                float px = 0.0;
-                float py = 0.0;
-                if (SorterPanel)
-                {
-                    SorterPanel.GetPos(px, py);
-                }
-                m_DragOffX = x - px;
-                m_DragOffY = y - py;
-            }
-        }
-
-        // v2.6 fix: If the click landed on an interactive widget
-        // (ButtonWidget or EditBoxWidget), return false so the widget's
-        // internal handler can process it → OnClick → Relay_Command.
-        // Returning true was consuming the event BEFORE ButtonWidget
-        // could generate OnClick, breaking ALL button clicks.
-        // ChangeGameFocus(1) + SetDisabled(true) already prevent
-        // game-side click-through (movement, attacks, interactions).
-        if (IsInteractiveWidget(w))
-        {
-            return false;
-        }
-
-        // Consume non-interactive clicks (panel bg, headers, labels)
-        // so mouse events don't leak to game layer.
-        return true;
-    }
-
-    override bool OnMouseButtonUp(Widget w, int x, int y, int button)
-    {
-        if (button == 0)
-        {
-            m_Dragging = false;
-        }
-        if (!m_IsOpen)
-            return false;
-
-        // v2.6 fix: Let interactive widgets receive mouse-up too
-        // (ButtonWidget needs both down+up to fire OnClick).
-        if (IsInteractiveWidget(w))
-        {
-            return false;
-        }
-        return true;
-    }
-
-    // =========================================================
-    // v2.7: Manual OnClick dispatch — robust fallback.
-    // Dabs MVC Relay_Command is processed by ScriptView.OnClick.
-    // This override intercepts FIRST, dispatches known buttons
-    // directly to the controller, and returns true to prevent
-    // the base class from ALSO dispatching (which would cause
-    // double-fire → toggles cancel out).
-    //
-    // For unrecognized buttons: delegates to super.OnClick so
-    // Relay_Command still works (future-proofing).
-    // =========================================================
-    override bool OnClick(Widget w, int x, int y, int button)
-    {
-        if (!m_IsOpen)
-        {
-            bool baseNotOpen = super.OnClick(w, x, y, button);
-            return baseNotOpen;
-        }
-        if (!w)
-        {
-            bool baseNoW = super.OnClick(w, x, y, button);
-            return baseNoW;
-        }
-        if (button != 0)
-        {
-            bool baseNotLMB = super.OnClick(w, x, y, button);
-            return baseNotLMB;
-        }
-
-        // Find the enclosing ButtonWidget (click may land on a child)
         Widget check = w;
         ButtonWidget btn = null;
         while (check)
@@ -769,98 +978,17 @@ class LFPG_SorterView extends ScriptView
             }
             check = check.GetParent();
         }
+
         if (!btn)
-        {
-            bool baseNoBtn = super.OnClick(w, x, y, button);
-            return baseNoBtn;
-        }
+            return null;
 
-        string bName = btn.GetName();
-        LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
-        if (!ctrl)
-        {
-            bool baseNoCtrl = super.OnClick(w, x, y, button);
-            return baseNoCtrl;
-        }
+        // First child is the Bg ImageWidget
+        Widget child = btn.GetChildren();
+        if (!child)
+            return null;
 
-        // Output tabs
-        string nTabOut0 = "TabOut0";
-        string nTabOut1 = "TabOut1";
-        string nTabOut2 = "TabOut2";
-        string nTabOut3 = "TabOut3";
-        string nTabOut4 = "TabOut4";
-        string nTabOut5 = "TabOut5";
-        if (bName == nTabOut0) { ctrl.TabOut0(); return true; }
-        if (bName == nTabOut1) { ctrl.TabOut1(); return true; }
-        if (bName == nTabOut2) { ctrl.TabOut2(); return true; }
-        if (bName == nTabOut3) { ctrl.TabOut3(); return true; }
-        if (bName == nTabOut4) { ctrl.TabOut4(); return true; }
-        if (bName == nTabOut5) { ctrl.TabOut5(); return true; }
-
-        // View tabs
-        string nTabRules = "TabRules";
-        string nTabPreview = "TabPreview";
-        if (bName == nTabRules) { ctrl.TabRules(); return true; }
-        if (bName == nTabPreview) { ctrl.TabPreview(); return true; }
-
-        // Category buttons
-        string nCat0 = "CatBtn0";
-        string nCat1 = "CatBtn1";
-        string nCat2 = "CatBtn2";
-        string nCat3 = "CatBtn3";
-        string nCat4 = "CatBtn4";
-        string nCat5 = "CatBtn5";
-        string nCat6 = "CatBtn6";
-        string nCat7 = "CatBtn7";
-        if (bName == nCat0) { ctrl.CatBtn0(); return true; }
-        if (bName == nCat1) { ctrl.CatBtn1(); return true; }
-        if (bName == nCat2) { ctrl.CatBtn2(); return true; }
-        if (bName == nCat3) { ctrl.CatBtn3(); return true; }
-        if (bName == nCat4) { ctrl.CatBtn4(); return true; }
-        if (bName == nCat5) { ctrl.CatBtn5(); return true; }
-        if (bName == nCat6) { ctrl.CatBtn6(); return true; }
-        if (bName == nCat7) { ctrl.CatBtn7(); return true; }
-
-        // Slot presets
-        string nSlot0 = "SlotPre0";
-        string nSlot1 = "SlotPre1";
-        string nSlot2 = "SlotPre2";
-        string nSlot3 = "SlotPre3";
-        if (bName == nSlot0) { ctrl.SlotPre0(); return true; }
-        if (bName == nSlot1) { ctrl.SlotPre1(); return true; }
-        if (bName == nSlot2) { ctrl.SlotPre2(); return true; }
-        if (bName == nSlot3) { ctrl.SlotPre3(); return true; }
-
-        // Add buttons
-        string nPrefixAdd = "BtnPrefixAdd";
-        string nContainsAdd = "BtnContainsAdd";
-        string nSlotAdd = "BtnSlotAdd";
-        if (bName == nPrefixAdd) { ctrl.BtnPrefixAdd(); return true; }
-        if (bName == nContainsAdd) { ctrl.BtnContainsAdd(); return true; }
-        if (bName == nSlotAdd) { ctrl.BtnSlotAdd(); return true; }
-
-        // Action buttons
-        string nCatchAll = "BtnCatchAll";
-        string nClearOut = "BtnClearOut";
-        string nResetAll = "BtnResetAll";
-        string nSave = "BtnSave";
-        string nSort = "BtnSort";
-        string nClose = "BtnClose";
-        string nCloseX = "BtnCloseX";
-        string nSortHeader = "BtnSortHeader";
-        if (bName == nCatchAll) { ctrl.BtnCatchAll(); return true; }
-        if (bName == nClearOut) { ctrl.BtnClearOut(); return true; }
-        if (bName == nResetAll) { ctrl.BtnResetAll(); return true; }
-        if (bName == nSave) { ctrl.BtnSave(); return true; }
-        if (bName == nSort) { ctrl.BtnSort(); return true; }
-        if (bName == nClose) { ctrl.BtnClose(); return true; }
-        if (bName == nCloseX) { ctrl.BtnCloseX(); return true; }
-        if (bName == nSortHeader) { ctrl.BtnSortHeader(); return true; }
-
-        // Unrecognized button — delegate to ScriptView base class
-        // so Relay_Command still works for any future buttons
-        bool baseFallback = super.OnClick(w, x, y, button);
-        return baseFallback;
+        ImageWidget bg = ImageWidget.Cast(child);
+        return bg;
     }
 
     // Walk the parent chain to see if widget is in the HeaderFrame
@@ -1036,149 +1164,6 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
-    static void RefreshHints()
-    {
-        if (!s_Instance)
-            return;
-        s_Instance.RefreshEditHints();
-    }
-
-    // v3: OnChange fires on every EditBox keystroke
-    override bool OnChange(Widget w, int x, int y, bool finished)
-    {
-        if (!m_IsOpen)
-            return false;
-        RefreshEditHints();
-        return false;
-    }
-
-    // =========================================================
-    // Singleton lifecycle
-    // =========================================================
-    static void Init()
-    {
-        #ifndef SERVER
-        if (s_Instance)
-            return;
-        s_Instance = new LFPG_SorterView();
-        Widget root = s_Instance.GetLayoutRoot();
-        if (root)
-        {
-            root.Show(false);
-            root.SetSort(50000);
-        }
-        string initMsg = "[SorterView] Pre-created (hidden)";
-        LFPG_Util.Info(initMsg);
-
-        // v2.5 B1: Capture design-time widget values for resolution scaling.
-        // Must happen AFTER ScriptView creates widgets (constructor) and
-        // BEFORE any Apply call. SorterPanel and all children are captured.
-        if (s_Instance.SorterPanel)
-        {
-            LFPG_UIScaler.Capture(s_Instance.SorterPanel);
-        }
-        #endif
-    }
-
-    // Called from RPC — widgets already exist, just show + data
-    static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
-    {
-        #ifndef SERVER
-        if (!s_Instance)
-        {
-            string warnMsg = "[SorterView] Open before Init — cannot open";
-            LFPG_Util.Warn(warnMsg);
-            return;
-        }
-        s_Instance.DoOpen(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
-        #endif
-    }
-
-    static void Close()
-    {
-        if (s_Instance)
-        {
-            s_Instance.DoClose();
-        }
-    }
-
-    static bool IsOpen()
-    {
-        if (!s_Instance)
-            return false;
-        return s_Instance.m_IsOpen;
-    }
-
-    // v2.4 Bug A: Called from MissionGameplay.OnKeyPress(key==1).
-    // Double-ESC: first clears EditBox focus, second closes panel.
-    // Returns true if event consumed (panel was open).
-    static bool HandleEscKey()
-    {
-        if (!s_Instance)
-            return false;
-        if (!s_Instance.m_IsOpen)
-            return false;
-
-        Widget focused = GetFocus();
-        if (focused)
-        {
-            EditBoxWidget editCheck = EditBoxWidget.Cast(focused);
-            if (editCheck)
-            {
-                SetFocus(null);
-                return true;
-            }
-        }
-        s_Instance.DoClose();
-        return true;
-    }
-
-    // S2 fix: Cleanup deletes instance properly (prevents leak).
-    // Input release is handled by the destructor (S1) which has
-    // GetGame() null guard for safe shutdown.
-    static void Cleanup()
-    {
-        // v2.5 B3: Release scaler arrays before destroying widgets
-        LFPG_UIScaler.Reset();
-
-        if (s_Instance)
-        {
-            s_Instance.m_IsOpen = false;
-            s_Instance.m_Dragging = false;
-            s_Instance.m_FadingIn = false;
-        }
-        // FIX 3: null decrements refcount → GC runs destructor safely.
-        // Explicit delete risked segfault if callback still held ref.
-        s_Instance = null;
-    }
-
-    static void OnSaveAck(bool success)
-    {
-        if (!s_Instance)
-            return;
-        if (!s_Instance.m_IsOpen)
-            return;
-        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
-        if (ctrl)
-        {
-            ctrl.HandleSaveAck(success);
-        }
-    }
-
-    // v2.6: Server preview response → delegate to Controller
-    static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
-    {
-        if (!s_Instance)
-            return;
-        if (!s_Instance.m_IsOpen)
-            return;
-        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
-        if (ctrl)
-        {
-            ctrl.PopulatePreview(outputIdx, totalMatched, names, cats, slots);
-        }
-    }
-
     protected void DoOpen(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         if (m_IsOpen)
@@ -1350,92 +1335,29 @@ class LFPG_SorterView extends ScriptView
         #endif
     }
 
+    // ═══════════════════════════════════════════════════════
+    // STATIC METHODS
+    // ═══════════════════════════════════════════════════════
+
     // =========================================================
-    // Hover feedback (v2.2) — lighten button bg on mouse enter
+    // Static color cache accessor (called from Controller.TintBg)
     // =========================================================
-    override bool OnMouseEnter(Widget w, int x, int y)
+    static void CacheColor(Widget w, int color)
     {
-        if (!m_IsOpen)
-            return false;
-        // N3: No hover flash on disabled/dimmed buttons
-        if (!m_ControlsEnabled)
-            return false;
-
-        ImageWidget bg = FindButtonBg(w);
-        int baseColor = 0;
-        int hoverColor = 0;
-        if (bg)
-        {
-            // Restore previous hover first (guards against Enter-before-Leave race)
-            if (m_HoveredBg && m_HoveredBg != bg)
-            {
-                baseColor = FindCachedColor(m_HoveredBg);
-                if (baseColor >= 0)
-                {
-                    m_HoveredBg.SetColor(baseColor);
-                }
-                m_HoveredBg = null;
-                baseColor = 0;
-            }
-
-            baseColor = FindCachedColor(bg);
-            if (baseColor >= 0)
-            {
-                m_HoveredBg = bg;
-                hoverColor = LightenARGB(baseColor, 20);
-                bg.SetColor(hoverColor);
-            }
-        }
-        return false;
-    }
-
-    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
-    {
-        // FIX 5: Guard symmetric with OnMouseEnter
-        if (!m_IsOpen)
-            return false;
-
-        int baseColor = 0;
-        if (m_HoveredBg)
-        {
-            baseColor = FindCachedColor(m_HoveredBg);
-            if (baseColor >= 0)
-            {
-                m_HoveredBg.SetColor(baseColor);
-            }
-            m_HoveredBg = null;
-        }
-        return false;
-    }
-
-    // Walk up from w to find enclosing ButtonWidget, then return first ImageWidget child
-    protected ImageWidget FindButtonBg(Widget w)
-    {
+        if (!s_Instance)
+            return;
         if (!w)
-            return null;
+            return;
+        s_Instance.CacheColorLocal(w, color);
+    }
 
-        Widget check = w;
-        ButtonWidget btn = null;
-        while (check)
-        {
-            btn = ButtonWidget.Cast(check);
-            if (btn)
-            {
-                break;
-            }
-            check = check.GetParent();
-        }
-
-        if (!btn)
-            return null;
-
-        // First child is the Bg ImageWidget
-        Widget child = btn.GetChildren();
-        if (!child)
-            return null;
-
-        ImageWidget bg = ImageWidget.Cast(child);
-        return bg;
+    // N3: Static setter — called from Controller.SetControlsEnabled
+    // so OnMouseEnter can skip hover on disabled buttons.
+    static void SetControlsFlag(bool enabled)
+    {
+        if (!s_Instance)
+            return;
+        s_Instance.m_ControlsEnabled = enabled;
     }
 
     // Lighten an ARGB color by adding 'amount' to RGB channels (clamped to 255)
@@ -1457,77 +1379,144 @@ class LFPG_SorterView extends ScriptView
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
-    // =========================================================
-    // Enter-to-submit on EditBoxes (v2.2)
-    // =========================================================
-    override bool OnKeyDown(Widget w, int x, int y, int key)
+    static void RefreshHints()
     {
-        if (!m_IsOpen)
+        if (!s_Instance)
+            return;
+        s_Instance.RefreshEditHints();
+    }
+
+    // =========================================================
+    // Singleton lifecycle
+    // =========================================================
+    static void Init()
+    {
+        #ifndef SERVER
+        if (s_Instance)
+            return;
+        s_Instance = new LFPG_SorterView();
+        Widget root = s_Instance.GetLayoutRoot();
+        if (root)
+        {
+            root.Show(false);
+            root.SetSort(50000);
+        }
+        string initMsg = "[SorterView] Pre-created (hidden)";
+        LFPG_Util.Info(initMsg);
+
+        // v2.5 B1: Capture design-time widget values for resolution scaling.
+        // Must happen AFTER ScriptView creates widgets (constructor) and
+        // BEFORE any Apply call. SorterPanel and all children are captured.
+        if (s_Instance.SorterPanel)
+        {
+            LFPG_UIScaler.Capture(s_Instance.SorterPanel);
+        }
+        #endif
+    }
+
+    // Called from RPC — widgets already exist, just show + data
+    static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
+    {
+        #ifndef SERVER
+        if (!s_Instance)
+        {
+            string warnMsg = "[SorterView] Open before Init — cannot open";
+            LFPG_Util.Warn(warnMsg);
+            return;
+        }
+        s_Instance.DoOpen(configJSON, containerName, d0, d1, d2, d3, d4, d5, netLow, netHigh);
+        #endif
+    }
+
+    static void Close()
+    {
+        if (s_Instance)
+        {
+            s_Instance.DoClose();
+        }
+    }
+
+    static bool IsOpen()
+    {
+        if (!s_Instance)
+            return false;
+        return s_Instance.m_IsOpen;
+    }
+
+    // v2.4 Bug A: Called from MissionGameplay.OnKeyPress(key==1).
+    // Double-ESC: first clears EditBox focus, second closes panel.
+    // Returns true if event consumed (panel was open).
+    static bool HandleEscKey()
+    {
+        if (!s_Instance)
+            return false;
+        if (!s_Instance.m_IsOpen)
             return false;
 
-        Widget focused = null;
-        LFPG_SorterController ctrl = null;
-        string wName = "";
-
-        // KC_RETURN = 28
-        if (key == KeyCode.KC_RETURN)
+        Widget focused = GetFocus();
+        if (focused)
         {
-            focused = GetFocus();
-            if (!focused)
-                return false;
-
-            ctrl = LFPG_SorterController.Cast(GetController());
-            if (!ctrl)
-                return false;
-
-            // Match focused widget to the known EditBoxes
-            wName = focused.GetName();
-            if (wName == "EditPrefix")
+            EditBoxWidget editCheck = EditBoxWidget.Cast(focused);
+            if (editCheck)
             {
-                ctrl.BtnPrefixAdd();
-                return true;
-            }
-            if (wName == "EditContains")
-            {
-                ctrl.BtnContainsAdd();
-                return true;
-            }
-            if (wName == "EditSlotMin" || wName == "EditSlotMax")
-            {
-                ctrl.BtnSlotAdd();
+                SetFocus(null);
                 return true;
             }
         }
-
-        return false;
+        s_Instance.DoClose();
+        return true;
     }
 
-    // =========================================================
-    // UI Sound helper (v2.2)
-    // =========================================================
-    static void PlayUIClick()
+    // S2 fix: Cleanup deletes instance properly (prevents leak).
+    // Input release is handled by the destructor (S1) which has
+    // GetGame() null guard for safe shutdown.
+    static void Cleanup()
     {
-        #ifndef SERVER
-        if (!GetGame())
-            return;
+        // v2.5 B3: Release scaler arrays before destroying widgets
+        LFPG_UIScaler.Reset();
 
-        // v3.1: "pickUpItem_SoundSet" is likely invalid in vanilla DayZ
-        // (same convention as attachmentAdded_SoundSet which is confirmed invalid).
-        // TODO: Define custom CfgSoundSets or find validated vanilla set.
-        #endif
+        if (s_Instance)
+        {
+            s_Instance.m_IsOpen = false;
+            s_Instance.m_Dragging = false;
+            s_Instance.m_FadingIn = false;
+        }
+        // FIX 3: null decrements refcount → GC runs destructor safely.
+        // Explicit delete risked segfault if callback still held ref.
+        s_Instance = null;
     }
 
-    static void PlayUIAction()
+    static void OnSaveAck(bool success)
     {
-        #ifndef SERVER
-        if (!GetGame())
+        if (!s_Instance)
             return;
-
-        // v3.1: "attachmentAdded_SoundSet" is invalid in vanilla DayZ.
-        // TODO: Define custom CfgSoundSets in config.cpp with a real .ogg
-        // for reliable UI feedback. For now, no-op to prevent log spam.
-        #endif
+        if (!s_Instance.m_IsOpen)
+            return;
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
+        if (ctrl)
+        {
+            ctrl.HandleSaveAck(success);
+        }
     }
+
+    // v2.6: Server preview response → delegate to Controller
+    static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_IsOpen)
+            return;
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
+        if (ctrl)
+        {
+            ctrl.PopulatePreview(outputIdx, totalMatched, names, cats, slots);
+        }
+    }
+
+    // UI sound hooks — no-op until custom CfgSoundSets defined in config.cpp.
+    // Callsites in Controller (16) and View (2) kept as future hooks.
+    static void PlayUIClick() {}
+    static void PlayUIAction() {}
 
     LFPG_SorterController GetSorterController()
     {

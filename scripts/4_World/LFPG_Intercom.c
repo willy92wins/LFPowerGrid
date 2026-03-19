@@ -240,11 +240,6 @@ class LF_Intercom : Inventory_Base
     // ============================================
     // Attachment slot control (v3.1.0: radio slot)
     // ============================================
-    override bool CanDisplayAttachments()
-    {
-        return true;
-    }
-
     override bool CanReceiveAttachment(EntityAI attachment, int slotId)
     {
         if (!attachment)

@@ -2,7 +2,13 @@
 // LF_PowerGrid — Sorter UI v2.0 (Dabs MVC)
 // Main layout — 720x590px panel centered at 1080p
 // scriptclass "ViewBinding" enables auto-binding
-// Relay_Command routes button clicks to controller methods
+//
+// BUTTON DISPATCH: Ningún ButtonWidgetClass tiene Relay_Command.
+// Esto es INTENCIONAL (v2.7 fix): Relay_Command combinado con
+// OnClick override causaba double-fire. Todo el dispatch se hace
+// manualmente en LFPG_SorterView.OnClick() por nombre de botón.
+// El único Relay_Command está en LF_SorterTag.layout (BtnRemove),
+// que funciona porque TagView tiene ScriptView propio.
 // =========================================================
 FrameWidgetClass SorterRoot {
 	size 1 1
@@ -15,33 +21,8 @@ FrameWidgetClass SorterRoot {
 	// L2 fix: scriptclass removed — ScriptView creates controller via GetControllerType()
 	// Having scriptclass on root caused Workbench to spawn a second ViewController
 	{
-		// v2.6: Fullscreen click blocker — catches ALL mouse events
-		// outside the SorterPanel. Without this, clicks on empty screen
-		// area pass through to the game (ignorepointer on root + no
-		// receiving widget = event never reaches OnMouseButtonDown).
-		// Alpha 1/255 = invisible but pointer-interactive.
-		// v2.7: ClickBlocker now has ignorepointer 1.
-		// It exists only as a visual/structural element.
-		// ChangeGameFocus(1) + SetDisabled(true) in DoOpen already
-		// prevent all game-side click-through. The OLD design
-		// (no ignorepointer) caused ClickBlocker to STEAL mouse
-		// events from ButtonWidgets: OnMouseButtonDown returned
-		// false for the button, engine tried ClickBlocker next,
-		// handler consumed it → OnClick never generated → all
-		// Relay_Commands dead.
-		ImageWidgetClass ClickBlocker {
-			position 0 0
-			size 1 1
-			hexactpos 0
-			vexactpos 0
-			hexactsize 0
-			vexactsize 0
-			color 0.0 0.0 0.0 0.004
-			stretch 1
-			ignorepointer 1
-			{
-			}
-		}
+		// v2.7+: ClickBlocker eliminado. ChangeGameFocus(1) + SetDisabled(true)
+		// previenen todo click-through. El widget con ignorepointer 1 no aportaba.
 		// ── Main panel (centered programmatically, drag via SetPos) ──
 		FrameWidgetClass SorterPanel {
 			halign left_ref
@@ -298,7 +279,7 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
-				// TAB BAR (y=72, h=30)
+				// TAB BAR (y=44, h=30)
 				// ════════════════════════════════
 				FrameWidgetClass TabBar {
 					position 0 44
@@ -749,14 +730,14 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
-				// BODY (y=74, h=470)
+				// BODY (y=74, h=442)
 				// Split: left 400px controls, right 320px rules/preview
 				// ════════════════════════════════
 
 				// ── LEFT COLUMN: Filter Controls ──
 				FrameWidgetClass FiltersPanel {
 					position 0 74
-					size 400 470
+					size 400 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -1755,7 +1736,7 @@ FrameWidgetClass SorterRoot {
 				// ── Column separator ──
 				ImageWidgetClass ColumnSep {
 					position 400 74
-					size 1 470
+					size 1 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -1769,7 +1750,7 @@ FrameWidgetClass SorterRoot {
 				// ── RIGHT COLUMN: Rules View ──
 				FrameWidgetClass RulesPanel {
 					position 401 74
-					size 319 470
+					size 319 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -1778,7 +1759,7 @@ FrameWidgetClass SorterRoot {
 					{
 						ImageWidgetClass RulesPanelBg {
 							position 0 0
-							size 319 470
+							size 319 442
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -1989,7 +1970,7 @@ FrameWidgetClass SorterRoot {
 				// ── RIGHT COLUMN: Preview View (hidden by default) ──
 				FrameWidgetClass PreviewPanel {
 					position 401 74
-					size 319 470
+					size 319 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -1999,7 +1980,7 @@ FrameWidgetClass SorterRoot {
 					{
 						ImageWidgetClass PreviewPanelBg {
 							position 0 0
-							size 319 470
+							size 319 442
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -2042,7 +2023,7 @@ FrameWidgetClass SorterRoot {
 						// Preview rows (GridSpacer for ObservableCollection)
 						ScrollWidgetClass PreviewScroll {
 							position 0 28
-							size 319 442
+							size 319 414
 							hexactpos 1
 							vexactpos 1
 							hexactsize 1
@@ -2125,7 +2106,7 @@ FrameWidgetClass SorterRoot {
 				// ════════════════════════════════
 				FrameWidgetClass UnpairedOverlay {
 					position 0 74
-					size 720 470
+					size 720 442
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -2178,7 +2159,7 @@ FrameWidgetClass SorterRoot {
 				}
 
 				// ════════════════════════════════
-				// FOOTER (y=544, h=46)
+				// FOOTER (y=516, h=46)
 				// ════════════════════════════════
 				FrameWidgetClass FooterFrame {
 					position 0 516

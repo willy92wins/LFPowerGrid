@@ -43,6 +43,7 @@ class LFPG_UIScaler
     protected static ref array<float>  s_DesignW;
     protected static ref array<float>  s_DesignH;
     protected static bool s_Captured;
+    protected static bool s_LoggedOnce;
 
     // ─────────────────────────────────────────────
     // Capture: walk the widget tree, store design values
@@ -76,11 +77,14 @@ class LFPG_UIScaler
         CaptureRecursive(root);
         s_Captured = true;
 
-        int capturedCount = s_Widgets.Count();
-        string msg = "[UIScaler] Captured ";
-        msg = msg + capturedCount.ToString();
-        msg = msg + " pixel-based widgets";
-        Print(msg);
+        if (!s_LoggedOnce)
+        {
+            int capturedCount = s_Widgets.Count();
+            string msg = "[UIScaler] Captured ";
+            msg = msg + capturedCount.ToString();
+            msg = msg + " pixel-based widgets";
+            Print(msg);
+        }
     }
 
     protected static void CaptureRecursive(Widget w)
@@ -180,13 +184,17 @@ class LFPG_UIScaler
             scale = SCALE_MAX;
         }
 
-        string scaleMsg = "[UIScaler] screen=";
-        scaleMsg = scaleMsg + scrW.ToString();
-        scaleMsg = scaleMsg + "x";
-        scaleMsg = scaleMsg + scrH.ToString();
-        scaleMsg = scaleMsg + " scale=";
-        scaleMsg = scaleMsg + scale.ToString();
-        Print(scaleMsg);
+        if (!s_LoggedOnce)
+        {
+            string scaleMsg = "[UIScaler] screen=";
+            scaleMsg = scaleMsg + scrW.ToString();
+            scaleMsg = scaleMsg + "x";
+            scaleMsg = scaleMsg + scrH.ToString();
+            scaleMsg = scaleMsg + " scale=";
+            scaleMsg = scaleMsg + scale.ToString();
+            Print(scaleMsg);
+            s_LoggedOnce = true;
+        }
 
         return scale;
     }
@@ -244,6 +252,26 @@ class LFPG_UIScaler
                 newH = newH * scale;
             }
 
+            // Guard: sub-pixel design values (> 0 and < 1.0) should scale
+            // but never go below 1px (invisible). Does NOT catch 1.0 to
+            // avoid false positives on proportional values in mixed widgets.
+            if (s_DesignW[i] > 0.0 && s_DesignW[i] < 1.0)
+            {
+                newW = s_DesignW[i] * scale;
+                if (newW < 1.0)
+                {
+                    newW = 1.0;
+                }
+            }
+            if (s_DesignH[i] > 0.0 && s_DesignH[i] < 1.0)
+            {
+                newH = s_DesignH[i] * scale;
+                if (newH < 1.0)
+                {
+                    newH = 1.0;
+                }
+            }
+
             w.SetPos(newX, newY);
             w.SetSize(newW, newH);
         }
@@ -275,6 +303,7 @@ class LFPG_UIScaler
             s_DesignH.Clear();
         }
         s_Captured = false;
+        s_LoggedOnce = false;
 
         s_Widgets = null;
         s_DesignX = null;
@@ -343,6 +372,24 @@ class LFPG_UIScaler
             if (sizeH > PROP_THRESHOLD)
             {
                 newH = sizeH * scale;
+            }
+
+            // Guard: sub-pixel design values (> 0 and < 1.0)
+            if (sizeW > 0.0 && sizeW < 1.0)
+            {
+                newW = sizeW * scale;
+                if (newW < 1.0)
+                {
+                    newW = 1.0;
+                }
+            }
+            if (sizeH > 0.0 && sizeH < 1.0)
+            {
+                newH = sizeH * scale;
+                if (newH < 1.0)
+                {
+                    newH = 1.0;
+                }
             }
 
             w.SetPos(newX, newY);

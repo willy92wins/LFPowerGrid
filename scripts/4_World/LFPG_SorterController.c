@@ -49,6 +49,7 @@ class LFPG_SorterController extends ViewController
 
     // ── Tag pool (v2.6 — reuse TagViews across RefreshTagsList calls) ──
     ref array<ref LFPG_SorterTagView> m_TagPool;
+    ref array<ref LFPG_SorterPreviewRow> m_PreviewPool;
 
     // ── Internal state ──
     protected ref LFPG_SortConfig m_Config;
@@ -145,6 +146,7 @@ class LFPG_SorterController extends ViewController
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
         m_TagPool = new array<ref LFPG_SorterTagView>;
+        m_PreviewPool = new array<ref LFPG_SorterPreviewRow>;
         m_Config = new LFPG_SortConfig();
         m_SelectedOutput = 0;
         m_ShowRules = true;
@@ -1336,13 +1338,15 @@ class LFPG_SorterController extends ViewController
         for (ri = 0; ri < ruleCount; ri = ri + 1)
         {
             rule = outCfg.m_Rules[ri];
-            if (!rule) continue;
-            label = rule.GetDisplayLabel();
-            color = GetRuleColor(rule.m_Type);
-            tag = m_TagPool[tagIdx];
-            tag.SetData(label, color, ri, m_SelectedOutput, this);
-            TagsList.Insert(tag);
-            tagIdx = tagIdx + 1;
+            if (rule)
+            {
+                label = rule.GetDisplayLabel();
+                color = GetRuleColor(rule.m_Type);
+                tag = m_TagPool[tagIdx];
+                tag.SetData(label, color, ri, m_SelectedOutput, this);
+                TagsList.Insert(tag);
+                tagIdx = tagIdx + 1;
+            }
         }
 
         // Catch-all tag (always last)
@@ -1522,12 +1526,21 @@ class LFPG_SorterController extends ViewController
         string itemName = "";
         string itemCat = "";
         int itemSlot = 0;
+        // Grow pool if needed
+        int poolSize = m_PreviewPool.Count();
+        int pi;
+        for (pi = poolSize; pi < sentCount; pi = pi + 1)
+        {
+            LFPG_SorterPreviewRow newRow = new LFPG_SorterPreviewRow();
+            m_PreviewPool.Insert(newRow);
+        }
+        LFPG_SorterPreviewRow row = null;
         for (si = 0; si < sentCount; si = si + 1)
         {
             itemName = names[si];
             itemCat = cats[si];
             itemSlot = slots[si];
-            LFPG_SorterPreviewRow row = new LFPG_SorterPreviewRow();
+            row = m_PreviewPool[si];
             row.SetData(itemName, itemCat, itemSlot);
             PreviewItems.Insert(row);
         }
@@ -1614,6 +1627,10 @@ class LFPG_SorterController extends ViewController
         if (PreviewItems)
         {
             PreviewItems.Clear();
+        }
+        if (m_PreviewPool)
+        {
+            m_PreviewPool.Clear();
         }
     }
 };
