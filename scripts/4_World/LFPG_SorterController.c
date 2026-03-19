@@ -49,7 +49,6 @@ class LFPG_SorterController extends ViewController
 
     // ── Tag pool (v2.6 — reuse TagViews across RefreshTagsList calls) ──
     ref array<ref LFPG_SorterTagView> m_TagPool;
-    ref array<ref LFPG_SorterPreviewRow> m_PreviewPool;
 
     // ── Internal state ──
     protected ref LFPG_SortConfig m_Config;
@@ -146,7 +145,6 @@ class LFPG_SorterController extends ViewController
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
         m_TagPool = new array<ref LFPG_SorterTagView>;
-        m_PreviewPool = new array<ref LFPG_SorterPreviewRow>;
         m_Config = new LFPG_SortConfig();
         m_SelectedOutput = 0;
         m_ShowRules = true;
@@ -469,6 +467,29 @@ class LFPG_SorterController extends ViewController
         {
             m_IsPaired = false;
         }
+
+        // DIAG: Log pairing state and key binding results
+        string diagInit = "[SorterCtrl] InitFromRPC paired=";
+        diagInit = diagInit + m_IsPaired.ToString();
+        diagInit = diagInit + " container=";
+        diagInit = diagInit + containerName;
+        LFPG_Util.Info(diagInit);
+        string diagBindings = "[SorterCtrl] Bindings CatBtn0Bg=";
+        if (CatBtn0Bg) { diagBindings = diagBindings + "OK"; }
+        else { diagBindings = diagBindings + "NULL"; }
+        diagBindings = diagBindings + " CatBtn0Text=";
+        if (CatBtn0Text) { diagBindings = diagBindings + "OK"; }
+        else { diagBindings = diagBindings + "NULL"; }
+        diagBindings = diagBindings + " TabOut1Text=";
+        if (TabOut1Text) { diagBindings = diagBindings + "OK"; }
+        else { diagBindings = diagBindings + "NULL"; }
+        diagBindings = diagBindings + " TabOut3Text=";
+        if (TabOut3Text) { diagBindings = diagBindings + "OK"; }
+        else { diagBindings = diagBindings + "NULL"; }
+        diagBindings = diagBindings + " TabOut5Text=";
+        if (TabOut5Text) { diagBindings = diagBindings + "OK"; }
+        else { diagBindings = diagBindings + "NULL"; }
+        LFPG_Util.Info(diagBindings);
 
         if (configJSON != "")
         {
@@ -1104,7 +1125,20 @@ class LFPG_SorterController extends ViewController
 
             TintBg(GetTabBg(i), bgCol);
             tt = GetTabText(i);
-            if (tt) { tt.SetColor(txtCol); tt.SetText(label); }
+            if (tt)
+            {
+                tt.SetColor(txtCol);
+                tt.SetText(label);
+            }
+            else
+            {
+                // DIAG: Log if TextWidget is null for this tab index
+                string diagTab = "[SorterCtrl] Tab ";
+                diagTab = diagTab + i.ToString();
+                diagTab = diagTab + " TextWidget NULL, label=";
+                diagTab = diagTab + label;
+                LFPG_Util.Warn(diagTab);
+            }
 
             // v3: Tab dot indicator (replaces " *" suffix)
             ImageWidget dot = GetTabDot(i);
@@ -1338,15 +1372,13 @@ class LFPG_SorterController extends ViewController
         for (ri = 0; ri < ruleCount; ri = ri + 1)
         {
             rule = outCfg.m_Rules[ri];
-            if (rule)
-            {
-                label = rule.GetDisplayLabel();
-                color = GetRuleColor(rule.m_Type);
-                tag = m_TagPool[tagIdx];
-                tag.SetData(label, color, ri, m_SelectedOutput, this);
-                TagsList.Insert(tag);
-                tagIdx = tagIdx + 1;
-            }
+            if (!rule) continue;
+            label = rule.GetDisplayLabel();
+            color = GetRuleColor(rule.m_Type);
+            tag = m_TagPool[tagIdx];
+            tag.SetData(label, color, ri, m_SelectedOutput, this);
+            TagsList.Insert(tag);
+            tagIdx = tagIdx + 1;
         }
 
         // Catch-all tag (always last)
@@ -1526,21 +1558,12 @@ class LFPG_SorterController extends ViewController
         string itemName = "";
         string itemCat = "";
         int itemSlot = 0;
-        // Grow pool if needed
-        int poolSize = m_PreviewPool.Count();
-        int pi;
-        for (pi = poolSize; pi < sentCount; pi = pi + 1)
-        {
-            LFPG_SorterPreviewRow newRow = new LFPG_SorterPreviewRow();
-            m_PreviewPool.Insert(newRow);
-        }
-        LFPG_SorterPreviewRow row = null;
         for (si = 0; si < sentCount; si = si + 1)
         {
             itemName = names[si];
             itemCat = cats[si];
             itemSlot = slots[si];
-            row = m_PreviewPool[si];
+            LFPG_SorterPreviewRow row = new LFPG_SorterPreviewRow();
             row.SetData(itemName, itemCat, itemSlot);
             PreviewItems.Insert(row);
         }
@@ -1627,10 +1650,6 @@ class LFPG_SorterController extends ViewController
         if (PreviewItems)
         {
             PreviewItems.Clear();
-        }
-        if (m_PreviewPool)
-        {
-            m_PreviewPool.Clear();
         }
     }
 };

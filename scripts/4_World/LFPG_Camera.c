@@ -205,7 +205,7 @@ class LF_Camera : Inventory_Base
         #endif
 
         #ifndef SERVER
-        LFPG_CameraViewport.Reset();
+        LFPG_CameraViewport.SafeAbort();
         #endif
 
         super.EEKilled(killer);
@@ -222,7 +222,7 @@ class LF_Camera : Inventory_Base
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
 
         #ifndef SERVER
-        LFPG_CameraViewport.Reset();
+        LFPG_CameraViewport.SafeAbort();
         #endif
 
         super.EEDelete(parent);

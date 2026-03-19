@@ -162,8 +162,11 @@ modded class MissionGameplay
             LFPG_CameraViewport vpInit = LFPG_CameraViewport.Get();
             if (vpInit)
             {
-                vpInit.InitWidgets();
-                m_LFPG_WidgetsCreated = true;
+                bool widgetsOk = vpInit.InitWidgets();
+                if (widgetsOk)
+                {
+                    m_LFPG_WidgetsCreated = true;
+                }
             }
         }
 

@@ -3768,7 +3768,16 @@ class LFPG_NetworkManager
                 if (moveResult)
                 {
                     moved = moved + 1;
+                    // Dirty dest so client refreshes cargo view.
+                    // SetSynchDirty is idempotent — safe to call per-item.
+                    destContainer.SetSynchDirty();
                 }
+            }
+
+            // Dirty source container if any items left it
+            if (moved > 0)
+            {
+                inputContainer.SetSynchDirty();
             }
         }
 
@@ -3902,6 +3911,9 @@ class LFPG_NetworkManager
         EntityAI destContainer = null;
         bool moveResult = false;
 
+        // Collect unique dest containers to dirty after sort
+        array<EntityAI> dirtiedDests = new array<EntityAI>;
+
         for (ci = 0; ci < sortCache.Count(); ci = ci + 1)
         {
             if (evaluated >= maxEval)
@@ -3936,8 +3948,24 @@ class LFPG_NetworkManager
             if (moveResult)
             {
                 moved = moved + 1;
+
+                // Track dest for batch dirty (skip duplicates)
+                if (dirtiedDests.Find(destContainer) < 0)
+                {
+                    dirtiedDests.Insert(destContainer);
+                }
             }
         }
+
+        // Force network sync on all affected destination containers
+        // so clients refresh their cached cargo views.
+        int di = 0;
+        for (di = 0; di < dirtiedDests.Count(); di = di + 1)
+        {
+            dirtiedDests[di].SetSynchDirty();
+        }
+
+        // Source container is dirtied by BinPackCargo below (Phase 5d).
 
         string sortLog = "[Sorter] REQUEST_SORT: evaluated=";
         sortLog = sortLog + evaluated.ToString();

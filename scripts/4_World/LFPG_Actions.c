@@ -395,6 +395,13 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         if (!item.IsInherited(LF_CableReel))
             return false;
 
+        // Block wiring actions while Sorter panel is open.
+        // SetDisabled(true) blocks movement/inventory but NOT
+        // CCTCursor actions — they fire every frame on whatever
+        // the player's cursor points at behind the UI.
+        if (LFPG_SorterView.IsOpen())
+            return false;
+
         if (!target)
             return false;
 

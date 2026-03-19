@@ -1139,6 +1139,14 @@ class LFPG_SorterLogic
             }
         }
 
+        // Phase 5d: Force container network sync so clients refresh
+        // their cached cargo grid. LocationSyncMoveEntity syncs
+        // individual item positions but the container entity itself
+        // needs a dirty signal for DayZ proximity-loot to re-read
+        // the cargo layout — especially after the ground round-trip
+        // (Phase 5a→5b) that produces many rapid sequential moves.
+        container.SetSynchDirty();
+
         return repositioned;
         #else
         return 0;

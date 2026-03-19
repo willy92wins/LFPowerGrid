@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - CCTV Viewport Manager (v1.3.1)
+// LF_PowerGrid - CCTV Viewport Manager (v1.3.2)
 //
 // EXIT STRATEGY: COT DEDICATED SERVER PATTERN
 //
@@ -15,15 +15,14 @@
 //     SetActive(true) + SetPosition + SetOrientation
 //
 //   EXIT (client-side):
-//     Phase 1: deactivate spectator cam + re-enable HIC + RPC EXIT_REQUEST
+//     Phase 1: m_Active=false, overlay off, HIC re-enable, RPC EXIT_REQUEST
+//              Camera STAYS ACTIVE (engine needs active cam until SelectPlayer)
 //     Phase 2: WAITING for server CCTV_EXIT_CONFIRM
-//     DoExitCleanup: null refs, restore HUD (idempotent safety)
+//     DoExitCleanup: SetActive(false) + null refs + restore HUD
 //
-//     CRITICAL (v1.3.1): Camera deactivation + HIC re-enable MUST happen
-//     in Phase 1, BEFORE the RPC roundtrip. SelectPlayer on the server
-//     immediately activates DayZPlayerCamera3rdPersonErc on client,
-//     which calls UpdateUDAngleUnlocked reading player state. If HIC
-//     is still disabled or spectator cam still active → crash 0x54.
+//     v1.3.2 FIX: v1.3.1 moved SetActive(false) to Phase 1 → crash
+//     (engine had no active camera between Phase 1 and SelectPlayer).
+//     HIC re-enable stays in Phase 1 (prevents 0x54 crash).
 //
 //   EXIT (server-side):
 //     SelectPlayer(sender, player) → engine restaura player cam
@@ -31,6 +30,10 @@
 //
 //   KEY: CreateObject("staticcamera") = unmanaged → crash 0x68
 //        SelectSpectator("staticcamera") = engine-managed → cleanup OK
+//
+//   SafeAbort: Camera/Monitor EEKilled/EEDelete call SafeAbort()
+//     instead of Reset(). SafeAbort only queues exit if active.
+//     Reset() destroyed widgets → overlay invisible on next entry.
 //
 // ENFORCE SCRIPT RULES:
 //   - No foreach, no ++/--, no ternario, no +=/-=
@@ -210,19 +213,49 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // InitWidgets — positions set from script (resolution-independent)
+    // SafeAbort — lightweight abort for Camera/Monitor EEKilled/EEDelete.
+    //
+    // Called when a camera or monitor entity is destroyed.
+    // If CCTV is active → triggers exit (Phase 1).
+    // If CCTV is NOT active → NO-OP.
+    //
+    // NEVER destroys widgets or the singleton. Widgets persist
+    // across sessions and are reused on the next EnterFromList.
+    // Reset() in Camera/Monitor was destroying the singleton
+    // on every EEDelete → m_OverlayRoot wiped → overlay invisible
+    // on next entry (m_LFPG_WidgetsCreated stays true in MissionInit).
     // =========================================================
-    void InitWidgets()
+    static void SafeAbort()
+    {
+        if (!s_Instance)
+            return;
+
+        if (!s_Instance.m_Active)
+            return;
+
+        // Already exiting — don't re-trigger Phase 1
+        if (s_Instance.m_ExitPhase > 0)
+            return;
+
+        Print("[CameraViewport] DIAG: SafeAbort — device destroyed, queueing exit");
+        s_Instance.m_ExitPhase = 1;
+    }
+
+    // =========================================================
+    // InitWidgets — positions set from script (resolution-independent)
+    // Returns true if widgets are ready, false if creation failed.
+    // =========================================================
+    bool InitWidgets()
     {
         if (m_OverlayRoot)
-            return;
+            return true;
 
         Print("[CameraViewport] DIAG: InitWidgets — pre-CreateWidgets");
         m_OverlayRoot = GetGame().GetWorkspace().CreateWidgets(LFPG_CCTV_LAYOUT);
         if (!m_OverlayRoot)
         {
             LFPG_Util.Error("[CameraViewport] Failed to create overlay from: " + LFPG_CCTV_LAYOUT);
-            return;
+            return false;
         }
         Print("[CameraViewport] DIAG: InitWidgets — CreateWidgets OK");
 
@@ -297,6 +330,7 @@ class LFPG_CameraViewport
 
         Print("[CameraViewport] DIAG: InitWidgets complete");
         LFPG_Util.Info("[CameraViewport] Overlay widgets created (hidden)");
+        return true;
     }
 
     protected void DestroyWidgets()
@@ -695,15 +729,21 @@ class LFPG_CameraViewport
 
     // =========================================================
     // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM or timeout.
-    // Camera deactivation + HIC re-enable already done in Phase 1.
-    // This only cleans up remaining references and restores HUD.
-    // Kept idempotent — safe to call even if Phase 1 already cleaned up.
+    // Server has already called SelectPlayer(sender, player)
+    // → engine updated internal camera pointer.
+    // NOW safe to deactivate and release the spectator camera.
+    //
+    // v1.3.2: Camera deactivation restored here (was in Phase 1
+    // in v1.3.1 → crash). HIC re-enable stays in Phase 1.
+    // Kept idempotent — safe to call multiple times.
     // =========================================================
     void DoExitCleanup()
     {
         Print("[CameraViewport] DIAG: DoExitCleanup — server confirmed");
 
-        // Safety: if camera wasn't cleaned up in Phase 1 (e.g. timeout path)
+        // Deactivate spectator camera. Phase 1 keeps it active to avoid
+        // engine crash (no active camera). Now that SelectPlayer has
+        // restored the player camera, safe to deactivate.
         if (m_ViewCamObj)
         {
             Camera viewCamTyped = Camera.Cast(m_ViewCamObj);
@@ -764,23 +804,18 @@ class LFPG_CameraViewport
             }
         }
 
-        // ---- Phase 1: prepare player + send exit request to server ----
-        // CRITICAL FIX (v1.3.1): Deactivate spectator camera AND re-enable
-        // HumanInputController HERE, BEFORE sending EXIT_REQUEST.
+        // ---- Phase 1: send exit request to server ----
+        // Camera STAYS ACTIVE until DoExitCleanup (after server confirm).
         //
-        // Race condition: server calls SelectPlayer → engine activates
-        // DayZPlayerCamera3rdPersonErc on client → OnUpdate runs
-        // UpdateUDAngleUnlocked → reads player state at offset 0x54.
-        // If HIC is still disabled or spectator cam still active,
-        // the player's internal command objects (HumanCommandMove etc.)
-        // may be null → Access Violation crash.
+        // v1.3.1 moved SetActive(false) here → crash: engine has no
+        // active camera between Phase 1 and SelectPlayer. Reverted.
         //
-        // By deactivating the spectator camera and re-enabling HIC
-        // before the RPC roundtrip, the player state is clean when
-        // SelectPlayer takes effect on the client.
+        // HIC re-enable IS done here — prevents 0x54 crash when
+        // SelectPlayer activates DayZPlayerCamera3rdPersonErc and
+        // UpdateUDAngleUnlocked reads player input state.
         if (m_ExitPhase == 1)
         {
-            Print("[CameraViewport] DIAG: Phase 1 — cleanup + RPC EXIT_REQUEST");
+            Print("[CameraViewport] DIAG: Phase 1 — m_Active=false + RPC EXIT_REQUEST");
 
             m_Active       = false;
             m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
@@ -801,22 +836,8 @@ class LFPG_CameraViewport
             m_CameraIndex    = 0;
             m_CameraTotal    = 0;
 
-            // Deactivate spectator camera BEFORE RPC roundtrip.
-            // This prevents two active cameras coexisting when
-            // SelectPlayer activates the 3rd-person camera.
-            if (m_ViewCamObj)
-            {
-                Camera phase1Cam = Camera.Cast(m_ViewCamObj);
-                if (phase1Cam)
-                {
-                    phase1Cam.SetActive(false);
-                }
-                m_ViewCamObj = null;
-            }
-
-            // Re-enable HIC BEFORE SelectPlayer takes effect.
-            // The 3rd-person camera reads player input state in
-            // UpdateUDAngleUnlocked — must not be disabled.
+            // Re-enable HIC BEFORE RPC roundtrip.
+            // Prevents 0x54 crash when SelectPlayer re-activates player cam.
             if (m_PlayerRef)
             {
                 HumanInputController phase1Hic = m_PlayerRef.GetInputController();
@@ -825,6 +846,10 @@ class LFPG_CameraViewport
                     phase1Hic.SetDisabled(false);
                 }
             }
+
+            // Camera STAYS ACTIVE — deactivated in DoExitCleanup after
+            // server confirms via CCTV_EXIT_CONFIRM RPC.
+            // v1.3.1 deactivated here → crash (no active camera for engine).
 
             // Send EXIT_REQUEST — server will SelectPlayer then send CONFIRM
             if (m_PlayerRef)
