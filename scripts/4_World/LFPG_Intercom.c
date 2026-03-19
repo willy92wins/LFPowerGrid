@@ -238,6 +238,45 @@ class LF_Intercom : Inventory_Base
     }
 
     // ============================================
+    // Attachment slot control (v3.1.0: radio slot)
+    // ============================================
+    override bool CanDisplayAttachments()
+    {
+        return true;
+    }
+
+    override bool CanReceiveAttachment(EntityAI attachment, int slotId)
+    {
+        if (!attachment)
+            return false;
+
+        string typeName = attachment.GetType();
+        if (typeName == "LF_GhostRadio")
+            return false;
+
+        string kindRadio = "PersonalRadio";
+        if (!attachment.IsKindOf(kindRadio))
+            return false;
+
+        return super.CanReceiveAttachment(attachment, slotId);
+    }
+
+    override bool CanReleaseAttachment(EntityAI attachment)
+    {
+        if (!attachment)
+            return false;
+
+        if (m_RadioInstalled)
+        {
+            string kindRadio = "PersonalRadio";
+            if (attachment.IsKindOf(kindRadio))
+                return false;
+        }
+
+        return super.CanReleaseAttachment(attachment);
+    }
+
+    // ============================================
     // Device ID helpers
     // ============================================
     protected void LFPG_UpdateDeviceIdString()

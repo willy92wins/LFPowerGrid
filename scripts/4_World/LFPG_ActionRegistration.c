@@ -137,7 +137,11 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionToggleBroadcast);
         actions.Insert(LFPG_ActionCycleFrequency);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (59)");
+        // --- v5.0: Sprinkler Kit placement + check ---
+        actions.Insert(LFPG_ActionPlaceSprinkler);
+        actions.Insert(LFPG_ActionCheckSprinkler);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (61)");
     }
 };
 

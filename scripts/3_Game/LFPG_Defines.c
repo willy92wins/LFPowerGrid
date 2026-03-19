@@ -700,3 +700,13 @@ static const int   LFPG_INTERCOM_TOGGLE_TICK_MS        = 1000;    // 1s between 
 // v4.0: Fridge + DoorController centralized tick intervals
 static const int   LFPG_FRIDGE_TICK_MS                 = 10000;   // 10s between fridge cooling ticks
 static const int   LFPG_DC_TICK_MS                     = 2000;    // 2s between door controller poll ticks
+
+// =========================================================
+// v5.0: SPRINKLER constants (CONSUMER, water delivery)
+// =========================================================
+static const float  LFPG_SPRINKLER_CONSUMPTION         = 5.0;       // u/s electrical
+static const float  LFPG_SPRINKLER_RADIUS              = 2.0;       // metres effect radius
+static const float  LFPG_SPRINKLER_DRAIN_PER_HOUR      = 1.0;       // L/hour in-game from T2 tank
+static const float  LFPG_SPRINKLER_WATER_AMOUNT         = 50.0;      // water per slot per tick (TUNABLE)
+static const float  LFPG_SPRINKLER_WET_AMOUNT           = 0.05;      // wetness per tick to items/clothing (TUNABLE)
+static const string LFPG_SPRINKLER_LOOP_SOUNDSET        = "LFPG_Sprinkler_Loop_SoundSet";

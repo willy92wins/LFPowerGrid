@@ -1,20 +1,21 @@
 // =========================================================
-// LF_PowerGrid - Action: Install Microphone (v3.0.0 - Sprint 3)
+// LF_PowerGrid - Action: Install Microphone (v3.1.0)
 //
 // Continuous action (5s) to upgrade Intercom from T1 to T2.
-// Consumes a PersonalRadio from player inventory. Irreversible.
+// Consumes a PersonalRadio from the Intercom's attachment slot.
+// Irreversible: radio is locked after install (CanReleaseAttachment).
 //
 // Requirements:
 //   - Player holds Screwdriver in hands
 //   - Target: LF_Intercom with m_RadioInstalled == false
-//   - Player has PersonalRadio anywhere in inventory
+//   - LF_Intercom has a PersonalRadio in its LF_IntercomRadio slot
 //
 // On completion (server):
-//   1. Find and delete PersonalRadio from player inventory
-//   2. Set m_RadioInstalled = true
+//   1. Set m_RadioInstalled = true (locks slot via CanReleaseAttachment)
+//   2. Delete PersonalRadio from intercom attachment slot (consumed)
 //   3. Set m_FrequencyIndex = 0 (default 87.8 MHz)
 //   4. Show microphone (SetObjectTexture on hiddenSelection 4)
-//   5. If powered+switchOn → spawn ghost radio
+//   5. If powered+switchOn -> spawn ghost radio
 //   6. SetSynchDirty()
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
@@ -60,7 +61,8 @@ class LFPG_ActionInstallMic : ActionContinuousBase
             return false;
 
         // Item in hands must be a Screwdriver
-        if (!item.IsKindOf("Screwdriver"))
+        string kindScrew = "Screwdriver";
+        if (!item.IsKindOf(kindScrew))
             return false;
 
         Object targetObj = target.GetObject();
@@ -75,8 +77,9 @@ class LFPG_ActionInstallMic : ActionContinuousBase
         if (ic.LFPG_GetRadioInstalled())
             return false;
 
-        // Player must have a PersonalRadio in inventory
-        if (!LFPG_FindPlayerRadio(player))
+        // Intercom must have a PersonalRadio in its attachment slot
+        EntityAI slotRadio = LFPG_FindIntercomRadio(ic);
+        if (!slotRadio)
             return false;
 
         return true;
@@ -107,63 +110,58 @@ class LFPG_ActionInstallMic : ActionContinuousBase
             return;
         }
 
-        // Find and consume PersonalRadio from player inventory
-        PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
-        if (!pb)
-            return;
-
-        EntityAI radio = LFPG_FindPlayerRadio(pb);
+        // Find PersonalRadio in intercom attachment slot
+        EntityAI radio = LFPG_FindIntercomRadio(ic);
         if (!radio)
         {
-            LFPG_Util.Warn("[InstallMic] No PersonalRadio found in player inventory.");
+            LFPG_Util.Warn("[InstallMic] No PersonalRadio in intercom slot.");
             return;
         }
 
-        // Delete the radio (consumed permanently)
-        GetGame().ObjectDelete(radio);
-
-        // Upgrade intercom to T2
+        // Upgrade intercom to T2 FIRST (sets m_RadioInstalled = true,
+        // which makes CanReleaseAttachment return false — locking the radio)
         ic.LFPG_InstallRadio();
 
-        string installMsg = "[LFPG] Microphone installed";
-        pb.MessageStatus(installMsg);
+        // Delete the radio from slot (consumed permanently)
+        GetGame().ObjectDelete(radio);
 
-        LFPG_Util.Info("[InstallMic] Radio consumed, T2 upgrade complete for id=" + ic.LFPG_GetDeviceId());
-    }
-
-    // Helper: find a PersonalRadio in player's inventory (excluding LF_GhostRadio)
-    static EntityAI LFPG_FindPlayerRadio(PlayerBase player)
-    {
-        if (!player)
-            return null;
-
-        array<EntityAI> items = new array<EntityAI>;
-        player.GetInventory().EnumerateInventory(InventoryTraversalType.PREORDER, items);
-
-        int i;
-        int count = items.Count();
-        EntityAI candidate;
-        string typeName;
-
-        for (i = 0; i < count; i = i + 1)
+        PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
+        if (pb)
         {
-            candidate = items[i];
-            if (!candidate)
-                continue;
-
-            typeName = candidate.GetType();
-
-            // Must be a PersonalRadio (or subclass)
-            if (!candidate.IsKindOf("PersonalRadio"))
-                continue;
-
-            // Exclude ghost radios (should never be in player inventory, but safety)
-            if (typeName == "LF_GhostRadio")
-                continue;
-
-            return candidate;
+            string installMsg = "[LFPG] Microphone installed";
+            pb.MessageStatus(installMsg);
         }
 
-        return null;
+        string logMsg = "[InstallMic] Radio consumed, T2 upgrade complete for id=";
+        logMsg = logMsg + ic.LFPG_GetDeviceId();
+        LFPG_Util.Info(logMsg);
+    }
+
+    // Helper: find a PersonalRadio in the intercom's attachment slot
+    static EntityAI LFPG_FindIntercomRadio(LF_Intercom ic)
+    {
+        if (!ic)
+            return null;
+
+        string slotName = "LF_IntercomRadio";
+        int slotId = InventorySlots.GetSlotIdFromString(slotName);
+        if (slotId == InventorySlots.INVALID)
+            return null;
+
+        EntityAI att = ic.GetInventory().FindAttachment(slotId);
+        if (!att)
+            return null;
+
+        // Must be a PersonalRadio (safety)
+        string kindRadio = "PersonalRadio";
+        if (!att.IsKindOf(kindRadio))
+            return null;
+
+        // Exclude ghost radios (should never be here, but safety)
+        string typeName = att.GetType();
+        if (typeName == "LF_GhostRadio")
+            return null;
+
+        return att;
     }
 };

@@ -13,6 +13,13 @@ class CfgSlots
         displayName = "Nails";
         ghostIcon = "missing";
     };
+    // v3.1.0: Intercom radio slot (PersonalRadio attachment for T2 upgrade)
+    class Slot_LF_IntercomRadio
+    {
+        name = "LF_IntercomRadio";
+        displayName = "Personal Radio";
+        ghostIcon = "missing";
+    };
     // v1.1.0: Water Pump slots
     class Slot_LF_PumpFilter
     {
@@ -147,7 +154,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge", "LF_Sprinkler_Kit", "LF_Sprinkler"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables"};
@@ -803,6 +810,13 @@ class CfgVehicles
     class GasMask_Filter
     {
         inventorySlot[] = {"GasMask_Filter", "LF_PumpFilter"};
+    };
+    // v3.1.0: PersonalRadio can go into Intercom radio slot
+    // NOTE: vanilla defines inventorySlot as scalar "".
+    // Using += on scalar base corrupts config. Must redefine as full array.
+    class PersonalRadio
+    {
+        inventorySlot[] = {"LF_IntercomRadio"};
     };
 
     // =========================================================
@@ -1754,6 +1768,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+        attachments[] = {"LF_IntercomRadio"};
 
         hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
         hiddenSelectionsTextures[] =
@@ -1895,5 +1910,43 @@ class CfgVehicles
                 animPeriod = 0.5;
             };
         };
+    };
+
+    // =========================================================
+    // v5.0: SPRINKLER (CONSUMER, automated crop watering)
+    // =========================================================
+
+    // ---- Sprinkler Kit (holdable, deployable, same-model) ----
+    class LF_Sprinkler_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SPRINKLER_KIT";
+        descriptionShort = "$STR_LFPG_SPRINKLER_KIT_DESC";
+        model = "\LFPowerGrid\data\sprinkler\sprinkler.p3d";
+        weight = 1500;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Sprinkler (placed device, CONSUMER 1 IN) ----
+    class LF_Sprinkler : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SPRINKLER";
+        descriptionShort = "$STR_LFPG_SPRINKLER_DESC";
+        model = "\LFPowerGrid\data\sprinkler\sprinkler.p3d";
+        weight = 2000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {};
     };
 };

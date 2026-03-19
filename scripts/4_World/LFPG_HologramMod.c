@@ -328,6 +328,8 @@ modded class Hologram
             return true;
         if (proj.IsKindOf("LF_Intercom_Kit"))
             return true;
+        if (proj.IsKindOf("LF_Sprinkler_Kit"))
+            return true;
         if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
