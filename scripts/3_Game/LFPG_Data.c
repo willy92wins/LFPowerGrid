@@ -129,6 +129,7 @@ class LFPG_ElecNode
     // --- Sprint 4.2: electrical state (now active) ---
     bool   m_Powered;          // True if node receives sufficient power
     float  m_InputPower;       // Sum of incoming edge power
+    float  m_PrevInputPower;   // v2.2: Previous epoch inputSum for PASSTHROUGH convergence detection
     float  m_OutputPower;      // Power delivered to outgoing edges
     float  m_LastStableOutput; // Previous output for change detection (epsilon)
 
@@ -190,6 +191,7 @@ class LFPG_ElecNode
         m_ComponentId = -1;
         m_Powered = false;
         m_InputPower = 0.0;
+        m_PrevInputPower = 0.0;
         m_OutputPower = 0.0;
         m_LastStableOutput = 0.0;
         m_Dirty = false;

@@ -2145,6 +2145,19 @@ class LFPG_ElecGraph
                     }
                 }
 
+                // v2.2 (Fix Bug #2): SOURCE must publish m_OutputPower
+                // BEFORE AllocateOutput so CountPoweredIncoming sees it
+                // when evaluating multi-source PASSTHROUGH targets.
+                // Without this, a newly-powered SOURCE has m_OutputPower=0
+                // from the previous epoch, CountPoweredIncoming undercounts,
+                // demand is not split, and the SOURCE falsely overloads.
+                // PASSTHROUGH excluded: newOutput changes later (demand signal
+                // override), so early-set would be incorrect.
+                if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+                {
+                    node.m_OutputPower = newOutput;
+                }
+
                 float allocAvail = newOutput;
                 if (gateIsClosed)
                 {
@@ -2314,6 +2327,29 @@ class LFPG_ElecGraph
             if (outputDelta < 0.0)
                 outputDelta = -outputDelta;
 
+            // v2.2 (Fix Bug #1): PASSTHROUGH input change detection.
+            // When a PASSTHROUGH has stable demand signal (outputDelta=0) but
+            // its inputSum changed (e.g. one of N sources cleared overload),
+            // propagation must trigger so upstream sources get re-evaluated.
+            // Without this, the three original conditions (outputDelta,
+            // forceDownstream, m_AllocChanged) all fail simultaneously for
+            // multi-source topologies, causing permanent overload deadlock.
+            // Only applies to PASSTHROUGH — SOURCE/CONSUMER unaffected.
+            bool inputChanged = false;
+            if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                float inputDelta = inputSum - node.m_PrevInputPower;
+                if (inputDelta < 0.0)
+                {
+                    inputDelta = 0.0 - inputDelta;
+                }
+                if (inputDelta > LFPG_PROPAGATION_EPSILON)
+                {
+                    inputChanged = true;
+                }
+                node.m_PrevInputPower = inputSum;
+            }
+
             // v0.7.38 (BugFix B1): Force downstream re-evaluation when topology
             // changed on a source/passthrough, even if total output is unchanged.
             // Wire replace creates fresh edges with m_AllocatedPower=0.
@@ -2342,7 +2378,10 @@ class LFPG_ElecGraph
             // total output (outputDelta) is unchanged. Example: SOURCE always
             // outputs 50, but splits 10→20 for a splitter after demand increase.
             // Without this, downstream never re-reads the new allocation.
-            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream || m_AllocChanged)
+            // v2.2: inputChanged — PASSTHROUGH input changed but demand signal
+            // (output) is stable. Triggers upstream re-evaluation for multi-source
+            // convergence (Fix Bug #1).
+            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream || m_AllocChanged || inputChanged)
             {
                 node.m_OutputPower = newOutput;
                 node.m_LastStableOutput = newOutput;
@@ -3325,7 +3364,16 @@ class LFPG_ElecGraph
         // from m_OutputPower and leak phantom power to downstream consumers,
         // causing a 1-frame flash. For gated devices, AllocateOutput always
         // runs (they are PASSTHROUGH), so m_AllocatedPower=0 is authoritative.
-        if (srcNode.m_IsGated)
+        // v2.2 (Fix Bug #4): Extended to ALL PASSTHROUGH, not just gated.
+        // Any PASSTHROUGH sets m_OutputPower = demandSignal (not real power)
+        // in the PDQ demand signal section. AllocateOutput always runs for
+        // PASSTHROUGH (Step 2b), so m_AllocatedPower is authoritative.
+        // The equal-split fallback would leak phantom power (demand signal)
+        // to downstream consumers, showing them as powered when upstream
+        // is dead. Cold-start cost: 1 extra convergence cycle (consumer
+        // processes before PASSTHROUGH → sees 0 → PASSTHROUGH processes →
+        // sets real allocation → consumer re-evaluates with correct data).
+        if (srcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             return 0.0;
 
         // Fallback: equal split (cold-start / first pass before AllocateOutput runs)
