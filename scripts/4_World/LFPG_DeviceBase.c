@@ -396,7 +396,7 @@ class LFPG_DeviceBase : Inventory_Base
         return false;
     }
 
-    void LFPG_SetPowered(bool p)
+    void LFPG_SetPowered(bool powered)
     {
     }
 
@@ -410,7 +410,7 @@ class LFPG_DeviceBase : Inventory_Base
         return 0.0;
     }
 
-    void LFPG_SetLoadRatio(float r)
+    void LFPG_SetLoadRatio(float ratio)
     {
     }
 
@@ -419,7 +419,7 @@ class LFPG_DeviceBase : Inventory_Base
         return false;
     }
 
-    void LFPG_SetOverloaded(bool v)
+    void LFPG_SetOverloaded(bool val)
     {
     }
 

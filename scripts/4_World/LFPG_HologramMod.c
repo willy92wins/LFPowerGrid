@@ -447,9 +447,9 @@ modded class Hologram
         if (!projection)
             return LFPG_HOLO_SURFACE_OFFSET;
         // Camera model: Z extends -0.057 to +0.057, backHalf=0.057
-        // Offset 0.08 places back face 2.3cm from wall (clean gap).
+        // Offset 0.14 places back face ~8cm from wall (prevents embedding).
         if (projection.IsKindOf("LF_Camera_Kit"))
-            return 0.08;
+            return 0.14;
         // Monitor model: Z extends -0.307, very deep
         if (projection.IsKindOf("LF_Monitor_Kit"))
             return 0.32;

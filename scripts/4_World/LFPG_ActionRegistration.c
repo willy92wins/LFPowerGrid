@@ -141,6 +141,9 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPlaceSprinkler);
         actions.Insert(LFPG_ActionCheckSprinkler);
 
+        // --- v5.1: Fridge door toggle (missing from registration) ---
+        actions.Insert(LFPG_ActionToggleFridgeDoor);
+
         LFPG_Util.Debug("[Actions] LFPG actions registered (61)");
     }
 };

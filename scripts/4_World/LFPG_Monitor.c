@@ -9,6 +9,9 @@
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 // =========================================================
 
+static const string LFPG_MONITOR_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_monitor_off.rvmat";
+static const string LFPG_MONITOR_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_monitor_on.rvmat";
+
 // ---------------------------------------------------------
 // KIT (unchanged)
 // ---------------------------------------------------------
@@ -99,6 +102,13 @@ class LF_Monitor : LFPG_WireOwnerBase
     override bool LFPG_GetSourceOn() { return m_PoweredNet; }
     override bool LFPG_IsPowered() { return m_PoweredNet; }
 
+    // ---- Actions (lost in v4.0 refactor) ----
+    override void SetActions()
+    {
+        super.SetActions();
+        AddAction(LFPG_ActionWatchMonitor);
+    }
+
     override void LFPG_SetPowered(bool powered)
     {
         #ifdef SERVER
@@ -158,6 +168,21 @@ class LF_Monitor : LFPG_WireOwnerBase
     {
         #ifdef SERVER
         if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
+        #endif
+    }
+
+    // ---- VarSync: screen material swap (lost in v4.0 refactor) ----
+    override void LFPG_OnVarSyncDevice()
+    {
+        #ifndef SERVER
+        if (m_PoweredNet)
+        {
+            SetObjectMaterial(0, LFPG_MONITOR_RVMAT_ON);
+        }
+        else
+        {
+            SetObjectMaterial(0, LFPG_MONITOR_RVMAT_OFF);
+        }
         #endif
     }
 };

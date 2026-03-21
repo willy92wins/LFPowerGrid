@@ -61,10 +61,14 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         if (!targetObj)
             return false;
 
-        // T1 check: requires verified power
+        // T1 check: requires verified power, blocked if sprinkler connected
         LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
         if (pump1)
         {
+            // v5.1: T1 water goes entirely to sprinkler — no drinking
+            if (pump1.LFPG_GetHasSprinklerOutput())
+                return false;
+
             EntityAI ent1 = EntityAI.Cast(targetObj);
             return LFPG_PumpHelper.VerifyPowered(ent1);
         }
@@ -74,8 +78,20 @@ class LFPG_ActionDrinkPump : ActionContinuousBase
         if (pump2)
         {
             EntityAI ent2 = EntityAI.Cast(targetObj);
-            if (LFPG_PumpHelper.VerifyPowered(ent2))
+            bool t2Powered = LFPG_PumpHelper.VerifyPowered(ent2);
+
+            if (t2Powered)
+            {
+                // v5.1: 3+ sprinklers with empty tank → net drain, no water left
+                int sprCnt = pump2.LFPG_GetConnectedSprinklerCount();
+                if (sprCnt >= 3)
+                {
+                    float tankCheck = pump2.LFPG_GetTankLevel();
+                    if (tankCheck <= 0.0)
+                        return false;
+                }
                 return true;
+            }
 
             float tankLvl = pump2.LFPG_GetTankLevel();
             if (tankLvl > 0.0)

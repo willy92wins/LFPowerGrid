@@ -166,6 +166,12 @@ class LFPG_NetworkManager
     protected ref Param1<float>   m_ReusableParamFloat;
     protected ref Param1<bool>    m_ReusableParamBool;
 
+    // v5.1 (Sprinkler tick): Reusable pump/sprinkler arrays for
+    // two-phase TickWaterPumps. Avoids double-iterating all devices.
+    protected ref array<LF_WaterPump>     m_ReusableT1Pumps;
+    protected ref array<LF_WaterPump_T2>  m_ReusableT2Pumps;
+    protected ref array<LF_Sprinkler>     m_ReusableSprinklers;
+
     // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
     protected static const string VANILLA_WIRES_FILE = "$profile:LF_PowerGrid\\vanilla_wires.json";
@@ -252,6 +258,9 @@ class LFPG_NetworkManager
         m_ReusableAllDevs = new array<EntityAI>;
         m_ReusableParamFloat = new Param1<float>(0.0);
         m_ReusableParamBool = new Param1<bool>(false);
+        m_ReusableT1Pumps = new array<LF_WaterPump>;
+        m_ReusableT2Pumps = new array<LF_WaterPump_T2>;
+        m_ReusableSprinklers = new array<LF_Sprinkler>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -634,6 +643,9 @@ class LFPG_NetworkManager
             TrackDeviceForPolling(sourceId);
             TrackDeviceForPolling(targetId);
         }
+        // v5.1: Instant sprinkler link refresh on wire connect
+        string noRemoved = "";
+        LFPG_RefreshPumpSprinklerLink(sourceId, noRemoved);
         return inserted;
         #else
         return false;
@@ -649,6 +661,8 @@ class LFPG_NetworkManager
         if (!m_Graph)
             return;
         m_Graph.OnWireRemoved(sourceId, targetId, sourcePort, targetPort);
+        // v5.1: Instant sprinkler link refresh on wire disconnect
+        LFPG_RefreshPumpSprinklerLink(sourceId, targetId);
         #endif
     }
 
@@ -3437,6 +3451,128 @@ class LFPG_NetworkManager
     // ===========================
     // v1.1.0: Water Pump Timer
     // ===========================
+    // v5.1: Instant pump↔sprinkler link refresh.
+    // Called from NotifyGraphWireAdded/Removed so sprinkler state
+    // updates immediately on wire connect/disconnect instead of
+    // waiting up to 60s for the periodic tick.
+    // removedTargetId: "" on add, actual targetId on remove.
+    // ===========================
+    void LFPG_RefreshPumpSprinklerLink(string sourceId, string removedTargetId)
+    {
+        #ifdef SERVER
+        LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
+        EntityAI srcEnt = reg.FindById(sourceId);
+        if (!srcEnt)
+            return;
+
+        // Check if source is a pump (T1 or T2)
+        LF_WaterPump rp1 = LF_WaterPump.Cast(srcEnt);
+        LF_WaterPump_T2 rp2 = LF_WaterPump_T2.Cast(srcEnt);
+        if (!rp1 && !rp2)
+            return;
+
+        // Handle removed target: reset sprinkler that was just disconnected
+        if (removedTargetId != "")
+        {
+            EntityAI removedEnt = reg.FindById(removedTargetId);
+            if (removedEnt)
+            {
+                LF_Sprinkler removedSpr = LF_Sprinkler.Cast(removedEnt);
+                if (removedSpr)
+                {
+                    string curSource = removedSpr.LFPG_GetWaterSourceId();
+                    if (curSource == sourceId)
+                    {
+                        removedSpr.LFPG_SetHasWaterSource(false);
+                        removedSpr.LFPG_SetSprinklerActive(false);
+                        string emptyId = "";
+                        removedSpr.LFPG_SetWaterSourceId(emptyId);
+                    }
+                }
+            }
+        }
+
+        // Rescan pump's current wires for sprinkler connections
+        array<ref LFPG_WireData> rpWires;
+        bool rpPowered;
+        float rpTank = 0.0;
+
+        if (rp1)
+        {
+            rpWires = rp1.LFPG_GetWires();
+            rpPowered = rp1.LFPG_GetPoweredNet();
+        }
+        else
+        {
+            rpWires = rp2.LFPG_GetWires();
+            rpPowered = rp2.LFPG_GetPoweredNet();
+            rpTank = rp2.LFPG_GetTankLevel();
+        }
+
+        int rpSprCount = 0;
+        int rwi;
+        int rpWireCount = rpWires.Count();
+        LFPG_WireData rpWd;
+        string rpTid;
+        EntityAI rpTEnt;
+        LF_Sprinkler rpTSpr;
+        bool rpSprActive;
+
+        for (rwi = 0; rwi < rpWireCount; rwi = rwi + 1)
+        {
+            rpWd = rpWires[rwi];
+            if (!rpWd)
+                continue;
+
+            rpTid = rpWd.m_TargetDeviceId;
+            if (rpTid == "")
+                continue;
+
+            rpTEnt = reg.FindById(rpTid);
+            if (!rpTEnt)
+                continue;
+
+            rpTSpr = LF_Sprinkler.Cast(rpTEnt);
+            if (!rpTSpr)
+                continue;
+
+            rpSprCount = rpSprCount + 1;
+            rpTSpr.LFPG_SetHasWaterSource(true);
+            rpTSpr.LFPG_SetWaterSourceId(sourceId);
+
+            if (rp1)
+            {
+                rpTSpr.LFPG_SetSprinklerActive(rpPowered);
+            }
+            else
+            {
+                rpSprActive = false;
+                if (rpPowered && rpTank > 0.0)
+                {
+                    rpSprActive = true;
+                }
+                rpTSpr.LFPG_SetSprinklerActive(rpSprActive);
+            }
+        }
+
+        // Update pump state
+        bool rpHasSpr = false;
+        if (rp1)
+        {
+            if (rpSprCount > 0)
+            {
+                rpHasSpr = true;
+            }
+            rp1.LFPG_SetHasSprinklerOutput(rpHasSpr);
+        }
+        else
+        {
+            rp2.LFPG_SetConnectedSprinklerCount(rpSprCount);
+        }
+        #endif
+    }
+
+    // ===========================
     // Two sub-systems:
     //   1. Filter degradation: real-time (ms), 1 qty point per LFPG_PUMP_FILTER_INTERVAL_MS (2%/h)
     //   2. Tank fill: in-game hour based, LFPG_PUMP_TANK_FILL_PER_HOUR per hour
@@ -3474,84 +3610,229 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- Single iteration: filter degradation + tank fill ---
+        // ============================================================
+        // Phase A: Single pass — collect pumps/sprinklers, reset
+        //          sprinkler water state, filter degradation.
+        // ============================================================
         m_ReusableAllDevs.Clear();
         LFPG_DeviceRegistry.Get().GetAll(m_ReusableAllDevs);
+        m_ReusableT1Pumps.Clear();
+        m_ReusableT2Pumps.Clear();
+        m_ReusableSprinklers.Clear();
 
         int i;
-        bool isPump;
-        LF_WaterPump pump1;
-        LF_WaterPump_T2 pump2;
+        int devCount = m_ReusableAllDevs.Count();
+        LF_WaterPump castT1;
+        LF_WaterPump_T2 castT2;
+        LF_Sprinkler castSpr;
         float elapsed;
 
-        for (i = 0; i < m_ReusableAllDevs.Count(); i = i + 1)
+        for (i = 0; i < devCount; i = i + 1)
         {
-            // --- T1: filter degradation only ---
-            isPump = false;
-            pump1 = LF_WaterPump.Cast(m_ReusableAllDevs[i]);
-            if (pump1)
+            // --- Sprinkler: reset water state (Phase B re-activates if connected) ---
+            castSpr = LF_Sprinkler.Cast(m_ReusableAllDevs[i]);
+            if (castSpr)
             {
-                isPump = true;
-                elapsed = nowMs - pump1.LFPG_GetFilterLastMs();
-                if (elapsed >= thresholdMs)
-                {
-                    pump1.LFPG_DegradeFilter();
-                    pump1.LFPG_SetFilterLastMs(nowMs);
-                }
+                castSpr.LFPG_SetHasWaterSource(false);
+                castSpr.LFPG_SetSprinklerActive(false);
+                m_ReusableSprinklers.Insert(castSpr);
+                continue;
             }
 
-            // --- T2: filter degradation + tank fill (separate class) ---
-            if (!isPump)
+            // --- T1: filter degradation + collect ---
+            castT1 = LF_WaterPump.Cast(m_ReusableAllDevs[i]);
+            if (castT1)
             {
-                pump2 = LF_WaterPump_T2.Cast(m_ReusableAllDevs[i]);
-                if (pump2)
+                elapsed = nowMs - castT1.LFPG_GetFilterLastMs();
+                if (elapsed >= thresholdMs)
                 {
-                    // T2 filter degradation (same logic as T1)
-                    elapsed = nowMs - pump2.LFPG_GetFilterLastMs();
-                    if (elapsed >= thresholdMs)
+                    castT1.LFPG_DegradeFilter();
+                    castT1.LFPG_SetFilterLastMs(nowMs);
+                }
+                m_ReusableT1Pumps.Insert(castT1);
+                continue;
+            }
+
+            // --- T2: filter degradation + collect ---
+            castT2 = LF_WaterPump_T2.Cast(m_ReusableAllDevs[i]);
+            if (castT2)
+            {
+                elapsed = nowMs - castT2.LFPG_GetFilterLastMs();
+                if (elapsed >= thresholdMs)
+                {
+                    castT2.LFPG_DegradeFilter();
+                    castT2.LFPG_SetFilterLastMs(nowMs);
+                }
+                m_ReusableT2Pumps.Insert(castT2);
+            }
+        }
+
+        // ============================================================
+        // Phase B: T1 pumps — wire scan → activate connected sprinklers,
+        //          set m_HasSprinklerOutput.
+        // ============================================================
+        LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
+        int t1Count = m_ReusableT1Pumps.Count();
+        int pi;
+        int wi;
+        int wireCount;
+        int sprCount;
+        LF_WaterPump curT1;
+        array<ref LFPG_WireData> wires;
+        LFPG_WireData wd;
+        string targetId;
+        EntityAI targetEnt;
+        LF_Sprinkler targetSpr;
+        bool pumpPowered;
+        string pumpId;
+        bool hasSprOut;
+
+        for (pi = 0; pi < t1Count; pi = pi + 1)
+        {
+            curT1 = m_ReusableT1Pumps[pi];
+            wires = curT1.LFPG_GetWires();
+            wireCount = wires.Count();
+            sprCount = 0;
+            pumpPowered = curT1.LFPG_GetPoweredNet();
+            pumpId = curT1.LFPG_GetDeviceId();
+
+            for (wi = 0; wi < wireCount; wi = wi + 1)
+            {
+                wd = wires[wi];
+                if (!wd)
+                    continue;
+
+                targetId = wd.m_TargetDeviceId;
+                if (targetId == "")
+                    continue;
+
+                targetEnt = reg.FindById(targetId);
+                if (!targetEnt)
+                    continue;
+
+                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                if (!targetSpr)
+                    continue;
+
+                // Sprinkler found on this T1 output
+                sprCount = sprCount + 1;
+                targetSpr.LFPG_SetHasWaterSource(true);
+                targetSpr.LFPG_SetWaterSourceId(pumpId);
+                targetSpr.LFPG_SetSprinklerActive(pumpPowered);
+            }
+
+            hasSprOut = false;
+            if (sprCount > 0)
+            {
+                hasSprOut = true;
+            }
+            curT1.LFPG_SetHasSprinklerOutput(hasSprOut);
+        }
+
+        // ============================================================
+        // Phase C: T2 pumps — wire scan → activate connected sprinklers,
+        //          set m_ConnectedSprinklerCount, adjusted tank fill.
+        // ============================================================
+        int t2Count = m_ReusableT2Pumps.Count();
+        LF_WaterPump_T2 curT2;
+        bool sprActive;
+        float curTank;
+        float level;
+        float sprDrainFactor;
+        float netFactor;
+        float netFill;
+        int incomingType;
+        int currentType;
+
+        for (pi = 0; pi < t2Count; pi = pi + 1)
+        {
+            curT2 = m_ReusableT2Pumps[pi];
+            wires = curT2.LFPG_GetWires();
+            wireCount = wires.Count();
+            sprCount = 0;
+            pumpPowered = curT2.LFPG_GetPoweredNet();
+            pumpId = curT2.LFPG_GetDeviceId();
+            curTank = curT2.LFPG_GetTankLevel();
+
+            for (wi = 0; wi < wireCount; wi = wi + 1)
+            {
+                wd = wires[wi];
+                if (!wd)
+                    continue;
+
+                targetId = wd.m_TargetDeviceId;
+                if (targetId == "")
+                    continue;
+
+                targetEnt = reg.FindById(targetId);
+                if (!targetEnt)
+                    continue;
+
+                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                if (!targetSpr)
+                    continue;
+
+                // Sprinkler found on this T2 output
+                sprCount = sprCount + 1;
+                targetSpr.LFPG_SetHasWaterSource(true);
+                targetSpr.LFPG_SetWaterSourceId(pumpId);
+
+                // T2 sprinkler active only if pump powered AND tank has water
+                sprActive = false;
+                if (pumpPowered && curTank > 0.0)
+                {
+                    sprActive = true;
+                }
+                targetSpr.LFPG_SetSprinklerActive(sprActive);
+            }
+
+            curT2.LFPG_SetConnectedSprinklerCount(sprCount);
+
+            // --- T2 tank fill with sprinkler drain adjustment ---
+            if (doTankFill && pumpPowered)
+            {
+                level = curT2.LFPG_GetTankLevel();
+
+                // netFill = fillAmount * (1.0 - sprCount * 0.5)
+                // 0 spr → +fill, 1 → +0.5*fill, 2 → 0, 3 → -0.5*fill
+                sprDrainFactor = sprCount * 0.5;
+                netFactor = 1.0 - sprDrainFactor;
+                netFill = fillAmount * netFactor;
+
+                level = level + netFill;
+
+                // Clamp to [0, max]
+                if (level < 0.0)
+                {
+                    level = 0.0;
+                }
+                if (level > LFPG_PUMP_TANK_MAX)
+                {
+                    level = LFPG_PUMP_TANK_MAX;
+                }
+
+                // Determine incoming water type (only when net positive)
+                if (netFill > 0.0)
+                {
+                    incomingType = LIQUID_RIVERWATER;
+                    if (LFPG_PumpHelper.HasActiveFilter(curT2))
                     {
-                        pump2.LFPG_DegradeFilter();
-                        pump2.LFPG_SetFilterLastMs(nowMs);
+                        incomingType = LIQUID_CLEANWATER;
                     }
 
-                    // T2 tank fill (only if hour changed and pump is powered)
-                    if (doTankFill)
+                    currentType = curT2.LFPG_GetTankLiquidType();
+
+                    if (level < 0.01)
                     {
-                        bool powered = pump2.LFPG_GetPoweredNet();
-                        if (powered)
-                        {
-                            float level = pump2.LFPG_GetTankLevel();
-                            if (level < LFPG_PUMP_TANK_MAX)
-                            {
-                                // Determine incoming water type
-                                int incomingType = LIQUID_RIVERWATER;
-                                if (LFPG_PumpHelper.HasActiveFilter(pump2))
-                                {
-                                    incomingType = LIQUID_CLEANWATER;
-                                }
-
-                                int currentType = pump2.LFPG_GetTankLiquidType();
-
-                                // Mixing rules
-                                if (level < 0.01)
-                                {
-                                    pump2.LFPG_SetTankLiquidType(incomingType);
-                                }
-                                else if (incomingType != currentType)
-                                {
-                                    pump2.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
-                                }
-
-                                level = level + fillAmount;
-                                if (level > LFPG_PUMP_TANK_MAX)
-                                {
-                                    level = LFPG_PUMP_TANK_MAX;
-                                }
-                                pump2.LFPG_SetTankLevel(level);
-                            }
-                        }
+                        curT2.LFPG_SetTankLiquidType(incomingType);
+                    }
+                    else if (incomingType != currentType)
+                    {
+                        curT2.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
                     }
                 }
+
+                curT2.LFPG_SetTankLevel(level);
             }
         }
         #endif

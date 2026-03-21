@@ -109,6 +109,7 @@ class LF_WaterPump : Inventory_Base
     protected bool m_Overloaded = false;
     protected bool m_LFPG_Deleting = false;
     protected float m_FilterLastRealMs = 0.0;
+    protected bool m_HasSprinklerOutput = false;
     protected EffectSound m_PumpLoopSound;
 
     void LF_WaterPump()
@@ -118,6 +119,8 @@ class LF_WaterPump : Inventory_Base
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_PoweredNet");
         RegisterNetSyncVariableBool("m_Overloaded");
+        string varSprOut = "m_HasSprinklerOutput";
+        RegisterNetSyncVariableBool(varSprOut);
     }
 
     void ~LF_WaterPump()
@@ -264,6 +267,20 @@ class LF_WaterPump : Inventory_Base
 
     bool LFPG_HasActiveFilter() { return LFPG_PumpHelper.HasActiveFilter(this); }
 
+    // ---- Sprinkler output state (set by NM tick, synced to client) ----
+    bool LFPG_GetHasSprinklerOutput() { return m_HasSprinklerOutput; }
+
+    void LFPG_SetHasSprinklerOutput(bool val)
+    {
+        #ifdef SERVER
+        if (m_HasSprinklerOutput != val)
+        {
+            m_HasSprinklerOutput = val;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
     // ---- Device interface (2 ports) ----
     string LFPG_GetDeviceId() { return m_DeviceId; }
     int LFPG_GetPortCount() { return 2; }
@@ -327,6 +344,9 @@ class LF_WaterPump : Inventory_Base
         m_PoweredNet = powered;
         SetSynchDirty();
         LFPG_Util.Debug("[LF_WaterPump] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId);
+        // v5.1: Instant sprinkler state update on power change
+        string noRemoved = "";
+        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
         #endif
     }
 
@@ -472,6 +492,7 @@ class LF_WaterPump_T2 : Inventory_Base
     protected float m_FilterLastRealMs = 0.0;
     protected float m_TankLevel = 0.0;
     protected int m_TankLiquidType = 0;
+    protected int m_ConnectedSprinklerCount = 0;
     protected EffectSound m_PumpLoopSound;
 
     void LF_WaterPump_T2()
@@ -483,6 +504,8 @@ class LF_WaterPump_T2 : Inventory_Base
         RegisterNetSyncVariableBool("m_Overloaded");
         RegisterNetSyncVariableFloat("m_TankLevel", 0.0, 50.0, 8);
         RegisterNetSyncVariableInt("m_TankLiquidType");
+        string varSprCnt = "m_ConnectedSprinklerCount";
+        RegisterNetSyncVariableInt(varSprCnt);
     }
 
     void ~LF_WaterPump_T2()
@@ -645,6 +668,20 @@ class LF_WaterPump_T2 : Inventory_Base
         #endif
     }
 
+    // ---- Sprinkler count state (set by NM tick, synced to client) ----
+    int LFPG_GetConnectedSprinklerCount() { return m_ConnectedSprinklerCount; }
+
+    void LFPG_SetConnectedSprinklerCount(int cnt)
+    {
+        #ifdef SERVER
+        if (m_ConnectedSprinklerCount != cnt)
+        {
+            m_ConnectedSprinklerCount = cnt;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
     // ---- Device interface (4 ports: 1 IN + 3 OUT) ----
     string LFPG_GetDeviceId() { return m_DeviceId; }
     int LFPG_GetPortCount() { return 4; }
@@ -721,6 +758,9 @@ class LF_WaterPump_T2 : Inventory_Base
         m_PoweredNet = powered;
         SetSynchDirty();
         LFPG_Util.Debug("[LF_WaterPump_T2] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId);
+        // v5.1: Instant sprinkler state update on power change
+        string noRemoved = "";
+        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
         #endif
     }
 
