@@ -281,9 +281,17 @@ class LFPG_DeviceAPI
         if (!obj)
             return;
 
+        // v4.0: Cast fast-path — direct call for production devices
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+        {
+            dev.LFPG_SetPowered(powered);
+            return;
+        }
+
         string objType = obj.GetType();
 
-        // Try LFPG-native method first
+        // Try LFPG-native method (test/legacy devices)
         Param1<bool> p = new Param1<bool>(powered);
         CallVoid(obj, "LFPG_SetPowered", p);
 
@@ -413,13 +421,23 @@ class LFPG_DeviceAPI
 
     // ----- LFPG-native device wrappers -----
 
+    // v4.0: Cast fast-path — avoids reflexion for 95% of devices.
     static string GetDeviceId(Object obj)
     {
+        if (!obj)
+            return "";
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_GetDeviceId();
         return CallString(obj, "LFPG_GetDeviceId", null, "");
     }
 
     static bool HasPort(Object obj, string portName, int dir)
     {
+        if (!obj) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_HasPort(portName, dir);
         Param2<string, int> p = new Param2<string, int>(portName, dir);
         return CallBool(obj, "LFPG_HasPort", p, false);
     }
@@ -434,40 +452,57 @@ class LFPG_DeviceAPI
 
     static bool IsSource(Object obj)
     {
+        if (!obj)
+            return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_IsSource();
         return CallBool(obj, "LFPG_IsSource", null, false);
     }
 
     static bool GetSourceOn(Object obj)
     {
+        if (!obj)
+            return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_GetSourceOn();
         return CallBool(obj, "LFPG_GetSourceOn", null, false);
     }
 
 	static bool IsGateOpen(EntityAI e)
     {
         if (!e) return true;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_IsGateOpen();
         return CallBool(e, "LFPG_IsGateOpen", null, true);
     }
 
-    // P1: Check if a device implements gate logic (LFPG_IsGateOpen).
-    // Default false — only PushButton (and future gate devices) return true.
-    // Used by ElecGraph to cache m_IsGated and skip entity lookup + dynamic
-    // dispatch for non-gated PASSTHROUGH devices every tick.
     static bool IsGateCapable(EntityAI e)
     {
         if (!e) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_IsGateCapable();
         return CallBool(e, "LFPG_IsGateCapable", null, false);
     }
 
-    // v0.7.38 (BugFix): Generic powered-state getter.
-    // Reads LFPG_IsPowered from LFPG-native devices (SyncVar m_PoweredNet).
-    // Used by status display to show correct state instead of CompEM.
     static bool GetPowered(Object obj)
     {
+        if (!obj) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_IsPowered();
         return CallBool(obj, "LFPG_IsPowered", null, false);
     }
 
     static bool CanConnectTo(Object obj, Object other, string myPort, string otherPort)
     {
+        if (!obj) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_CanConnectTo(other, myPort, otherPort);
         Param3<Object, string, string> p = new Param3<Object, string, string>(other, myPort, otherPort);
         return CallBool(obj, "LFPG_CanConnectTo", p, false);
     }
@@ -480,12 +515,20 @@ class LFPG_DeviceAPI
     // Does this object own a wire store?
     static bool HasWireStore(Object obj)
     {
+        if (!obj) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+        if (dev)
+            return dev.LFPG_HasWireStore();
         return CallBool(obj, "LFPG_HasWireStore", null, false);
     }
 
     // Get wires JSON for broadcasting (avoids out-param issues)
     static string GetWiresJSON(Object obj)
     {
+        if (!obj) return "";
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_GetWiresJSON();
         return CallString(obj, "LFPG_GetWiresJSON", null, "");
     }
 
@@ -493,6 +536,9 @@ class LFPG_DeviceAPI
     static bool AddDeviceWire(Object obj, LFPG_WireData wd)
     {
         if (!obj || !wd) return false;
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_AddWire(wd);
         Param1<LFPG_WireData> p = new Param1<LFPG_WireData>(wd);
         return CallBool(obj, "LFPG_AddWire", p, false);
     }
@@ -500,6 +546,10 @@ class LFPG_DeviceAPI
     // Clear all wires from any wire-owning device
     static bool ClearDeviceWires(Object obj)
     {
+        if (!obj) return false;
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_ClearWires();
         return CallBool(obj, "LFPG_ClearWires", null, false);
     }
 
@@ -507,6 +557,9 @@ class LFPG_DeviceAPI
     static bool ClearDeviceWiresForCreator(Object obj, string creatorId)
     {
         if (!obj || creatorId == "") return false;
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_ClearWiresForCreator(creatorId);
         Param1<string> p = new Param1<string>(creatorId);
         return CallBool(obj, "LFPG_ClearWiresForCreator", p, false);
     }
@@ -514,14 +567,19 @@ class LFPG_DeviceAPI
     // Prune wires targeting missing devices
     static bool PruneDeviceMissingTargets(Object obj)
     {
+        if (!obj) return false;
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_PruneMissingTargets();
         return CallBool(obj, "LFPG_PruneMissingTargets", null, false);
     }
 
-    // Get the array of wires from any wire-owning device.
-    // Uses CallFunctionParams with array return type.
     static array<ref LFPG_WireData> GetDeviceWires(Object obj)
     {
         if (!obj) return null;
+        LFPG_WireOwnerBase wo = LFPG_WireOwnerBase.Cast(obj);
+        if (wo)
+            return wo.LFPG_GetWires();
         array<ref LFPG_WireData> ret;
         int ok = GetGame().GameScript.CallFunctionParams(obj, "LFPG_GetWires", ret, null);
         if (ok != 0)
@@ -540,7 +598,12 @@ class LFPG_DeviceAPI
         if (!e)
             return LFPG_DeviceType.UNKNOWN;
 
-        // Try LFPG-native dynamic dispatch first
+        // v4.0: Cast fast-path
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetDeviceType();
+
+        // Try LFPG-native dynamic dispatch (test/legacy)
         int nativeType = CallInt(e, "LFPG_GetDeviceType", null, -1);
         if (nativeType >= 0)
             return nativeType;
@@ -565,7 +628,12 @@ class LFPG_DeviceAPI
     {
         if (!e) return 0.0;
 
-        // LFPG native
+        // v4.0: Cast fast-path
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetConsumption();
+
+        // LFPG native (test devices / legacy)
         float val = CallFloat(e, "LFPG_GetConsumption", null, -1.0);
         if (val >= 0.0)
             return val;
@@ -604,7 +672,12 @@ class LFPG_DeviceAPI
     {
         if (!e) return 0.0;
 
-        // LFPG native
+        // v4.0: Cast fast-path
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetCapacity();
+
+        // LFPG native (test/legacy)
         float val = CallFloat(e, "LFPG_GetCapacity", null, -1.0);
         if (val >= 0.0)
             return val;
@@ -621,6 +694,9 @@ class LFPG_DeviceAPI
     static float GetLoadRatio(EntityAI e)
     {
         if (!e) return 0.0;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetLoadRatio();
         return CallFloat(e, "LFPG_GetLoadRatio", null, 0.0);
     }
 
@@ -628,6 +704,12 @@ class LFPG_DeviceAPI
     static void SetLoadRatio(EntityAI e, float ratio)
     {
         if (!e) return;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+        {
+            dev.LFPG_SetLoadRatio(ratio);
+            return;
+        }
         Param1<float> p = new Param1<float>(ratio);
         CallVoid(e, "LFPG_SetLoadRatio", p);
     }
@@ -637,12 +719,21 @@ class LFPG_DeviceAPI
     static bool GetOverloaded(EntityAI e)
     {
         if (!e) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetOverloaded();
         return CallBool(e, "LFPG_GetOverloaded", null, false);
     }
 
     static void SetOverloaded(EntityAI e, bool val)
     {
         if (!e) return;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+        {
+            dev.LFPG_SetOverloaded(val);
+            return;
+        }
         Param1<bool> p = new Param1<bool>(val);
         CallVoid(e, "LFPG_SetOverloaded", p);
     }
@@ -656,7 +747,12 @@ class LFPG_DeviceAPI
     {
         if (!e) return 0;
 
-        // Try LFPG dynamic dispatch
+        // v4.0: Cast fast-path
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_GetPortCount();
+
+        // Try LFPG dynamic dispatch (test/legacy)
         int count = CallInt(e, "LFPG_GetPortCount", null, 0);
         if (count > 0) return count;
 

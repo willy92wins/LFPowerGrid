@@ -1,28 +1,14 @@
 // =========================================================
-// LF_PowerGrid - Sprinkler device (v1.0.0)
+// LF_PowerGrid - Sprinkler device (v4.0 Refactor)
 //
 // LF_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
-// LF_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no OUT, no wire store.
+// LF_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
 //
-// Memory points (LOD Memory in p3d):
-//   port_input_0      — cable anchor
-//   unit              — placement reference
-//
-// Sprinkler activates when:
-//   1. Powered (electricity from graph)
-//   2. Upstream direct is WaterPump (T1 or T2)
-//   3. Pump is powered
-//   4. If T2 + output_3: tank not empty
-//   5. Not ruined
-//
-// m_SprinklerActive is server-derived, synced to client for FX.
-// Persistence: only DeviceId (m_SprinklerActive derived post-restart).
-//
-// Enforce Script: no ternaries, no ++/--, no foreach, no +=/-=.
+// v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT — same-model deployment (patron Searchlight/Splitter)
+// KIT (unchanged)
 // ---------------------------------------------------------
 class LF_Sprinkler_Kit : Inventory_Base
 {
@@ -51,8 +37,6 @@ class LF_Sprinkler_Kit : Inventory_Base
         return "placeBarbedWire_SoundSet";
     }
 
-    // Previene loop sound huerfano: ObjectDelete durante OnPlacementComplete
-    // interrumpe cleanup del action callback antes de detener sonido.
     override string GetLoopDeploySoundset()
     {
         return "";
@@ -73,37 +57,30 @@ class LF_Sprinkler_Kit : Inventory_Base
         vector finalPos = position;
         vector finalOri = orientation;
 
-        string tLog = "[Sprinkler_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
+        string tLog = "[Sprinkler_Kit] OnPlacementComplete: param=" + position.ToString();
         tLog = tLog + " kitPos=";
         tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        string typeName = "LF_Sprinkler";
-        EntityAI spr = GetGame().CreateObjectEx(typeName, finalPos, ECE_CREATEPHYSICS);
+        EntityAI spr = GetGame().CreateObjectEx("LF_Sprinkler", finalPos, ECE_CREATEPHYSICS);
         if (spr)
         {
             spr.SetPosition(finalPos);
             spr.SetOrientation(finalOri);
             spr.Update();
-
-            string deployMsg = "[Sprinkler_Kit] Deployed LF_Sprinkler at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            deployMsg = deployMsg + " ori=";
-            deployMsg = deployMsg + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
+            string depMsg = "[Sprinkler_Kit] Deployed at ";
+            depMsg = depMsg + finalPos.ToString();
+            LFPG_Util.Info(depMsg);
             GetGame().ObjectDelete(this);
         }
         else
         {
-            string errMsg = "[Sprinkler_Kit] Failed to create LF_Sprinkler! Kit preserved.";
-            LFPG_Util.Error(errMsg);
+            string errKit = "[Sprinkler_Kit] Failed to create LF_Sprinkler! Kit preserved.";
+            LFPG_Util.Error(errKit);
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
-                string failMsg = "[LFPG] Sprinkler placement failed. Kit preserved.";
-                pb.MessageStatus(failMsg);
+                pb.MessageStatus("[LFPG] Sprinkler placement failed. Kit preserved.");
             }
         }
         #endif
@@ -111,174 +88,75 @@ class LF_Sprinkler_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
-// DEVICE — CONSUMER, 1 IN (input_0), 5 u/s
+// DEVICE - CONSUMER : LFPG_DeviceBase
 // ---------------------------------------------------------
-class LF_Sprinkler : Inventory_Base
+class LF_Sprinkler : LFPG_DeviceBase
 {
-    // ---- SyncVars ----
-    protected int   m_DeviceIdLow    = 0;
-    protected int   m_DeviceIdHigh   = 0;
-    protected bool  m_PoweredNet     = false;
-    protected bool  m_SprinklerActive = false;
-
-    // ---- Estado local ----
-    protected string m_DeviceId       = "";
-    protected bool   m_LFPG_Deleting  = false;
+    // ---- Device-specific SyncVars ----
+    protected bool m_PoweredNet      = false;
+    protected bool m_SprinklerActive = false;
 
     // ---- Server-only: upstream tracking (set by NetworkManager tick) ----
-    protected bool   m_HasWaterSource  = false;
-    protected string m_WaterSourceId   = "";
-    protected string m_SourcePort      = "";
+    protected bool   m_HasWaterSource = false;
+    protected string m_WaterSourceId  = "";
+    protected string m_SourcePort     = "";
 
-    // ---- Client: sound (NOT ref — engine object) ----
+    // ---- Client: sound ----
     protected EffectSound m_LoopSound;
 
-    // ============================================
-    // Constructor — SyncVar registration
-    // MUST be constructor, NOT EEInit.
-    // ============================================
     void LF_Sprinkler()
     {
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableBool("m_SprinklerActive");
+        string pIn = "input_0";
+        string lIn = "Power Input";
+        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
+
+        string varPowered = "m_PoweredNet";
+        RegisterNetSyncVariableBool(varPowered);
+        string varActive = "m_SprinklerActive";
+        RegisterNetSyncVariableBool(varActive);
     }
 
-    // ============================================
-    // Helpers de ID
-    // ============================================
-    protected void LFPG_UpdateDeviceIdString()
+    // ---- Actions (add sprinkler-specific) ----
+    override void SetActions()
     {
-        m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
+        super.SetActions();
+        AddAction(LFPG_ActionCheckSprinkler);
     }
 
-    protected void LFPG_TryRegister()
+    // ---- Virtual interface ----
+    override int LFPG_GetDeviceType()
     {
-        if (m_LFPG_Deleting)
+        return LFPG_DeviceType.CONSUMER;
+    }
+
+    override float LFPG_GetConsumption()
+    {
+        return LFPG_SPRINKLER_CONSUMPTION;
+    }
+
+    override bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
+    }
+
+    override void LFPG_SetPowered(bool powered)
+    {
+        #ifdef SERVER
+        if (m_PoweredNet == powered)
             return;
 
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
-
-        if (oldId != "" && oldId != m_DeviceId)
-        {
-            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
-        }
-
-        if (m_DeviceId != "")
-        {
-            LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
-        }
-    }
-
-    // ============================================
-    // Lifecycle
-    // ============================================
-    override void EEInit()
-    {
-        super.EEInit();
-
-        #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
+        m_PoweredNet = powered;
         SetSynchDirty();
+
+        string msg = "[LF_Sprinkler] SetPowered(";
+        msg = msg + powered.ToString();
+        msg = msg + ") id=";
+        msg = msg + m_DeviceId;
+        LFPG_Util.Debug(msg);
         #endif
-
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
     }
 
-    override void EEKilled(Object killer)
-    {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
-
-        #ifdef SERVER
-        bool dirty = false;
-        if (m_PoweredNet)
-        {
-            m_PoweredNet = false;
-            dirty = true;
-        }
-        if (m_SprinklerActive)
-        {
-            m_SprinklerActive = false;
-            dirty = true;
-        }
-        if (dirty)
-        {
-            SetSynchDirty();
-        }
-        #endif
-
-        #ifndef SERVER
-        LFPG_CleanupClientFX();
-        #endif
-
-        super.EEKilled(killer);
-    }
-
-    override void EEDelete(EntityAI parent)
-    {
-        m_LFPG_Deleting = true;
-
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-
-        #ifndef SERVER
-        LFPG_CleanupClientFX();
-        #endif
-
-        super.EEDelete(parent);
-    }
-
-    // ============================================
-    // Client FX cleanup
-    // ============================================
-    protected void LFPG_CleanupClientFX()
-    {
-        if (m_LoopSound)
-        {
-            m_LoopSound.SoundStop();
-            m_LoopSound = null;
-        }
-        // TODO S4: particle cleanup here
-    }
-
-    // ============================================
-    // Client sync — sound + particle toggle
-    // ============================================
-    override void OnVariablesSynchronized()
-    {
-        super.OnVariablesSynchronized();
-
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-
-        // Sound toggle based on m_SprinklerActive
-        if (m_SprinklerActive && !m_LoopSound)
-        {
-            string soundSet = LFPG_SPRINKLER_LOOP_SOUNDSET;
-            m_LoopSound = SEffectManager.PlaySound(soundSet, GetPosition());
-            if (m_LoopSound)
-            {
-                m_LoopSound.SetAutodestroy(false);
-            }
-        }
-        if (!m_SprinklerActive && m_LoopSound)
-        {
-            m_LoopSound.SoundStop();
-            m_LoopSound = null;
-        }
-
-        // TODO S4: particle toggle here
-    }
-
-    // ============================================
-    // Server: sprinkler state accessors
-    // (called by NetworkManager tick)
-    // ============================================
+    // ---- Sprinkler-specific state accessors (NM tick) ----
     bool LFPG_GetSprinklerActive()
     {
         return m_SprinklerActive;
@@ -342,187 +220,81 @@ class LF_Sprinkler : Inventory_Base
         return m_PoweredNet;
     }
 
-    // ============================================
-    // Persistence — CONSUMER: ids only
-    // m_PoweredNet + m_SprinklerActive = derived state.
-    // ============================================
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
-    }
-
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
-    {
-        if (!super.OnStoreLoad(ctx, version))
-            return false;
-
-        if (!ctx.Read(m_DeviceIdLow))
-            return false;
-        if (!ctx.Read(m_DeviceIdHigh))
-            return false;
-
-        return true;
-    }
-
-    // ============================================
-    // Guards de inventario y colocacion
-    // ============================================
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanPutIntoHands(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return false;
-    }
-
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
-        AddAction(LFPG_ActionCheckSprinkler);
-    }
-
-    // Safety: bloquea CompEM vanilla
-    override bool IsElectricAppliance()
-    {
-        return false;
-    }
-
-    // ============================================
-    // LFPG_IDevice interface
-    // ============================================
-    string LFPG_GetDeviceId()
-    {
-        return m_DeviceId;
-    }
-
-    int LFPG_GetDeviceIdLow()
-    {
-        return m_DeviceIdLow;
-    }
-
-    int LFPG_GetDeviceIdHigh()
-    {
-        return m_DeviceIdHigh;
-    }
-
-    int LFPG_GetPortCount()
-    {
-        return 1;
-    }
-
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0)
-            return "input_0";
-        return "";
-    }
-
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0)
-            return LFPG_PortDir.IN;
-        return -1;
-    }
-
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0)
-            return "Power Input";
-        return "";
-    }
-
-    bool LFPG_HasPort(string portName, int dir)
-    {
-        string inName = "input_0";
-        if (dir == LFPG_PortDir.IN && portName == inName)
-            return true;
-        return false;
-    }
-
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        string memPoint = "port_input_0";
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        string warnMsg = "[LF_Sprinkler] Missing memory point: ";
-        warnMsg = warnMsg + memPoint;
-        LFPG_Util.Warn(warnMsg);
-        vector p = GetPosition();
-        p[1] = p[1] + 0.1;
-        return p;
-    }
-
-    int LFPG_GetDeviceType()
-    {
-        return LFPG_DeviceType.CONSUMER;
-    }
-
-    bool LFPG_IsSource()
-    {
-        return false;
-    }
-
-    float LFPG_GetConsumption()
-    {
-        return LFPG_SPRINKLER_CONSUMPTION;
-    }
-
-    bool LFPG_IsPowered()
-    {
-        return m_PoweredNet;
-    }
-
-    void LFPG_SetPowered(bool powered)
+    // ---- Lifecycle hooks ----
+    override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        if (m_PoweredNet == powered)
-            return;
+        bool dirty = false;
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            dirty = true;
+        }
+        if (m_SprinklerActive)
+        {
+            m_SprinklerActive = false;
+            dirty = true;
+        }
+        if (dirty)
+        {
+            SetSynchDirty();
+        }
+        #endif
 
-        m_PoweredNet = powered;
-        SetSynchDirty();
-
-        string msg = "[LF_Sprinkler] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        #ifndef SERVER
+        LFPG_CleanupClientFX();
         #endif
     }
 
-    void LFPG_SetOverloaded(bool overloaded)
+    override void LFPG_OnDeleted()
     {
-        // Sprinkler does not track overloaded state (CONSUMER, no output)
+        #ifndef SERVER
+        LFPG_CleanupClientFX();
+        #endif
     }
 
-    // CONSUMER — no tiene puerto OUT, no puede ser origen de conexion.
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
+    override void LFPG_OnWiresCut()
     {
-        return false;
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
     }
 
-    // No wire store (IN-only).
-    bool LFPG_HasWireStore()
+    // ---- VarSync: sound toggle ----
+    override void LFPG_OnVarSync()
     {
-        return false;
+        #ifndef SERVER
+        if (m_SprinklerActive && !m_LoopSound)
+        {
+            string soundSet = LFPG_SPRINKLER_LOOP_SOUNDSET;
+            m_LoopSound = SEffectManager.PlaySound(soundSet, GetPosition());
+            if (m_LoopSound)
+            {
+                m_LoopSound.SetAutodestroy(false);
+            }
+        }
+        if (!m_SprinklerActive && m_LoopSound)
+        {
+            m_LoopSound.SoundStop();
+            m_LoopSound = null;
+        }
+        // TODO S4: particle toggle
+        #endif
     }
+
+    // ---- Client FX cleanup ----
+    protected void LFPG_CleanupClientFX()
+    {
+        if (m_LoopSound)
+        {
+            m_LoopSound.SoundStop();
+            m_LoopSound = null;
+        }
+    }
+
+    // ---- No extra persistence (CONSUMER: ids + deviceVer only) ----
 };

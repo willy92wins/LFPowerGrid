@@ -227,7 +227,7 @@ static const float LFPG_OCC_FORCED_RECHECK_MS = 300.0;  // v0.7.38: 800→300 (l
 // ---- Persistence (v0.7.15, Sprint 3) ----
 // Schema versions for chained migration. Bump when adding/changing persisted fields.
 // See LFPG_Migrators.c for migration chain and compatibility strategy.
-static const int   LFPG_PERSIST_VER = 2;
+static const int   LFPG_PERSIST_VER = 3;  // v4.0: DeviceBase refactor, per-device version — WIPE REQUIRED
 static const int   LFPG_VANILLA_PERSIST_VER = 2;
 static const float LFPG_VANILLA_FLUSH_S = 30.0;
 

@@ -1,58 +1,19 @@
 // =========================================================
-// LF_PowerGrid - Solar Panel devices (v0.9.3, Sprint 6)
+// LF_PowerGrid - Solar Panel devices (v4.0 Refactor)
 //
-// LF_SolarPanel_Kit:  Deployable kit (DeployableContainer_Base pattern).
-//                     Uses shared box model (lf_kit_box.p3d).
-//                     Hologram shows T1 panel model during placement
-//                     via LFPG_HologramMod.c overrides (6 methods).
-//                     On confirm, spawns LF_SolarPanel and deletes kit.
+// LF_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
+// LF_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
+//                     Sun-driven via centralized NM timer.
 //
-// v0.8.1: Refactored from Inventory_Base + isDeployable=1 to
-//   DeployableContainer_Base + vanilla actions (sample_container pattern).
-//   - Kit parent: DeployableContainer_Base (not Inventory_Base)
-//   - SetActions: ActionTogglePlaceObject + ActionPlaceObject (vanilla)
-//   - OnPlacementComplete: CreateObject (not CreateObjectEx), DeleteSafe
-//   - LFPG_ActionPlaceSolarPanel removed (no longer needed)
-//   - 6 Hologram overrides in LFPG_HologramMod.c prevent ghost entity
-//     from ProjectionBasedOnParent creating real entities.
-//
-// v0.9.3 (Sync Audit):
-//   S4: LFPG_TryRegister now captures oldId before recalculating.
-//       Prevents ghost entries in DeviceRegistry from partial SyncVars.
-//       Parity with all other devices (v0.7.45 Patch 4).
-//   S5: LFPG_SetLoadRatio now uses delta threshold (0.01) to avoid
-//       SetSynchDirty from float jitter. Parity with LF_TestGenerator.
-//
-// LF_SolarPanel:      T1 SOURCE device (20 u/s during daylight).
-//                     1 output port (output_1). Owns wires.
-//                     Sun state managed by NetworkManager centralized timer.
-//                     Accepts MetalPlate + Nail attachments for upgrade.
-//
-// LF_SolarPanel_T2:   T2 SOURCE device (50 u/s during daylight).
-//                     Inherits LF_SolarPanel. No attachments.
-//                     Created by LFPG_ActionUpgradeSolarPanel.
-//
-// Memory points required in T1/T2 p3d (LOD Memory):
-//   port_output_1 -- cable connection point
-//
-// Wire manipulation delegated to LFPG_WireHelper (3_Game).
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Persists m_SourceOn via LFPG_OnStoreSaveDevice hook.
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT: DeployableContainer_Base pattern (different-model hologram)
-// Box model in hands -> hologram shows panel T1 model.
-// On confirm, spawns LF_SolarPanel at hologram position.
-//
-// Based on sample_container proven pattern:
-//   Kit extends DeployableContainer_Base
-//   Config: SingleUseActions[]={527}, ContinuousActions[]={231}
-//   Hologram: 6 overrides in LFPG_HologramMod.c
-//   PlaceEntity override prevents ghost entity creation
+// KIT (unchanged)
 // ---------------------------------------------------------
 class LF_SolarPanel_Kit : DeployableContainer_Base
 {
-    // Returns the classname that the hologram should project.
-    // Called by LFPG_HologramMod overrides to swap box -> panel.
     string GetDeployedClassname()
     {
         return "LF_SolarPanel";
@@ -63,20 +24,11 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
         return "0 0 0";
     }
 
-    // Orientation offset applied during hologram preview.
-    // The T1 P3D model is authored flat (horizontal). Apply pitch
-    // correction so the hologram shows the panel standing upright.
-    // Format: "Yaw Pitch Roll" in degrees.
-    // NOTE: If panel faces wrong way, try "0 90 0" instead.
     vector GetDeployOrientationOffset()
     {
         return "0 -90 0";
     }
 
-    // v0.8.1: DeployableContainer_Base pattern (sample_container).
-    // Uses CreateObject (not CreateObjectEx), pb.GetLocalProjectionPosition()
-    // as initial spawn position, then SetPosition/SetOrientation from params.
-    // DeleteSafe instead of ObjectDelete for safer network cleanup.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
@@ -88,13 +40,15 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
         if (!pb)
             return;
 
-        // Spawn T1 panel at hologram position
-        LF_SolarPanel panel = LF_SolarPanel.Cast(GetGame().CreateObject(GetDeployedClassname(), pb.GetLocalProjectionPosition(), false));
+        string spawnClass = GetDeployedClassname();
+        LF_SolarPanel panel = LF_SolarPanel.Cast(GetGame().CreateObject(spawnClass, pb.GetLocalProjectionPosition(), false));
 
         if (!panel)
         {
-            LFPG_Util.Error("[SolarPanel_Kit] Failed to create LF_SolarPanel! Kit preserved.");
-            pb.MessageStatus("[LFPG] Solar panel placement failed. Kit preserved.");
+            string errKit = "[SolarPanel_Kit] Failed to create LF_SolarPanel! Kit preserved.";
+            LFPG_Util.Error(errKit);
+            string failMsg = "[LFPG] Solar panel placement failed. Kit preserved.";
+            pb.MessageStatus(failMsg);
             return;
         }
 
@@ -103,9 +57,11 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
 
         SetIsDeploySound(true);
 
-        LFPG_Util.Info("[SolarPanel_Kit] Deployed LF_SolarPanel at pos=" + position.ToString() + " ori=" + orientation.ToString());
+        string logMsg = "[SolarPanel_Kit] Deployed LF_SolarPanel at pos=" + position.ToString();
+        logMsg = logMsg + " ori=";
+        logMsg = logMsg + orientation.ToString();
+        LFPG_Util.Info(logMsg);
 
-        // Delete kit only on successful spawn
         this.DeleteSafe();
     }
 
@@ -119,9 +75,6 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
         return true;
     }
 
-    // v0.9.2: Prevent orphan loop sound — same fix as all other LFPG kits.
-    // DeleteSafe during OnPlacementComplete interrupts callback cleanup
-    // before the sound system detaches the loop.
     override string GetLoopDeploySoundset()
     {
         return "";
@@ -130,91 +83,87 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
     override void SetActions()
     {
         super.SetActions();
-        // v0.8.1: Vanilla placement actions (no custom LFPG_ActionPlaceSolarPanel).
-        // Config also declares these via SingleUseActions[]={527} ContinuousActions[]={231}.
-        // DayZ deduplicates, having both is safe and matches sample_container pattern.
         AddAction(ActionTogglePlaceObject);
         AddAction(ActionPlaceObject);
     }
 };
 
 // ---------------------------------------------------------
-// T1: Solar Panel SOURCE (20 u/s during daylight)
+// DEVICE - SOURCE : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_SolarPanel : Inventory_Base
+class LF_SolarPanel : LFPG_WireOwnerBase
 {
-    // ---- Device identity ----
-    protected int m_DeviceIdLow = 0;
-    protected int m_DeviceIdHigh = 0;
-    protected string m_DeviceId;
-
-    // ---- Wires owned (output side) ----
-    protected ref array<ref LFPG_WireData> m_Wires;
-
-    // ---- Source state (replicated) ----
-    protected bool m_SourceOn = false;
-
-    // ---- Anti-ghost guard (RC-04 parity) ----
-    // Prevents OnVariablesSynchronized from re-registering after EEDelete.
-    protected bool m_LFPG_Deleting = false;
-
-    // ---- Load telemetry (replicated to clients) ----
-    protected float m_LoadRatio = 0.0;
-    protected bool m_Overloaded = false;
+    // ---- Device-specific SyncVars ----
+    protected bool  m_SourceOn   = false;
+    protected float m_LoadRatio  = 0.0;
+    protected bool  m_Overloaded = false;
 
     void LF_SolarPanel()
     {
-        m_Wires = new array<ref LFPG_WireData>;
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_SourceOn");
-        RegisterNetSyncVariableFloat("m_LoadRatio", 0.0, 5.0, 2);
-        RegisterNetSyncVariableBool("m_Overloaded");
+        string pOut = "output_1";
+        LFPG_AddPort(pOut, LFPG_PortDir.OUT, "Output");
+
+        string varSrc = "m_SourceOn";
+        RegisterNetSyncVariableBool(varSrc);
+        string varLoad = "m_LoadRatio";
+        RegisterNetSyncVariableFloat(varLoad, 0.0, 5.0, 2);
+        string varOver = "m_Overloaded";
+        RegisterNetSyncVariableBool(varOver);
     }
 
-    // ============================================
-    // Actions
-    // ============================================
-    override void SetActions()
+    // ---- Virtual interface ----
+    override int LFPG_GetDeviceType() { return LFPG_DeviceType.SOURCE; }
+    override bool LFPG_IsSource() { return true; }
+    override bool LFPG_GetSourceOn() { return m_SourceOn; }
+    override float LFPG_GetConsumption() { return 0.0; }
+    override float LFPG_GetCapacity() { return 20.0; }
+
+    override float LFPG_GetLoadRatio() { return m_LoadRatio; }
+
+    override void LFPG_SetLoadRatio(float ratio)
     {
-        super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
+        #ifdef SERVER
+        if (ratio < 0.0)
+        {
+            ratio = 0.0;
+        }
+
+        float diff = ratio - m_LoadRatio;
+        if (diff < 0.0)
+        {
+            diff = -diff;
+        }
+        if (diff > 0.01)
+        {
+            m_LoadRatio = ratio;
+            SetSynchDirty();
+        }
+        #endif
     }
 
-    override bool CanPutInCargo(EntityAI parent)
+    override bool LFPG_GetOverloaded() { return m_Overloaded; }
+
+    override void LFPG_SetOverloaded(bool val)
     {
-        return false;
+        #ifdef SERVER
+        if (m_Overloaded != val)
+        {
+            m_Overloaded = val;
+            SetSynchDirty();
+        }
+        #endif
     }
 
-    override bool CanPutIntoHands(EntityAI parent)
+    // SOURCE: SetPowered is no-op (driven by m_SourceOn / sun)
+    override void LFPG_SetPowered(bool powered) {}
+    override bool LFPG_IsPowered() { return m_SourceOn; }
+
+    bool LFPG_GetSwitchState()
     {
-        return false;
+        return m_SourceOn;
     }
 
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return false;
-    }
-
-    // Prevent heavy-item carry behavior (parity with Splitter/Combiner/CeilingLight)
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
-
-    override bool IsElectricAppliance()
-    {
-        return false;
-    }
-
-    // ============================================
-    // Solar state update (called by NetworkManager centralized timer)
-    // ============================================
-    // v0.8.0: Replaces per-panel CheckSunlight/StartSolarTimer/StopSolarTimer.
-    // NetworkManager.LFPG_TickSolarPanels() calls this on all panels
-    // when sun state transitions (dawn/dusk). Also called from EEInit
-    // with cached state for immediate initialization.
+    // ---- Sun state (called by NM centralized timer) ----
     void LFPG_UpdateSunState(bool hasSun)
     {
         #ifdef SERVER
@@ -229,41 +178,23 @@ class LF_SolarPanel : Inventory_Base
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         }
 
-        LFPG_Util.Info("[LF_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString() + " id=" + m_DeviceId);
+        string sunMsg = "[LF_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString();
+        sunMsg = sunMsg + " id=";
+        sunMsg = sunMsg + m_DeviceId;
+        LFPG_Util.Info(sunMsg);
         #endif
     }
 
-    // ============================================
-    // Lifecycle
-    // ============================================
-    override void EEInit()
+    // ---- Lifecycle hooks ----
+    override void LFPG_OnInitDevice()
     {
-        super.EEInit();
-
         #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
-        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
-        SetSynchDirty();
-        #endif
-
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-
-        #ifdef SERVER
-        // v0.8.0: Use cached sun state from centralized timer (no per-panel timer).
-        // LFPG_UpdateSunState propagates internally if m_SourceOn changes.
         bool preState = m_SourceOn;
         bool cachedSun = LFPG_NetworkManager.Get().LFPG_GetCachedSunState();
         LFPG_UpdateSunState(cachedSun);
 
-        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
-
-        // Persistence restore: if loaded m_SourceOn already matched cached sun,
-        // LFPG_UpdateSunState was a no-op (no propagation). We must propagate
-        // explicitly to rebuild graph edge allocations for this device.
+        // Persistence restore: if loaded m_SourceOn matched cached sun,
+        // UpdateSunState was a no-op. Must propagate explicitly.
         if (preState == m_SourceOn && m_SourceOn && m_DeviceId != "")
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
@@ -271,17 +202,8 @@ class LF_SolarPanel : Inventory_Base
         #endif
     }
 
-    override void EEDelete(EntityAI parent)
+    override void LFPG_OnKilled()
     {
-        m_LFPG_Deleting = true;
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-        super.EEDelete(parent);
-    }
-
-    override void EEKilled(Object killer)
-    {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
-
         #ifdef SERVER
         if (m_SourceOn)
         {
@@ -289,425 +211,47 @@ class LF_SolarPanel : Inventory_Base
             SetSynchDirty();
         }
         #endif
-
-        super.EEKilled(killer);
     }
 
-    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
-    {
-        super.EEItemLocationChanged(oldLoc, newLoc);
-
-        #ifdef SERVER
-        if (m_DeviceId == "")
-            return;
-
-        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
-        if (wiresCut)
-        {
-            if (m_SourceOn)
-            {
-                m_SourceOn = false;
-                SetSynchDirty();
-            }
-        }
-        #endif
-    }
-
-    // v0.9.1 (H1 JIP Fix): Added CableRenderer sync block.
-    // SolarPanel is SOURCE with OUT ports — owns wires.
-    // Without RequestDeviceSync, cables from SolarPanel never
-    // appear on JIP clients until ReconcileTick (60s).
-    // Pattern: Splitter/Combiner/Generator parity.
-    override void OnVariablesSynchronized()
-    {
-        super.OnVariablesSynchronized();
-        LFPG_TryRegister();
-
-        #ifndef SERVER
-        if (m_DeviceId != "")
-        {
-            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
-            if (r)
-            {
-                if (!r.HasOwnerData(m_DeviceId))
-                {
-                    r.RequestDeviceSync(m_DeviceId, this);
-                }
-                else
-                {
-                    r.NotifyOwnerVisualChanged(m_DeviceId);
-                }
-            }
-        }
-        #endif
-    }
-
-    // ============================================
-    // Device identity helpers
-    // ============================================
-    protected void LFPG_UpdateDeviceIdString()
-    {
-        m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
-    }
-
-    protected void LFPG_TryRegister()
-    {
-        // v0.7.48 (RC-04 parity): Don't register if device is being deleted.
-        if (m_LFPG_Deleting)
-            return;
-
-        // v0.9.3 (S4 fix): Capture old ID before recalculating.
-        // If OnVarSync delivers partial SyncVars (DeviceIdLow before High),
-        // the transient ID gets registered. When the second SyncVar arrives
-        // and the ID changes, the old entry must be unregistered to prevent
-        // ghost entries in DeviceRegistry.
-        // Parity with Generator/Lamp/Splitter/Combiner/Camera/Monitor (v0.7.45).
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
-
-        if (oldId != "" && oldId != m_DeviceId)
-        {
-            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
-        }
-
-        if (m_DeviceId != "")
-        {
-            LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
-        }
-    }
-
-    // ============================================
-    // LFPG_IDevice interface
-    // ============================================
-    string LFPG_GetDeviceId()
-    {
-        return m_DeviceId;
-    }
-
-    int LFPG_GetPortCount()
-    {
-        return 1;
-    }
-
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0) return "output_1";
-        return "";
-    }
-
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0) return LFPG_PortDir.OUT;
-        return -1;
-    }
-
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0) return "Output";
-        return "";
-    }
-
-    bool LFPG_HasPort(string portName, int dir)
-    {
-        if (dir == LFPG_PortDir.OUT && portName == "output_1") return true;
-        return false;
-    }
-
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        string memPoint = "port_" + portName;
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        // Fallback: try compact naming (port_output1)
-        int len = portName.Length();
-        if (len >= 3)
-        {
-            string lastChar = portName.Substring(len - 1, 1);
-            string beforeLast = portName.Substring(len - 2, 1);
-            if (beforeLast == "_")
-            {
-                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
-                if (MemoryPointExists(compact))
-                {
-                    return ModelToWorld(GetMemoryPointPos(compact));
-                }
-            }
-        }
-
-        // Fallback: device center + offset
-        LFPG_Util.Warn("[LF_SolarPanel] Missing memory point for port: " + portName);
-        vector p = GetPosition();
-        p[1] = p[1] + 0.3;
-        return p;
-    }
-
-    int LFPG_GetDeviceType()
-    {
-        return LFPG_DeviceType.SOURCE;
-    }
-
-    bool LFPG_IsSource()
-    {
-        return true;
-    }
-
-    bool LFPG_GetSourceOn()
-    {
-        return m_SourceOn;
-    }
-
-    // Capacity: 20 u/s for T1 (overridden by T2)
-    float LFPG_GetCapacity()
-    {
-        return 20.0;
-    }
-
-    // SOURCE devices: consumption is 0
-    float LFPG_GetConsumption()
-    {
-        return 0.0;
-    }
-
-    float LFPG_GetLoadRatio()
-    {
-        return m_LoadRatio;
-    }
-
-    void LFPG_SetLoadRatio(float ratio)
+    override void LFPG_OnWiresCut()
     {
         #ifdef SERVER
-        if (ratio < 0.0)
+        if (m_SourceOn)
         {
-            ratio = 0.0;
-        }
-
-        // v0.9.3 (S5 fix): Delta threshold to avoid SetSynchDirty from float jitter.
-        // Parity with LF_TestGenerator.LFPG_SetLoadRatio (v0.7.8+).
-        float diff = ratio - m_LoadRatio;
-        if (diff < 0.0)
-        {
-            diff = -diff;
-        }
-        if (diff > 0.01)
-        {
-            m_LoadRatio = ratio;
+            m_SourceOn = false;
             SetSynchDirty();
         }
         #endif
     }
 
-    bool LFPG_GetOverloaded()
+    // ---- Extra persistence: m_SourceOn ----
+    override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        return m_Overloaded;
-    }
-
-    void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val)
-        {
-            m_Overloaded = val;
-            SetSynchDirty();
-        }
-        #endif
-    }
-
-    // SOURCE: SetPowered is a no-op (we drive power via m_SourceOn)
-    void LFPG_SetPowered(bool powered)
-    {
-        // No-op for SOURCE devices
-    }
-
-    // SwitchState for ToggleSource compatibility (solar has no manual toggle)
-    bool LFPG_GetSwitchState()
-    {
-        return m_SourceOn;
-    }
-
-    // ---- Connection validation ----
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
-    {
-        if (!other) return false;
-
-        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT)) return false;
-
-        EntityAI otherEntity = EntityAI.Cast(other);
-        if (!otherEntity) return false;
-
-        string otherId = LFPG_DeviceAPI.GetDeviceId(otherEntity);
-        if (otherId != "")
-        {
-            return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN);
-        }
-
-        return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
-    }
-
-    // ============================================
-    // Wire ownership API (delegates to WireHelper)
-    // ============================================
-    bool LFPG_HasWireStore()
-    {
-        return true;
-    }
-
-    array<ref LFPG_WireData> LFPG_GetWires()
-    {
-        return m_Wires;
-    }
-
-    string LFPG_GetWiresJSON()
-    {
-        return LFPG_WireHelper.GetJSON(m_Wires);
-    }
-
-    bool LFPG_AddWire(LFPG_WireData wd)
-    {
-        if (!wd) return false;
-
-        if (wd.m_SourcePort == "")
-        {
-            wd.m_SourcePort = "output_1";
-        }
-
-        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
-        {
-            LFPG_Util.Warn("[LF_SolarPanel] AddWire rejected: not an output port: " + wd.m_SourcePort);
-            return false;
-        }
-
-        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_ClearWires()
-    {
-        bool result = LFPG_WireHelper.ClearAll(m_Wires);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_ClearWiresForCreator(string creatorId)
-    {
-        bool result = LFPG_WireHelper.ClearForCreator(m_Wires, creatorId);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_PruneMissingTargets()
-    {
-        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
-        if (!validIds)
-        {
-            validIds = new map<string, bool>;
-            array<EntityAI> all = new array<EntityAI>;
-            LFPG_DeviceRegistry.Get().GetAll(all);
-            int vi;
-            for (vi = 0; vi < all.Count(); vi = vi + 1)
-            {
-                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
-                if (did != "")
-                {
-                    validIds[did] = true;
-                }
-            }
-        }
-
-        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    // ============================================
-    // Persistence
-    // ============================================
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
         ctx.Write(m_SourceOn);
-
-        string json;
-        LFPG_WireHelper.SerializeJSON(m_Wires, json);
-        ctx.Write(json);
     }
 
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
+    override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-        if (!super.OnStoreLoad(ctx, version))
-            return false;
-
-        if (!ctx.Read(m_DeviceIdLow))
-        {
-            LFPG_Util.Error("[LF_SolarPanel] OnStoreLoad: failed to read m_DeviceIdLow");
-            return false;
-        }
-
-        if (!ctx.Read(m_DeviceIdHigh))
-        {
-            LFPG_Util.Error("[LF_SolarPanel] OnStoreLoad: failed to read m_DeviceIdHigh");
-            return false;
-        }
-
-        LFPG_UpdateDeviceIdString();
-
         if (!ctx.Read(m_SourceOn))
         {
-            LFPG_Util.Error("[LF_SolarPanel] OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId);
+            string errSrc = "[LF_SolarPanel] OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId;
+            LFPG_Util.Error(errSrc);
             return false;
         }
-
-        string json;
-        if (!ctx.Read(json))
-        {
-            LFPG_Util.Error("[LF_SolarPanel] OnStoreLoad: failed to read wires json for " + m_DeviceId);
-            return false;
-        }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_SolarPanel");
-
         return true;
     }
 };
 
 // ---------------------------------------------------------
 // T2: Upgraded Solar Panel SOURCE (50 u/s during daylight)
-// Inherits T1 -- only overrides capacity and blocks attachments.
 // ---------------------------------------------------------
 class LF_SolarPanel_T2 : LF_SolarPanel
 {
-    // T2 generates 50 u/s instead of 20 u/s
     override float LFPG_GetCapacity()
     {
         return 50.0;
     }
 
-    // T2 does not accept upgrade materials
     override bool CanReceiveAttachment(EntityAI attachment, int slotId)
     {
         return false;

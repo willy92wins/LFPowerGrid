@@ -1,60 +1,26 @@
 // =========================================================
-// LF_PowerGrid - Door Controller device (v1.0.0)
+// LF_PowerGrid - Door Controller device (v4.0 Refactor)
 //
-// LF_DoorController_Kit:  Holdable, deployable (same-model pattern = Camera).
-// LF_DoorController:      CONSUMER, 1 IN (input_1), 5 u/s, no OUT, no wire store.
+// LF_DoorController_Kit:  Holdable, deployable (same-model pattern).
+// LF_DoorController:      CONSUMER, 1 IN (input_1), 5 u/s, no wire store.
 //
-// Memory points (LOD Memory in p3d):
-//   port_input_0  — upstream cable anchor
-//
-// Named selections / hiddenSelections (from model.cfg sections[]):
-//   [0] bolt       — bolt geometry
-//   [1] light_led  — LED indicator (rvmat swap on/off)
-//   [2] screen     — screen face
-//   [3] camo       — camo texture slot
-//
-// rvmats:
-//   door_controller.rvmat       — body (Super shader)
-//   door_controller_green.rvmat — LED ON/powered (Normal/Basic, emmisive green)
-//   door_controller_red.rvmat   — LED OFF/unpowered (Normal/Basic, emmisive red)
-//
-// Function:
-//   Auto-pairs to nearest door within 1m (Fence/BBP/Building).
-//   Powered → opens paired door (bypasses locks from script side).
-//   Unpowered → closes paired door.
-//   Locks (CombinationLock, CodeLock) remain attached — they only
-//   block player actions, not server-side OpenFence()/CloseFence().
-//   Polling interval: 5s (per-device Timer, server only).
-//
-// Supported door types:
-//   - Vanilla Fence gates (constructed with hinges)
-//   - BBP doors/gates (#ifdef BBP, inherits Fence)
-//   - Vanilla Building doors (proto native OpenDoor/CloseDoor)
-//
-// Enforce Script: no ternaries, no ++/--, no foreach, no +=/-=.
+// v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
+//   Boilerplate removed. Door logic preserved unchanged.
 // =========================================================
 
 static const string LFPG_DC_RVMAT_OFF = "\\LFPowerGrid\\data\\door_controller\\data\\door_controller_red.rvmat";
 static const string LFPG_DC_RVMAT_ON  = "\\LFPowerGrid\\data\\door_controller\\data\\door_controller_green.rvmat";
 
-// Door type constants (Enforce Script has no enums in user scripts)
 static const int LFPG_DOORTYPE_NONE     = 0;
 static const int LFPG_DOORTYPE_FENCE    = 1;
 static const int LFPG_DOORTYPE_BUILDING = 2;
 
-// Pairing radius (meters)
 static const float LFPG_DC_PAIR_RADIUS     = 1.0;
-// DistanceSq threshold = radius^2
 static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
-
-// v4.0: Poll interval moved to LFPG_Defines.c (LFPG_DC_TICK_MS = 2000ms)
-// Centralized in NetworkManager — no per-device Timer.
-
-// Max door index to scan for vanilla buildings
 static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
 
 // ---------------------------------------------------------
-// KIT — patron identico a LF_Camera_Kit
+// KIT (unchanged)
 // ---------------------------------------------------------
 class LF_DoorController_Kit : Inventory_Base
 {
@@ -83,8 +49,6 @@ class LF_DoorController_Kit : Inventory_Base
         return "placeBarbedWire_SoundSet";
     }
 
-    // Previene loop sound huerfano: ObjectDelete durante OnPlacementComplete
-    // interrumpe cleanup del action callback antes de detener sonido.
     override string GetLoopDeploySoundset()
     {
         return "";
@@ -97,8 +61,6 @@ class LF_DoorController_Kit : Inventory_Base
         AddAction(LFPG_ActionPlaceDoorController);
     }
 
-    // Usar parametro position/orientation, NUNCA GetPosition().
-    // GetPosition() devuelve la pos del kit (cerca del player), no el hologram.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
@@ -108,32 +70,29 @@ class LF_DoorController_Kit : Inventory_Base
         vector finalOri = orientation;
 
         string tLog = "[DoorController_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        string spawnType = "LF_DoorController";
-        EntityAI dc = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
+        EntityAI dc = GetGame().CreateObjectEx("LF_DoorController", finalPos, ECE_CREATEPHYSICS);
         if (dc)
         {
             dc.SetPosition(finalPos);
             dc.SetOrientation(finalOri);
             dc.Update();
-
-            string deployMsg = "[DoorController_Kit] Deployed LF_DoorController at " + finalPos.ToString();
-            deployMsg = deployMsg + " ori=" + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
+            string depMsg = "[DoorController_Kit] Deployed at ";
+            depMsg = depMsg + finalPos.ToString();
+            LFPG_Util.Info(depMsg);
             GetGame().ObjectDelete(this);
         }
         else
         {
-            string kitErr = "[DoorController_Kit] Failed to create LF_DoorController! Kit preserved.";
-            LFPG_Util.Error(kitErr);
+            string errKit = "[DoorController_Kit] Failed! Kit preserved.";
+            LFPG_Util.Error(errKit);
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
-                string errMsg = "[LFPG] DoorController placement failed. Kit preserved.";
-                pb.MessageStatus(errMsg);
+                pb.MessageStatus("[LFPG] Door Controller placement failed.");
             }
         }
         #endif
@@ -141,98 +100,90 @@ class LF_DoorController_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
-// DEVICE — CONSUMER, 1 IN (input_1), 5 u/s
+// DEVICE - CONSUMER : LFPG_DeviceBase
 // ---------------------------------------------------------
-class LF_DoorController : Inventory_Base
+class LF_DoorController : LFPG_DeviceBase
 {
-    // ---- SyncVars ----
-    protected int  m_DeviceIdLow  = 0;
-    protected int  m_DeviceIdHigh = 0;
-    protected bool m_PoweredNet   = false;
-
-    // ---- Estado local ----
-    protected string m_DeviceId      = "";
-    protected bool   m_LFPG_Deleting = false;
+    // ---- Device-specific SyncVars ----
+    protected bool m_PoweredNet = false;
 
     // ---- Door pairing (server only, NOT persisted) ----
     protected Object m_PairedDoor   = null;
-    protected int    m_DoorType     = 0;   // LFPG_DOORTYPE_*
-    protected int    m_DoorIndex    = -1;  // Only for BUILDING type
+    protected int    m_DoorType     = 0;
+    protected int    m_DoorIndex    = -1;
 
-    // ============================================
-    // Constructor — registro de SyncVars
-    // MUST be constructor, NOT EEInit.
-    // ============================================
     void LF_DoorController()
     {
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_PoweredNet");
+        string pIn = "input_1";
+        string lIn = "IN";
+        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
+
+        string varPowered = "m_PoweredNet";
+        RegisterNetSyncVariableBool(varPowered);
     }
 
-    // ============================================
-    // Device ID helpers
-    // ============================================
-    protected void LFPG_UpdateDeviceIdString()
+    // ---- Custom port world pos (p3d uses "port_input_0") ----
+    override vector LFPG_GetPortWorldPos(string portName)
     {
-        m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
+        string memPoint = "port_input_0";
+        if (MemoryPointExists(memPoint))
+        {
+            return ModelToWorld(GetMemoryPointPos(memPoint));
+        }
+
+        string warnMsg = "[LF_DoorController] Missing memory point for port: " + portName;
+        LFPG_Util.Warn(warnMsg);
+        vector p = GetPosition();
+        p[1] = p[1] - 0.1;
+        return p;
     }
 
-    protected void LFPG_TryRegister()
+    // ---- Virtual interface ----
+    override int LFPG_GetDeviceType()
     {
-        if (m_LFPG_Deleting)
+        return LFPG_DeviceType.CONSUMER;
+    }
+
+    override float LFPG_GetConsumption()
+    {
+        return 5.0;
+    }
+
+    override bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
+    }
+
+    override void LFPG_SetPowered(bool powered)
+    {
+        #ifdef SERVER
+        if (m_PoweredNet == powered)
             return;
 
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
+        m_PoweredNet = powered;
+        SetSynchDirty();
 
-        if (oldId != "" && oldId != m_DeviceId)
-        {
-            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
-        }
+        string msg = "[LF_DoorController] SetPowered(";
+        msg = msg + powered.ToString();
+        msg = msg + ") id=";
+        msg = msg + m_DeviceId;
+        LFPG_Util.Debug(msg);
 
-        if (m_DeviceId != "")
-        {
-            LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
-        }
+        LFPG_ApplyDoorState();
+        #endif
     }
 
-    // ============================================
-    // Lifecycle: EEInit
-    // ============================================
-    override void EEInit()
+    // ---- Lifecycle hooks ----
+    override void LFPG_OnInit()
     {
-        super.EEInit();
-
         #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
-        SetSynchDirty();
-        #endif
-
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-
-        // CONSUMER: no BroadcastOwnerWires (no OUT port, no wire store)
-
-        #ifdef SERVER
-        // v4.0: Centralized poll via NetworkManager (replaces per-device Timer)
         LFPG_NetworkManager.Get().RegisterDoorController(this);
-
-        // Attempt immediate pairing on spawn/load
         LFPG_SearchAndPairDoor();
         #endif
     }
 
-    // ============================================
-    // Lifecycle: EEKilled
-    // ============================================
-    override void EEKilled(Object killer)
+    override void LFPG_OnKilled()
     {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
-
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterDoorController(this);
         LFPG_UnpairDoor();
@@ -243,62 +194,33 @@ class LF_DoorController : Inventory_Base
             SetSynchDirty();
         }
         #endif
-
-        super.EEKilled(killer);
     }
 
-    // ============================================
-    // Lifecycle: EEDelete (with anti-ghost guard)
-    // ============================================
-    override void EEDelete(EntityAI parent)
+    override void LFPG_OnDeleted()
     {
-        m_LFPG_Deleting = true;
-
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterDoorController(this);
         LFPG_UnpairDoor();
         #endif
-
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-        super.EEDelete(parent);
     }
 
-    // ============================================
-    // Lifecycle: EEItemLocationChanged
-    // ============================================
-    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
+    override void LFPG_OnWiresCut()
     {
-        super.EEItemLocationChanged(oldLoc, newLoc);
-
         #ifdef SERVER
-        if (m_DeviceId == "")
-            return;
+        LFPG_UnpairDoor();
 
-        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
-        if (wiresCut)
+        if (m_PoweredNet)
         {
-            LFPG_UnpairDoor();
-
-            if (m_PoweredNet)
-            {
-                m_PoweredNet = false;
-                SetSynchDirty();
-            }
+            m_PoweredNet = false;
+            SetSynchDirty();
         }
         #endif
     }
 
-    // ============================================
-    // Client sync
-    // ============================================
-    override void OnVariablesSynchronized()
+    // ---- VarSync: LED visual ----
+    override void LFPG_OnVarSync()
     {
-        super.OnVariablesSynchronized();
-        LFPG_TryRegister();
-
         #ifndef SERVER
-        // LED rvmat swap based on power state.
-        // light_led = hiddenSelections[1] in config.cpp.
         if (m_PoweredNet)
         {
             SetObjectMaterial(1, LFPG_DC_RVMAT_ON);
@@ -307,201 +229,7 @@ class LF_DoorController : Inventory_Base
         {
             SetObjectMaterial(1, LFPG_DC_RVMAT_OFF);
         }
-
-        // Request wire data from server so cables
-        // towards this controller render on JIP.
-        if (m_DeviceId != "")
-        {
-            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
-            if (r)
-            {
-                r.RequestDeviceSync(m_DeviceId, this);
-            }
-        }
         #endif
-    }
-
-    // ============================================
-    // Persistence — CONSUMER: ids only.
-    // m_PoweredNet: NOT persisted (derived state).
-    // m_PairedDoor: NOT persisted (re-discovered on load).
-    // ============================================
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
-    }
-
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
-    {
-        if (!super.OnStoreLoad(ctx, version))
-            return false;
-
-        if (!ctx.Read(m_DeviceIdLow))
-            return false;
-        if (!ctx.Read(m_DeviceIdHigh))
-            return false;
-
-        return true;
-    }
-
-    // ============================================
-    // Inventory guards (prevent pickup — breaks wires)
-    // ============================================
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanPutIntoHands(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return false;
-    }
-
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
-    }
-
-    // Block vanilla CompEM entirely.
-    override bool IsElectricAppliance()
-    {
-        return false;
-    }
-
-    // ============================================
-    // LFPG_IDevice interface
-    // ============================================
-    string LFPG_GetDeviceId()
-    {
-        return m_DeviceId;
-    }
-
-    int LFPG_GetDeviceIdLow()
-    {
-        return m_DeviceIdLow;
-    }
-
-    int LFPG_GetDeviceIdHigh()
-    {
-        return m_DeviceIdHigh;
-    }
-
-    // ---- Port definition: 1x IN ----
-    int LFPG_GetPortCount()
-    {
-        return 1;
-    }
-
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0)
-            return "input_1";
-        return "";
-    }
-
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0)
-            return LFPG_PortDir.IN;
-        return -1;
-    }
-
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0)
-            return "IN";
-        return "";
-    }
-
-    bool LFPG_HasPort(string name, int dir)
-    {
-        string inName = "input_1";
-        if (name == inName && dir == LFPG_PortDir.IN)
-            return true;
-        return false;
-    }
-
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        // p3d skeleton defines "port_input_0" (not "port_input_1")
-        string memPoint = "port_input_0";
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        // Fallback: slightly below device position
-        string warnMsg = "[LF_DoorController] Missing memory point for port: " + portName;
-        LFPG_Util.Warn(warnMsg);
-        vector p = GetPosition();
-        p[1] = p[1] - 0.1;
-        return p;
-    }
-
-    // ---- Device type ----
-    int LFPG_GetDeviceType()
-    {
-        return LFPG_DeviceType.CONSUMER;
-    }
-
-    bool LFPG_IsSource()
-    {
-        return false;
-    }
-
-    float LFPG_GetConsumption()
-    {
-        return 5.0;
-    }
-
-    bool LFPG_IsPowered()
-    {
-        return m_PoweredNet;
-    }
-
-    void LFPG_SetPowered(bool powered)
-    {
-        #ifdef SERVER
-        if (m_PoweredNet == powered)
-            return;
-
-        m_PoweredNet = powered;
-        SetSynchDirty();
-
-        string msg = "[LF_DoorController] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId;
-        LFPG_Util.Debug(msg);
-
-        // v2.1: Immediate door reaction — no waiting for poll timer.
-        // Eliminates 0-5s delay from async timer stacking.
-        LFPG_ApplyDoorState();
-        #endif
-    }
-
-    // CONSUMER — no output port, cannot initiate connections.
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
-    {
-        return false;
-    }
-
-    // No wire store (IN-only).
-    bool LFPG_HasWireStore()
-    {
-        return false;
     }
 
     // ============================================
@@ -514,19 +242,14 @@ class LF_DoorController : Inventory_Base
         m_DoorIndex = -1;
     }
 
-    // ============================================
-    // POLL CALLBACK (server, every 5s)
-    // ============================================
     void LFPG_OnDoorPoll()
     {
         #ifdef SERVER
         if (!GetGame().IsServer())
             return;
 
-        // 1. Validate existing pairing
         if (m_PairedDoor)
         {
-            // Check door still alive
             EntityAI pairedEntity = EntityAI.Cast(m_PairedDoor);
             bool isAlive = false;
             if (pairedEntity)
@@ -535,7 +258,6 @@ class LF_DoorController : Inventory_Base
             }
             else
             {
-                // Object cast — check if still exists (non-EntityAI building)
                 isAlive = (m_PairedDoor != null);
             }
 
@@ -545,7 +267,6 @@ class LF_DoorController : Inventory_Base
                 return;
             }
 
-            // Check distance (DistanceSq avoids sqrt)
             vector myPos = GetPosition();
             vector doorPos = m_PairedDoor.GetPosition();
             float dx = myPos[0] - doorPos[0];
@@ -562,7 +283,6 @@ class LF_DoorController : Inventory_Base
             }
         }
 
-        // 2. If not paired, search for a door
         if (!m_PairedDoor)
         {
             LFPG_SearchAndPairDoor();
@@ -570,16 +290,10 @@ class LF_DoorController : Inventory_Base
                 return;
         }
 
-        // 3. Apply door state based on power
         LFPG_ApplyDoorState();
         #endif
     }
 
-    // ============================================
-    // APPLY DOOR STATE — opens/closes based on m_PoweredNet.
-    // Called from LFPG_SetPowered (immediate) and LFPG_OnDoorPoll (periodic).
-    // Safe to call anytime: guards on m_PairedDoor null.
-    // ============================================
     protected void LFPG_ApplyDoorState()
     {
         #ifdef SERVER
@@ -605,10 +319,6 @@ class LF_DoorController : Inventory_Base
         #endif
     }
 
-    // ============================================
-    // DOOR SEARCH — finds nearest valid door within 1m
-    // Priority: Fence/BBP > Building
-    // ============================================
     protected void LFPG_SearchAndPairDoor()
     {
         #ifdef SERVER
@@ -627,7 +337,6 @@ class LF_DoorController : Inventory_Base
         int count = objects.Count();
         int i = 0;
 
-        // Hoisted variables for loop body (Enforce: no declarations inside loops)
         Object obj;
         float dx;
         float dy;
@@ -639,7 +348,6 @@ class LF_DoorController : Inventory_Base
         int doorIdx;
         vector objPos;
 
-        // BBP-specific hoisted variables (only compiled when BBP defined)
         #ifdef BBP
         BBP_BASE bbpBase;
         bool isBBPType;
@@ -651,7 +359,6 @@ class LF_DoorController : Inventory_Base
             if (!obj)
                 continue;
 
-            // Skip self
             if (obj == this)
                 continue;
 
@@ -661,22 +368,16 @@ class LF_DoorController : Inventory_Base
             dz = myPos[2] - objPos[2];
             distSq = (dx * dx) + (dy * dy) + (dz * dz);
 
-            // --- Check Fence (vanilla gate + BBP) ---
             fence = Fence.Cast(obj);
             if (fence)
             {
                 isFenceValid = false;
 
-                // Vanilla: must have hinges (gate constructed)
                 if (fence.HasHinges())
                 {
                     isFenceValid = true;
                 }
 
-                // BBP: door/gate might not have vanilla hinges.
-                // BBP_HasDoor() is on BBP_BASE, not modded ItemBase.
-                // isBBPDoor() and IsBBPGate() are on modded ItemBase
-                // but accessible via BBP_BASE (inherits from Fence).
                 #ifdef BBP
                 if (!isFenceValid)
                 {
@@ -714,7 +415,6 @@ class LF_DoorController : Inventory_Base
                 continue;
             }
 
-            // --- Check Building (vanilla houses) ---
             bld = Building.Cast(obj);
             if (bld)
             {
@@ -731,7 +431,6 @@ class LF_DoorController : Inventory_Base
             }
         }
 
-        // Apply best match
         if (bestDoor)
         {
             m_PairedDoor = bestDoor;
@@ -740,18 +439,17 @@ class LF_DoorController : Inventory_Base
 
             float bestDist = Math.Sqrt(bestDistSq);
             string pairMsg = "[LF_DoorController] Paired to door type=" + bestType.ToString();
-            pairMsg = pairMsg + " idx=" + bestIndex.ToString();
-            pairMsg = pairMsg + " dist=" + bestDist.ToString();
-            pairMsg = pairMsg + " id=" + m_DeviceId;
+            pairMsg = pairMsg + " idx=";
+            pairMsg = pairMsg + bestIndex.ToString();
+            pairMsg = pairMsg + " dist=";
+            pairMsg = pairMsg + bestDist.ToString();
+            pairMsg = pairMsg + " id=";
+            pairMsg = pairMsg + m_DeviceId;
             LFPG_Util.Info(pairMsg);
         }
         #endif
     }
 
-    // ============================================
-    // BUILDING DOOR INDEX — find first valid door (0-5)
-    // A door "exists" if it's currently open or can be opened.
-    // ============================================
     protected int LFPG_FindFirstValidDoorIndex(Building bld)
     {
         if (!bld)
@@ -762,11 +460,9 @@ class LF_DoorController : Inventory_Base
 
         for (i = 0; i <= LFPG_DC_MAX_DOOR_INDEX; i = i + 1)
         {
-            // Door is valid if it's open...
             if (bld.IsDoorOpen(i))
                 return i;
 
-            // ...or if it can be opened (false = ignore lock check)
             canOpen = bld.CanDoorBeOpened(i, false);
             if (canOpen)
                 return i;
@@ -775,9 +471,6 @@ class LF_DoorController : Inventory_Base
         return -1;
     }
 
-    // ============================================
-    // QUERY: Is paired door currently open?
-    // ============================================
     protected bool LFPG_IsPairedDoorOpen()
     {
         if (!m_PairedDoor)
@@ -806,11 +499,6 @@ class LF_DoorController : Inventory_Base
         return false;
     }
 
-    // ============================================
-    // FORCE OPEN — bypasses lock checks
-    // OpenFence() / OpenDoor() are server methods that
-    // do NOT check IsLocked(). Locks only gate player actions.
-    // ============================================
     protected void LFPG_ForceOpenDoor()
     {
         #ifdef SERVER
@@ -843,7 +531,8 @@ class LF_DoorController : Inventory_Base
                     b.OpenDoor(m_DoorIndex);
 
                     string openDoorMsg = "[LF_DoorController] Opened building door idx=" + m_DoorIndex.ToString();
-                    openDoorMsg = openDoorMsg + " id=" + m_DeviceId;
+                    openDoorMsg = openDoorMsg + " id=";
+                    openDoorMsg = openDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(openDoorMsg);
                 }
             }
@@ -852,11 +541,6 @@ class LF_DoorController : Inventory_Base
         #endif
     }
 
-    // ============================================
-    // FORCE CLOSE — bypasses lock checks
-    // CloseFence() / CloseDoor() are server methods that
-    // do NOT check IsLocked().
-    // ============================================
     protected void LFPG_ForceCloseDoor()
     {
         #ifdef SERVER
@@ -889,7 +573,8 @@ class LF_DoorController : Inventory_Base
                     b.CloseDoor(m_DoorIndex);
 
                     string closeDoorMsg = "[LF_DoorController] Closed building door idx=" + m_DoorIndex.ToString();
-                    closeDoorMsg = closeDoorMsg + " id=" + m_DeviceId;
+                    closeDoorMsg = closeDoorMsg + " id=";
+                    closeDoorMsg = closeDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(closeDoorMsg);
                 }
             }
