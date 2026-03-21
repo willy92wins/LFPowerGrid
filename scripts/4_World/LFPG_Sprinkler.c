@@ -239,6 +239,11 @@ class LF_Sprinkler : LFPG_DeviceBase
         {
             SetSynchDirty();
         }
+        // v5.1: Notify parent pump to rescan (skip this dying sprinkler)
+        if (m_WaterSourceId != "")
+        {
+            LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
+        }
         #endif
 
         #ifndef SERVER
@@ -248,6 +253,14 @@ class LF_Sprinkler : LFPG_DeviceBase
 
     override void LFPG_OnDeleted()
     {
+        #ifdef SERVER
+        // v5.1: Notify parent pump to rescan (skip this dying sprinkler)
+        if (m_WaterSourceId != "")
+        {
+            LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
+        }
+        #endif
+
         #ifndef SERVER
         LFPG_CleanupClientFX();
         #endif

@@ -3528,6 +3528,10 @@ class LFPG_NetworkManager
             if (rpTid == "")
                 continue;
 
+            // v5.1: Skip the sprinkler being deleted/disconnected
+            if (rpTid == removedTargetId)
+                continue;
+
             rpTEnt = reg.FindById(rpTid);
             if (!rpTEnt)
                 continue;
