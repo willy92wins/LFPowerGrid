@@ -309,6 +309,9 @@ static const float LFPG_LASER_CROSS_RADIUS_SQ = 0.1225; // 0.35² pre-computed
 static const float LFPG_LASER_CONSUMPTION     = 5.0;    // self-consumption (u/s)
 static const float LFPG_LASER_CAPACITY        = 20.0;   // max throughput (u/s)
 
+// ---- Momentary pulse duration (shared by PushButton, SwitchRemote) ----
+static const int LFPG_BUTTON_PULSE_MS = 2000;
+
 // ---- Telemetry (v0.7.13 — Sprint 2.5, G1/G5) ----
 // Interval between telemetry log dumps (ms).
 // 5000ms = every 5 seconds when active. Low overhead: only increments counters per-frame,

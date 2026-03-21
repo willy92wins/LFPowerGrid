@@ -1,76 +1,33 @@
 // =========================================================
-// LF_PowerGrid - Push Button / Switch (v0.10.0)
+// LF_PowerGrid - Push Button / Momentary Switch (v2.0.0 — Refactor)
 //
-// LFPG_PushButton_Kit: Holdable, deployable (same-model pattern = Splitter).
-// LFPG_PushButton:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
-//                       Zero self-consumption. Momentary toggle (2s pulse).
+// LFPG_PushButton: PASSTHROUGH, 1 IN + 1 OUT.
+//                   Momentary pulse (ON for LFPG_BUTTON_PULSE_MS, then OFF).
+//                   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
-// Model: switch_v1.p3d (toggle switch with LED indicator)
-//   Memory points: port_input_0, port_output_0
-//   Animation: switch_state (translation 0→0.5)
-//   Hidden selection: light_led (index 0)
+// LED states (hiddenSelections[2] = "light_led"):
+//   Green = m_PoweredNet && m_SwitchOn  | Red = m_PoweredNet && !m_SwitchOn  | Off = !m_PoweredNet
+// Animation: "switch_state" (translation via model.cfg)
 //
-// Behavior:
-//   Toggle ON:  m_SwitchOn=true → power passes through → LED green → switch up
-//   After 2s:   m_SwitchOn=false → power blocked → LED red → switch down
-//   No input:   LED off (disconnected)
-//
-// LED states (hiddenSelections[0] = "light_led"):
-//   Green = m_PoweredNet && m_SwitchOn  (passing power)
-//   Red   = m_PoweredNet && !m_SwitchOn (has input, blocking)
-//   Off   = !m_PoweredNet               (no upstream / disconnected)
-//
-// Port names remain input_1/output_1 for persistence compatibility.
-// GetPortWorldPos maps to p3d memory points port_input_0/port_output_0.
-//
-// Persistence: DeviceIdLow, DeviceIdHigh + wires JSON.
-//   m_SwitchOn NOT persisted (momentary, defaults to false on restart).
-//   m_PoweredNet NOT persisted (derived by graph propagation).
+// Persistence: [base: DeviceId + ver + wireJSON] — m_SwitchOn NOT persisted (momentary)
+// LFPG_BUTTON_PULSE_MS now in LFPG_Defines.c (shared with SwitchRemote)
 // =========================================================
 
-static const string LFPG_BUTTON_RVMAT_OFF   = "\\LFPowerGrid\\data\\switch_v1\\data\\led_off.rvmat";
-static const string LFPG_BUTTON_RVMAT_GREEN  = "\\LFPowerGrid\\data\\switch_v1\\data\\led_green.rvmat";
-static const string LFPG_BUTTON_RVMAT_RED    = "\\LFPowerGrid\\data\\switch_v1\\data\\led_red.rvmat";
-
-// Duration in milliseconds that the button stays ON after toggle.
-static const int LFPG_BUTTON_PULSE_MS = 2000;
+static const string LFPG_BUTTON_RVMAT_OFF    = "\\LFPowerGrid\\data\\switch_v1\\data\\led_off.rvmat";
+static const string LFPG_BUTTON_RVMAT_GREEN   = "\\LFPowerGrid\\data\\switch_v1\\data\\led_green.rvmat";
+static const string LFPG_BUTTON_RVMAT_RED     = "\\LFPowerGrid\\data\\switch_v1\\data\\led_red.rvmat";
 
 // ---------------------------------------------------------
-// KIT - same-model deploy pattern (Splitter/Combiner parity)
+// KIT — unchanged
 // ---------------------------------------------------------
 class LFPG_PushButton_Kit : Inventory_Base
 {
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    // Previene loop sound huerfano: ObjectDelete durante OnPlacementComplete
-    // interrumpe el cleanup del action callback antes de detener el sonido.
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
+    override bool IsDeployable() { return true; }
+    override bool CanDisplayCargo() { return false; }
+    override bool CanBePlaced(Man player, vector position) { return true; }
+    override bool DoPlacingHeightCheck() { return false; }
+    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
+    override string GetLoopDeploySoundset() { return ""; }
 
     override void SetActions()
     {
@@ -79,42 +36,37 @@ class LFPG_PushButton_Kit : Inventory_Base
         AddAction(LFPG_ActionPlacePushButton);
     }
 
-    // Usar parametro position/orientation, NUNCA GetPosition().
-    // GetPosition() devuelve la pos del kit (cerca del player), no el hologram.
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
     {
         super.OnPlacementComplete(player, position, orientation);
-
         #ifdef SERVER
         vector finalPos = position;
         vector finalOri = orientation;
-
-        string tLog = "[PushButton_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        string tLog = "[PushButton_Kit] OnPlacementComplete: param=";
+        tLog = tLog + position.ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
-
-        // No ECE_PLACE_ON_SURFACE — mata wall placement.
-        EntityAI btn = GetGame().CreateObjectEx("LFPG_PushButton", finalPos, ECE_CREATEPHYSICS);
-        if (btn)
+        string spawnType = "LFPG_PushButton";
+        EntityAI sw = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
+        if (sw)
         {
-            btn.SetPosition(finalPos);
-            btn.SetOrientation(finalOri);
-            btn.Update();
-
-            string deployMsg = "[PushButton_Kit] Deployed LFPG_PushButton at " + finalPos.ToString();
-            deployMsg = deployMsg + " ori=" + finalOri.ToString();
+            sw.SetPosition(finalPos);
+            sw.SetOrientation(finalOri);
+            sw.Update();
+            string deployMsg = "[PushButton_Kit] Deployed at ";
+            deployMsg = deployMsg + finalPos.ToString();
             LFPG_Util.Info(deployMsg);
-
-            // Solo borrar kit si spawn exitoso (Splitter parity).
             GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[PushButton_Kit] Failed to create LFPG_PushButton! Kit preserved.");
+            LFPG_Util.Error("[PushButton_Kit] Failed to create! Kit preserved.");
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
-                pb.MessageStatus("[LFPG] Button placement failed. Kit preserved.");
+                string failMsg = "[LFPG] Push Button placement failed. Kit preserved.";
+                pb.MessageStatus(failMsg);
             }
         }
         #endif
@@ -122,231 +74,203 @@ class LFPG_PushButton_Kit : Inventory_Base
 };
 
 // ---------------------------------------------------------
-// DEVICE: PASSTHROUGH (1 IN + 1 OUT), momentary toggle
+// DEVICE: PASSTHROUGH, momentary pulse
 // ---------------------------------------------------------
-class LFPG_PushButton : Inventory_Base
+class LFPG_PushButton : LFPG_WireOwnerBase
 {
-    // ---- Device identity ----
-    protected int m_DeviceIdLow = 0;
-    protected int m_DeviceIdHigh = 0;
-    protected string m_DeviceId;
-
-    // ---- Wires owned (output side, same as Splitter/Generator) ----
-    protected ref array<ref LFPG_WireData> m_Wires;
-
-    // ---- Power state (set by graph propagation) ----
     protected bool m_PoweredNet = false;
-
-    // ---- Switch state (momentary: true for LFPG_BUTTON_PULSE_MS, then false) ----
-    protected bool m_SwitchOn = false;
-
-    // ---- Overload state ----
+    protected bool m_SwitchOn   = false;
     protected bool m_Overloaded = false;
 
-    // ---- Deletion guard ----
-    protected bool m_LFPG_Deleting = false;
-
-    // ============================================
-    // Constructor - SyncVars en constructor, NO EEInit
-    // ============================================
     void LFPG_PushButton()
     {
-        m_Wires = new array<ref LFPG_WireData>;
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableBool("m_SwitchOn");
-        RegisterNetSyncVariableBool("m_Overloaded");
+        string varPowered  = "m_PoweredNet";
+        string varSwitch   = "m_SwitchOn";
+        string varOverload = "m_Overloaded";
+        RegisterNetSyncVariableBool(varPowered);
+        RegisterNetSyncVariableBool(varSwitch);
+        RegisterNetSyncVariableBool(varOverload);
+
+        string pIn  = "input_1";
+        string pOut = "output_1";
+        string lIn  = "Input 1";
+        string lOut = "Output 1";
+        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
+        LFPG_AddPort(pOut, LFPG_PortDir.OUT, lOut);
     }
 
-    // ============================================
-    // Actions
-    // ============================================
     override void SetActions()
     {
         super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
         AddAction(LFPG_ActionTogglePushButton);
     }
 
-    // ============================================
-    // Inventory guards (prevent pickup — breaks wires)
-    // ============================================
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
+    // ---- DeviceAPI ----
+    override int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
+    override bool LFPG_IsSource() { return true; }
+    override bool LFPG_GetSourceOn() { return m_PoweredNet; }
+    override bool LFPG_IsGateCapable() { return true; }
+    override bool LFPG_IsGateOpen() { return m_SwitchOn; }
+    override float LFPG_GetConsumption() { return 0.0; }
+    override float LFPG_GetCapacity() { return LFPG_DEFAULT_PASSTHROUGH_CAPACITY; }
+    override bool LFPG_IsPowered() { return m_PoweredNet; }
+    override bool LFPG_GetOverloaded() { return m_Overloaded; }
 
-    override bool CanPutIntoHands(EntityAI parent)
+    override void LFPG_SetPowered(bool powered)
     {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return false;
-    }
-
-    override bool IsHeavyBehaviour()
-    {
-        return false;
-    }
-
-    // ============================================
-    // Device ID helpers
-    // ============================================
-    protected void LFPG_UpdateDeviceIdString()
-    {
-        m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh);
-    }
-
-    protected void LFPG_TryRegister()
-    {
-        if (m_LFPG_Deleting)
+        #ifdef SERVER
+        if (m_PoweredNet == powered)
             return;
 
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
+        m_PoweredNet = powered;
 
-        if (oldId != "" && oldId != m_DeviceId)
+        if (!powered && m_SwitchOn)
         {
-            LFPG_DeviceRegistry.Get().Unregister(oldId, this);
-        }
-
-        if (m_DeviceId != "")
-        {
-            LFPG_DeviceRegistry.Get().Register(this, m_DeviceId);
-        }
-    }
-
-    // ============================================
-    // Lifecycle
-    // ============================================
-    override void EEInit()
-    {
-        super.EEInit();
-
-        #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
-        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
-        SetSynchDirty();
-        #endif
-
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-
-        #ifdef SERVER
-        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
-        #endif
-    }
-
-    override void EEKilled(Object killer)
-    {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
-
-        #ifdef SERVER
-        // Cancel pending pulse timer to prevent callback on dead entity
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
-
-        bool dirty = false;
-        if (m_PoweredNet)
-        {
-            m_PoweredNet = false;
-            dirty = true;
-        }
-        if (m_SwitchOn)
-        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
             m_SwitchOn = false;
-            dirty = true;
         }
-        if (dirty)
+
+        SetSynchDirty();
+
+        string pwrMsg = "[LFPG_PushButton] SetPowered(";
+        pwrMsg = pwrMsg + powered.ToString();
+        pwrMsg = pwrMsg + ") id=";
+        pwrMsg = pwrMsg + m_DeviceId;
+        LFPG_Util.Debug(pwrMsg);
+        #endif
+    }
+
+    override void LFPG_SetOverloaded(bool val)
+    {
+        #ifdef SERVER
+        if (m_Overloaded != val)
         {
+            m_Overloaded = val;
             SetSynchDirty();
         }
         #endif
-
-        super.EEKilled(killer);
     }
 
-    override void EEDelete(EntityAI parent)
+    // ---- Device-specific ----
+    bool LFPG_GetSwitchOn() { return m_SwitchOn; }
+
+    void LFPG_ToggleButton()
     {
-        m_LFPG_Deleting = true;
-
-        // Cancel pending pulse timer to prevent callback on deleted entity
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
-
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-        super.EEDelete(parent);
-    }
-
-    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
-    {
-        super.EEItemLocationChanged(oldLoc, newLoc);
-
         #ifdef SERVER
-        if (m_DeviceId == "")
+        if (m_SwitchOn)
+        {
             return;
+        }
 
-        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
-        if (wiresCut)
+        m_SwitchOn = true;
+        SetSynchDirty();
+
+        string togMsg = "[LFPG_PushButton] Toggle ON id=";
+        togMsg = togMsg + m_DeviceId;
+        LFPG_Util.Info(togMsg);
+
+        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_BUTTON_PULSE_MS, false);
+        #endif
+    }
+
+    void LFPG_PulseOff()
+    {
+        #ifdef SERVER
+        if (!m_SwitchOn)
+            return;
+        m_SwitchOn = false;
+        SetSynchDirty();
+
+        string offMsg = "[LFPG_PushButton] Pulse OFF id=";
+        offMsg = offMsg + m_DeviceId;
+        LFPG_Util.Info(offMsg);
+
+        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        #endif
+    }
+
+    // ---- Port world position (p3d uses _0) ----
+    override vector LFPG_GetPortWorldPos(string portName)
+    {
+        string memPoint;
+        if (portName == "input_1")
+        {
+            memPoint = "port_input_0";
+        }
+        else if (portName == "output_1")
+        {
+            memPoint = "port_output_0";
+        }
+        else
+        {
+            memPoint = "port_";
+            memPoint = memPoint + portName;
+        }
+
+        if (MemoryPointExists(memPoint))
+        {
+            return ModelToWorld(GetMemoryPointPos(memPoint));
+        }
+
+        vector offset = "0 0.02 0";
+        if (portName == "input_1")
+        {
+            offset = "0 0.02 -0.025";
+        }
+        else if (portName == "output_1")
+        {
+            offset = "0 0.02 0.025";
+        }
+        return ModelToWorld(offset);
+    }
+
+    // ---- Lifecycle hooks ----
+    override void LFPG_OnKilled()
+    {
+        #ifdef SERVER
+        if (GetGame())
         {
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
-
-            bool locDirty = false;
-            if (m_PoweredNet)
-            {
-                m_PoweredNet = false;
-                locDirty = true;
-            }
-            if (m_SwitchOn)
-            {
-                m_SwitchOn = false;
-                locDirty = true;
-            }
-            if (locDirty)
-            {
-                SetSynchDirty();
-            }
         }
+        bool dirty = false;
+        if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
+        if (m_SwitchOn) { m_SwitchOn = false; dirty = true; }
+        if (dirty) { SetSynchDirty(); }
         #endif
     }
 
-    override void OnVariablesSynchronized()
+    override void LFPG_OnDeleted()
     {
-        super.OnVariablesSynchronized();
-        LFPG_TryRegister();
-
-        #ifndef SERVER
-        // LED + animation update
-        LFPG_UpdateVisuals();
-
-        // CableRenderer sync (Splitter parity)
-        if (m_DeviceId != "")
+        if (GetGame())
         {
-            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
-            if (r)
-            {
-                r.RequestDeviceSync(m_DeviceId, this);
-                if (r.HasOwnerData(m_DeviceId))
-                {
-                    r.NotifyOwnerVisualChanged(m_DeviceId);
-                }
-            }
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
+    }
+
+    override void LFPG_OnWiresCut()
+    {
+        #ifdef SERVER
+        if (GetGame())
+        {
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+        }
+        bool dirty = false;
+        if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
+        if (m_SwitchOn) { m_SwitchOn = false; dirty = true; }
+        if (dirty) { SetSynchDirty(); }
         #endif
     }
 
-    // ============================================
-    // Visual update (client only)
-    // ============================================
+    // ---- Visual sync ----
+    override void LFPG_OnVarSyncDevice()
+    {
+        LFPG_UpdateVisuals();
+    }
+
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // LED rvmat swap (index 2: camo=0, switch=1, light_led=2)
         if (m_PoweredNet && m_SwitchOn)
         {
             SetObjectMaterial(2, LFPG_BUTTON_RVMAT_GREEN);
@@ -360,406 +284,18 @@ class LFPG_PushButton : Inventory_Base
             SetObjectMaterial(2, LFPG_BUTTON_RVMAT_OFF);
         }
 
-        // Switch animation
         if (m_SwitchOn)
         {
-            SetAnimationPhase("switch_state", 1.0);
+            string animOn = "switch_state";
+            SetAnimationPhase(animOn, 1.0);
         }
         else
         {
-            SetAnimationPhase("switch_state", 0.0);
+            string animOff = "switch_state";
+            SetAnimationPhase(animOff, 0.0);
         }
         #endif
     }
 
-    // ============================================
-    // Toggle logic (called by action, server only)
-    // ============================================
-    void LFPG_ToggleButton()
-    {
-        #ifdef SERVER
-        if (m_SwitchOn)
-        {
-            // Already on — ignore (timer will reset it)
-            return;
-        }
-
-        m_SwitchOn = true;
-        SetSynchDirty();
-
-        string togMsg = "[LFPG_PushButton] Toggle ON id=" + m_DeviceId;
-        LFPG_Util.Info(togMsg);
-
-        // Propagate immediately so downstream gets power
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
-
-        // Schedule auto-off after pulse duration
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_BUTTON_PULSE_MS, false);
-        #endif
-    }
-
-    // Timer callback: auto-reset switch after pulse
-    void LFPG_PulseOff()
-    {
-        #ifdef SERVER
-        if (!m_SwitchOn)
-            return;
-
-        m_SwitchOn = false;
-        SetSynchDirty();
-
-        string offMsg = "[LFPG_PushButton] Pulse OFF id=" + m_DeviceId;
-        LFPG_Util.Info(offMsg);
-
-        // Propagate to cut downstream power
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
-        #endif
-    }
-
-    // ============================================
-    // LFPG_IDevice interface
-    // ============================================
-    string LFPG_GetDeviceId()
-    {
-        return m_DeviceId;
-    }
-
-    // 2 ports: 1 input + 1 output
-    int LFPG_GetPortCount()
-    {
-        return 2;
-    }
-
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0) return "input_1";
-        if (idx == 1) return "output_1";
-        return "";
-    }
-
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0) return LFPG_PortDir.IN;
-        if (idx == 1) return LFPG_PortDir.OUT;
-        return -1;
-    }
-
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0) return "Input 1";
-        if (idx == 1) return "Output 1";
-        return "";
-    }
-
-    bool LFPG_HasPort(string portName, int dir)
-    {
-        if (dir == LFPG_PortDir.IN && portName == "input_1") return true;
-        if (dir == LFPG_PortDir.OUT && portName == "output_1") return true;
-        return false;
-    }
-
-    // Port positions: switch_v1.p3d has real memory points.
-    // port_input_0 and port_output_0 in the p3d.
-    // LFPG port names remain input_1/output_1 for persistence compat.
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        // Map LFPG port names → p3d memory point names
-        string memPoint;
-        if (portName == "input_1")
-        {
-            memPoint = "port_input_0";
-        }
-        else if (portName == "output_1")
-        {
-            memPoint = "port_output_0";
-        }
-        else
-        {
-            memPoint = "port_" + portName;
-        }
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        // Fallback: virtual offsets if memory points missing
-        vector offset = "0 0.02 0";
-        if (portName == "input_1")
-        {
-            offset = "0 0.02 -0.025";
-        }
-        else if (portName == "output_1")
-        {
-            offset = "0 0.02 0.025";
-        }
-
-        return ModelToWorld(offset);
-    }
-
-    // ---- PASSTHROUGH device type ----
-    int LFPG_GetDeviceType()
-    {
-        return LFPG_DeviceType.PASSTHROUGH;
-    }
-
-    // ---- Source behavior ----
-    bool LFPG_IsSource()
-    {
-        return true;
-    }
-
-    // Source ON when receiving power from upstream.
-    // NOTE: Gate logic is NOT here — GetSourceOn is only consulted for
-    // SOURCE nodes by the graph. For PASSTHROUGH, the graph uses
-    // LFPG_IsGateOpen() instead (v0.10.0 ElecGraph patch).
-    bool LFPG_GetSourceOn()
-    {
-        return m_PoweredNet;
-    }
-
-    // v0.10.0: Gated passthrough. When false, ElecGraph sets newOutput=0
-    // for this PASSTHROUGH node even if inputSum > 0. Default for all
-    // other PASSTHROUGH devices (Splitter/Combiner/CeilingLight) is true
-    // via DeviceAPI fallback — zero regression.
-    bool LFPG_IsGateOpen()
-    {
-        return m_SwitchOn;
-    }
-
-    // P1: Signal to ElecGraph that this device has gate logic.
-    // Cached in LFPG_ElecNode.m_IsGated to skip entity lookup
-    // for non-gated PASSTHROUGH devices every tick.
-    bool LFPG_IsGateCapable()
-    {
-        return true;
-    }
-
-    // Zero self-consumption: pure relay.
-    // Without this, DeviceAPI fallback returns 10.0 (IsEnergyConsumer=true).
-    float LFPG_GetConsumption()
-    {
-        return 0.0;
-    }
-
-    // Throughput capacity (same as default passthrough).
-    float LFPG_GetCapacity()
-    {
-        return LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
-    }
-
-    // Expose powered state for inspector / graph queries.
-    bool LFPG_IsPowered()
-    {
-        return m_PoweredNet;
-    }
-
-    // Expose switch state for toggle action text
-    bool LFPG_GetSwitchOn()
-    {
-        return m_SwitchOn;
-    }
-
-    // Called by graph propagation when upstream power state changes.
-    void LFPG_SetPowered(bool powered)
-    {
-        #ifdef SERVER
-        if (m_PoweredNet == powered)
-            return;
-
-        m_PoweredNet = powered;
-
-        // When upstream power is lost, cancel any pending pulse timer
-        // and reset switch. Prevents stale m_SwitchOn=true from causing
-        // a spurious RequestPropagate when the timer fires with no power.
-        if (!powered && m_SwitchOn)
-        {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
-            m_SwitchOn = false;
-        }
-
-        SetSynchDirty();
-
-        string pwrMsg = "[LFPG_PushButton] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
-        #endif
-    }
-
-    // Overload state
-    bool LFPG_GetOverloaded()
-    {
-        return m_Overloaded;
-    }
-
-    void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val)
-        {
-            m_Overloaded = val;
-            SetSynchDirty();
-        }
-        #endif
-    }
-
-    // ---- Connection validation ----
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
-    {
-        if (!other) return false;
-        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT)) return false;
-
-        EntityAI otherEntity = EntityAI.Cast(other);
-        if (!otherEntity) return false;
-
-        string otherId = LFPG_DeviceAPI.GetDeviceId(otherEntity);
-        if (otherId != "")
-        {
-            return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN);
-        }
-
-        return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
-    }
-
-    // ============================================
-    // Wire ownership API (Splitter parity)
-    // ============================================
-    bool LFPG_HasWireStore()
-    {
-        return true;
-    }
-
-    array<ref LFPG_WireData> LFPG_GetWires()
-    {
-        return m_Wires;
-    }
-
-    string LFPG_GetWiresJSON()
-    {
-        return LFPG_WireHelper.GetJSON(m_Wires);
-    }
-
-    bool LFPG_AddWire(LFPG_WireData wd)
-    {
-        if (!wd) return false;
-
-        if (wd.m_SourcePort == "")
-        {
-            wd.m_SourcePort = "output_1";
-        }
-
-        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
-        {
-            LFPG_Util.Warn("[LFPG_PushButton] AddWire rejected: not an output port: " + wd.m_SourcePort);
-            return false;
-        }
-
-        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_ClearWires()
-    {
-        bool result = LFPG_WireHelper.ClearAll(m_Wires);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_ClearWiresForCreator(string creatorId)
-    {
-        bool result = LFPG_WireHelper.ClearForCreator(m_Wires, creatorId);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    bool LFPG_PruneMissingTargets()
-    {
-        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
-        if (!validIds)
-        {
-            validIds = new map<string, bool>;
-            array<EntityAI> all = new array<EntityAI>;
-            LFPG_DeviceRegistry.Get().GetAll(all);
-            int vi;
-            for (vi = 0; vi < all.Count(); vi = vi + 1)
-            {
-                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
-                if (did != "")
-                {
-                    validIds[did] = true;
-                }
-            }
-        }
-
-        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    // ============================================
-    // Persistence
-    // ============================================
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
-        // m_PoweredNet: NOT persisted (derived state, graph recalculates)
-        // m_SwitchOn:   NOT persisted (momentary, defaults false on restart)
-
-        string json = "";
-        LFPG_WireHelper.SerializeJSON(m_Wires, json);
-        ctx.Write(json);
-    }
-
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
-    {
-        if (!super.OnStoreLoad(ctx, version))
-            return false;
-
-        if (!ctx.Read(m_DeviceIdLow))
-        {
-            LFPG_Util.Error("[LFPG_PushButton] OnStoreLoad: failed to read m_DeviceIdLow");
-            return false;
-        }
-
-        if (!ctx.Read(m_DeviceIdHigh))
-        {
-            LFPG_Util.Error("[LFPG_PushButton] OnStoreLoad: failed to read m_DeviceIdHigh");
-            return false;
-        }
-
-        LFPG_UpdateDeviceIdString();
-
-        string json = "";
-        if (!ctx.Read(json))
-        {
-            LFPG_Util.Error("[LFPG_PushButton] OnStoreLoad: failed to read wires json for " + m_DeviceId);
-            return false;
-        }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_PushButton");
-
-        return true;
-    }
+    // ---- No persist extras (momentary, m_SwitchOn defaults false) ----
 };
