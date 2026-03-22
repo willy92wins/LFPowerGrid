@@ -179,6 +179,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterPreviewResponse(ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_SORT_ACK)
+        {
+            HandleLFPG_SorterSortAck(ctx);
+        }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM)
         {
             HandleLFPG_SearchlightEnterConfirm(ctx);
@@ -2534,7 +2538,16 @@ modded class PlayerBase
         }
 
         // Delegate to NetworkManager (handles powered + container checks)
-        LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter);
+        int sortMoved = LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter);
+        bool sortOk = (sortMoved >= 0);
+
+        // Send ACK only to requesting player (not broadcast)
+        ScriptRPC sortAckRpc = new ScriptRPC();
+        int sortAckSubId = LFPG_RPC_SubId.SORTER_SORT_ACK;
+        sortAckRpc.Write(sortAckSubId);
+        sortAckRpc.Write(sortOk);
+        sortAckRpc.Write(sortMoved);
+        sortAckRpc.Send(this, LFPG_RPC_CHANNEL, true, sender);
     }
 
     // =====================================
@@ -2623,6 +2636,22 @@ modded class PlayerBase
             return;
 
         LFPG_SorterView.OnSaveAck(success);
+    }
+
+    // =====================================
+    // CLIENT: Sorter SORT_ACK (SubId 33)
+    // Server confirms sort result + moved count.
+    // =====================================
+    protected void HandleLFPG_SorterSortAck(ParamsReadContext ctx)
+    {
+        bool success = false;
+        int movedCount = 0;
+        if (!ctx.Read(success))
+            return;
+        if (!ctx.Read(movedCount))
+            return;
+
+        LFPG_SorterView.OnSortAck(success, movedCount);
     }
 
     // =====================================

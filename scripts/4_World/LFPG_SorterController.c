@@ -680,6 +680,7 @@ class LFPG_SorterController extends ViewController
         string stSorting = "SORTING...";
         string stError = "ERROR";
         string stNoLink = "NO LINK";
+        string stSortFail = "SORT FAILED";
         if (st == stSaving || st == stSorting)
         {
             return LFPG_SorterView.COL_AMBER;
@@ -689,6 +690,10 @@ class LFPG_SorterController extends ViewController
             return LFPG_SorterView.COL_RED;
         }
         if (st == stNoLink)
+        {
+            return LFPG_SorterView.COL_RED;
+        }
+        if (st == stSortFail)
         {
             return LFPG_SorterView.COL_RED;
         }
@@ -723,6 +728,23 @@ class LFPG_SorterController extends ViewController
             SetStatus(stErr);
         }
         m_FeedbackTimer = 2.5;
+    }
+
+    // v3.2: Server sort result feedback
+    void HandleSortAck(bool success, int movedCount)
+    {
+        if (success)
+        {
+            string stSorted = "SORTED: ";
+            stSorted = stSorted + movedCount.ToString();
+            SetStatus(stSorted);
+        }
+        else
+        {
+            string stFail = "SORT FAILED";
+            SetStatus(stFail);
+        }
+        m_FeedbackTimer = 3.0;
     }
 
     // =========================================================
@@ -995,8 +1017,8 @@ class LFPG_SorterController extends ViewController
         LFPG_Util.Info(logLabel);
         string stSorting = "SORTING...";
         SetStatus(stSorting);
-        // S6: Single feedback timer (last-write-wins over save)
-        m_FeedbackTimer = 3.0;
+        // S6: Timeout timer — SORT_ACK will override with real result
+        m_FeedbackTimer = 8.0;
         LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
         // R4: GetGame guard

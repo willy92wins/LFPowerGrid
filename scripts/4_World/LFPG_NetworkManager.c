@@ -4265,7 +4265,9 @@ class LFPG_NetworkManager
         string packLog = "[Sorter] BinPack after sort: repositioned=";
         packLog = packLog + packed.ToString();
         LFPG_Util.Info(packLog);
+        return moved;
         #endif
+        return -1;
     }
 
     // ===========================

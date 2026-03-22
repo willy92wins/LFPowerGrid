@@ -1234,6 +1234,20 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
+    // v3.2: Server sort result → delegate to Controller
+    static void OnSortAck(bool success, int movedCount)
+    {
+        if (!s_Instance)
+            return;
+        if (!s_Instance.m_IsOpen)
+            return;
+        LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
+        if (ctrl)
+        {
+            ctrl.HandleSortAck(success, movedCount);
+        }
+    }
+
     // v2.6: Server preview response → delegate to Controller
     static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
     {
