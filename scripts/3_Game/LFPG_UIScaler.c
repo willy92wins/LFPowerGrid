@@ -7,15 +7,14 @@
 //
 // Usage:
 //   Init  → LFPG_UIScaler.Capture(panelRoot)
-//   Open  → LFPG_UIScaler.DetectLogicalSize(fullscreenRoot)
-//           float s = LFPG_UIScaler.ComputeScale();
+//   Open  → float s = LFPG_UIScaler.ComputeScale();
 //           LFPG_UIScaler.Apply(s);
 //   Close → (no action needed)
 //   Quit  → LFPG_UIScaler.Reset();
 //
-// v3.2: DPI-aware. DetectLogicalSize reads the rendered size
-// of a fullscreen root widget to get logical (widget-space)
-// dimensions. Fixes overflow at 4K with Windows DPI > 100%.
+// v3.2: DPI-safe. SCALE_MAX capped at 1.5 to prevent overflow
+// at 4K with Windows DPI > 100% (GetScreenSize returns physical
+// pixels but widget coordinates are logical).
 //
 // The Capture pass stores original values so Apply can be
 // called repeatedly (e.g. on every open) without accumulating
@@ -35,8 +34,13 @@ class LFPG_UIScaler
     static const float DESIGN_H = 1080.0;
 
     // Scale clamps
+    // v3.2: SCALE_MAX reduced from 2.0 to 1.5.
+    // At 4K with Windows DPI > 100%, GetScreenSize returns physical
+    // pixels (3840x2160) but SetPos/SetSize operate in logical
+    // pixels (2560x1440 at 150% DPI). No API detects this mismatch.
+    // Capping at 1.5 ensures the panel fits at any DPI up to 200%.
     static const float SCALE_MIN = 0.65;
-    static const float SCALE_MAX = 2.0;
+    static const float SCALE_MAX = 1.5;
 
     // Threshold: if BOTH size components <= this, treat as proportional
     static const float PROP_THRESHOLD = 1.5;
@@ -49,16 +53,6 @@ class LFPG_UIScaler
     protected static ref array<float>  s_DesignH;
     protected static bool s_Captured;
     protected static bool s_LoggedOnce;
-
-    // v3.2: Detected logical screen size (widget coordinate space).
-    // At DPI > 100%, global GetScreenSize returns physical pixels
-    // but SetPos/SetSize operate in logical pixels. This mismatch
-    // causes panels to overflow. DetectLogicalSize reads the
-    // rendered size of a fullscreen (size 1 1) root widget to get
-    // the actual available space in widget coordinates.
-    protected static float s_LogicalW;
-    protected static float s_LogicalH;
-    protected static bool s_LogicalDetected;
 
     // ─────────────────────────────────────────────
     // Capture: walk the widget tree, store design values
@@ -146,112 +140,17 @@ class LFPG_UIScaler
     }
 
     // ─────────────────────────────────────────────
-    // DetectLogicalSize: read the rendered size of a fullscreen
-    // root widget (size 1 1, proportional) to get the available
-    // space in widget coordinates. Must be called BEFORE ComputeScale.
-    //
-    // Why: GetScreenSize() (global) returns physical pixels (e.g. 3840x2160).
-    // But SetPos/SetSize operate in logical pixels. At Windows DPI 150%,
-    // logical = physical / 1.5 (e.g. 2560x1440). Without this correction,
-    // scale=2.0 creates a panel that overflows the logical viewport.
-    //
-    // The root widget (SorterRoot, size 1 1) fills the entire viewport
-    // in widget-space. Its GetScreenSize returns the actual usable area.
-    // ─────────────────────────────────────────────
-    static void DetectLogicalSize(Widget fullscreenRoot)
-    {
-        s_LogicalDetected = false;
-        s_LogicalW = 0.0;
-        s_LogicalH = 0.0;
-
-        if (!fullscreenRoot)
-            return;
-
-        float rootW = 0.0;
-        float rootH = 0.0;
-        fullscreenRoot.GetScreenSize(rootW, rootH);
-
-        // Widget.GetScreenSize on a proportional (size 1 1) root returns
-        // the viewport in logical coordinates. Validate: must be > 100
-        // (rules out fractional 0.0-1.0 values AND zero if engine hasn't
-        // completed a layout pass yet after Show(true)) and < 20000 (sanity).
-        // If validation fails, GetLogicalW/H fallback to global GetScreenSize.
-        bool validW = false;
-        bool validH = false;
-        if (rootW > 100.0 && rootW < 20000.0)
-        {
-            validW = true;
-        }
-        if (rootH > 100.0 && rootH < 20000.0)
-        {
-            validH = true;
-        }
-
-        if (validW && validH)
-        {
-            s_LogicalW = rootW;
-            s_LogicalH = rootH;
-            s_LogicalDetected = true;
-        }
-
-        // Diagnostic log (once)
-        if (!s_LoggedOnce)
-        {
-            int physW = 0;
-            int physH = 0;
-            GetScreenSize(physW, physH);
-            string detectMsg = "[UIScaler] physical=";
-            detectMsg = detectMsg + physW.ToString();
-            detectMsg = detectMsg + "x";
-            detectMsg = detectMsg + physH.ToString();
-            detectMsg = detectMsg + " logical=";
-            detectMsg = detectMsg + rootW.ToString();
-            detectMsg = detectMsg + "x";
-            detectMsg = detectMsg + rootH.ToString();
-            detectMsg = detectMsg + " detected=";
-            detectMsg = detectMsg + s_LogicalDetected.ToString();
-            Print(detectMsg);
-        }
-    }
-
-    // Getters for CenterPanel (SorterView)
-    static float GetLogicalW()
-    {
-        if (s_LogicalDetected)
-        {
-            return s_LogicalW;
-        }
-        // Fallback: global GetScreenSize (works correctly at DPI 100%)
-        int fw = 0;
-        int fh = 0;
-        GetScreenSize(fw, fh);
-        return fw;
-    }
-
-    static float GetLogicalH()
-    {
-        if (s_LogicalDetected)
-        {
-            return s_LogicalH;
-        }
-        int fw = 0;
-        int fh = 0;
-        GetScreenSize(fw, fh);
-        return fh;
-    }
-
-    // ─────────────────────────────────────────────
-    // ComputeScale: derive factor from logical screen dimensions.
-    // v3.2: Uses DetectLogicalSize result when available.
-    // Falls back to global GetScreenSize if detection failed.
+    // ComputeScale: derive factor from current resolution.
+    // v3.2: SCALE_MAX capped at 1.5 to handle DPI mismatch.
     // ─────────────────────────────────────────────
     static float ComputeScale()
     {
-        float availW = GetLogicalW();
-        float availH = GetLogicalH();
+        int scrW = 0;
+        int scrH = 0;
+        GetScreenSize(scrW, scrH);
 
-        float scaleW = availW / DESIGN_W;
-        float scaleH = availH / DESIGN_H;
+        float scaleW = scrW / DESIGN_W;
+        float scaleH = scrH / DESIGN_H;
 
         // Use the smaller axis to guarantee the panel fits on screen
         float scale = scaleW;
@@ -263,8 +162,8 @@ class LFPG_UIScaler
         // Panel-fit clamp — ensure 720x590 * scale fits with margin
         float panelH = 590.0 * scale;
         float panelW = 720.0 * scale;
-        float maxH = availH * 0.92;
-        float maxW = availW * 0.92;
+        float maxH = scrH * 0.92;
+        float maxW = scrW * 0.92;
         if (panelH > maxH)
         {
             scale = maxH / 590.0;
@@ -291,9 +190,9 @@ class LFPG_UIScaler
         if (!s_LoggedOnce)
         {
             string scaleMsg = "[UIScaler] screen=";
-            scaleMsg = scaleMsg + availW.ToString();
+            scaleMsg = scaleMsg + scrW.ToString();
             scaleMsg = scaleMsg + "x";
-            scaleMsg = scaleMsg + availH.ToString();
+            scaleMsg = scaleMsg + scrH.ToString();
             scaleMsg = scaleMsg + " scale=";
             scaleMsg = scaleMsg + scale.ToString();
             Print(scaleMsg);
@@ -408,9 +307,6 @@ class LFPG_UIScaler
         }
         s_Captured = false;
         s_LoggedOnce = false;
-        s_LogicalDetected = false;
-        s_LogicalW = 0.0;
-        s_LogicalH = 0.0;
 
         s_Widgets = null;
         s_DesignX = null;

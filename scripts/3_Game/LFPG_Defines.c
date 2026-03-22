@@ -277,7 +277,8 @@ enum LFPG_RPC_SubId
 	SORTER_RESYNC              = 29,  // v2.4: Client→Server: re-link nearest container
 	SORTER_RESYNC_ACK          = 30,  // v2.4: Server→Client: result (containerName)
 	SORTER_PREVIEW_REQUEST     = 31,  // v2.6: Client→Server: request matching items for preview
-	SORTER_PREVIEW_RESPONSE    = 32   // v2.6: Server→Client: matched item list (cap 50)
+	SORTER_PREVIEW_RESPONSE    = 32,  // v2.6: Server→Client: matched item list (cap 50)
+	SORTER_SORT_ACK            = 33   // v3.2: Server→Client: sort result (success, movedCount)
 };
 
 // ---- Sorter tick constants (Sprint S3) ----

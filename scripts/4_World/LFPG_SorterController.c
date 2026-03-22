@@ -88,11 +88,11 @@ class LFPG_SorterController extends ViewController
     TextWidget StatusLabel;
     ImageWidget StatusDot;
 
-    // Output tabs (m_ prefix prevents Dabs auto-bind from overwriting EnsureBindings refs)
-    ImageWidget m_TabOut0Bg; ImageWidget m_TabOut1Bg; ImageWidget m_TabOut2Bg;
-    ImageWidget m_TabOut3Bg; ImageWidget m_TabOut4Bg; ImageWidget m_TabOut5Bg;
-    TextWidget m_TabOut0Text; TextWidget m_TabOut1Text; TextWidget m_TabOut2Text;
-    TextWidget m_TabOut3Text; TextWidget m_TabOut4Text; TextWidget m_TabOut5Text;
+    // Output tabs — stored in arrays to prevent Dabs auto-bind from
+    // overwriting refs during NotifyPropertyChanged. Dabs only matches
+    // named Widget/ImageWidget/TextWidget fields, NOT array elements.
+    protected ref array<ImageWidget> m_TabBgs;
+    protected ref array<TextWidget> m_TabTexts;
     // View tabs
     ImageWidget TabRulesBg; ImageWidget TabPreviewBg;
     TextWidget TabRulesText; TextWidget TabPreviewText;
@@ -146,6 +146,15 @@ class LFPG_SorterController extends ViewController
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
         m_TagPool = new array<ref LFPG_SorterTagView>;
         m_Config = new LFPG_SortConfig();
+        // v3.2: Tab widget arrays (6 outputs)
+        m_TabBgs = new array<ImageWidget>;
+        m_TabTexts = new array<TextWidget>;
+        int ti = 0;
+        for (ti = 0; ti < 6; ti = ti + 1)
+        {
+            m_TabBgs.Insert(null);
+            m_TabTexts.Insert(null);
+        }
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
@@ -185,25 +194,16 @@ class LFPG_SorterController extends ViewController
 
         string bn = "";
 
-        // ── Output tabs (child-walk, overwrite any auto-bind) ──
-        bn = "TabOut0";
-        m_TabOut0Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut0Text = FindBtnChildText(layoutRoot, bn);
-        bn = "TabOut1";
-        m_TabOut1Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut1Text = FindBtnChildText(layoutRoot, bn);
-        bn = "TabOut2";
-        m_TabOut2Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut2Text = FindBtnChildText(layoutRoot, bn);
-        bn = "TabOut3";
-        m_TabOut3Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut3Text = FindBtnChildText(layoutRoot, bn);
-        bn = "TabOut4";
-        m_TabOut4Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut4Text = FindBtnChildText(layoutRoot, bn);
-        bn = "TabOut5";
-        m_TabOut5Bg = FindBtnChildBg(layoutRoot, bn);
-        m_TabOut5Text = FindBtnChildText(layoutRoot, bn);
+        // ── Output tabs (child-walk → store in arrays, safe from Dabs rebind) ──
+        string tabName = "";
+        int tabIdx = 0;
+        for (tabIdx = 0; tabIdx < 6; tabIdx = tabIdx + 1)
+        {
+            tabName = "TabOut";
+            tabName = tabName + tabIdx.ToString();
+            m_TabBgs.Set(tabIdx, FindBtnChildBg(layoutRoot, tabName));
+            m_TabTexts.Set(tabIdx, FindBtnChildText(layoutRoot, tabName));
+        }
 
         // ── View tabs ──
         bn = "TabRules";
@@ -481,13 +481,13 @@ class LFPG_SorterController extends ViewController
         if (CatBtn0Text) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut1Text=";
-        if (m_TabOut1Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabTexts.Get(1)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut3Text=";
-        if (m_TabOut3Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabTexts.Get(3)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut5Text=";
-        if (m_TabOut5Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabTexts.Get(5)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         LFPG_Util.Info(diagBindings);
 
@@ -1194,17 +1194,17 @@ class LFPG_SorterController extends ViewController
 
     protected ImageWidget GetTabBg(int idx)
     {
-        if (idx == 0) return m_TabOut0Bg; if (idx == 1) return m_TabOut1Bg;
-        if (idx == 2) return m_TabOut2Bg; if (idx == 3) return m_TabOut3Bg;
-        if (idx == 4) return m_TabOut4Bg; if (idx == 5) return m_TabOut5Bg;
-        return null;
+        if (idx < 0) return null;
+        if (idx > 5) return null;
+        if (!m_TabBgs) return null;
+        return m_TabBgs.Get(idx);
     }
     protected TextWidget GetTabText(int idx)
     {
-        if (idx == 0) return m_TabOut0Text; if (idx == 1) return m_TabOut1Text;
-        if (idx == 2) return m_TabOut2Text; if (idx == 3) return m_TabOut3Text;
-        if (idx == 4) return m_TabOut4Text; if (idx == 5) return m_TabOut5Text;
-        return null;
+        if (idx < 0) return null;
+        if (idx > 5) return null;
+        if (!m_TabTexts) return null;
+        return m_TabTexts.Get(idx);
     }
 
     // v3: Tab dot accessor

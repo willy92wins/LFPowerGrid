@@ -4081,14 +4081,16 @@ class LFPG_NetworkManager
     // Called by PlayerRPC after validating proximity + type.
     // Sorter already resolved and validated upstream.
 
-    void HandleSorterRequestSort(LF_Sorter sorter)
+    // v3.2: Returns moved count (-1 = error/skip, 0+ = items moved).
+    // Caller (PlayerRPC) sends SORT_ACK with the result.
+    int HandleSorterRequestSort(LF_Sorter sorter)
     {
         #ifdef SERVER
         if (!sorter)
         {
             string w0 = "[Sorter] REQUEST_SORT: null sorter";
             LFPG_Util.Warn(w0);
-            return;
+            return -1;
         }
 
         // Must be powered
@@ -4096,7 +4098,7 @@ class LFPG_NetworkManager
         {
             string d0 = "[Sorter] REQUEST_SORT: sorter not powered";
             LFPG_Util.Debug(d0);
-            return;
+            return -1;
         }
 
         // Resolve source container
@@ -4105,7 +4107,7 @@ class LFPG_NetworkManager
         {
             string w1 = "[Sorter] REQUEST_SORT: no linked container";
             LFPG_Util.Warn(w1);
-            return;
+            return -1;
         }
 
         // S3.1: Source container must be accessible
@@ -4113,7 +4115,7 @@ class LFPG_NetworkManager
         {
             string w2 = "[Sorter] REQUEST_SORT: container not accessible";
             LFPG_Util.Warn(w2);
-            return;
+            return -1;
         }
 
         // Must have filter config
@@ -4122,7 +4124,7 @@ class LFPG_NetworkManager
         {
             string w3 = "[Sorter] REQUEST_SORT: no filter config";
             LFPG_Util.Warn(w3);
-            return;
+            return -1;
         }
 
         // Must have cargo
@@ -4130,14 +4132,14 @@ class LFPG_NetworkManager
         {
             string w4 = "[Sorter] REQUEST_SORT: no inventory";
             LFPG_Util.Warn(w4);
-            return;
+            return -1;
         }
         CargoBase srcCargo = container.GetInventory().GetCargo();
         if (!srcCargo)
         {
             string w5 = "[Sorter] REQUEST_SORT: no cargo";
             LFPG_Util.Warn(w5);
-            return;
+            return -1;
         }
 
         int itemCount = srcCargo.GetItemCount();
@@ -4145,7 +4147,7 @@ class LFPG_NetworkManager
         {
             string d1 = "[Sorter] REQUEST_SORT: cargo empty";
             LFPG_Util.Debug(d1);
-            return;
+            return 0;
         }
 
         // Build wire mask — which outputs have wires connected
@@ -4172,7 +4174,7 @@ class LFPG_NetworkManager
             string bpLog = "[Sorter] BinPack only (no wires): ";
             bpLog = bpLog + bpOnly.ToString();
             LFPG_Util.Info(bpLog);
-            return;
+            return 0;
         }
 
         // Collect items into cache (index mutation safe)

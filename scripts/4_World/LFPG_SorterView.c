@@ -147,8 +147,9 @@ class LFPG_SorterView extends ScriptView
     static const int COL_PAIRING_OK   = 0x5034D399;
     static const int COL_PAIRING_ERR  = 0x50F87171;
     // v3: New constants
-    // v3.2: Was 0x08FFFFFF (alpha 3% = invisible in DayZ, threshold is 0x30)
-    static const int COL_BG_SECTION_CARD = 0x40FFFFFF;
+    // v3.2: Was 0x08FFFFFF (invisible), then 0x40FFFFFF (still too faint).
+    // Now matches COL_BG_ELEVATED — opaque dark blue, clearly visible.
+    static const int COL_BG_SECTION_CARD = 0xE61E2B41;
     static const int COL_BG_RULES_PANEL  = 0xFF1E2B41;
     static const int COL_RED_BTN_SOFT    = 0x26F87171;
     static const int COL_RED_BTN_BORDER  = 0x40F87171;
@@ -197,9 +198,9 @@ class LFPG_SorterView extends ScriptView
             float newX = mx - m_DragOffX;
             float newY = my - m_DragOffY;
             // Clamp to screen bounds
-            // v3.2: Use logical screen size (DPI-safe)
-            float scrWf = LFPG_UIScaler.GetLogicalW();
-            float scrHf = LFPG_UIScaler.GetLogicalH();
+            int scrW = 0;
+            int scrH = 0;
+            GetScreenSize(scrW, scrH);
             float panW = 0.0;
             float panH = 0.0;
             if (SorterPanel)
@@ -217,8 +218,19 @@ class LFPG_SorterView extends ScriptView
             {
                 newY = 5.0;
             }
-            float maxX = scrWf - panW;
-            float maxY = scrHf - panH;
+            // v3.2: DPI-safe max — cap to panel dimensions
+            float maxX = scrW - panW;
+            float maxY = scrH - panH;
+            float dpiCapX = panW;
+            float dpiCapY = panH * 0.5;
+            if (maxX > dpiCapX)
+            {
+                maxX = dpiCapX;
+            }
+            if (maxY > dpiCapY)
+            {
+                maxY = dpiCapY;
+            }
             // v2.6: At very low resolutions, max could be < min.
             // Clamp to min values so the panel stays on screen.
             if (maxX < 0.0)
@@ -962,19 +974,46 @@ class LFPG_SorterView extends ScriptView
     // At 4K it appears smaller (18.75%) but fully functional.
     // Full proportional scaling requires layout redesign (future sprint).
     // =========================================================
+    // =========================================================
+    // v3.2: DPI-safe centering.
+    // GetScreenSize returns physical pixels, but SetPos operates
+    // in logical pixels. At DPI > 100% the viewport is smaller
+    // than reported. We can't detect this, so we use a heuristic:
+    // cap vertical position to panH * 0.5 (panel always stays
+    // in the top half), horizontal to panW (safe at any DPI).
+    // At 1080p/2K (no DPI) this still centers normally because
+    // the centered position is smaller than the cap.
+    // =========================================================
     protected void CenterPanel()
     {
         if (!SorterPanel)
             return;
-        // v3.2: Use logical screen size (DPI-safe)
-        float scrWf = LFPG_UIScaler.GetLogicalW();
-        float scrHf = LFPG_UIScaler.GetLogicalH();
+        int scrW = 0;
+        int scrH = 0;
+        GetScreenSize(scrW, scrH);
         float panW = 0.0;
         float panH = 0.0;
         SorterPanel.GetSize(panW, panH);
-        float cx = (scrWf - panW) * 0.5;
-        float cy = (scrHf - panH) * 0.5;
-        // E8: Clamp for resolutions smaller than panel
+
+        // Ideal centered position
+        float cx = (scrW - panW) * 0.5;
+        float cy = (scrH - panH) * 0.5;
+
+        // DPI-safe caps: at DPI > 100%, physical screen is larger
+        // than logical viewport. These caps ensure the panel stays
+        // visible regardless of DPI.
+        float maxCx = panW;
+        float maxCy = panH * 0.5;
+        if (cx > maxCx)
+        {
+            cx = maxCx;
+        }
+        if (cy > maxCy)
+        {
+            cy = maxCy;
+        }
+
+        // Floor clamp
         if (cx < 0.0)
         {
             cx = 0.0;
@@ -1229,10 +1268,6 @@ class LFPG_SorterView extends ScriptView
         // v2.5 B3: Apply resolution scaling BEFORE centering.
         // Apply reads from captured design values (never accumulates error).
         // CenterPanel then reads the scaled SorterPanel size to center correctly.
-        // v3.2: Detect logical screen size from root widget (DPI-safe).
-        // root is SorterRoot (size 1 1, fullscreen) — its rendered size
-        // gives us the actual viewport in widget coordinates.
-        LFPG_UIScaler.DetectLogicalSize(root);
         float uiScale = LFPG_UIScaler.ComputeScale();
         LFPG_UIScaler.Apply(uiScale);
         CenterPanel();

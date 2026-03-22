@@ -415,6 +415,18 @@ modded class Hologram
         return 0.0;
     }
 
+    // ---- Helper: per-kit WALL yaw offset (degrees) ----
+    // Added to wallYaw after normal-based calculation + scroll.
+    // SwitchV2 model faces backward by default → 180° to face player.
+    protected float LFPG_GetKitWallYawOffset(EntityAI projection)
+    {
+        if (!projection)
+            return 0.0;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return 180.0;
+        return 0.0;
+    }
+
     // ---- Helper: per-kit WALL pitch offset (degrees) ----
     // Applied only in wall mode. MotionSensor is ceiling-oriented
     // (sensor dome at -Y), so on a wall we pitch -90° to rotate
@@ -428,14 +440,10 @@ modded class Hologram
             return 0.0;
         if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
             return -90.0;
-        // Logic gates: lid/symbol face is +Y (top). +90° pitches
-        // +Y outward from wall so symbol faces the player.
         if (projection.IsKindOf("LFPG_LogicGate_Kit"))
             return 90.0;
-        // Switches: SwitchV2 (lever) face is +Y → -90° pitches outward.
-        // SwitchRemote (button) has opposite local orientation → +90°.
         if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return 90.0;
+            return 180.0;
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return -90.0;
         return 0.0;
@@ -450,7 +458,7 @@ modded class Hologram
             return 0.0;
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return 180.0;
-        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
+        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
             return 180.0;
         return 0.0;
     }
@@ -793,7 +801,11 @@ modded class Hologram
         float scrollWall = GetProjectionRotation()[0];
         wallYaw = wallYaw + scrollWall;
 
-        // Per-kit wall pitch (e.g. MotionSensor -90° so dome faces out)
+        // Per-kit wall yaw offset (e.g. SwitchV2 faces backward → +180°)
+        float wallYawOff = LFPG_GetKitWallYawOffset(projection);
+        wallYaw = wallYaw + wallYawOff;
+
+        // Per-kit wall pitch and roll
         float wallPitchOff = LFPG_GetKitWallPitchOffset(projection);
         float wallRollOff = LFPG_GetKitWallRollOffset(projection);
         vector wallOri = Vector(wallYaw, wallPitchOff, wallRollOff);
