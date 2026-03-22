@@ -33,7 +33,7 @@ class LFPG_SwitchRemote_Kit : Inventory_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceSwitchRemote);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")

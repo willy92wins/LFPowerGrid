@@ -87,7 +87,7 @@ class LF_Intercom_Kit : Inventory_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceIntercom);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
@@ -350,6 +350,8 @@ class LF_Intercom : LFPG_DeviceBase
         LFPG_DestroyGhostRadio();
 
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterIntercom(this);
+
         bool dirty = false;
         if (m_PoweredNet)
         {

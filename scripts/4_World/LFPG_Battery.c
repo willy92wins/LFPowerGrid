@@ -95,7 +95,7 @@ class LF_BatteryMedium_Kit : Inventory_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceBatteryMedium);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
@@ -228,7 +228,7 @@ class LF_BatteryLarge_Kit : DeployableContainer_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(ActionPlaceObject);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 };
 

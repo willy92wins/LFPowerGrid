@@ -24,7 +24,7 @@ class LF_Splitter_Kit : Inventory_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceSplitter);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 
     override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")

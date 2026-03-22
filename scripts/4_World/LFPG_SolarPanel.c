@@ -84,7 +84,7 @@ class LF_SolarPanel_Kit : DeployableContainer_Base
     {
         super.SetActions();
         AddAction(ActionTogglePlaceObject);
-        AddAction(ActionPlaceObject);
+        AddAction(LFPG_ActionPlaceGeneric);
     }
 };
 

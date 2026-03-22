@@ -1,15 +1,23 @@
 // =========================================================
-// LF_PowerGrid - Custom placement action for MotionSensor Kit (v1.5.0)
+// LF_PowerGrid - Generic placement action for ALL LFPG Kits
 //
-// Patron identico a LFPG_ActionPlacePushButton / LFPG_ActionPlaceSplitter.
+// v4.0 (Fase 3): Replaces 20 individual LFPG_ActionPlaceX files
+// with a single generic action. All kits share the same placement
+// animation pipeline (m_FullBody + PLACING_* commands).
 //
-// IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
-//   via actions.Insert(LFPG_ActionPlaceMotionSensor).
+// LogicGate kits inherit from this class and override ActionCondition
+// only (vanilla validation fails for small items).
+//
+// ActionTogglePlaceObject enters placement mode (shows hologram).
+// This action confirms the placement (fires animation + callback).
+//
+// IMPORTANT: Must be registered in ActionConstructor.RegisterActions()
+//   via actions.Insert(LFPG_ActionPlaceGeneric).
 // =========================================================
 
-class LFPG_ActionPlaceMotionSensor : ActionPlaceObject
+class LFPG_ActionPlaceGeneric : ActionPlaceObject
 {
-    void LFPG_ActionPlaceMotionSensor()
+    void LFPG_ActionPlaceGeneric()
     {
         m_StanceMask = DayZPlayerConstants.STANCEMASK_ERECT | DayZPlayerConstants.STANCEMASK_CROUCH;
         m_FullBody = true;
@@ -34,7 +42,7 @@ class LFPG_ActionPlaceMotionSensor : ActionPlaceObject
         }
         else
         {
-            m_CommandUID = DayZPlayerConstants.CMD_ACTIONFB_PLACING_1HD;
+            m_CommandUID = DayZPlayerConstants.CMD_ACTIONFB_PLACING_2HD;
         }
     }
 
