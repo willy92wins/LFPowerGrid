@@ -1,3 +1,18 @@
+// =========================================================
+// LF_PowerGrid - Solar Panel devices (v4.0 Refactor)
+//
+// LF_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
+// LF_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
+//                     Sun-driven via centralized NM timer.
+//
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Persists m_SourceOn via LFPG_OnStoreSaveDevice hook.
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT (unchanged)
+// ---------------------------------------------------------
+
 class LF_SolarPanel_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()

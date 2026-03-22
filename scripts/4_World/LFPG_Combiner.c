@@ -1,3 +1,17 @@
+// =========================================================
+// LF_PowerGrid - Combiner device (v4.0 Refactor)
+//
+// LF_Combiner_Kit:  Holdable (same-model deployment).
+// LF_Combiner:      PASSTHROUGH, 2 IN + 1 OUT, 0 u/s self-consumption.
+//                   Capacity 500 u/s.
+//
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT (unchanged)
+// ---------------------------------------------------------
+
 class LF_Combiner_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()

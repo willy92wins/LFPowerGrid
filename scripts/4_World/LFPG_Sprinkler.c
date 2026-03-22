@@ -1,3 +1,16 @@
+// =========================================================
+// LF_PowerGrid - Sprinkler device (v4.0 Refactor)
+//
+// LF_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
+// LF_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
+//
+// v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT (unchanged)
+// ---------------------------------------------------------
+
 class LF_Sprinkler_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()

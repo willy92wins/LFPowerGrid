@@ -1,3 +1,26 @@
+// =========================================================
+// LF_PowerGrid - Battery device (v4.0 Refactor)
+//
+// LF_Battery_Kit:     Deployable kit → spawns BatterySmall.
+// LF_BatteryMedium_Kit: Deployable kit → spawns BatteryMedium.
+// LF_BatteryLarge_Kit:  DeployableContainer_Base → spawns BatteryLarge.
+//
+// LF_BatteryBase:     PASSTHROUGH (1 IN + 1 OUT) with energy storage.
+//                     Charges from surplus, discharges to supplement.
+//
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
+//   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
+//
+// LF_BatterySmall:    2,000 u capacity, 30 chg, 40 dis, 92% eff
+// LF_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
+// LF_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT (SMALL): same-model deploy pattern
+// ---------------------------------------------------------
+
 class LF_Battery_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()

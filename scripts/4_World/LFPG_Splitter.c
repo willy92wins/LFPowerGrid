@@ -1,3 +1,17 @@
+// =========================================================
+// LF_PowerGrid - Splitter device (v4.0 Refactor)
+//
+// LF_Splitter_Kit:  Holdable (same-model deployment).
+// LF_Splitter:      PASSTHROUGH, 1 IN + 3 OUT, 0 u/s self-consumption.
+//
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT (unchanged)
+// ---------------------------------------------------------
+
 class LF_Splitter_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()

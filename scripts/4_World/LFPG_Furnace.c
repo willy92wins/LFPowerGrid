@@ -1,3 +1,23 @@
+// =========================================================
+// LF_PowerGrid - Furnace (Incinerator) SOURCE device (v4.0 Refactor)
+//
+// LF_Furnace_Kit:  DeployableContainer_Base pattern (different-model).
+// LF_Furnace:      SOURCE device (50 u/s constant while burning).
+//                  Burns any item for fuel. 1 output (output_1).
+//
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
+//   FIX: Per-instance CallLater(30s) replaced with RegisterFurnace/
+//   UnregisterFurnace in NM. BurnTick now checks m_BurnNextMs timing
+//   (NM polls every 5s, burn fires every 30s).
+//
+// Memory point: port_output_1 (matches base pattern, no override needed).
+// =========================================================
+
+// ---------------------------------------------------------
+// KIT: DeployableContainer_Base pattern
+// ---------------------------------------------------------
+
 class LF_Furnace_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
