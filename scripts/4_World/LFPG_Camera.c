@@ -13,86 +13,11 @@
 static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_off.rvmat";
 static const string LFPG_CAMERA_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_on.rvmat";
 
-// ---------------------------------------------------------
-// KIT (unchanged — stays Inventory_Base)
-// ---------------------------------------------------------
-class LF_Camera_Kit : Inventory_Base
+class LF_Camera_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[Camera_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        EntityAI cam = GetGame().CreateObjectEx("LF_Camera", finalPos, ECE_CREATEPHYSICS);
-        if (cam)
-        {
-            cam.SetPosition(finalPos);
-            cam.SetOrientation(finalOri);
-            cam.Update();
-
-            string deployMsg = "[Camera_Kit] Deployed LF_Camera at " + finalPos.ToString();
-            deployMsg = deployMsg + " ori=";
-            deployMsg = deployMsg + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Camera_Kit] Failed to create LF_Camera! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Camera placement failed. Kit preserved.");
-            }
-        }
-        #endif
+        return "LF_Camera";
     }
 };
 

@@ -14,107 +14,11 @@ static const string LFPG_FRIDGE_RVMAT_OFF  = "\\LFPowerGrid\\data\\fridge\\led_o
 static const float  LFPG_FRIDGE_TEMP       = 5.0;
 static const float  LFPG_FRIDGE_CONSUMPTION = 20.0;
 
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_Fridge_Kit : DeployableContainer_Base
+class LF_Fridge_Kit : LFPG_KitBaseDeployable
 {
-    string GetDeployedClassname()
+    override string LFPG_GetSpawnClassname()
     {
         return "LF_Fridge";
-    }
-
-    vector GetDeployPositionOffset()
-    {
-        return "0 0 0";
-    }
-
-    vector GetDeployOrientationOffset()
-    {
-        return "0 0 0";
-    }
-
-    override bool IsBasebuildingKit()
-    {
-        return true;
-    }
-
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[Fridge_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string spawnType = "LF_Fridge";
-        EntityAI device = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
-        if (device)
-        {
-            device.SetPosition(finalPos);
-            device.SetOrientation(finalOri);
-            device.Update();
-
-            string deployMsg = "[Fridge_Kit] Deployed LF_Fridge at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            LFPG_Util.Info(deployMsg);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Fridge_Kit] Failed to create LF_Fridge! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Fridge placement failed. Kit preserved.");
-            }
-        }
-        #endif
     }
 };
 

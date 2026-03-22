@@ -17,7 +17,13 @@ static const float  LFPG_MCELL_CAPACITY      = 20.0;
 // ---------------------------------------------------------
 // KIT — unchanged (inherits LFPG_LogicGate_Kit)
 // ---------------------------------------------------------
-class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit {};
+class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_MemoryCell";
+    }
+};
 
 // ---------------------------------------------------------
 // DEVICE: PASSTHROUGH, SR latch with rising edge detection

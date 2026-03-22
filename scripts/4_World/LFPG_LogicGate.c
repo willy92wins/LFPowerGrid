@@ -17,114 +17,35 @@ static const string LFPG_GATE_RVMAT_GREEN  = "\\LFPowerGrid\\data\\button\\mater
 static const string LFPG_GATE_RVMAT_RED    = "\\LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 static const float  LFPG_GATE_CAPACITY     = 20.0;
 
-// ---------------------------------------------------------
-// KIT — unchanged (includes shared LFPG_GetEntityClass for AND/OR/XOR/MemoryCell)
-// ---------------------------------------------------------
-class LFPG_LogicGate_Kit : Inventory_Base
+class LFPG_LogicGate_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override void LFPG_AddPlaceAction()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
         AddAction(LFPG_ActionPlaceLogicGate);
-    }
-
-    protected string LFPG_GetEntityClass()
-    {
-        string kitType = GetType();
-
-        if (kitType == "LFPG_AND_Gate_Kit")
-        {
-            return "LFPG_AND_Gate";
-        }
-
-        if (kitType == "LFPG_OR_Gate_Kit")
-        {
-            return "LFPG_OR_Gate";
-        }
-
-        if (kitType == "LFPG_XOR_Gate_Kit")
-        {
-            return "LFPG_XOR_Gate";
-        }
-
-        if (kitType == "LFPG_MemoryCell_Kit")
-        {
-            return "LFPG_MemoryCell";
-        }
-
-        string errMsg = "[LogicGate_Kit] Unknown kit type: ";
-        errMsg = errMsg + kitType;
-        LFPG_Util.Error(errMsg);
-        return "";
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        string entityClass = LFPG_GetEntityClass();
-        if (entityClass == "")
-        {
-            LFPG_Util.Error("[LogicGate_Kit] Empty entity class — cannot spawn.");
-            return;
-        }
-
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[LogicGate_Kit] OnPlacementComplete: type=";
-        tLog = tLog + GetType();
-        tLog = tLog + " entity=";
-        tLog = tLog + entityClass;
-        tLog = tLog + " pos=";
-        tLog = tLog + position.ToString();
-        LFPG_Util.Info(tLog);
-
-        EntityAI gate = GetGame().CreateObjectEx(entityClass, finalPos, ECE_CREATEPHYSICS);
-        if (gate)
-        {
-            gate.SetPosition(finalPos);
-            gate.SetOrientation(finalOri);
-            gate.Update();
-
-            string successLog = "[LogicGate_Kit] Deployed ";
-            successLog = successLog + entityClass;
-            successLog = successLog + " at ";
-            successLog = successLog + finalPos.ToString();
-            LFPG_Util.Info(successLog);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string failLog = "[LogicGate_Kit] Failed to create ";
-            failLog = failLog + entityClass;
-            failLog = failLog + "! Kit preserved.";
-            LFPG_Util.Error(failLog);
-
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string msg = "[LFPG] Logic gate placement failed. Kit preserved.";
-                pb.MessageStatus(msg);
-            }
-        }
-        #endif
     }
 };
 
-class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit {};
-class LFPG_OR_Gate_Kit  : LFPG_LogicGate_Kit {};
-class LFPG_XOR_Gate_Kit : LFPG_LogicGate_Kit {};
+class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_AND_Gate";
+    }
+};
+class LFPG_OR_Gate_Kit : LFPG_LogicGate_Kit
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_OR_Gate";
+    }
+};
+class LFPG_XOR_Gate_Kit : LFPG_LogicGate_Kit
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_XOR_Gate";
+    }
+};
 
 // ---------------------------------------------------------
 // DEVICE BASE: PASSTHROUGH, 2 IN + 1 OUT, GATE

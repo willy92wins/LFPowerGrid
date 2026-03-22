@@ -17,57 +17,11 @@ static const int    LFPG_COUNTER_DEBOUNCE_MS = 200;
 static const float  LFPG_COUNTER_CAPACITY    = 20.0;
 static const float  LFPG_COUNTER_CONSUMPTION = 5.0;
 
-// ---------------------------------------------------------
-// KIT — unchanged
-// ---------------------------------------------------------
-class LFPG_ElectronicCounter_Kit : Inventory_Base
+class LFPG_ElectronicCounter_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-        string tLog = "[Counter_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        LFPG_Util.Info(tLog);
-        string spawnType = "LFPG_ElectronicCounter";
-        EntityAI ent = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
-        if (ent)
-        {
-            ent.SetPosition(finalPos);
-            ent.SetOrientation(finalOri);
-            ent.Update();
-            string deployMsg = "[Counter_Kit] Deployed at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            LFPG_Util.Info(deployMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            LFPG_Util.Error("[Counter_Kit] Failed to create! Kit preserved.");
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string failMsg = "[LFPG] Counter placement failed. Kit preserved.";
-                pb.MessageStatus(failMsg);
-            }
-        }
-        #endif
+        return "LFPG_ElectronicCounter";
     }
 };
 

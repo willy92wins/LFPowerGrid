@@ -48,89 +48,11 @@ static const string LFPG_INTERCOM_SND_RF_BEEP      = "LFPG_Intercom_RFBeep_Sound
 static const string LFPG_INTERCOM_SND_KNOB_CLICK   = "LFPG_Intercom_KnobClick_SoundSet";
 static const string LFPG_INTERCOM_SND_STATIC_BURST  = "LFPG_Intercom_Static_SoundSet";
 
-// ---------------------------------------------------------
-// KIT — same-model deploy pattern
-// ---------------------------------------------------------
-class LF_Intercom_Kit : Inventory_Base
+class LF_Intercom_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[Intercom_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string className = "LF_Intercom";
-        EntityAI device = GetGame().CreateObjectEx(className, finalPos, ECE_CREATEPHYSICS);
-        if (device)
-        {
-            device.SetPosition(finalPos);
-            device.SetOrientation(finalOri);
-            device.Update();
-
-            string deployMsg = "[Intercom_Kit] Deployed LF_Intercom at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            deployMsg = deployMsg + " ori=";
-            deployMsg = deployMsg + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Intercom_Kit] Failed to create LF_Intercom! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string errPlayer = "[LFPG] Intercom placement failed. Kit preserved.";
-                pb.MessageStatus(errPlayer);
-            }
-        }
-        #endif
+        return "LF_Intercom";
     }
 };
 

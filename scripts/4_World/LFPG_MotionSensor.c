@@ -27,108 +27,11 @@ static const string LFPG_SENSOR_RVMAT_OFF    = "\\LFPowerGrid\\data\\sensor\\mot
 static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\sensor\\motion_sensor_green.rvmat";
 static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\sensor\\motion_sensor_red.rvmat";
 
-// ---------------------------------------------------------
-// KIT — same-model deploy pattern
-// ---------------------------------------------------------
-class LFPG_MotionSensor_Kit : Inventory_Base
+class LFPG_MotionSensor_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[MotionSensor_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string className = "LFPG_MotionSensor";
-        EntityAI sensor = GetGame().CreateObjectEx(className, finalPos, ECE_CREATEPHYSICS);
-        if (sensor)
-        {
-            sensor.SetPosition(finalPos);
-            sensor.SetOrientation(finalOri);
-            sensor.Update();
-
-            LFPG_MotionSensor ms = LFPG_MotionSensor.Cast(sensor);
-            if (ms)
-            {
-                string groupName = "";
-                #ifdef LBmaster_Groups
-                PlayerBase pb = PlayerBase.Cast(player);
-                if (pb)
-                {
-                    LBGroup grp = pb.GetLBGroup();
-                    if (grp)
-                    {
-                        groupName = grp.name;
-                    }
-                }
-                #endif
-                ms.LFPG_SetPairedGroupName(groupName);
-            }
-
-            string deployMsg = "[MotionSensor_Kit] Deployed LFPG_MotionSensor at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            deployMsg = deployMsg + " ori=";
-            deployMsg = deployMsg + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[MotionSensor_Kit] Failed to create LFPG_MotionSensor! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pbFail = PlayerBase.Cast(player);
-            if (pbFail)
-            {
-                string errPlayer = "[LFPG] Motion Sensor placement failed. Kit preserved.";
-                pbFail.MessageStatus(errPlayer);
-            }
-        }
-        #endif
+        return "LFPG_MotionSensor";
     }
 };
 

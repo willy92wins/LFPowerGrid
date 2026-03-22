@@ -19,83 +19,11 @@ static const float LFPG_DC_PAIR_RADIUS     = 1.0;
 static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
 static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
 
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_DoorController_Kit : Inventory_Base
+class LF_DoorController_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[DoorController_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        EntityAI dc = GetGame().CreateObjectEx("LF_DoorController", finalPos, ECE_CREATEPHYSICS);
-        if (dc)
-        {
-            dc.SetPosition(finalPos);
-            dc.SetOrientation(finalOri);
-            dc.Update();
-            string depMsg = "[DoorController_Kit] Deployed at ";
-            depMsg = depMsg + finalPos.ToString();
-            LFPG_Util.Info(depMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[DoorController_Kit] Failed! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Door Controller placement failed.");
-            }
-        }
-        #endif
+        return "LF_DoorController";
     }
 };
 

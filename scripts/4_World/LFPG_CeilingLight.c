@@ -11,62 +11,11 @@
 static const string LFPG_CEILING_RVMAT_OFF = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light.rvmat";
 static const string LFPG_CEILING_RVMAT_ON  = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light_on.rvmat";
 
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_CeilingLight_Kit : Inventory_Base
+class LF_CeilingLight_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string logPre = "[CeilingLight_Kit] OnPlacementComplete: pos=";
-        logPre = logPre + finalPos.ToString();
-        logPre = logPre + " ori=";
-        logPre = logPre + finalOri.ToString();
-        LFPG_Util.Info(logPre);
-
-        EntityAI light = GetGame().CreateObjectEx("LF_CeilingLight", finalPos, ECE_CREATEPHYSICS);
-        if (light)
-        {
-            light.SetPosition(finalPos);
-            light.SetOrientation(finalOri);
-            light.SetOrientation(light.GetOrientation());
-            light.Update();
-            string depMsg = "[CeilingLight_Kit] Deployed at ";
-            depMsg = depMsg + finalPos.ToString();
-            LFPG_Util.Info(depMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[CeilingLight_Kit] Failed! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Ceiling light placement failed.");
-            }
-        }
-        #endif
+        return "LF_CeilingLight";
     }
 };
 

@@ -12,59 +12,11 @@
 static const string LFPG_MONITOR_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_monitor_off.rvmat";
 static const string LFPG_MONITOR_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_monitor_on.rvmat";
 
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_Monitor_Kit : Inventory_Base
+class LF_Monitor_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string logPre = "[Monitor_Kit] OnPlacementComplete: pos=";
-        logPre = logPre + finalPos.ToString();
-        LFPG_Util.Info(logPre);
-
-        EntityAI mon = GetGame().CreateObjectEx("LF_Monitor", finalPos, ECE_CREATEPHYSICS);
-        if (mon)
-        {
-            mon.SetPosition(finalPos);
-            mon.SetOrientation(finalOri);
-            mon.Update();
-            string depMsg = "[Monitor_Kit] Deployed at ";
-            depMsg = depMsg + finalPos.ToString();
-            LFPG_Util.Info(depMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Monitor_Kit] Failed! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Monitor placement failed.");
-            }
-        }
-        #endif
+        return "LF_Monitor";
     }
 };
 

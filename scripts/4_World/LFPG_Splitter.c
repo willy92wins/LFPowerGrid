@@ -1,67 +1,8 @@
-// =========================================================
-// LF_PowerGrid - Splitter device (v4.0 Refactor)
-//
-// LF_Splitter_Kit:  Holdable (same-model deployment).
-// LF_Splitter:      PASSTHROUGH, 1 IN + 3 OUT, 0 u/s self-consumption.
-//
-// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
-//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
-// =========================================================
-
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_Splitter_Kit : Inventory_Base
+class LF_Splitter_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[Splitter_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        EntityAI splitter = GetGame().CreateObjectEx("LF_Splitter", finalPos, ECE_CREATEPHYSICS);
-        if (splitter)
-        {
-            splitter.SetPosition(finalPos);
-            splitter.SetOrientation(finalOri);
-            splitter.Update();
-            string depMsg = "[Splitter_Kit] Deployed at ";
-            depMsg = depMsg + finalPos.ToString();
-            LFPG_Util.Info(depMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Splitter_Kit] Failed to create LF_Splitter! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                pb.MessageStatus("[LFPG] Splitter placement failed. Kit preserved.");
-            }
-        }
-        #endif
+        return "LF_Splitter";
     }
 };
 

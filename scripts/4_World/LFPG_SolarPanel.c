@@ -1,90 +1,13 @@
-// =========================================================
-// LF_PowerGrid - Solar Panel devices (v4.0 Refactor)
-//
-// LF_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
-// LF_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
-//                     Sun-driven via centralized NM timer.
-//
-// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
-//   Persists m_SourceOn via LFPG_OnStoreSaveDevice hook.
-// =========================================================
-
-// ---------------------------------------------------------
-// KIT (unchanged)
-// ---------------------------------------------------------
-class LF_SolarPanel_Kit : DeployableContainer_Base
+class LF_SolarPanel_Kit : LFPG_KitBaseDeployable
 {
-    string GetDeployedClassname()
+    override string LFPG_GetSpawnClassname()
     {
         return "LF_SolarPanel";
     }
 
-    vector GetDeployPositionOffset()
-    {
-        return "0 0 0";
-    }
-
-    vector GetDeployOrientationOffset()
+    override vector GetDeployOrientationOffset()
     {
         return "0 -90 0";
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        if (!GetGame().IsDedicatedServer())
-            return;
-
-        PlayerBase pb = PlayerBase.Cast(player);
-        if (!pb)
-            return;
-
-        string spawnClass = GetDeployedClassname();
-        LF_SolarPanel panel = LF_SolarPanel.Cast(GetGame().CreateObject(spawnClass, pb.GetLocalProjectionPosition(), false));
-
-        if (!panel)
-        {
-            string errKit = "[SolarPanel_Kit] Failed to create LF_SolarPanel! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            string failMsg = "[LFPG] Solar panel placement failed. Kit preserved.";
-            pb.MessageStatus(failMsg);
-            return;
-        }
-
-        panel.SetPosition(position);
-        panel.SetOrientation(orientation);
-
-        SetIsDeploySound(true);
-
-        string logMsg = "[SolarPanel_Kit] Deployed LF_SolarPanel at pos=" + position.ToString();
-        logMsg = logMsg + " ori=";
-        logMsg = logMsg + orientation.ToString();
-        LFPG_Util.Info(logMsg);
-
-        this.DeleteSafe();
-    }
-
-    override bool IsBasebuildingKit()
-    {
-        return true;
-    }
-
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
     }
 };
 

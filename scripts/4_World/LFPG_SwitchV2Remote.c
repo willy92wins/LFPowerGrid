@@ -14,60 +14,11 @@ static const string LFPG_SWV2R_RVMAT_OFF    = "\\LFPowerGrid\\data\\switch_v2\\d
 static const string LFPG_SWV2R_RVMAT_GREEN   = "\\LFPowerGrid\\data\\switch_v2\\data\\led_green.rvmat";
 static const string LFPG_SWV2R_RVMAT_RED     = "\\LFPowerGrid\\data\\switch_v2_remote\\data\\switch_v2_remote_red.rvmat";
 
-// ---------------------------------------------------------
-// KIT — unchanged
-// ---------------------------------------------------------
-class LFPG_SwitchV2Remote_Kit : Inventory_Base
+class LFPG_SwitchV2Remote_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-        string tLog = "[SwitchV2Remote_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-        string spawnType = "LFPG_SwitchV2Remote";
-        EntityAI sw = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
-        if (sw)
-        {
-            sw.SetPosition(finalPos);
-            sw.SetOrientation(finalOri);
-            sw.Update();
-            string deployMsg = "[SwitchV2Remote_Kit] Deployed at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            LFPG_Util.Info(deployMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errCreate = "[SwitchV2Remote_Kit] Failed to create! Kit preserved.";
-            LFPG_Util.Error(errCreate);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string failMsg = "[LFPG] Switch V2 Remote placement failed. Kit preserved.";
-                pb.MessageStatus(failMsg);
-            }
-        }
-        #endif
+        return "LFPG_SwitchV2Remote";
     }
 };
 

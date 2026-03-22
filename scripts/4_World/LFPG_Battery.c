@@ -1,234 +1,24 @@
-// =========================================================
-// LF_PowerGrid - Battery device (v4.0 Refactor)
-//
-// LF_Battery_Kit:     Deployable kit → spawns BatterySmall.
-// LF_BatteryMedium_Kit: Deployable kit → spawns BatteryMedium.
-// LF_BatteryLarge_Kit:  DeployableContainer_Base → spawns BatteryLarge.
-//
-// LF_BatteryBase:     PASSTHROUGH (1 IN + 1 OUT) with energy storage.
-//                     Charges from surplus, discharges to supplement.
-//
-// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
-//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
-//   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
-//
-// LF_BatterySmall:    2,000 u capacity, 30 chg, 40 dis, 92% eff
-// LF_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
-// LF_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
-// =========================================================
-
-// ---------------------------------------------------------
-// KIT (SMALL): same-model deploy pattern
-// ---------------------------------------------------------
-class LF_Battery_Kit : Inventory_Base
+class LF_Battery_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        string empty = "";
-        return empty;
+        return "LF_BatterySmall";
     }
 };
 
-// ---------------------------------------------------------
-// KIT (MEDIUM)
-// ---------------------------------------------------------
-class LF_BatteryMedium_Kit : Inventory_Base
+class LF_BatteryMedium_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        string snd = "placeBarbedWire_SoundSet";
-        return snd;
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        string empty = "";
-        return empty;
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[BatteryMedium_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string spawnClass = "LF_BatteryMedium";
-        EntityAI battery = GetGame().CreateObjectEx(spawnClass, finalPos, ECE_CREATEPHYSICS);
-        if (battery)
-        {
-            battery.SetPosition(finalPos);
-            battery.SetOrientation(finalOri);
-            battery.Update();
-
-            string okLog = "[BatteryMedium_Kit] Deployed LF_BatteryMedium at ";
-            okLog = okLog + finalPos.ToString();
-            okLog = okLog + " ori=";
-            okLog = okLog + finalOri.ToString();
-            LFPG_Util.Info(okLog);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string failLog = "[BatteryMedium_Kit] Failed to create LF_BatteryMedium! Kit preserved.";
-            LFPG_Util.Error(failLog);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string errMsg = "[LFPG] Battery placement failed. Kit preserved.";
-                pb.MessageStatus(errMsg);
-            }
-        }
-        #endif
+        return "LF_BatteryMedium";
     }
 };
 
-// ---------------------------------------------------------
-// KIT (LARGE): DeployableContainer_Base pattern
-// ---------------------------------------------------------
-class LF_BatteryLarge_Kit : DeployableContainer_Base
+class LF_BatteryLarge_Kit : LFPG_KitBaseDeployable
 {
-    string GetDeployedClassname()
+    override string LFPG_GetSpawnClassname()
     {
-        string cls = "LF_BatteryLarge";
-        return cls;
-    }
-
-    vector GetDeployPositionOffset()
-    {
-        return "0 0 0";
-    }
-
-    vector GetDeployOrientationOffset()
-    {
-        return "0 0 0";
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        if (!GetGame().IsDedicatedServer())
-            return;
-
-        PlayerBase pb = PlayerBase.Cast(player);
-        if (!pb)
-            return;
-
-        string spawnClass = GetDeployedClassname();
-        vector spawnPos = pb.GetLocalProjectionPosition();
-
-        string tLog = "[BatteryLarge_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        EntityAI battery = GetGame().CreateObject(spawnClass, spawnPos, false);
-        if (!battery)
-        {
-            string errLog = "[BatteryLarge_Kit] Failed to create LF_BatteryLarge! Kit preserved.";
-            LFPG_Util.Error(errLog);
-            string errMsg = "[LFPG] Battery placement failed. Kit preserved.";
-            pb.MessageStatus(errMsg);
-            return;
-        }
-
-        battery.SetPosition(position);
-        battery.SetOrientation(orientation);
-
-        SetIsDeploySound(true);
-
-        string okLog = "[BatteryLarge_Kit] Deployed LF_BatteryLarge at pos=";
-        okLog = okLog + position.ToString();
-        okLog = okLog + " ori=";
-        okLog = okLog + orientation.ToString();
-        LFPG_Util.Info(okLog);
-
-        this.DeleteSafe();
-    }
-
-    override bool IsBasebuildingKit()
-    {
-        return true;
-    }
-
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        string empty = "";
-        return empty;
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
+        return "LF_BatteryLarge";
     }
 };
 

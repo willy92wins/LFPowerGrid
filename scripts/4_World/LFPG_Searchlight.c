@@ -26,89 +26,11 @@ static const string LFPG_SL_RVMAT_ON  = "\\LFPowerGrid\\data\\searchlight\\lf_se
 
 static const float LFPG_SL_SPLASH_Y_OFFSET = 0.05;
 
-// ---------------------------------------------------------
-// KIT — same-model deploy pattern
-// ---------------------------------------------------------
-class LF_Searchlight_Kit : Inventory_Base
+class LF_Searchlight_Kit : LFPG_KitBase
 {
-    override bool IsDeployable()
+    override string LFPG_GetSpawnClassname()
     {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override bool CanBePlaced(Man player, vector position)
-    {
-        return true;
-    }
-
-    override bool DoPlacingHeightCheck()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
-    }
-
-    override void SetActions()
-    {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[Searchlight_Kit] OnPlacementComplete: param=" + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string className = "LF_Searchlight";
-        EntityAI sl = GetGame().CreateObjectEx(className, finalPos, ECE_CREATEPHYSICS);
-        if (sl)
-        {
-            sl.SetPosition(finalPos);
-            sl.SetOrientation(finalOri);
-            sl.Update();
-
-            string deployMsg = "[Searchlight_Kit] Deployed LF_Searchlight at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            deployMsg = deployMsg + " ori=";
-            deployMsg = deployMsg + finalOri.ToString();
-            LFPG_Util.Info(deployMsg);
-
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[Searchlight_Kit] Failed to create LF_Searchlight! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string errPlayer = "[LFPG] Searchlight placement failed. Kit preserved.";
-                pb.MessageStatus(errPlayer);
-            }
-        }
-        #endif
+        return "LF_Searchlight";
     }
 };
 

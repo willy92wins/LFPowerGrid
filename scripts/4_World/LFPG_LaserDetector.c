@@ -18,60 +18,11 @@
 static const string LFPG_LASER_RVMAT_OFF = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
 static const string LFPG_LASER_RVMAT_RED = "\\LFPowerGrid\\data\\laser_detector\\laser_detector_red.rvmat";
 
-// ---------------------------------------------------------
-// KIT — unchanged
-// ---------------------------------------------------------
-class LFPG_LaserDetector_Kit : Inventory_Base
+class LFPG_LaserDetector_Kit : LFPG_KitBase
 {
-    override bool IsDeployable() { return true; }
-    override bool CanDisplayCargo() { return false; }
-    override bool CanBePlaced(Man player, vector position) { return true; }
-    override bool DoPlacingHeightCheck() { return false; }
-    override string GetDeploySoundset() { return "placeBarbedWire_SoundSet"; }
-    override string GetLoopDeploySoundset() { return ""; }
-
-    override void SetActions()
+    override string LFPG_GetSpawnClassname()
     {
-        super.SetActions();
-        AddAction(ActionTogglePlaceObject);
-        AddAction(LFPG_ActionPlaceGeneric);
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-        string tLog = "[LaserDetector_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-        string spawnType = "LFPG_LaserDetector";
-        EntityAI device = GetGame().CreateObjectEx(spawnType, finalPos, ECE_CREATEPHYSICS);
-        if (device)
-        {
-            device.SetPosition(finalPos);
-            device.SetOrientation(finalOri);
-            device.Update();
-            string deployMsg = "[LaserDetector_Kit] Deployed at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            LFPG_Util.Info(deployMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errMsg = "[LaserDetector_Kit] Failed to create! Kit preserved.";
-            LFPG_Util.Error(errMsg);
-            PlayerBase pbFail = PlayerBase.Cast(player);
-            if (pbFail)
-            {
-                string failMsg = "[LFPG] Laser Detector placement failed. Kit preserved.";
-                pbFail.MessageStatus(failMsg);
-            }
-        }
-        #endif
+        return "LFPG_LaserDetector";
     }
 };
 
