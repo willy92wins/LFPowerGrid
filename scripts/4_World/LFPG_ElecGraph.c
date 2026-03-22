@@ -2317,6 +2317,24 @@ class LFPG_ElecGraph
                         if (gateEntityResolved && prevGateClosed != node.m_GateClosed)
                         {
                             m_AllocChanged = true;
+
+                            // v4.1: Mark upstream sources dirty so they re-evaluate
+                            // allocation through this gate. Without this, upstream
+                            // keeps stale allocation (e.g. probe-only 1.0 u/s) and
+                            // downstream consumers never receive enough power.
+                            ref array<ref LFPG_ElecEdge> gateInEdges;
+                            if (m_Incoming.Find(nodeId, gateInEdges) && gateInEdges)
+                            {
+                                int gi;
+                                for (gi = 0; gi < gateInEdges.Count(); gi = gi + 1)
+                                {
+                                    ref LFPG_ElecEdge gInEdge = gateInEdges[gi];
+                                    if (gInEdge && gInEdge.m_SourceNodeId != "")
+                                    {
+                                        MarkNodeDirty(gInEdge.m_SourceNodeId, LFPG_DIRTY_INPUT);
+                                    }
+                                }
+                            }
                         }
                     }
                 }

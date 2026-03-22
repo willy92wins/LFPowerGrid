@@ -415,6 +415,24 @@ modded class Hologram
         return 0.0;
     }
 
+    // ---- Helper: per-kit GLOBAL roll offset (degrees) ----
+    // Applied in ALL modes (floor, wall, ceiling) via ApplySmoothed.
+    // SwitchV2, SwitchRemote, SwitchV2Remote p3d models have local
+    // Y axis inverted, causing upside-down placement in every mode.
+    // 180° roll flips them upright.
+    protected float LFPG_GetKitRollOffset(EntityAI projection)
+    {
+        if (!projection)
+            return 0.0;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return 180.0;
+        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
+            return 180.0;
+        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
+            return 180.0;
+        return 0.0;
+    }
+
     // ---- Helper: per-kit WALL yaw offset (degrees) ----
     // Added to wallYaw after normal-based calculation + scroll.
     // SwitchV2 model faces backward by default → 180° to face player.
@@ -456,10 +474,6 @@ modded class Hologram
     {
         if (!projection)
             return 0.0;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return 180.0;
-        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
-            return 180.0;
         return 0.0;
     }
 
@@ -487,6 +501,12 @@ modded class Hologram
             return 0.04;
         if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
             return 0.04;
+        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
+            return 0.04;
+        // MotionSensor: dome protrudes ~0.06m from origin. Wall pitch
+        // of -90° rotates dome outward, but default 0.03m embeds housing.
+        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
+            return 0.08;
         return LFPG_HOLO_SURFACE_OFFSET;
     }
 
@@ -923,6 +943,14 @@ modded class Hologram
         if (kitPitch != 0.0)
         {
             targetOri[1] = targetOri[1] + kitPitch;
+        }
+
+        // Per-kit roll offset (e.g. SwitchV2/Remote 180° to flip upright)
+        // Applied globally (floor + wall + ceiling) BEFORE smoothing.
+        float kitRoll = LFPG_GetKitRollOffset(projection);
+        if (kitRoll != 0.0)
+        {
+            targetOri[2] = targetOri[2] + kitRoll;
         }
 
         vector finalPos;

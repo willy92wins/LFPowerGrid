@@ -60,20 +60,16 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (vp && vp.IsActive())
             return false;
 
-        // Toggle text based on current state
+        // v4.1: Exit is handled by SearchlightController.Tick() via
+        // direct F-key (UAAction) detection. The action system only
+        // handles ENTER. If the controller is active (any searchlight),
+        // block this action entirely to prevent a race where Tick exits
+        // and this action re-enters on the same F press.
         LFPG_SearchlightController ctrl = LFPG_SearchlightController.Get();
-        if (ctrl && ctrl.IsOperatingEntity(sl))
-        {
-            m_Text = "#STR_LFPG_ACTION_RELEASE_SEARCHLIGHT";
-        }
-        else
-        {
-            // Block if already operating a DIFFERENT searchlight
-            if (ctrl && ctrl.IsActive())
-                return false;
+        if (ctrl && ctrl.IsActive())
+            return false;
 
-            m_Text = "#STR_LFPG_ACTION_OPERATE_SEARCHLIGHT";
-        }
+        m_Text = "#STR_LFPG_ACTION_OPERATE_SEARCHLIGHT";
 
         return true;
     }

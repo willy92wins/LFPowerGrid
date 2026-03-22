@@ -378,7 +378,7 @@ class LF_Searchlight : LFPG_DeviceBase
         m_LightBeamSpill = LFPG_SearchlightBeamSpill.Cast(tmpLight);
 
         vector mpStartLocal = GetMemoryPointPos(mpName);
-        string zeroVec = "0 0 0";
+        vector zeroVec = "0 0 0";
         tmpLight = ScriptedLightBase.CreateLight(LFPG_SearchlightHalo, zeroVec);
         m_LightHalo = LFPG_SearchlightHalo.Cast(tmpLight);
         if (m_LightHalo)
@@ -437,7 +437,7 @@ class LF_Searchlight : LFPG_DeviceBase
         if (!m_LightBeamCore)
             return;
 
-        float totalYaw = m_BaseOriYaw + m_AimYaw + 180.0;
+        float totalYaw = m_BaseOriYaw + m_AimYaw;
 
         vector entOri = Vector(totalYaw, 0, 0);
         SetOrientation(entOri);
@@ -546,7 +546,7 @@ class LF_Searchlight : LFPG_DeviceBase
         if (!m_LightBeamCore)
             return;
 
-        float totalYaw = m_BaseOriYaw + yaw + 180.0;
+        float totalYaw = m_BaseOriYaw + yaw;
 
         vector entOri = Vector(totalYaw, 0, 0);
         SetOrientation(entOri);
@@ -658,6 +658,10 @@ class LF_Searchlight : LFPG_DeviceBase
         #ifdef SERVER
         m_OperatorNetLow  = 0;
         m_OperatorNetHigh = 0;
+
+        // Force SyncVar push so all clients receive the final
+        // aim position (m_AimYaw/m_AimPitch) after operator exits.
+        SetSynchDirty();
         #endif
     }
 

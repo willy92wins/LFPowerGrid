@@ -3518,6 +3518,7 @@ class LFPG_NetworkManager
         LF_Sprinkler rpTSpr;
         bool rpSprActive;
 
+        // Pass 1: Count sprinklers + set water source + T1 activation
         for (rwi = 0; rwi < rpWireCount; rwi = rwi + 1)
         {
             rpWd = rpWires[rwi];
@@ -3544,18 +3545,10 @@ class LFPG_NetworkManager
             rpTSpr.LFPG_SetHasWaterSource(true);
             rpTSpr.LFPG_SetWaterSourceId(sourceId);
 
+            // T1: activate immediately (no tank dependency)
             if (rp1)
             {
                 rpTSpr.LFPG_SetSprinklerActive(rpPowered);
-            }
-            else
-            {
-                rpSprActive = false;
-                if (rpPowered && rpTank > 0.0)
-                {
-                    rpSprActive = true;
-                }
-                rpTSpr.LFPG_SetSprinklerActive(rpSprActive);
             }
         }
 
@@ -3572,6 +3565,46 @@ class LFPG_NetworkManager
         else
         {
             rp2.LFPG_SetConnectedSprinklerCount(rpSprCount);
+
+            // T2 Pass 2: Activate sprinklers based on final count.
+            // 1-2 sprinklers: always active if powered (sustainable flow).
+            // 3+: require tank > 0.
+            rpSprActive = false;
+            if (rpPowered)
+            {
+                if (rpSprCount <= 2)
+                {
+                    rpSprActive = true;
+                }
+                else if (rpTank > 0.0)
+                {
+                    rpSprActive = true;
+                }
+            }
+
+            for (rwi = 0; rwi < rpWireCount; rwi = rwi + 1)
+            {
+                rpWd = rpWires[rwi];
+                if (!rpWd)
+                    continue;
+
+                rpTid = rpWd.m_TargetDeviceId;
+                if (rpTid == "")
+                    continue;
+
+                if (rpTid == removedTargetId)
+                    continue;
+
+                rpTEnt = reg.FindById(rpTid);
+                if (!rpTEnt)
+                    continue;
+
+                rpTSpr = LF_Sprinkler.Cast(rpTEnt);
+                if (!rpTSpr)
+                    continue;
+
+                rpTSpr.LFPG_SetSprinklerActive(rpSprActive);
+            }
         }
         #endif
     }
@@ -3758,6 +3791,7 @@ class LFPG_NetworkManager
             pumpId = curT2.LFPG_GetDeviceId();
             curTank = curT2.LFPG_GetTankLevel();
 
+            // Pass 1: Count sprinklers + set water source (no activation yet)
             for (wi = 0; wi < wireCount; wi = wi + 1)
             {
                 wd = wires[wi];
@@ -3776,21 +3810,49 @@ class LFPG_NetworkManager
                 if (!targetSpr)
                     continue;
 
-                // Sprinkler found on this T2 output
                 sprCount = sprCount + 1;
                 targetSpr.LFPG_SetHasWaterSource(true);
                 targetSpr.LFPG_SetWaterSourceId(pumpId);
-
-                // T2 sprinkler active only if pump powered AND tank has water
-                sprActive = false;
-                if (pumpPowered && curTank > 0.0)
-                {
-                    sprActive = true;
-                }
-                targetSpr.LFPG_SetSprinklerActive(sprActive);
             }
 
             curT2.LFPG_SetConnectedSprinklerCount(sprCount);
+
+            // Determine activation: 1-2 sprinklers always work if powered
+            // (net flow >= 0, system is sustainable). 3+ require tank > 0.
+            sprActive = false;
+            if (pumpPowered)
+            {
+                if (sprCount <= 2)
+                {
+                    sprActive = true;
+                }
+                else if (curTank > 0.0)
+                {
+                    sprActive = true;
+                }
+            }
+
+            // Pass 2: Activate sprinklers with final decision
+            for (wi = 0; wi < wireCount; wi = wi + 1)
+            {
+                wd = wires[wi];
+                if (!wd)
+                    continue;
+
+                targetId = wd.m_TargetDeviceId;
+                if (targetId == "")
+                    continue;
+
+                targetEnt = reg.FindById(targetId);
+                if (!targetEnt)
+                    continue;
+
+                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                if (!targetSpr)
+                    continue;
+
+                targetSpr.LFPG_SetSprinklerActive(sprActive);
+            }
 
             // --- T2 tank fill with sprinkler drain adjustment ---
             if (doTankFill && pumpPowered)

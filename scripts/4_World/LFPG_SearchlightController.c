@@ -179,8 +179,6 @@ class LFPG_SearchlightController
         m_TargetSl      = null;
         m_TargetNetLow  = 0;
         m_TargetNetHigh = 0;
-        m_AimYaw        = 0.0;
-        m_AimPitch      = 0.0;
         m_RpcAccum      = 0.0;
         m_AimDirty      = false;
 
@@ -225,6 +223,23 @@ class LFPG_SearchlightController
             return;
         }
 
+        // ---- F-key exit (bypasses action system) ----
+        // The action LFPG_ActionOperateSearchlight uses CCTCursor which
+        // requires crosshair over the searchlight. While operating, the
+        // player walks around aiming the beam — crosshair is NOT on the
+        // searchlight, so the action never resolves and F does nothing.
+        // Detect UAAction (F key) directly here for reliable exit.
+        Input exitInp = GetGame().GetInput();
+        if (exitInp)
+        {
+            string uaAction = "UAAction";
+            if (exitInp.LocalPress(uaAction, false))
+            {
+                RequestExit();
+                return;
+            }
+        }
+
         // ---- Compute yaw from player position ----
         // Beam points OPPOSITE to player = AWAY from player.
         // Vector FROM player TO searchlight, extended through = beam direction.
@@ -236,7 +251,7 @@ class LFPG_SearchlightController
         float worldRad = Math.Atan2(awayX, awayZ);
         float worldDeg = worldRad * Math.RAD2DEG;
         float slBaseYaw = m_TargetSl.LFPG_GetBaseYaw();
-        float localYaw = worldDeg - slBaseYaw - 180.0;
+        float localYaw = worldDeg - slBaseYaw;
 
         // Normalize to [-180, 180]
         while (localYaw > 180.0)
@@ -327,8 +342,6 @@ class LFPG_SearchlightController
         m_TargetSl      = null;
         m_TargetNetLow  = 0;
         m_TargetNetHigh = 0;
-        m_AimYaw        = 0.0;
-        m_AimPitch      = 0.0;
         m_RpcAccum      = 0.0;
         m_AimDirty      = false;
     }
