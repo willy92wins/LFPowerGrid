@@ -2652,6 +2652,15 @@ modded class PlayerBase
             return;
 
         LFPG_SorterView.OnSortAck(success, movedCount);
+
+        // v3.2: Force client inventory UI refresh.
+        // LocationSyncMoveEntity on server moves items but client
+        // may not refresh cargo view until relog. UpdateInventoryMenu
+        // is vanilla EntityAI method called after every inventory op.
+        if (success && movedCount > 0)
+        {
+            UpdateInventoryMenu();
+        }
     }
 
     // =====================================

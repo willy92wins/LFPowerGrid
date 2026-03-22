@@ -97,14 +97,14 @@ class LFPG_SorterController extends ViewController
     ImageWidget TabRulesBg; ImageWidget TabPreviewBg;
     TextWidget TabRulesText; TextWidget TabPreviewText;
     ImageWidget TabIndicator;
-    // Category
-    ImageWidget CatBtn0Bg; ImageWidget CatBtn1Bg; ImageWidget CatBtn2Bg; ImageWidget CatBtn3Bg;
-    ImageWidget CatBtn4Bg; ImageWidget CatBtn5Bg; ImageWidget CatBtn6Bg; ImageWidget CatBtn7Bg;
-    TextWidget CatBtn0Text; TextWidget CatBtn1Text; TextWidget CatBtn2Text; TextWidget CatBtn3Text;
-    TextWidget CatBtn4Text; TextWidget CatBtn5Text; TextWidget CatBtn6Text; TextWidget CatBtn7Text;
-    // Slot
-    ImageWidget SlotPre0Bg; ImageWidget SlotPre1Bg; ImageWidget SlotPre2Bg; ImageWidget SlotPre3Bg;
-    TextWidget SlotPre0Text; TextWidget SlotPre1Text; TextWidget SlotPre2Text; TextWidget SlotPre3Text;
+    // Category — arrays prevent Dabs auto-bind corruption (same fix as F2 tabs)
+    protected ref array<ImageWidget> m_CatBgs;
+    protected ref array<TextWidget> m_CatTexts;
+    // Slot — arrays prevent Dabs auto-bind corruption
+    protected ref array<ImageWidget> m_SlotBgs;
+    protected ref array<TextWidget> m_SlotTexts;
+    // Layout root — stored for re-binding buttons after Dabs corruption
+    protected Widget m_LayoutRoot;
     // Catch-all
     ImageWidget BtnCatchAllBg; TextWidget BtnCatchAllText;
     // Footer + header button BGs
@@ -155,6 +155,25 @@ class LFPG_SorterController extends ViewController
             m_TabBgs.Insert(null);
             m_TabTexts.Insert(null);
         }
+        // v3.2: Category button arrays (8 categories) — Dabs-proof
+        m_CatBgs = new array<ImageWidget>;
+        m_CatTexts = new array<TextWidget>;
+        int ci = 0;
+        for (ci = 0; ci < 8; ci = ci + 1)
+        {
+            m_CatBgs.Insert(null);
+            m_CatTexts.Insert(null);
+        }
+        // v3.2: Slot preset arrays (4 slots) — Dabs-proof
+        m_SlotBgs = new array<ImageWidget>;
+        m_SlotTexts = new array<TextWidget>;
+        int si = 0;
+        for (si = 0; si < 4; si = si + 1)
+        {
+            m_SlotBgs.Insert(null);
+            m_SlotTexts.Insert(null);
+        }
+        m_LayoutRoot = null;
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
@@ -192,6 +211,7 @@ class LFPG_SorterController extends ViewController
         if (!layoutRoot)
             return;
 
+        m_LayoutRoot = layoutRoot;
         string bn = "";
 
         // ── Output tabs (child-walk → store in arrays, safe from Dabs rebind) ──
@@ -213,45 +233,27 @@ class LFPG_SorterController extends ViewController
         TabPreviewBg = FindBtnChildBg(layoutRoot, bn);
         TabPreviewText = FindBtnChildText(layoutRoot, bn);
 
-        // ── Category buttons ──
-        bn = "CatBtn0";
-        CatBtn0Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn0Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn1";
-        CatBtn1Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn1Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn2";
-        CatBtn2Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn2Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn3";
-        CatBtn3Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn3Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn4";
-        CatBtn4Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn4Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn5";
-        CatBtn5Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn5Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn6";
-        CatBtn6Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn6Text = FindBtnChildText(layoutRoot, bn);
-        bn = "CatBtn7";
-        CatBtn7Bg = FindBtnChildBg(layoutRoot, bn);
-        CatBtn7Text = FindBtnChildText(layoutRoot, bn);
+        // ── Category buttons (arrays — safe from Dabs rebind) ──
+        string catName = "";
+        int catIdx = 0;
+        for (catIdx = 0; catIdx < 8; catIdx = catIdx + 1)
+        {
+            catName = "CatBtn";
+            catName = catName + catIdx.ToString();
+            m_CatBgs.Set(catIdx, FindBtnChildBg(layoutRoot, catName));
+            m_CatTexts.Set(catIdx, FindBtnChildText(layoutRoot, catName));
+        }
 
-        // ── Slot presets ──
-        bn = "SlotPre0";
-        SlotPre0Bg = FindBtnChildBg(layoutRoot, bn);
-        SlotPre0Text = FindBtnChildText(layoutRoot, bn);
-        bn = "SlotPre1";
-        SlotPre1Bg = FindBtnChildBg(layoutRoot, bn);
-        SlotPre1Text = FindBtnChildText(layoutRoot, bn);
-        bn = "SlotPre2";
-        SlotPre2Bg = FindBtnChildBg(layoutRoot, bn);
-        SlotPre2Text = FindBtnChildText(layoutRoot, bn);
-        bn = "SlotPre3";
-        SlotPre3Bg = FindBtnChildBg(layoutRoot, bn);
-        SlotPre3Text = FindBtnChildText(layoutRoot, bn);
+        // ── Slot presets (arrays — safe from Dabs rebind) ──
+        string slotName = "";
+        int slotIdx = 0;
+        for (slotIdx = 0; slotIdx < 4; slotIdx = slotIdx + 1)
+        {
+            slotName = "SlotPre";
+            slotName = slotName + slotIdx.ToString();
+            m_SlotBgs.Set(slotIdx, FindBtnChildBg(layoutRoot, slotName));
+            m_SlotTexts.Set(slotIdx, FindBtnChildText(layoutRoot, slotName));
+        }
 
         // ── Catch-all ──
         bn = "BtnCatchAll";
@@ -474,11 +476,11 @@ class LFPG_SorterController extends ViewController
         diagInit = diagInit + " container=";
         diagInit = diagInit + containerName;
         LFPG_Util.Info(diagInit);
-        string diagBindings = "[SorterCtrl] Bindings CatBtn0Bg=";
-        if (CatBtn0Bg) { diagBindings = diagBindings + "OK"; }
+        string diagBindings = "[SorterCtrl] Bindings CatBg0=";
+        if (m_CatBgs.Get(0)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
-        diagBindings = diagBindings + " CatBtn0Text=";
-        if (CatBtn0Text) { diagBindings = diagBindings + "OK"; }
+        diagBindings = diagBindings + " CatTxt0=";
+        if (m_CatTexts.Get(0)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut1Text=";
         if (m_TabTexts.Get(1)) { diagBindings = diagBindings + "OK"; }
@@ -504,6 +506,10 @@ class LFPG_SorterController extends ViewController
         HeaderTitle = sorterTitle;
         string propHeader = "HeaderTitle";
         NotifyPropertyChanged(propHeader, false);
+
+        // v3.2: Dabs re-bind corrupts named widget fields after NotifyPropertyChanged.
+        // Re-resolve before ApplyInitialColors/Labels use them.
+        ReBindButtons();
 
         if (m_IsPaired)
         {
@@ -580,23 +586,23 @@ class LFPG_SorterController extends ViewController
 
     protected void ApplyInitialLabels()
     {
-        SetBtnLabel(CatBtn0Text, m_CatLabel0);
-        SetBtnLabel(CatBtn1Text, m_CatLabel1);
-        SetBtnLabel(CatBtn2Text, m_CatLabel2);
-        SetBtnLabel(CatBtn3Text, m_CatLabel3);
-        SetBtnLabel(CatBtn4Text, m_CatLabel4);
-        SetBtnLabel(CatBtn5Text, m_CatLabel5);
-        SetBtnLabel(CatBtn6Text, m_CatLabel6);
-        SetBtnLabel(CatBtn7Text, m_CatLabel7);
+        SetBtnLabel(m_CatTexts.Get(0), m_CatLabel0);
+        SetBtnLabel(m_CatTexts.Get(1), m_CatLabel1);
+        SetBtnLabel(m_CatTexts.Get(2), m_CatLabel2);
+        SetBtnLabel(m_CatTexts.Get(3), m_CatLabel3);
+        SetBtnLabel(m_CatTexts.Get(4), m_CatLabel4);
+        SetBtnLabel(m_CatTexts.Get(5), m_CatLabel5);
+        SetBtnLabel(m_CatTexts.Get(6), m_CatLabel6);
+        SetBtnLabel(m_CatTexts.Get(7), m_CatLabel7);
 
         string lblTiny = "Tiny";
         string lblSmall = "Small";
         string lblMed = "Med";
         string lblLarge = "Large";
-        SetBtnLabel(SlotPre0Text, lblTiny);
-        SetBtnLabel(SlotPre1Text, lblSmall);
-        SetBtnLabel(SlotPre2Text, lblMed);
-        SetBtnLabel(SlotPre3Text, lblLarge);
+        SetBtnLabel(m_SlotTexts.Get(0), lblTiny);
+        SetBtnLabel(m_SlotTexts.Get(1), lblSmall);
+        SetBtnLabel(m_SlotTexts.Get(2), lblMed);
+        SetBtnLabel(m_SlotTexts.Get(3), lblLarge);
     }
 
     protected void SetBtnLabel(TextWidget txt, string label)
@@ -642,20 +648,20 @@ class LFPG_SorterController extends ViewController
             SetTxtCol(BtnSortHeaderText, dimTxt);
 
             // Dim all category buttons
-            TintBg(CatBtn0Bg, dimBg); SetTxtCol(CatBtn0Text, dimTxt);
-            TintBg(CatBtn1Bg, dimBg); SetTxtCol(CatBtn1Text, dimTxt);
-            TintBg(CatBtn2Bg, dimBg); SetTxtCol(CatBtn2Text, dimTxt);
-            TintBg(CatBtn3Bg, dimBg); SetTxtCol(CatBtn3Text, dimTxt);
-            TintBg(CatBtn4Bg, dimBg); SetTxtCol(CatBtn4Text, dimTxt);
-            TintBg(CatBtn5Bg, dimBg); SetTxtCol(CatBtn5Text, dimTxt);
-            TintBg(CatBtn6Bg, dimBg); SetTxtCol(CatBtn6Text, dimTxt);
-            TintBg(CatBtn7Bg, dimBg); SetTxtCol(CatBtn7Text, dimTxt);
+            TintBg(m_CatBgs.Get(0), dimBg); SetTxtCol(m_CatTexts.Get(0), dimTxt);
+            TintBg(m_CatBgs.Get(1), dimBg); SetTxtCol(m_CatTexts.Get(1), dimTxt);
+            TintBg(m_CatBgs.Get(2), dimBg); SetTxtCol(m_CatTexts.Get(2), dimTxt);
+            TintBg(m_CatBgs.Get(3), dimBg); SetTxtCol(m_CatTexts.Get(3), dimTxt);
+            TintBg(m_CatBgs.Get(4), dimBg); SetTxtCol(m_CatTexts.Get(4), dimTxt);
+            TintBg(m_CatBgs.Get(5), dimBg); SetTxtCol(m_CatTexts.Get(5), dimTxt);
+            TintBg(m_CatBgs.Get(6), dimBg); SetTxtCol(m_CatTexts.Get(6), dimTxt);
+            TintBg(m_CatBgs.Get(7), dimBg); SetTxtCol(m_CatTexts.Get(7), dimTxt);
 
             // Dim all slot preset buttons
-            TintBg(SlotPre0Bg, dimBg); SetTxtCol(SlotPre0Text, dimTxt);
-            TintBg(SlotPre1Bg, dimBg); SetTxtCol(SlotPre1Text, dimTxt);
-            TintBg(SlotPre2Bg, dimBg); SetTxtCol(SlotPre2Text, dimTxt);
-            TintBg(SlotPre3Bg, dimBg); SetTxtCol(SlotPre3Text, dimTxt);
+            TintBg(m_SlotBgs.Get(0), dimBg); SetTxtCol(m_SlotTexts.Get(0), dimTxt);
+            TintBg(m_SlotBgs.Get(1), dimBg); SetTxtCol(m_SlotTexts.Get(1), dimTxt);
+            TintBg(m_SlotBgs.Get(2), dimBg); SetTxtCol(m_SlotTexts.Get(2), dimTxt);
+            TintBg(m_SlotBgs.Get(3), dimBg); SetTxtCol(m_SlotTexts.Get(3), dimTxt);
 
             // Dim add buttons
             TintBg(BtnPrefixAddBg, dimBg);
@@ -1067,8 +1073,54 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     // Full refresh
     // =========================================================
+    // v3.2: Re-resolve non-array button widgets before each refresh.
+    // Dabs auto-bind corrupts named ImageWidget/TextWidget fields
+    // after any NotifyPropertyChanged call. Arrays are safe (Dabs
+    // cannot match array elements), but named fields must be
+    // re-resolved each time from m_LayoutRoot.
+    protected void ReBindButtons()
+    {
+        if (!m_LayoutRoot)
+            return;
+        string bn = "";
+        bn = "BtnCatchAll";
+        BtnCatchAllBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnCatchAllText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnPrefixAdd";
+        BtnPrefixAddBg = FindBtnChildBg(m_LayoutRoot, bn);
+        bn = "BtnContainsAdd";
+        BtnContainsAddBg = FindBtnChildBg(m_LayoutRoot, bn);
+        bn = "BtnSlotAdd";
+        BtnSlotAddBg = FindBtnChildBg(m_LayoutRoot, bn);
+        bn = "BtnSort";
+        BtnSortBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnSortText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnSave";
+        BtnSaveBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnSaveText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnResetAll";
+        BtnResetAllBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnResetAllText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnClearOut";
+        BtnClearOutBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnClearOutText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnClose";
+        BtnCloseBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnCloseText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnSortHeader";
+        BtnSortHeaderBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnSortHeaderText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "TabRules";
+        TabRulesBg = FindBtnChildBg(m_LayoutRoot, bn);
+        TabRulesText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "TabPreview";
+        TabPreviewBg = FindBtnChildBg(m_LayoutRoot, bn);
+        TabPreviewText = FindBtnChildText(m_LayoutRoot, bn);
+    }
+
     protected void RefreshAll()
     {
+        ReBindButtons();
         RefreshOutputTabs();
         RefreshViewTabs();
         RefreshCategoryButtons();
@@ -1090,6 +1142,9 @@ class LFPG_SorterController extends ViewController
         // v3: Refresh edit hints
         LFPG_SorterView.RefreshHints();
         // Apply disabled visual after all refreshes (v2.2)
+        // v3.2: Re-bind again — RefreshRuleCount etc. called NotifyPropertyChanged
+        // which corrupts named button refs between the first ReBindButtons and here.
+        ReBindButtons();
         SetControlsEnabled(m_IsPaired);
     }
 
@@ -1284,14 +1339,14 @@ class LFPG_SorterController extends ViewController
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        RefreshToggleBtn(CatBtn0Bg, CatBtn0Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue0), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel0);
-        RefreshToggleBtn(CatBtn1Bg, CatBtn1Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue1), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel1);
-        RefreshToggleBtn(CatBtn2Bg, CatBtn2Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue2), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel2);
-        RefreshToggleBtn(CatBtn3Bg, CatBtn3Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue3), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel3);
-        RefreshToggleBtn(CatBtn4Bg, CatBtn4Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue4), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel4);
-        RefreshToggleBtn(CatBtn5Bg, CatBtn5Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue5), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel5);
-        RefreshToggleBtn(CatBtn6Bg, CatBtn6Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue6), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel6);
-        RefreshToggleBtn(CatBtn7Bg, CatBtn7Text, outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue7), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel7);
+        RefreshToggleBtn(m_CatBgs.Get(0), m_CatTexts.Get(0), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue0), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel0);
+        RefreshToggleBtn(m_CatBgs.Get(1), m_CatTexts.Get(1), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue1), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel1);
+        RefreshToggleBtn(m_CatBgs.Get(2), m_CatTexts.Get(2), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue2), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel2);
+        RefreshToggleBtn(m_CatBgs.Get(3), m_CatTexts.Get(3), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue3), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel3);
+        RefreshToggleBtn(m_CatBgs.Get(4), m_CatTexts.Get(4), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue4), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel4);
+        RefreshToggleBtn(m_CatBgs.Get(5), m_CatTexts.Get(5), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue5), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel5);
+        RefreshToggleBtn(m_CatBgs.Get(6), m_CatTexts.Get(6), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue6), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel6);
+        RefreshToggleBtn(m_CatBgs.Get(7), m_CatTexts.Get(7), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue7), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel7);
     }
 
     protected void RefreshSlotButtons()
@@ -1302,10 +1357,10 @@ class LFPG_SorterController extends ViewController
         string lblSmall = "Small";
         string lblMed = "Med";
         string lblLarge = "Large";
-        RefreshToggleBtn(SlotPre0Bg, SlotPre0Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_TINY), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblTiny);
-        RefreshToggleBtn(SlotPre1Bg, SlotPre1Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_SMALL), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblSmall);
-        RefreshToggleBtn(SlotPre2Bg, SlotPre2Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_MEDIUM), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblMed);
-        RefreshToggleBtn(SlotPre3Bg, SlotPre3Text, outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_LARGE), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblLarge);
+        RefreshToggleBtn(m_SlotBgs.Get(0), m_SlotTexts.Get(0), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_TINY), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblTiny);
+        RefreshToggleBtn(m_SlotBgs.Get(1), m_SlotTexts.Get(1), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_SMALL), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblSmall);
+        RefreshToggleBtn(m_SlotBgs.Get(2), m_SlotTexts.Get(2), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_MEDIUM), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblMed);
+        RefreshToggleBtn(m_SlotBgs.Get(3), m_SlotTexts.Get(3), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_LARGE), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblLarge);
     }
 
     // Unified toggle button refresh: active/inactive with custom active colors
