@@ -147,7 +147,8 @@ class LFPG_SorterView extends ScriptView
     static const int COL_PAIRING_OK   = 0x5034D399;
     static const int COL_PAIRING_ERR  = 0x50F87171;
     // v3: New constants
-    static const int COL_BG_SECTION_CARD = 0x08FFFFFF;
+    // v3.2: Was 0x08FFFFFF (alpha 3% = invisible in DayZ, threshold is 0x30)
+    static const int COL_BG_SECTION_CARD = 0x40FFFFFF;
     static const int COL_BG_RULES_PANEL  = 0xFF1E2B41;
     static const int COL_RED_BTN_SOFT    = 0x26F87171;
     static const int COL_RED_BTN_BORDER  = 0x40F87171;
@@ -196,9 +197,9 @@ class LFPG_SorterView extends ScriptView
             float newX = mx - m_DragOffX;
             float newY = my - m_DragOffY;
             // Clamp to screen bounds
-            int scrW = 0;
-            int scrH = 0;
-            GetScreenSize(scrW, scrH);
+            // v3.2: Use logical screen size (DPI-safe)
+            float scrWf = LFPG_UIScaler.GetLogicalW();
+            float scrHf = LFPG_UIScaler.GetLogicalH();
             float panW = 0.0;
             float panH = 0.0;
             if (SorterPanel)
@@ -216,8 +217,8 @@ class LFPG_SorterView extends ScriptView
             {
                 newY = 5.0;
             }
-            float maxX = scrW - panW;
-            float maxY = scrH - panH;
+            float maxX = scrWf - panW;
+            float maxY = scrHf - panH;
             // v2.6: At very low resolutions, max could be < min.
             // Clamp to min values so the panel stays on screen.
             if (maxX < 0.0)
@@ -965,14 +966,14 @@ class LFPG_SorterView extends ScriptView
     {
         if (!SorterPanel)
             return;
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
+        // v3.2: Use logical screen size (DPI-safe)
+        float scrWf = LFPG_UIScaler.GetLogicalW();
+        float scrHf = LFPG_UIScaler.GetLogicalH();
         float panW = 0.0;
         float panH = 0.0;
         SorterPanel.GetSize(panW, panH);
-        float cx = (scrW - panW) * 0.5;
-        float cy = (scrH - panH) * 0.5;
+        float cx = (scrWf - panW) * 0.5;
+        float cy = (scrHf - panH) * 0.5;
         // E8: Clamp for resolutions smaller than panel
         if (cx < 0.0)
         {
@@ -1006,7 +1007,8 @@ class LFPG_SorterView extends ScriptView
                 string pairedLabel = badgePrefix;
                 pairedLabel = pairedLabel + containerDisplayName;
                 PairingBadgeText.SetText(pairedLabel);
-                PairingBadgeText.SetColor(COL_GREEN);
+                // v3.2: Was COL_GREEN — unreadable on COL_PAIRING_OK green bg
+                PairingBadgeText.SetColor(COL_TEXT);
             }
         }
         else
@@ -1227,6 +1229,10 @@ class LFPG_SorterView extends ScriptView
         // v2.5 B3: Apply resolution scaling BEFORE centering.
         // Apply reads from captured design values (never accumulates error).
         // CenterPanel then reads the scaled SorterPanel size to center correctly.
+        // v3.2: Detect logical screen size from root widget (DPI-safe).
+        // root is SorterRoot (size 1 1, fullscreen) — its rendered size
+        // gives us the actual viewport in widget coordinates.
+        LFPG_UIScaler.DetectLogicalSize(root);
         float uiScale = LFPG_UIScaler.ComputeScale();
         LFPG_UIScaler.Apply(uiScale);
         CenterPanel();

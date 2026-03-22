@@ -432,8 +432,26 @@ modded class Hologram
         // +Y outward from wall so symbol faces the player.
         if (projection.IsKindOf("LFPG_LogicGate_Kit"))
             return 90.0;
+        // Switches: SwitchV2 (lever) face is +Y → -90° pitches outward.
+        // SwitchRemote (button) has opposite local orientation → +90°.
         if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
             return 90.0;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return -90.0;
+        return 0.0;
+    }
+
+    // ---- Helper: per-kit WALL roll offset (degrees) ----
+    // Applied in wall mode to flip model 180° around its facing axis
+    // so labels/displays read correctly (not upside-down).
+    protected float LFPG_GetKitWallRollOffset(EntityAI projection)
+    {
+        if (!projection)
+            return 0.0;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return 180.0;
+        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
+            return 180.0;
         return 0.0;
     }
 
@@ -459,7 +477,69 @@ modded class Hologram
             return 0.05;
         if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
             return 0.04;
+        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
+            return 0.04;
         return LFPG_HOLO_SURFACE_OFFSET;
+    }
+
+    // ---- Helper: per-kit FLOOR Y offset (metres) ----
+    // Replaces the global LFPG_HOLO_FLOOR_GROUND_SNAP for specific kits.
+    // PressurePad is very thin and clips into terrain at 0.05m.
+    protected float LFPG_GetKitFloorYOffset(EntityAI projection)
+    {
+        if (!projection)
+            return LFPG_HOLO_FLOOR_GROUND_SNAP;
+        if (projection.IsKindOf("LFPG_PressurePad_Kit"))
+            return 0.015;
+        return LFPG_HOLO_FLOOR_GROUND_SNAP;
+    }
+
+    // ---- Helper: does this kit adapt orientation to terrain slope? ----
+    // PressurePad should lie flat on slopes, not always world-horizontal.
+    protected bool LFPG_KitAdaptsToTerrain(EntityAI projection)
+    {
+        if (!projection)
+            return false;
+        if (projection.IsKindOf("LFPG_PressurePad_Kit"))
+            return true;
+        return false;
+    }
+
+    // ---- Helper: compute orientation from terrain normal ----
+    // Converts a surface normal into yaw/pitch/roll so the kit
+    // lies flush with the ground surface. Adds scroll rotation.
+    // Uses only Math.Atan2 (verified Enforce API).
+    protected vector LFPG_CalcTerrainOrientation(vector normal)
+    {
+        // Pitch and roll from normal (Y-up convention)
+        // pitch = tilt forward/back, roll = tilt left/right
+        float nX = normal[0];
+        float nY = normal[1];
+        float nZ = normal[2];
+
+        if (nY < 0.01)
+        {
+            return LFPG_CalcFloorOrientation();
+        }
+
+        float pitch = Math.Atan2(-nZ, nY) * Math.RAD2DEG;
+        float roll = Math.Atan2(nX, nY) * Math.RAD2DEG;
+
+        // Yaw from scroll rotation + default orientation
+        vector defOri = GetDefaultOrientation();
+        vector scrollRot = GetProjectionRotation();
+        float yaw = defOri[0] + scrollRot[0];
+
+        if (yaw > 180.0)
+        {
+            yaw = yaw - 360.0;
+        }
+        if (yaw < -180.0)
+        {
+            yaw = yaw + 360.0;
+        }
+
+        return Vector(yaw, pitch, roll);
     }
 
     // ============================================
@@ -591,17 +671,29 @@ modded class Hologram
             // Skip the expensive ground-snap raycast in that case.
             vector floorPos;
             float flatFloorThreshold = 0.9;
+            float kitFloorY = LFPG_GetKitFloorYOffset(projection);
             if (rawNormalY > flatFloorThreshold)
             {
                 // Pure flat floor: use hitPos directly with small Y offset
-                floorPos = Vector(hitPos[0], hitPos[1] + LFPG_HOLO_FLOOR_GROUND_SNAP, hitPos[2]);
+                floorPos = Vector(hitPos[0], hitPos[1] + kitFloorY, hitPos[2]);
             }
             else
             {
                 // Angled floor (ramp/slope): ground-snap for precision
                 floorPos = LFPG_GroundSnap(hitPos);
+                floorPos = Vector(floorPos[0], floorPos[1] + kitFloorY - LFPG_HOLO_FLOOR_GROUND_SNAP, floorPos[2]);
             }
-            vector floorOri = LFPG_CalcFloorOrientation();
+
+            // Orientation: adapt to terrain normal for floor-hugging kits
+            vector floorOri;
+            if (LFPG_KitAdaptsToTerrain(projection) && rawNormalY < 0.999)
+            {
+                floorOri = LFPG_CalcTerrainOrientation(hitNormal);
+            }
+            else
+            {
+                floorOri = LFPG_CalcFloorOrientation();
+            }
 
             // For different-model kits, apply position offset
             if (LFPG_IsDifferentModelKit())
@@ -703,7 +795,8 @@ modded class Hologram
 
         // Per-kit wall pitch (e.g. MotionSensor -90° so dome faces out)
         float wallPitchOff = LFPG_GetKitWallPitchOffset(projection);
-        vector wallOri = Vector(wallYaw, wallPitchOff, 0);
+        float wallRollOff = LFPG_GetKitWallRollOffset(projection);
+        vector wallOri = Vector(wallYaw, wallPitchOff, wallRollOff);
 
         LFPG_ApplySmoothed(wallPos, wallOri, timeslice, projection);
     }

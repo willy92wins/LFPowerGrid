@@ -144,6 +144,51 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
     }
 
     // ============================================
+    // Port world position (custom: input_1 has no p3d memory point)
+    // ============================================
+    override vector LFPG_GetPortWorldPos(string portName)
+    {
+        string memPoint;
+        if (portName == "input_0")
+        {
+            memPoint = "port_input_0";
+        }
+        else if (portName == "output_0")
+        {
+            memPoint = "port_output_0";
+        }
+        else
+        {
+            memPoint = "";
+        }
+
+        if (memPoint != "")
+        {
+            if (MemoryPointExists(memPoint))
+            {
+                return ModelToWorld(GetMemoryPointPos(memPoint));
+            }
+        }
+
+        // Fallback: virtual offsets
+        vector offset = "0 0.02 0";
+        if (portName == "input_0")
+        {
+            offset = "0 0.02 -0.04";
+        }
+        else if (portName == "input_1")
+        {
+            offset = "0.04 0.02 -0.04";
+        }
+        else if (portName == "output_0")
+        {
+            offset = "0 0.02 0.04";
+        }
+
+        return ModelToWorld(offset);
+    }
+
+    // ============================================
     // SetPowered — complex: debounce, edge, restore
     // ============================================
     override void LFPG_SetPowered(bool powered)

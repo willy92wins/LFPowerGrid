@@ -2286,17 +2286,17 @@ class LFPG_ElecGraph
 
                         if (gateIsClosed)
                         {
-                            // Override demand signal: closed gate cannot serve
-                            // downstream, so report only a small probe trickle.
-                            // Using selfConsumption (e.g. 5.0 for PressurePad)
-                            // creates a feedback loop: m_LastStableOutput=5 →
-                            // upstream allocates 5 → device fully powers on →
-                            // cable green. Probe=1.0 keeps a minimal trickle
-                            // so the gate can re-evaluate when toggled, without
-                            // powering the device (1.0 < 5.0 consumption).
-                            // Battery soft demand (charging) added on top of
-                            // probe so charging continues even with output off.
-                            float gatedDemand = LFPG_GATE_PROBE_DEMAND + node.m_SoftDemand;
+                            // v2.3: Closed gate demand = max(probe, selfCons).
+                            // Device needs enough input to power itself and run
+                            // detection logic (LaserDetector raycast, PressurePad step).
+                            // Gate only blocks downstream output, not self-powering.
+                            float selfForGate = node.m_Consumption;
+                            float baseDemand = LFPG_GATE_PROBE_DEMAND;
+                            if (selfForGate > baseDemand)
+                            {
+                                baseDemand = selfForGate;
+                            }
+                            float gatedDemand = baseDemand + node.m_SoftDemand;
                             newOutput = gatedDemand;
                             if (node.m_SoftDemand > LFPG_PROPAGATION_EPSILON)
                             {
@@ -3100,7 +3100,20 @@ class LFPG_ElecGraph
                         // false always → zero regression.
                         if (targetNode.m_GateClosed)
                         {
-                            edgeDemand = LFPG_GATE_PROBE_DEMAND;
+                            // v2.3: Gated PASSTHROUGH with self-consumption
+                            // must demand at least its consumption so it powers
+                            // up and can run its detection logic (raycast, step).
+                            // Without this, probe=1.0 < consumption=5.0 → device
+                            // stays unpowered → gate never opens → deadlock.
+                            float gateSelf = targetNode.m_Consumption;
+                            if (gateSelf > LFPG_GATE_PROBE_DEMAND)
+                            {
+                                edgeDemand = gateSelf;
+                            }
+                            else
+                            {
+                                edgeDemand = LFPG_GATE_PROBE_DEMAND;
+                            }
                         }
                         else
                         {

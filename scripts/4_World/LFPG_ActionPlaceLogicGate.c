@@ -20,6 +20,30 @@ class LFPG_ActionPlaceLogicGate : ActionPlaceObject
         m_FullBody = true;
     }
 
+    override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
+    {
+        // v2.1: Direct check instead of super.ActionCondition which
+        // returns false for logic gate kits (vanilla placement validation
+        // issue with small items). Matches proven pattern from other mods.
+        if (!player)
+            return false;
+
+        if (!item)
+            return false;
+
+        if (!player.IsPlacingLocal())
+            return false;
+
+        Hologram holo = player.GetHologramLocal();
+        if (!holo)
+            return false;
+
+        if (holo.IsColliding())
+            return false;
+
+        return true;
+    }
+
     override void SetupAnimation(ItemBase item)
     {
         if (!item)

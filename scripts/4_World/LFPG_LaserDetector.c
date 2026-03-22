@@ -199,6 +199,21 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         return Vector(dx * invLen, dy * invLen, dz * invLen);
     }
 
+    vector LFPG_GetBeamEnd()
+    {
+        vector beamStart = LFPG_GetBeamStart();
+        vector beamDir = LFPG_GetBeamDirection();
+        float len = m_BeamLength;
+        if (len < 0.01)
+        {
+            len = 0.01;
+        }
+        float eX = beamStart[0] + beamDir[0] * len;
+        float eY = beamStart[1] + beamDir[1] * len;
+        float eZ = beamStart[2] + beamDir[2] * len;
+        return Vector(eX, eY, eZ);
+    }
+
     // ============================================
     // Beam raycast (called by NM centralized tick)
     // ============================================

@@ -1930,6 +1930,17 @@ modded class PlayerBase
                     // Re-register to heal stale DeviceRegistry refs.
                     // Only when we have the confirmed server-side ID.
                     LFPG_DeviceRegistry.Get().Register(resolvedObj, resolvedId);
+
+                    // v1.1 (JIP Fix): Force SyncVar re-replication.
+                    // When a JIP client enters a device's bubble, the engine
+                    // may deliver default SyncVar values (m_SourceOn=false,
+                    // m_PoweredNet=false). This causes: no CompEM effects
+                    // (smoke/sound) on generators, IDLE cable colors on
+                    // CableRenderer. SetSynchDirty forces the engine to
+                    // re-queue ALL SyncVars on the next network tick.
+                    // Each device in the bubble sends its own RequestDeviceSync,
+                    // so this covers generators, consumers, and passthroughs.
+                    resolvedObj.SetSynchDirty();
                 }
             }
         }

@@ -743,6 +743,7 @@ FrameWidgetClass SorterRoot {
 					hexactsize 1
 					vexactsize 1
 					clipchildren 1
+					ignorepointer 1
 					{
 						// ── Section card: Category (A) ──
 						ImageWidgetClass CatSectionBg {
@@ -2308,6 +2309,7 @@ FrameWidgetClass SorterRoot {
 							vexactpos 1
 							hexactsize 1
 							vexactsize 1
+							visible 0
 							{
 								ImageWidgetClass BtnSortBg {
 									position 0 0

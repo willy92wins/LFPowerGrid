@@ -13,13 +13,8 @@ class CfgSlots
         displayName = "Nails";
         ghostIcon = "missing";
     };
-    // v3.1.0: Intercom radio slot (PersonalRadio attachment for T2 upgrade)
-    class Slot_LF_IntercomRadio
-    {
-        name = "LF_IntercomRadio";
-        displayName = "Personal Radio";
-        ghostIcon = "missing";
-    };
+    // v3.1.0: Intercom radio slot — uses vanilla WalkieTalkie slot.
+    // No custom slot needed; PersonalRadio already has inventorySlot="WalkieTalkie".
     // v1.1.0: Water Pump slots
     class Slot_LF_PumpPlate
     {
@@ -804,9 +799,8 @@ class CfgVehicles
     // Overriding scalar to array crashes the config (engine bug T148506).
 
     // v3.1.0: PersonalRadio — NO override needed.
-    // Radio install uses action-based system (LFPG_ActionInstallMic),
-    // not inventory drag-and-drop. Overriding inventorySlot would break
-    // compatibility with clothing mods (Forward Operator Gear, etc).
+    // Vanilla inventorySlot="WalkieTalkie". Intercom uses attachments[]={"WalkieTalkie"}
+    // so PersonalRadio attaches directly. Compatible with Forward Operator Gear etc.
 
     // =========================================================
     // v1.1.0: WATER PUMP (PASSTHROUGH, filter + tank)
@@ -1757,7 +1751,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"LF_IntercomRadio"};
+        attachments[] = {"WalkieTalkie"};
 
         hiddenSelections[] = {"camo", "camoscreen", "light_led", "light_led2", "microphone"};
         hiddenSelectionsTextures[] =

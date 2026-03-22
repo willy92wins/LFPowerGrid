@@ -8,11 +8,11 @@
 // Requirements:
 //   - Player holds Screwdriver in hands
 //   - Target: LF_Intercom with m_RadioInstalled == false
-//   - LF_Intercom has a PersonalRadio in its LF_IntercomRadio slot
+//   - LF_Intercom has a PersonalRadio in its WalkieTalkie slot
 //
 // On completion (server):
 //   1. Set m_RadioInstalled = true (locks slot via CanReleaseAttachment)
-//   2. Delete PersonalRadio from intercom attachment slot (consumed)
+//   2. Radio stays in slot, locked (visible but not removable)
 //   3. Set m_FrequencyIndex = 0 (default 87.8 MHz)
 //   4. Show microphone (SetObjectTexture on hiddenSelection 4)
 //   5. If powered+switchOn -> spawn ghost radio
@@ -122,8 +122,8 @@ class LFPG_ActionInstallMic : ActionContinuousBase
         // which makes CanReleaseAttachment return false — locking the radio)
         ic.LFPG_InstallRadio();
 
-        // Delete the radio from slot (consumed permanently)
-        GetGame().ObjectDelete(radio);
+        // Radio stays in slot, locked by CanReleaseAttachment.
+        // Player can see it but cannot remove it.
 
         PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
         if (pb)
@@ -132,7 +132,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
             pb.MessageStatus(installMsg);
         }
 
-        string logMsg = "[InstallMic] Radio consumed, T2 upgrade complete for id=";
+        string logMsg = "[InstallMic] T2 upgrade complete (radio locked) for id=";
         logMsg = logMsg + ic.LFPG_GetDeviceId();
         LFPG_Util.Info(logMsg);
     }
@@ -143,7 +143,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
         if (!ic)
             return null;
 
-        string slotName = "LF_IntercomRadio";
+        string slotName = "WalkieTalkie";
         int slotId = InventorySlots.GetSlotIdFromString(slotName);
         if (slotId == InventorySlots.INVALID)
             return null;

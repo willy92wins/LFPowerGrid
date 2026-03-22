@@ -88,11 +88,11 @@ class LFPG_SorterController extends ViewController
     TextWidget StatusLabel;
     ImageWidget StatusDot;
 
-    // Output tabs
-    ImageWidget TabOut0Bg; ImageWidget TabOut1Bg; ImageWidget TabOut2Bg;
-    ImageWidget TabOut3Bg; ImageWidget TabOut4Bg; ImageWidget TabOut5Bg;
-    TextWidget TabOut0Text; TextWidget TabOut1Text; TextWidget TabOut2Text;
-    TextWidget TabOut3Text; TextWidget TabOut4Text; TextWidget TabOut5Text;
+    // Output tabs (m_ prefix prevents Dabs auto-bind from overwriting EnsureBindings refs)
+    ImageWidget m_TabOut0Bg; ImageWidget m_TabOut1Bg; ImageWidget m_TabOut2Bg;
+    ImageWidget m_TabOut3Bg; ImageWidget m_TabOut4Bg; ImageWidget m_TabOut5Bg;
+    TextWidget m_TabOut0Text; TextWidget m_TabOut1Text; TextWidget m_TabOut2Text;
+    TextWidget m_TabOut3Text; TextWidget m_TabOut4Text; TextWidget m_TabOut5Text;
     // View tabs
     ImageWidget TabRulesBg; ImageWidget TabPreviewBg;
     TextWidget TabRulesText; TextWidget TabPreviewText;
@@ -187,23 +187,23 @@ class LFPG_SorterController extends ViewController
 
         // ── Output tabs (child-walk, overwrite any auto-bind) ──
         bn = "TabOut0";
-        TabOut0Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut0Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut0Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut0Text = FindBtnChildText(layoutRoot, bn);
         bn = "TabOut1";
-        TabOut1Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut1Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut1Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut1Text = FindBtnChildText(layoutRoot, bn);
         bn = "TabOut2";
-        TabOut2Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut2Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut2Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut2Text = FindBtnChildText(layoutRoot, bn);
         bn = "TabOut3";
-        TabOut3Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut3Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut3Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut3Text = FindBtnChildText(layoutRoot, bn);
         bn = "TabOut4";
-        TabOut4Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut4Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut4Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut4Text = FindBtnChildText(layoutRoot, bn);
         bn = "TabOut5";
-        TabOut5Bg = FindBtnChildBg(layoutRoot, bn);
-        TabOut5Text = FindBtnChildText(layoutRoot, bn);
+        m_TabOut5Bg = FindBtnChildBg(layoutRoot, bn);
+        m_TabOut5Text = FindBtnChildText(layoutRoot, bn);
 
         // ── View tabs ──
         bn = "TabRules";
@@ -481,13 +481,13 @@ class LFPG_SorterController extends ViewController
         if (CatBtn0Text) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut1Text=";
-        if (TabOut1Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabOut1Text) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut3Text=";
-        if (TabOut3Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabOut3Text) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         diagBindings = diagBindings + " TabOut5Text=";
-        if (TabOut5Text) { diagBindings = diagBindings + "OK"; }
+        if (m_TabOut5Text) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         LFPG_Util.Info(diagBindings);
 
@@ -1194,16 +1194,16 @@ class LFPG_SorterController extends ViewController
 
     protected ImageWidget GetTabBg(int idx)
     {
-        if (idx == 0) return TabOut0Bg; if (idx == 1) return TabOut1Bg;
-        if (idx == 2) return TabOut2Bg; if (idx == 3) return TabOut3Bg;
-        if (idx == 4) return TabOut4Bg; if (idx == 5) return TabOut5Bg;
+        if (idx == 0) return m_TabOut0Bg; if (idx == 1) return m_TabOut1Bg;
+        if (idx == 2) return m_TabOut2Bg; if (idx == 3) return m_TabOut3Bg;
+        if (idx == 4) return m_TabOut4Bg; if (idx == 5) return m_TabOut5Bg;
         return null;
     }
     protected TextWidget GetTabText(int idx)
     {
-        if (idx == 0) return TabOut0Text; if (idx == 1) return TabOut1Text;
-        if (idx == 2) return TabOut2Text; if (idx == 3) return TabOut3Text;
-        if (idx == 4) return TabOut4Text; if (idx == 5) return TabOut5Text;
+        if (idx == 0) return m_TabOut0Text; if (idx == 1) return m_TabOut1Text;
+        if (idx == 2) return m_TabOut2Text; if (idx == 3) return m_TabOut3Text;
+        if (idx == 4) return m_TabOut4Text; if (idx == 5) return m_TabOut5Text;
         return null;
     }
 
