@@ -1,20 +1,17 @@
 // =========================================================
-// LF_PowerGrid - Water Pump device (v1.1.0)
+// LF_PowerGrid - Water Pump device (v4.0 Refactor)
 //
-// LF_WaterPump_Kit:  DeployableContainer_Base pattern (like Solar Panel Kit).
-//                    Box model in hands -> hologram shows T1 pump model.
-//                    Config: SingleUseActions={527}, ContinuousActions={231}
-//                    Hologram: 5 overrides in LFPG_HologramMod.c
-//
+// LF_WaterPump_Kit:  DeployableContainer_Base pattern (box → hologram).
 // LF_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
 // LF_WaterPump_T2:   PASSTHROUGH, 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
 //
-// ENFORCE SCRIPT NOTES:
-//   - No ternary operators, No ++ / --, Explicit typing, No foreach
+// v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+//   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
+//   WaterPump_T2 is independent (NOT inherited from T1).
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT: DeployableContainer_Base pattern (different-model hologram)
+// KIT: DeployableContainer_Base pattern (unchanged)
 // ---------------------------------------------------------
 class LF_WaterPump_Kit : DeployableContainer_Base
 {
@@ -43,27 +40,32 @@ class LF_WaterPump_Kit : DeployableContainer_Base
 
         string tLog = "[WaterPump_Kit] OnPlacementComplete: param=";
         tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=" + GetPosition().ToString();
+        tLog = tLog + " kitPos=";
+        tLog = tLog + GetPosition().ToString();
         LFPG_Util.Info(tLog);
 
-        EntityAI pump = GetGame().CreateObjectEx("LF_WaterPump", finalPos, ECE_CREATEPHYSICS);
+        string className = "LF_WaterPump";
+        EntityAI pump = GetGame().CreateObjectEx(className, finalPos, ECE_CREATEPHYSICS);
         if (pump)
         {
             pump.SetPosition(finalPos);
             pump.SetOrientation(finalOri);
             pump.Update();
 
-            string deployMsg = "[WaterPump_Kit] Deployed LF_WaterPump at " + finalPos.ToString();
+            string deployMsg = "[WaterPump_Kit] Deployed LF_WaterPump at ";
+            deployMsg = deployMsg + finalPos.ToString();
             LFPG_Util.Info(deployMsg);
             GetGame().ObjectDelete(this);
         }
         else
         {
-            LFPG_Util.Error("[WaterPump_Kit] Failed to create LF_WaterPump! Kit preserved.");
+            string errKit = "[WaterPump_Kit] Failed to create LF_WaterPump! Kit preserved.";
+            LFPG_Util.Error(errKit);
             PlayerBase pb = PlayerBase.Cast(player);
             if (pb)
             {
-                pb.MessageStatus("[LFPG] Water Pump placement failed. Kit preserved.");
+                string errPlayer = "[LFPG] Water Pump placement failed. Kit preserved.";
+                pb.MessageStatus(errPlayer);
             }
         }
         #endif
@@ -96,30 +98,41 @@ class LF_WaterPump_Kit : DeployableContainer_Base
 };
 
 // ---------------------------------------------------------
-// WATER PUMP T1: PASSTHROUGH (1 IN + 1 OUT)
-// Self-consumption: 50 u/s, Throughput cap: 100 u/s
+// WATER PUMP T1: PASSTHROUGH : LFPG_WireOwnerBase
+// 1 IN + 1 OUT, 50 u/s self-consumption, 100 u/s cap
 // ---------------------------------------------------------
-class LF_WaterPump : Inventory_Base
+class LF_WaterPump : LFPG_WireOwnerBase
 {
-    protected int m_DeviceIdLow = 0;
-    protected int m_DeviceIdHigh = 0;
-    protected string m_DeviceId;
-    protected ref array<ref LFPG_WireData> m_Wires;
-    protected bool m_PoweredNet = false;
-    protected bool m_Overloaded = false;
-    protected bool m_LFPG_Deleting = false;
-    protected float m_FilterLastRealMs = 0.0;
+    // ---- Device-specific SyncVars ----
+    protected bool m_PoweredNet        = false;
+    protected bool m_Overloaded        = false;
     protected bool m_HasSprinklerOutput = false;
+
+    // ---- Server-only (not SyncVars, not persisted) ----
+    protected float m_FilterLastRealMs = 0.0;
+
+    // ---- Client sound ----
     protected EffectSound m_PumpLoopSound;
 
+    // ============================================
+    // Constructor — ports + SyncVars
+    // ============================================
     void LF_WaterPump()
     {
-        m_Wires = new array<ref LFPG_WireData>;
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableBool("m_Overloaded");
+        string pIn = "input_1";
+        string lIn = "Input";
+        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
+
+        string pOut = "output_1";
+        string lOut = "Output";
+        LFPG_AddPort(pOut, LFPG_PortDir.OUT, lOut);
+
+        string varPowered = "m_PoweredNet";
+        string varOverloaded = "m_Overloaded";
         string varSprOut = "m_HasSprinklerOutput";
+
+        RegisterNetSyncVariableBool(varPowered);
+        RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableBool(varSprOut);
     }
 
@@ -132,118 +145,191 @@ class LF_WaterPump : Inventory_Base
         }
     }
 
+    // ============================================
+    // SetActions
+    // ============================================
     override void SetActions()
     {
         super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
         AddAction(LFPG_ActionDrinkPump);
         AddAction(LFPG_ActionWashHandsPump);
     }
 
-    bool LFPG_IsGateOpen() { return true; }
-
-    override bool CanPutInCargo(EntityAI parent) { return false; }
-    override bool CanPutIntoHands(EntityAI parent) { return false; }
-    override bool CanBePlaced(Man player, vector position) { return false; }
-    override bool IsHeavyBehaviour() { return false; }
-
+    // ============================================
+    // Attachment override
+    // ============================================
     override bool CanReleaseAttachment(EntityAI attachment)
     {
         return super.CanReleaseAttachment(attachment);
     }
 
-    override void EEInit()
+    // ============================================
+    // Virtual interface — PASSTHROUGH
+    // ============================================
+    override int LFPG_GetDeviceType()
     {
-        super.EEInit();
+        return LFPG_DeviceType.PASSTHROUGH;
+    }
+
+    override float LFPG_GetConsumption()
+    {
+        return LFPG_PUMP_CONSUMPTION;
+    }
+
+    override float LFPG_GetCapacity()
+    {
+        return LFPG_PUMP_CAPACITY;
+    }
+
+    override bool LFPG_IsSource()
+    {
+        return true;
+    }
+
+    override bool LFPG_GetSourceOn()
+    {
+        return m_PoweredNet;
+    }
+
+    override bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
+    }
+
+    bool LFPG_GetPoweredNet()
+    {
+        return m_PoweredNet;
+    }
+
+    override void LFPG_SetPowered(bool powered)
+    {
         #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
-        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
+        if (m_PoweredNet == powered)
+            return;
+
+        m_PoweredNet = powered;
         SetSynchDirty();
+
+        string msg = "[LF_WaterPump] SetPowered(";
+        msg = msg + powered.ToString();
+        msg = msg + ") id=";
+        msg = msg + m_DeviceId;
+        LFPG_Util.Debug(msg);
+
+        string noRemoved = "";
+        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
+        #endif
+    }
+
+    override bool LFPG_GetOverloaded()
+    {
+        return m_Overloaded;
+    }
+
+    override void LFPG_SetOverloaded(bool val)
+    {
+        #ifdef SERVER
+        if (m_Overloaded != val)
+        {
+            m_Overloaded = val;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ============================================
+    // Lifecycle hooks
+    // ============================================
+    override void LFPG_OnInitDevice()
+    {
+        #ifdef SERVER
         m_FilterLastRealMs = GetGame().GetTime();
         #endif
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-        #ifdef SERVER
-        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
-        #endif
     }
 
-    override void EEKilled(Object killer)
+    override void LFPG_OnKilled()
     {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
         #ifdef SERVER
-        if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
-        #endif
-        super.EEKilled(killer);
-    }
-
-    override void EEDelete(EntityAI parent)
-    {
-        m_LFPG_Deleting = true;
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-        if (m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
-        super.EEDelete(parent);
-    }
-
-    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
-    {
-        super.EEItemLocationChanged(oldLoc, newLoc);
-        #ifdef SERVER
-        if (m_DeviceId == "") return;
-        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
-        if (wiresCut)
+        if (m_PoweredNet)
         {
-            if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
+            m_PoweredNet = false;
+            SetSynchDirty();
         }
         #endif
     }
 
-    override void OnVariablesSynchronized()
+    override void LFPG_OnDeleted()
     {
-        super.OnVariablesSynchronized();
-        LFPG_TryRegister();
+        if (m_PumpLoopSound)
+        {
+            m_PumpLoopSound.SoundStop();
+            m_PumpLoopSound = null;
+        }
+    }
+
+    override void LFPG_OnWiresCut()
+    {
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ============================================
+    // VarSync: LED + pump loop sound
+    // ============================================
+    override void LFPG_OnVarSyncDevice()
+    {
         #ifndef SERVER
-        if (m_PoweredNet) { SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_ON); }
-        else { SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_OFF); }
+        if (m_PoweredNet)
+        {
+            SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_ON);
+        }
+        else
+        {
+            SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_OFF);
+        }
+
         if (m_PoweredNet && !m_PumpLoopSound)
         {
             m_PumpLoopSound = SEffectManager.PlaySound(LFPG_PUMP_LOOP_SOUNDSET, GetPosition());
-            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(false); }
-        }
-        if (!m_PoweredNet && m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
-        if (m_DeviceId != "")
-        {
-            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
-            if (r)
+            if (m_PumpLoopSound)
             {
-                r.RequestDeviceSync(m_DeviceId, this);
-                if (r.HasOwnerData(m_DeviceId)) { r.NotifyOwnerVisualChanged(m_DeviceId); }
+                m_PumpLoopSound.SetAutodestroy(false);
             }
+        }
+
+        if (!m_PoweredNet && m_PumpLoopSound)
+        {
+            m_PumpLoopSound.SoundStop();
+            m_PumpLoopSound = null;
         }
         #endif
     }
 
-    protected void LFPG_UpdateDeviceIdString() { m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh); }
-    protected void LFPG_TryRegister()
+    // No extra persistence (PASSTHROUGH: ids + deviceVer + wireJSON from base)
+
+    // ============================================
+    // Filter degradation
+    // ============================================
+    float LFPG_GetFilterLastMs()
     {
-        if (m_LFPG_Deleting) return;
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
-        if (oldId != "" && oldId != m_DeviceId) { LFPG_DeviceRegistry.Get().Unregister(oldId, this); }
-        if (m_DeviceId != "") { LFPG_DeviceRegistry.Get().Register(this, m_DeviceId); }
+        return m_FilterLastRealMs;
     }
 
-    float LFPG_GetFilterLastMs() { return m_FilterLastRealMs; }
-    void LFPG_SetFilterLastMs(float ms) { m_FilterLastRealMs = ms; }
+    void LFPG_SetFilterLastMs(float ms)
+    {
+        m_FilterLastRealMs = ms;
+    }
 
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        EntityAI filter = FindAttachmentBySlotName("LF_PumpFilter");
+        string slotName = "LF_PumpFilter";
+        EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;
 
@@ -265,10 +351,18 @@ class LF_WaterPump : Inventory_Base
         #endif
     }
 
-    bool LFPG_HasActiveFilter() { return LFPG_PumpHelper.HasActiveFilter(this); }
+    bool LFPG_HasActiveFilter()
+    {
+        return LFPG_PumpHelper.HasActiveFilter(this);
+    }
 
-    // ---- Sprinkler output state (set by NM tick, synced to client) ----
-    bool LFPG_GetHasSprinklerOutput() { return m_HasSprinklerOutput; }
+    // ============================================
+    // Sprinkler output state
+    // ============================================
+    bool LFPG_GetHasSprinklerOutput()
+    {
+        return m_HasSprinklerOutput;
+    }
 
     void LFPG_SetHasSprinklerOutput(bool val)
     {
@@ -281,352 +375,311 @@ class LF_WaterPump : Inventory_Base
         #endif
     }
 
-    // ---- Device interface (2 ports) ----
-    string LFPG_GetDeviceId() { return m_DeviceId; }
-    int LFPG_GetPortCount() { return 2; }
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0) return "input_1";
-        if (idx == 1) return "output_1";
-        return "";
-    }
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0) return LFPG_PortDir.IN;
-        if (idx == 1) return LFPG_PortDir.OUT;
-        return -1;
-    }
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0) return "Input";
-        if (idx == 1) return "Output";
-        return "";
-    }
-    bool LFPG_HasPort(string portName, int dir)
-    {
-        if (dir == LFPG_PortDir.IN && portName == "input_1") return true;
-        if (dir == LFPG_PortDir.OUT && portName == "output_1") return true;
-        return false;
-    }
-
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        string memPoint = "port_" + portName;
-        if (MemoryPointExists(memPoint)) { return ModelToWorld(GetMemoryPointPos(memPoint)); }
-        int len = portName.Length();
-        if (len >= 3)
-        {
-            string lastChar = portName.Substring(len - 1, 1);
-            string beforeLast = portName.Substring(len - 2, 1);
-            if (beforeLast == "_")
-            {
-                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
-                if (MemoryPointExists(compact)) { return ModelToWorld(GetMemoryPointPos(compact)); }
-            }
-        }
-        if (MemoryPointExists(portName)) { return ModelToWorld(GetMemoryPointPos(portName)); }
-        LFPG_Util.Warn("[LF_WaterPump] Missing memory point for port: " + portName);
-        vector p = GetPosition(); p[1] = p[1] + 0.5; return p;
-    }
-
-    int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
-    bool LFPG_IsSource() { return true; }
-    bool LFPG_GetSourceOn() { return m_PoweredNet; }
-    float LFPG_GetConsumption() { return LFPG_PUMP_CONSUMPTION; }
-    float LFPG_GetCapacity() { return LFPG_PUMP_CAPACITY; }
-    bool LFPG_IsPowered() { return m_PoweredNet; }
-    bool LFPG_GetPoweredNet() { return m_PoweredNet; }
-
-    void LFPG_SetPowered(bool powered)
-    {
-        #ifdef SERVER
-        if (m_PoweredNet == powered) return;
-        m_PoweredNet = powered;
-        SetSynchDirty();
-        LFPG_Util.Debug("[LF_WaterPump] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId);
-        // v5.1: Instant sprinkler state update on power change
-        string noRemoved = "";
-        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
-        #endif
-    }
-
-    bool LFPG_GetOverloaded() { return m_Overloaded; }
-    void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val) { m_Overloaded = val; SetSynchDirty(); }
-        #endif
-    }
-
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
-    {
-        if (!other) return false;
-        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT)) return false;
-        EntityAI otherEntity = EntityAI.Cast(other);
-        if (!otherEntity) return false;
-        string otherId = LFPG_DeviceAPI.GetDeviceId(otherEntity);
-        if (otherId != "") { return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN); }
-        return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
-    }
-
-    // ---- Vanilla water overrides (server: graph-verified, client: SyncVar) ----
+    // ============================================
+    // Vanilla water overrides
+    // ============================================
     override int GetLiquidSourceType()
     {
-        if (!LFPG_PumpHelper.VerifyPowered(this)) return LIQUID_NONE;
-        if (LFPG_HasActiveFilter()) return LIQUID_CLEANWATER;
+        if (!LFPG_PumpHelper.VerifyPowered(this))
+            return LIQUID_NONE;
+        if (LFPG_HasActiveFilter())
+            return LIQUID_CLEANWATER;
         return LIQUID_RIVERWATER;
     }
+
     override int GetWaterSourceObjectType()
     {
-        if (!LFPG_PumpHelper.VerifyPowered(this)) return EWaterSourceObjectType.NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this))
+            return EWaterSourceObjectType.NONE;
         return EWaterSourceObjectType.WELL;
     }
-    override bool IsWell() { return LFPG_PumpHelper.VerifyPowered(this); }
-    override float GetLiquidThroughputCoef() { return LIQUID_THROUGHPUT_WELL; }
 
-    // ---- Wire ownership API ----
-    bool LFPG_HasWireStore() { return true; }
-    array<ref LFPG_WireData> LFPG_GetWires() { return m_Wires; }
-    string LFPG_GetWiresJSON() { return LFPG_WireHelper.GetJSON(m_Wires); }
-
-    bool LFPG_AddWire(LFPG_WireData wd)
+    override bool IsWell()
     {
-        if (!wd) return false;
-        if (wd.m_SourcePort == "") wd.m_SourcePort = "output_1";
-        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
-        { LFPG_Util.Warn("[LF_WaterPump] AddWire rejected: " + wd.m_SourcePort); return false; }
-        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-    bool LFPG_ClearWires()
-    {
-        bool r = LFPG_WireHelper.ClearAll(m_Wires);
-        if (r)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return r;
-    }
-    bool LFPG_ClearWiresForCreator(string cid)
-    {
-        bool r = LFPG_WireHelper.ClearForCreator(m_Wires, cid);
-        if (r)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return r;
+        return LFPG_PumpHelper.VerifyPowered(this);
     }
 
-    bool LFPG_PruneMissingTargets()
+    override float GetLiquidThroughputCoef()
     {
-        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
-        if (!validIds)
-        {
-            validIds = new map<string, bool>;
-            array<EntityAI> all = new array<EntityAI>;
-            LFPG_DeviceRegistry.Get().GetAll(all);
-            int vi;
-            for (vi = 0; vi < all.Count(); vi = vi + 1)
-            {
-                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
-                if (did != "") { validIds[did] = true; }
-            }
-        }
-        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    // ---- Persistence ----
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
-        string json;
-        LFPG_WireHelper.SerializeJSON(m_Wires, json);
-        ctx.Write(json);
-    }
-
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
-    {
-        if (!super.OnStoreLoad(ctx, version)) return false;
-        if (!ctx.Read(m_DeviceIdLow)) { LFPG_Util.Error("[LF_WaterPump] Load: m_DeviceIdLow"); return false; }
-        if (!ctx.Read(m_DeviceIdHigh)) { LFPG_Util.Error("[LF_WaterPump] Load: m_DeviceIdHigh"); return false; }
-        LFPG_UpdateDeviceIdString();
-        string json;
-        if (!ctx.Read(json)) { LFPG_Util.Error("[LF_WaterPump] Load: wires " + m_DeviceId); return false; }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_WaterPump");
-        return true;
+        return LIQUID_THROUGHPUT_WELL;
     }
 };
 
 // ---------------------------------------------------------
-// WATER PUMP T2: PASSTHROUGH (1 IN + 3 OUT) + 50L tank
-// Independent class (NOT inherited from T1).
+// WATER PUMP T2: PASSTHROUGH : LFPG_WireOwnerBase
+// 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
+// Independent class (NOT inherited from T1)
 // ---------------------------------------------------------
-class LF_WaterPump_T2 : Inventory_Base
+class LF_WaterPump_T2 : LFPG_WireOwnerBase
 {
-    protected int m_DeviceIdLow = 0;
-    protected int m_DeviceIdHigh = 0;
-    protected string m_DeviceId;
-    protected ref array<ref LFPG_WireData> m_Wires;
-    protected bool m_PoweredNet = false;
-    protected bool m_Overloaded = false;
-    protected bool m_LFPG_Deleting = false;
+    // ---- Device-specific SyncVars ----
+    protected bool  m_PoweredNet             = false;
+    protected bool  m_Overloaded             = false;
+    protected float m_TankLevel              = 0.0;
+    protected int   m_TankLiquidType         = 0;
+    protected int   m_ConnectedSprinklerCount = 0;
+
+    // ---- Server-only ----
     protected float m_FilterLastRealMs = 0.0;
-    protected float m_TankLevel = 0.0;
-    protected int m_TankLiquidType = 0;
-    protected int m_ConnectedSprinklerCount = 0;
+
+    // ---- Client sound ----
     protected EffectSound m_PumpLoopSound;
 
+    // ============================================
+    // Constructor — ports + SyncVars
+    // ============================================
     void LF_WaterPump_T2()
     {
-        m_Wires = new array<ref LFPG_WireData>;
-        RegisterNetSyncVariableInt("m_DeviceIdLow");
-        RegisterNetSyncVariableInt("m_DeviceIdHigh");
-        RegisterNetSyncVariableBool("m_PoweredNet");
-        RegisterNetSyncVariableBool("m_Overloaded");
-        RegisterNetSyncVariableFloat("m_TankLevel", 0.0, 50.0, 8);
-        RegisterNetSyncVariableInt("m_TankLiquidType");
-        string varSprCnt = "m_ConnectedSprinklerCount";
+        string pIn = "input_1";
+        string lIn = "Input 1";
+        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
+
+        string pO1 = "output_1";
+        string lO1 = "Output 1";
+        LFPG_AddPort(pO1, LFPG_PortDir.OUT, lO1);
+
+        string pO2 = "output_2";
+        string lO2 = "Output 2";
+        LFPG_AddPort(pO2, LFPG_PortDir.OUT, lO2);
+
+        string pO3 = "output_3";
+        string lO3 = "Output 3";
+        LFPG_AddPort(pO3, LFPG_PortDir.OUT, lO3);
+
+        string varPowered    = "m_PoweredNet";
+        string varOverloaded = "m_Overloaded";
+        string varTankLevel  = "m_TankLevel";
+        string varTankLiq    = "m_TankLiquidType";
+        string varSprCnt     = "m_ConnectedSprinklerCount";
+
+        RegisterNetSyncVariableBool(varPowered);
+        RegisterNetSyncVariableBool(varOverloaded);
+        RegisterNetSyncVariableFloat(varTankLevel, 0.0, 50.0, 8);
+        RegisterNetSyncVariableInt(varTankLiq);
         RegisterNetSyncVariableInt(varSprCnt);
     }
 
     void ~LF_WaterPump_T2()
     {
-        if (m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
+        if (m_PumpLoopSound)
+        {
+            m_PumpLoopSound.SoundStop();
+            m_PumpLoopSound = null;
+        }
     }
 
+    // ============================================
+    // SetActions
+    // ============================================
     override void SetActions()
     {
         super.SetActions();
-        RemoveAction(ActionTakeItem);
-        RemoveAction(ActionTakeItemToHands);
         AddAction(LFPG_ActionDrinkPump);
         AddAction(LFPG_ActionWashHandsPump);
         AddAction(LFPG_ActionFillPump);
     }
 
-    bool LFPG_IsGateOpen() { return true; }
-
-    override bool CanPutInCargo(EntityAI parent) { return false; }
-    override bool CanPutIntoHands(EntityAI parent) { return false; }
-    override bool CanBePlaced(Man player, vector position) { return false; }
-    override bool IsHeavyBehaviour() { return false; }
-
+    // ============================================
+    // Attachment override
+    // ============================================
     override bool CanReleaseAttachment(EntityAI attachment)
     {
         return super.CanReleaseAttachment(attachment);
     }
 
-    override void EEInit()
+    // ============================================
+    // Virtual interface — PASSTHROUGH
+    // ============================================
+    override int LFPG_GetDeviceType()
     {
-        super.EEInit();
+        return LFPG_DeviceType.PASSTHROUGH;
+    }
+
+    override float LFPG_GetConsumption()
+    {
+        return LFPG_PUMP_CONSUMPTION;
+    }
+
+    override float LFPG_GetCapacity()
+    {
+        return LFPG_PUMP_CAPACITY;
+    }
+
+    override bool LFPG_IsSource()
+    {
+        return true;
+    }
+
+    override bool LFPG_GetSourceOn()
+    {
+        return m_PoweredNet;
+    }
+
+    override bool LFPG_IsPowered()
+    {
+        return m_PoweredNet;
+    }
+
+    bool LFPG_GetPoweredNet()
+    {
+        return m_PoweredNet;
+    }
+
+    override void LFPG_SetPowered(bool powered)
+    {
         #ifdef SERVER
-        if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
-        {
-            LFPG_Util.GenerateDeviceId(m_DeviceIdLow, m_DeviceIdHigh);
-        }
-        // v0.9.3 (Audit Fix #2): Unconditional SetSynchDirty for persistence load.
+        if (m_PoweredNet == powered)
+            return;
+
+        m_PoweredNet = powered;
         SetSynchDirty();
+
+        string msg = "[LF_WaterPump_T2] SetPowered(";
+        msg = msg + powered.ToString();
+        msg = msg + ") id=";
+        msg = msg + m_DeviceId;
+        LFPG_Util.Debug(msg);
+
+        string noRemoved = "";
+        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
+        #endif
+    }
+
+    override bool LFPG_GetOverloaded()
+    {
+        return m_Overloaded;
+    }
+
+    override void LFPG_SetOverloaded(bool val)
+    {
+        #ifdef SERVER
+        if (m_Overloaded != val)
+        {
+            m_Overloaded = val;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ============================================
+    // Lifecycle hooks
+    // ============================================
+    override void LFPG_OnInitDevice()
+    {
+        #ifdef SERVER
         m_FilterLastRealMs = GetGame().GetTime();
         #endif
-        LFPG_UpdateDeviceIdString();
-        LFPG_TryRegister();
-        #ifdef SERVER
-        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
-        #endif
     }
 
-    override void EEKilled(Object killer)
+    override void LFPG_OnKilled()
     {
-        LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
         #ifdef SERVER
-        if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
-        #endif
-        super.EEKilled(killer);
-    }
-
-    override void EEDelete(EntityAI parent)
-    {
-        m_LFPG_Deleting = true;
-        LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
-        if (m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
-        super.EEDelete(parent);
-    }
-
-    override void EEItemLocationChanged(notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
-    {
-        super.EEItemLocationChanged(oldLoc, newLoc);
-        #ifdef SERVER
-        if (m_DeviceId == "") return;
-        bool wiresCut = LFPG_DeviceLifecycle.OnDeviceMoved(this, m_DeviceId, oldLoc, newLoc);
-        if (wiresCut)
+        if (m_PoweredNet)
         {
-            if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
+            m_PoweredNet = false;
+            SetSynchDirty();
         }
         #endif
     }
 
-    override void OnVariablesSynchronized()
+    override void LFPG_OnDeleted()
     {
-        super.OnVariablesSynchronized();
-        LFPG_TryRegister();
+        if (m_PumpLoopSound)
+        {
+            m_PumpLoopSound.SoundStop();
+            m_PumpLoopSound = null;
+        }
+    }
+
+    override void LFPG_OnWiresCut()
+    {
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ============================================
+    // VarSync: LED + pump loop sound
+    // ============================================
+    override void LFPG_OnVarSyncDevice()
+    {
         #ifndef SERVER
-        if (m_PoweredNet) { SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_ON); }
-        else { SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_OFF); }
+        if (m_PoweredNet)
+        {
+            SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_ON);
+        }
+        else
+        {
+            SetObjectMaterial(LFPG_PUMP_LED_SELECTION_IDX, LFPG_PUMP_LED_RVMAT_OFF);
+        }
+
         if (m_PoweredNet && !m_PumpLoopSound)
         {
             m_PumpLoopSound = SEffectManager.PlaySound(LFPG_PUMP_LOOP_SOUNDSET, GetPosition());
-            if (m_PumpLoopSound) { m_PumpLoopSound.SetAutodestroy(false); }
-        }
-        if (!m_PoweredNet && m_PumpLoopSound) { m_PumpLoopSound.SoundStop(); m_PumpLoopSound = null; }
-        if (m_DeviceId != "")
-        {
-            LFPG_CableRenderer r = LFPG_CableRenderer.Get();
-            if (r)
+            if (m_PumpLoopSound)
             {
-                r.RequestDeviceSync(m_DeviceId, this);
-                if (r.HasOwnerData(m_DeviceId)) { r.NotifyOwnerVisualChanged(m_DeviceId); }
+                m_PumpLoopSound.SetAutodestroy(false);
             }
+        }
+
+        if (!m_PoweredNet && m_PumpLoopSound)
+        {
+            m_PumpLoopSound.SoundStop();
+            m_PumpLoopSound = null;
         }
         #endif
     }
 
-    protected void LFPG_UpdateDeviceIdString() { m_DeviceId = LFPG_Util.MakeDeviceKey(m_DeviceIdLow, m_DeviceIdHigh); }
-    protected void LFPG_TryRegister()
+    // ============================================
+    // Persistence: TankLevel + TankLiquidType (after wireJSON from base)
+    // ============================================
+    override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        if (m_LFPG_Deleting) return;
-        string oldId = m_DeviceId;
-        LFPG_UpdateDeviceIdString();
-        if (oldId != "" && oldId != m_DeviceId) { LFPG_DeviceRegistry.Get().Unregister(oldId, this); }
-        if (m_DeviceId != "") { LFPG_DeviceRegistry.Get().Register(this, m_DeviceId); }
+        ctx.Write(m_TankLevel);
+        ctx.Write(m_TankLiquidType);
     }
 
-    // ---- Filter degradation timer ----
-    float LFPG_GetFilterLastMs() { return m_FilterLastRealMs; }
-    void LFPG_SetFilterLastMs(float ms) { m_FilterLastRealMs = ms; }
+    override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
+    {
+        if (!ctx.Read(m_TankLevel))
+        {
+            string errTank = "[LF_WaterPump_T2] OnStoreLoad failed: m_TankLevel";
+            LFPG_Util.Error(errTank);
+            return false;
+        }
+
+        if (!ctx.Read(m_TankLiquidType))
+        {
+            string errLiq = "[LF_WaterPump_T2] OnStoreLoad failed: m_TankLiquidType";
+            LFPG_Util.Error(errLiq);
+            return false;
+        }
+
+        return true;
+    }
+
+    // ============================================
+    // Filter degradation
+    // ============================================
+    float LFPG_GetFilterLastMs()
+    {
+        return m_FilterLastRealMs;
+    }
+
+    void LFPG_SetFilterLastMs(float ms)
+    {
+        m_FilterLastRealMs = ms;
+    }
 
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        EntityAI filter = FindAttachmentBySlotName("LF_PumpFilter");
+        string slotName = "LF_PumpFilter";
+        EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;
 
@@ -648,10 +701,19 @@ class LF_WaterPump_T2 : Inventory_Base
         #endif
     }
 
-    bool LFPG_HasActiveFilter() { return LFPG_PumpHelper.HasActiveFilter(this); }
+    bool LFPG_HasActiveFilter()
+    {
+        return LFPG_PumpHelper.HasActiveFilter(this);
+    }
 
-    // ---- Tank accessors ----
-    float LFPG_GetTankLevel() { return m_TankLevel; }
+    // ============================================
+    // Tank accessors
+    // ============================================
+    float LFPG_GetTankLevel()
+    {
+        return m_TankLevel;
+    }
+
     void LFPG_SetTankLevel(float level)
     {
         #ifdef SERVER
@@ -659,7 +721,12 @@ class LF_WaterPump_T2 : Inventory_Base
         SetSynchDirty();
         #endif
     }
-    int LFPG_GetTankLiquidType() { return m_TankLiquidType; }
+
+    int LFPG_GetTankLiquidType()
+    {
+        return m_TankLiquidType;
+    }
+
     void LFPG_SetTankLiquidType(int liqType)
     {
         #ifdef SERVER
@@ -668,8 +735,13 @@ class LF_WaterPump_T2 : Inventory_Base
         #endif
     }
 
-    // ---- Sprinkler count state (set by NM tick, synced to client) ----
-    int LFPG_GetConnectedSprinklerCount() { return m_ConnectedSprinklerCount; }
+    // ============================================
+    // Sprinkler count state
+    // ============================================
+    int LFPG_GetConnectedSprinklerCount()
+    {
+        return m_ConnectedSprinklerCount;
+    }
 
     void LFPG_SetConnectedSprinklerCount(int cnt)
     {
@@ -682,214 +754,32 @@ class LF_WaterPump_T2 : Inventory_Base
         #endif
     }
 
-    // ---- Device interface (4 ports: 1 IN + 3 OUT) ----
-    string LFPG_GetDeviceId() { return m_DeviceId; }
-    int LFPG_GetPortCount() { return 4; }
-
-    string LFPG_GetPortName(int idx)
-    {
-        if (idx == 0) return "input_1";
-        if (idx == 1) return "output_1";
-        if (idx == 2) return "output_2";
-        if (idx == 3) return "output_3";
-        return "";
-    }
-
-    int LFPG_GetPortDir(int idx)
-    {
-        if (idx == 0) return LFPG_PortDir.IN;
-        if (idx >= 1 && idx <= 3) return LFPG_PortDir.OUT;
-        return -1;
-    }
-
-    string LFPG_GetPortLabel(int idx)
-    {
-        if (idx == 0) return "Input 1";
-        if (idx == 1) return "Output 1";
-        if (idx == 2) return "Output 2";
-        if (idx == 3) return "Output 3";
-        return "";
-    }
-
-    bool LFPG_HasPort(string portName, int dir)
-    {
-        if (dir == LFPG_PortDir.IN && portName == "input_1") return true;
-        if (dir == LFPG_PortDir.OUT)
-        {
-            if (portName == "output_1") return true;
-            if (portName == "output_2") return true;
-            if (portName == "output_3") return true;
-        }
-        return false;
-    }
-
-    vector LFPG_GetPortWorldPos(string portName)
-    {
-        string memPoint = "port_" + portName;
-        if (MemoryPointExists(memPoint)) { return ModelToWorld(GetMemoryPointPos(memPoint)); }
-        int len = portName.Length();
-        if (len >= 3)
-        {
-            string lastChar = portName.Substring(len - 1, 1);
-            string beforeLast = portName.Substring(len - 2, 1);
-            if (beforeLast == "_")
-            {
-                string compact = "port_" + portName.Substring(0, len - 2) + lastChar;
-                if (MemoryPointExists(compact)) { return ModelToWorld(GetMemoryPointPos(compact)); }
-            }
-        }
-        if (MemoryPointExists(portName)) { return ModelToWorld(GetMemoryPointPos(portName)); }
-        LFPG_Util.Warn("[LF_WaterPump_T2] Missing memory point: " + portName);
-        vector p = GetPosition(); p[1] = p[1] + 0.5; return p;
-    }
-
-    int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
-    bool LFPG_IsSource() { return true; }
-    bool LFPG_GetSourceOn() { return m_PoweredNet; }
-    float LFPG_GetConsumption() { return LFPG_PUMP_CONSUMPTION; }
-    float LFPG_GetCapacity() { return LFPG_PUMP_CAPACITY; }
-    bool LFPG_IsPowered() { return m_PoweredNet; }
-    bool LFPG_GetPoweredNet() { return m_PoweredNet; }
-
-    void LFPG_SetPowered(bool powered)
-    {
-        #ifdef SERVER
-        if (m_PoweredNet == powered) return;
-        m_PoweredNet = powered;
-        SetSynchDirty();
-        LFPG_Util.Debug("[LF_WaterPump_T2] SetPowered(" + powered.ToString() + ") id=" + m_DeviceId);
-        // v5.1: Instant sprinkler state update on power change
-        string noRemoved = "";
-        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
-        #endif
-    }
-
-    bool LFPG_GetOverloaded() { return m_Overloaded; }
-    void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val) { m_Overloaded = val; SetSynchDirty(); }
-        #endif
-    }
-
-    bool LFPG_CanConnectTo(Object other, string myPort, string otherPort)
-    {
-        if (!other) return false;
-        if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT)) return false;
-        EntityAI otherEntity = EntityAI.Cast(other);
-        if (!otherEntity) return false;
-        string otherId = LFPG_DeviceAPI.GetDeviceId(otherEntity);
-        if (otherId != "") { return LFPG_DeviceAPI.HasPort(other, otherPort, LFPG_PortDir.IN); }
-        return LFPG_DeviceAPI.IsEnergyConsumer(otherEntity);
-    }
-
-    // ---- Vanilla water overrides (server: graph-verified, client: SyncVar) ----
+    // ============================================
+    // Vanilla water overrides
+    // ============================================
     override int GetLiquidSourceType()
     {
-        if (!LFPG_PumpHelper.VerifyPowered(this)) return LIQUID_NONE;
-        if (LFPG_HasActiveFilter()) return LIQUID_CLEANWATER;
+        if (!LFPG_PumpHelper.VerifyPowered(this))
+            return LIQUID_NONE;
+        if (LFPG_HasActiveFilter())
+            return LIQUID_CLEANWATER;
         return LIQUID_RIVERWATER;
     }
+
     override int GetWaterSourceObjectType()
     {
-        if (!LFPG_PumpHelper.VerifyPowered(this)) return EWaterSourceObjectType.NONE;
+        if (!LFPG_PumpHelper.VerifyPowered(this))
+            return EWaterSourceObjectType.NONE;
         return EWaterSourceObjectType.WELL;
     }
-    override bool IsWell() { return LFPG_PumpHelper.VerifyPowered(this); }
-    override float GetLiquidThroughputCoef() { return LIQUID_THROUGHPUT_WELL; }
 
-    // ---- Wire ownership API ----
-    bool LFPG_HasWireStore() { return true; }
-    array<ref LFPG_WireData> LFPG_GetWires() { return m_Wires; }
-    string LFPG_GetWiresJSON() { return LFPG_WireHelper.GetJSON(m_Wires); }
-
-    bool LFPG_AddWire(LFPG_WireData wd)
+    override bool IsWell()
     {
-        if (!wd) return false;
-        if (wd.m_SourcePort == "") wd.m_SourcePort = "output_1";
-        if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
-        { LFPG_Util.Warn("[LF_WaterPump_T2] AddWire rejected: " + wd.m_SourcePort); return false; }
-        bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-    bool LFPG_ClearWires()
-    {
-        bool r = LFPG_WireHelper.ClearAll(m_Wires);
-        if (r)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return r;
-    }
-    bool LFPG_ClearWiresForCreator(string cid)
-    {
-        bool r = LFPG_WireHelper.ClearForCreator(m_Wires, cid);
-        if (r)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return r;
+        return LFPG_PumpHelper.VerifyPowered(this);
     }
 
-    bool LFPG_PruneMissingTargets()
+    override float GetLiquidThroughputCoef()
     {
-        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
-        if (!validIds)
-        {
-            validIds = new map<string, bool>;
-            array<EntityAI> all = new array<EntityAI>;
-            LFPG_DeviceRegistry.Get().GetAll(all);
-            int vi;
-            for (vi = 0; vi < all.Count(); vi = vi + 1)
-            {
-                string did = LFPG_DeviceAPI.GetOrCreateDeviceId(all[vi]);
-                if (did != "") { validIds[did] = true; }
-            }
-        }
-        bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
-        if (result)
-        {
-            #ifdef SERVER
-            SetSynchDirty();
-            #endif
-        }
-        return result;
-    }
-
-    // ---- Persistence (T2: adds m_TankLevel + m_TankLiquidType) ----
-    override void OnStoreSave(ParamsWriteContext ctx)
-    {
-        super.OnStoreSave(ctx);
-        ctx.Write(m_DeviceIdLow);
-        ctx.Write(m_DeviceIdHigh);
-        string json;
-        LFPG_WireHelper.SerializeJSON(m_Wires, json);
-        ctx.Write(json);
-        ctx.Write(m_TankLevel);
-        ctx.Write(m_TankLiquidType);
-    }
-
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
-    {
-        if (!super.OnStoreLoad(ctx, version)) return false;
-        if (!ctx.Read(m_DeviceIdLow)) { LFPG_Util.Error("[LF_WaterPump_T2] Load: m_DeviceIdLow"); return false; }
-        if (!ctx.Read(m_DeviceIdHigh)) { LFPG_Util.Error("[LF_WaterPump_T2] Load: m_DeviceIdHigh"); return false; }
-        LFPG_UpdateDeviceIdString();
-        string json;
-        if (!ctx.Read(json)) { LFPG_Util.Error("[LF_WaterPump_T2] Load: wires " + m_DeviceId); return false; }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_WaterPump_T2");
-        if (!ctx.Read(m_TankLevel)) { LFPG_Util.Error("[LF_WaterPump_T2] Load: m_TankLevel"); return false; }
-        if (!ctx.Read(m_TankLiquidType)) { LFPG_Util.Error("[LF_WaterPump_T2] Load: m_TankLiquidType"); return false; }
-        return true;
+        return LIQUID_THROUGHPUT_WELL;
     }
 };
