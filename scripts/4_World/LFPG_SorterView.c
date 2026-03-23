@@ -52,6 +52,8 @@ class LFPG_SorterView extends ScriptView
     // N3: Tracks whether controls are enabled (unpaired = false).
     // Set from Controller via static setter; read by OnMouseEnter.
     protected bool m_ControlsEnabled;
+    // P3: Track first Tint pass (LoadImageFile only needed once)
+    protected bool m_ColorsInitialized;
 
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
@@ -314,13 +316,8 @@ class LFPG_SorterView extends ScriptView
         }
     }
 
-    // S3: ApplyColors moved to DoOpen() — calling here caused flash
-    // because colors were painted before data existed, then overwritten by InitFromRPC.
-    // R2: Override kept intentionally to document this design decision.
-    override void OnWidgetScriptInit(Widget w)
-    {
-        super.OnWidgetScriptInit(w);
-    }
+    // S3: ApplyColors lives in DoOpen(), NOT OnWidgetScriptInit — calling
+    // there caused flash because colors were painted before data existed.
 
     // =========================================================
     // v2.6: Manual binding fallback for View-level widget refs.
@@ -598,13 +595,18 @@ class LFPG_SorterView extends ScriptView
         {
             FooterEscHint.SetColor(COL_TEXT_DIM);
         }
+        m_ColorsInitialized = true;
     }
 
     protected void Tint(ImageWidget img, int color)
     {
         if (!img)
             return;
-        img.LoadImageFile(0, PROC_WHITE);
+        // P3: LoadImageFile only on first pass — subsequent calls just SetColor
+        if (!m_ColorsInitialized)
+        {
+            img.LoadImageFile(0, PROC_WHITE);
+        }
         img.SetColor(color);
         // Cache for hover system (v2.2)
         CacheColorLocal(img, color);
@@ -631,13 +633,13 @@ class LFPG_SorterView extends ScriptView
         m_CacheColors.Insert(color);
     }
 
-    // Find cached color for a widget, returns -1 if not found
+    // Find cached color for a widget, returns 0 (transparent) if not found
     protected int FindCachedColor(Widget w)
     {
         if (!w)
-            return -1;
+            return 0;
         if (!m_CacheWidgets)
-            return -1;
+            return 0;
         int i = 0;
         int count = m_CacheWidgets.Count();
         for (i = 0; i < count; i = i + 1)
@@ -647,7 +649,7 @@ class LFPG_SorterView extends ScriptView
                 return m_CacheColors[i];
             }
         }
-        return -1;
+        return 0;
     }
 
     // =========================================================
@@ -689,7 +691,7 @@ class LFPG_SorterView extends ScriptView
                 if (m_HoveredBg)
                 {
                     int restoreCol = FindCachedColor(m_HoveredBg);
-                    if (restoreCol >= 0)
+                    if (restoreCol != 0)
                     {
                         m_HoveredBg.SetColor(restoreCol);
                     }
@@ -717,18 +719,6 @@ class LFPG_SorterView extends ScriptView
         {
             return false;
         }
-
-        // DIAG: Log consumed non-interactive clicks — if category buttons
-        // land here, OnClick will NEVER fire for them.
-        string diagDown = "[SorterView] MouseDown CONSUMED w=";
-        diagDown = diagDown + w.GetName();
-        Widget diagDownP = w.GetParent();
-        if (diagDownP)
-        {
-            diagDown = diagDown + " parent=";
-            diagDown = diagDown + diagDownP.GetName();
-        }
-        LFPG_Util.Info(diagDown);
 
         // Consume non-interactive clicks (panel bg, headers, labels)
         // so mouse events don't leak to game layer.
@@ -796,26 +786,11 @@ class LFPG_SorterView extends ScriptView
         }
         if (!btn)
         {
-            // DIAG: Log what widget received the click when no ButtonWidget found
-            string diagNoBtn = "[SorterView] OnClick NO ButtonWidget w=";
-            diagNoBtn = diagNoBtn + w.GetName();
-            Widget diagParent = w.GetParent();
-            if (diagParent)
-            {
-                diagNoBtn = diagNoBtn + " parent=";
-                diagNoBtn = diagNoBtn + diagParent.GetName();
-            }
-            LFPG_Util.Info(diagNoBtn);
             bool baseNoBtn = super.OnClick(w, x, y, button);
             return baseNoBtn;
         }
 
         string bName = btn.GetName();
-
-        // DIAG: Log every button click for debugging
-        string diagClick = "[SorterView] OnClick btn=";
-        diagClick = diagClick + bName;
-        LFPG_Util.Info(diagClick);
 
         LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
         if (!ctrl)
@@ -1453,7 +1428,7 @@ class LFPG_SorterView extends ScriptView
             if (m_HoveredBg && m_HoveredBg != bg)
             {
                 baseColor = FindCachedColor(m_HoveredBg);
-                if (baseColor >= 0)
+                if (baseColor != 0)
                 {
                     m_HoveredBg.SetColor(baseColor);
                 }
@@ -1462,7 +1437,7 @@ class LFPG_SorterView extends ScriptView
             }
 
             baseColor = FindCachedColor(bg);
-            if (baseColor >= 0)
+            if (baseColor != 0)
             {
                 m_HoveredBg = bg;
                 hoverColor = LightenARGB(baseColor, 20);
@@ -1482,7 +1457,7 @@ class LFPG_SorterView extends ScriptView
         if (m_HoveredBg)
         {
             baseColor = FindCachedColor(m_HoveredBg);
-            if (baseColor >= 0)
+            if (baseColor != 0)
             {
                 m_HoveredBg.SetColor(baseColor);
             }
@@ -1583,33 +1558,6 @@ class LFPG_SorterView extends ScriptView
         }
 
         return false;
-    }
-
-    // =========================================================
-    // UI Sound helper (v2.2)
-    // =========================================================
-    static void PlayUIClick()
-    {
-        #ifndef SERVER
-        if (!GetGame())
-            return;
-
-        // v3.1: "pickUpItem_SoundSet" is likely invalid in vanilla DayZ
-        // (same convention as attachmentAdded_SoundSet which is confirmed invalid).
-        // TODO: Define custom CfgSoundSets or find validated vanilla set.
-        #endif
-    }
-
-    static void PlayUIAction()
-    {
-        #ifndef SERVER
-        if (!GetGame())
-            return;
-
-        // v3.1: "attachmentAdded_SoundSet" is invalid in vanilla DayZ.
-        // TODO: Define custom CfgSoundSets in config.cpp with a real .ogg
-        // for reliable UI feedback. For now, no-op to prevent log spam.
-        #endif
     }
 
     LFPG_SorterController GetSorterController()

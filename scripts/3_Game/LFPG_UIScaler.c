@@ -98,44 +98,51 @@ class LFPG_UIScaler
 
     protected static void CaptureRecursive(Widget w)
     {
-        if (!w)
-            return;
-
+        // Iterate siblings (while), recurse only into children (depth).
+        // Prevents stack overflow on wide layouts (200+ siblings at same level).
+        Widget current = w;
         float posX = 0.0;
         float posY = 0.0;
         float sizeW = 0.0;
         float sizeH = 0.0;
-
-        w.GetPos(posX, posY);
-        w.GetSize(sizeW, sizeH);
-
-        // Heuristic: if BOTH dimensions <= threshold → proportional → skip
         bool isProportional = false;
-        if (sizeW <= PROP_THRESHOLD && sizeH <= PROP_THRESHOLD)
-        {
-            isProportional = true;
-        }
+        Widget child = null;
 
-        if (!isProportional)
+        while (current)
         {
-            s_Widgets.Insert(w);
-            s_DesignX.Insert(posX);
-            s_DesignY.Insert(posY);
-            s_DesignW.Insert(sizeW);
-            s_DesignH.Insert(sizeH);
-        }
+            posX = 0.0;
+            posY = 0.0;
+            sizeW = 0.0;
+            sizeH = 0.0;
 
-        // Recurse: children first, then siblings
-        Widget child = w.GetChildren();
-        if (child)
-        {
-            CaptureRecursive(child);
-        }
+            current.GetPos(posX, posY);
+            current.GetSize(sizeW, sizeH);
 
-        Widget sibling = w.GetSibling();
-        if (sibling)
-        {
-            CaptureRecursive(sibling);
+            // Heuristic: if BOTH dimensions <= threshold → proportional → skip
+            isProportional = false;
+            if (sizeW <= PROP_THRESHOLD && sizeH <= PROP_THRESHOLD)
+            {
+                isProportional = true;
+            }
+
+            if (!isProportional)
+            {
+                s_Widgets.Insert(current);
+                s_DesignX.Insert(posX);
+                s_DesignY.Insert(posY);
+                s_DesignW.Insert(sizeW);
+                s_DesignH.Insert(sizeH);
+            }
+
+            // Recurse into children (depth only)
+            child = current.GetChildren();
+            if (child)
+            {
+                CaptureRecursive(child);
+            }
+
+            // Next sibling (iterative — no recursion)
+            current = current.GetSibling();
         }
     }
 

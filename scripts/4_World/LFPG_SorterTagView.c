@@ -23,7 +23,6 @@ class LFPG_SorterTagController extends ViewController
 
     void BtnRemove()
     {
-        LFPG_SorterView.PlayUIClick();
         if (m_OwnerController)
         {
             m_OwnerController.OnRemoveTag(m_OutputIndex, m_RuleIndex);
@@ -46,6 +45,11 @@ class LFPG_SorterTagView extends ScriptView
     override typename GetControllerType()
     {
         return LFPG_SorterTagController;
+    }
+
+    override bool UseUpdateLoop()
+    {
+        return false;
     }
 
     // R1 fix: break circular ref (Controller → TagsList → TagView → TagController → m_OwnerController → Controller)

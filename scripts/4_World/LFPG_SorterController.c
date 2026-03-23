@@ -49,6 +49,8 @@ class LFPG_SorterController extends ViewController
 
     // ── Tag pool (v2.6 — reuse TagViews across RefreshTagsList calls) ──
     ref array<ref LFPG_SorterTagView> m_TagPool;
+    // ── Preview pool (reuse PreviewRows across PopulatePreview calls) ──
+    ref array<ref LFPG_SorterPreviewRow> m_PreviewPool;
 
     // ── Internal state ──
     protected ref LFPG_SortConfig m_Config;
@@ -60,6 +62,8 @@ class LFPG_SorterController extends ViewController
 
     // ── Pairing state (Bug #5/#6) ──
     protected bool m_IsPaired;
+    // P3: Track first TintBg pass (LoadImageFile only needed once)
+    protected bool m_BgInitialized;
     protected string m_ContainerDisplayName;
 
     // ── RPC identity ──
@@ -144,6 +148,7 @@ class LFPG_SorterController extends ViewController
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
         m_TagPool = new array<ref LFPG_SorterTagView>;
+        m_PreviewPool = new array<ref LFPG_SorterPreviewRow>;
         m_Config = new LFPG_SortConfig();
         // v3.2: Tab widget arrays (6 outputs)
         m_TabBgs = new array<ImageWidget>;
@@ -172,7 +177,6 @@ class LFPG_SorterController extends ViewController
             m_SlotBgs.Insert(null);
             m_SlotTexts.Insert(null);
         }
-        m_LayoutRoot = null;
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
@@ -523,6 +527,7 @@ class LFPG_SorterController extends ViewController
         ApplyInitialColors();
         ApplyInitialLabels();
         RefreshAll();
+        m_BgInitialized = true;
     }
 
     // =========================================================
@@ -812,15 +817,14 @@ class LFPG_SorterController extends ViewController
             return;
         m_SelectedOutput = idx;
         m_ResetConfirmActive = false;
-        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
     // =========================================================
     // Relay_Commands — view tabs
     // =========================================================
-    void TabRules()  { m_ShowRules = true;  LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); }
-    void TabPreview() { m_ShowRules = false; LFPG_SorterView.PlayUIClick(); RefreshViewTabs(); RequestPreview(); }
+    void TabRules()  { m_ShowRules = true;  RefreshViewTabs(); }
+    void TabPreview() { m_ShowRules = false; RefreshViewTabs(); RequestPreview(); }
 
     // =========================================================
     // Relay_Commands — category toggles (Bug #6: guard unpaired)
@@ -841,7 +845,6 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_CATEGORY, catValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_CATEGORY, catValue); }
-        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -860,7 +863,6 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_SLOT, slotValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue); }
-        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -877,7 +879,6 @@ class LFPG_SorterController extends ViewController
         EditPrefix = "";
         string propEP = "EditPrefix";
         NotifyPropertyChanged(propEP, false);
-        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -891,7 +892,6 @@ class LFPG_SorterController extends ViewController
         EditContains = "";
         string propEC = "EditContains";
         NotifyPropertyChanged(propEC, false);
-        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -916,7 +916,6 @@ class LFPG_SorterController extends ViewController
         string propMax = "EditSlotMax";
         NotifyPropertyChanged(propMin, false);
         NotifyPropertyChanged(propMax, false);
-        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -930,7 +929,6 @@ class LFPG_SorterController extends ViewController
         if (!outCfg) return;
         if (outCfg.m_IsCatchAll) { outCfg.m_IsCatchAll = false; }
         else { outCfg.m_IsCatchAll = true; }
-        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -940,7 +938,6 @@ class LFPG_SorterController extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         outCfg.ClearRules();
-        LFPG_SorterView.PlayUIClick();
         RefreshAll();
     }
 
@@ -954,7 +951,6 @@ class LFPG_SorterController extends ViewController
             string confirmLabel = "Confirm?";
             if (BtnResetAllText) { BtnResetAllText.SetText(confirmLabel); }
             TintBg(BtnResetAllBg, LFPG_SorterView.COL_AMBER);
-            LFPG_SorterView.PlayUIClick();
             return;
         }
         m_ResetConfirmActive = false;
@@ -962,7 +958,6 @@ class LFPG_SorterController extends ViewController
         string resetLabel = "Reset All";
         if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
         TintBg(BtnResetAllBg, LFPG_SorterView.COL_RED_BTN);
-        LFPG_SorterView.PlayUIAction();
         RefreshAll();
     }
 
@@ -978,7 +973,6 @@ class LFPG_SorterController extends ViewController
         LFPG_Util.Info(saveMsg);
         string stSaving = "SAVING...";
         SetStatus(stSaving);
-        LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
         // R4: GetGame guard
         if (!GetGame())
@@ -1003,10 +997,10 @@ class LFPG_SorterController extends ViewController
         DoSort(label);
     }
 
-    void BtnClose() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
+    void BtnClose() { LFPG_SorterView.Close(); }
 
     // Bug #3: X close button in header
-    void BtnCloseX() { LFPG_SorterView.PlayUIClick(); LFPG_SorterView.Close(); }
+    void BtnCloseX() { LFPG_SorterView.Close(); }
 
     // v2.8: Header quick-sort button
     void BtnSortHeader()
@@ -1024,7 +1018,6 @@ class LFPG_SorterController extends ViewController
         SetStatus(stSorting);
         // S6: Timeout timer — SORT_ACK will override with real result
         m_FeedbackTimer = 8.0;
-        LFPG_SorterView.PlayUIAction();
         #ifndef SERVER
         // R4: GetGame guard
         if (!GetGame())
@@ -1141,9 +1134,6 @@ class LFPG_SorterController extends ViewController
         // v3: Refresh edit hints
         LFPG_SorterView.RefreshHints();
         // Apply disabled visual after all refreshes (v2.2)
-        // v3.2: Re-bind again — RefreshRuleCount etc. called NotifyPropertyChanged
-        // which corrupts named button refs between the first ReBindButtons and here.
-        ReBindButtons();
         SetControlsEnabled(m_IsPaired);
     }
 
@@ -1630,16 +1620,27 @@ class LFPG_SorterController extends ViewController
         PreviewItems.Clear();
 
         int sentCount = names.Count();
-        int si;
+
+        // P2: Grow pool if needed (rows persist across preview refreshes)
+        int poolSize = m_PreviewPool.Count();
+        int pi = 0;
+        for (pi = poolSize; pi < sentCount; pi = pi + 1)
+        {
+            LFPG_SorterPreviewRow newRow = new LFPG_SorterPreviewRow();
+            m_PreviewPool.Insert(newRow);
+        }
+
+        int si = 0;
         string itemName = "";
         string itemCat = "";
         int itemSlot = 0;
+        LFPG_SorterPreviewRow row = null;
         for (si = 0; si < sentCount; si = si + 1)
         {
             itemName = names[si];
             itemCat = cats[si];
             itemSlot = slots[si];
-            LFPG_SorterPreviewRow row = new LFPG_SorterPreviewRow();
+            row = m_PreviewPool[si];
             row.SetData(itemName, itemCat, itemSlot);
             PreviewItems.Insert(row);
         }
@@ -1696,7 +1697,11 @@ class LFPG_SorterController extends ViewController
     protected void TintBg(ImageWidget bg, int color)
     {
         if (!bg) return;
-        bg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+        // P3: LoadImageFile only on first pass — subsequent calls just SetColor
+        if (!m_BgInitialized)
+        {
+            bg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+        }
         bg.SetColor(color);
         // Cache in View for hover system (v2.2)
         LFPG_SorterView.CacheColor(bg, color);
@@ -1726,6 +1731,10 @@ class LFPG_SorterController extends ViewController
         if (PreviewItems)
         {
             PreviewItems.Clear();
+        }
+        if (m_PreviewPool)
+        {
+            m_PreviewPool.Clear();
         }
     }
 };

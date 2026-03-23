@@ -41,6 +41,11 @@ class LFPG_SorterPreviewRow extends ScriptView
         return LFPG_SorterPreviewRowController;
     }
 
+    override bool UseUpdateLoop()
+    {
+        return false;
+    }
+
     void SetData(string itemName, string catKey, int slotCount)
     {
         LFPG_SorterPreviewRowController ctrl = LFPG_SorterPreviewRowController.Cast(GetController());
