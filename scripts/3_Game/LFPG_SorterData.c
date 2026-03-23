@@ -22,7 +22,7 @@
 static const int LFPG_SORT_FILTER_CATEGORY = 0;
 static const int LFPG_SORT_FILTER_PREFIX   = 1;
 static const int LFPG_SORT_FILTER_CONTAINS = 2;
-static const int LFPG_SORT_FILTER_RARITY   = 3;
+static const int LFPG_SORT_FILTER_RARITY   = 3; // FUTURE: not yet exposed in UI
 static const int LFPG_SORT_FILTER_SLOT     = 4;
 
 // ---------------------------------------------------------

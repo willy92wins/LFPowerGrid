@@ -1,7 +1,13 @@
 // =========================================================
-// LF_PowerGrid — Sorter Controller (Dabs MVC, v2.6 Pool Sprint)
+// LF_PowerGrid — Sorter Controller (Dabs MVC, v3.3)
 //
-// v2.6 changes (Tag Pool — Fase 5):
+// v3.3 changes (Sprint 3 — Performance):
+//   P4: Granular refresh — handlers call targeted subsets
+//       instead of RefreshAll(). ~60% fewer ops per click.
+//       New helpers: RefreshRulesDisplay, RefreshFilterButtons.
+//       OnRemoveTag reads rule type before delete for precision.
+//
+// v2.6 changes (Tag Pool — Phase 5):
 //   - m_TagPool: reuse TagViews via pool (eliminates new/delete
 //     per RefreshTagsList call). Max 9 = 8 rules + 1 catch-all.
 //   - ClearCollections: pool cleared on DoClose to break refs.
@@ -852,7 +858,10 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_CATEGORY, catValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_CATEGORY, catValue); }
-        RefreshAll();
+        // P4: Only cat buttons + rules changed
+        ReBindButtons();
+        RefreshCategoryButtons();
+        RefreshRulesDisplay();
     }
 
     // =========================================================
@@ -873,7 +882,10 @@ class LFPG_SorterController extends ViewController
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_SLOT, slotValue); }
         else { outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue); }
-        RefreshAll();
+        // P4: Only slot buttons + rules changed
+        ReBindButtons();
+        RefreshSlotButtons();
+        RefreshRulesDisplay();
     }
 
     // =========================================================
@@ -889,7 +901,10 @@ class LFPG_SorterController extends ViewController
         EditPrefix = "";
         string propEP = "EditPrefix";
         NotifyPropertyChanged(propEP, false);
-        RefreshAll();
+        // P4: Only rules changed + hints (edit field cleared)
+        ReBindButtons();
+        RefreshRulesDisplay();
+        LFPG_SorterView.RefreshHints();
     }
 
     void BtnContainsAdd()
@@ -902,7 +917,10 @@ class LFPG_SorterController extends ViewController
         EditContains = "";
         string propEC = "EditContains";
         NotifyPropertyChanged(propEC, false);
-        RefreshAll();
+        // P4: Only rules changed + hints (edit field cleared)
+        ReBindButtons();
+        RefreshRulesDisplay();
+        LFPG_SorterView.RefreshHints();
     }
 
     void BtnSlotAdd()
@@ -926,7 +944,10 @@ class LFPG_SorterController extends ViewController
         string propMax = "EditSlotMax";
         NotifyPropertyChanged(propMin, false);
         NotifyPropertyChanged(propMax, false);
-        RefreshAll();
+        // P4: Only rules changed + hints (edit fields cleared)
+        ReBindButtons();
+        RefreshRulesDisplay();
+        LFPG_SorterView.RefreshHints();
     }
 
     // =========================================================
@@ -939,7 +960,10 @@ class LFPG_SorterController extends ViewController
         if (!outCfg) return;
         if (outCfg.m_IsCatchAll) { outCfg.m_IsCatchAll = false; }
         else { outCfg.m_IsCatchAll = true; }
-        RefreshAll();
+        // P4: Only catch-all button + rules changed
+        ReBindButtons();
+        RefreshCatchAllButton();
+        RefreshRulesDisplay();
     }
 
     void BtnClearOut()
@@ -948,7 +972,10 @@ class LFPG_SorterController extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         outCfg.ClearRules();
-        RefreshAll();
+        // P4: All filter buttons reset + rules cleared
+        ReBindButtons();
+        RefreshFilterButtons();
+        RefreshRulesDisplay();
     }
 
     void BtnResetAll()
@@ -1053,9 +1080,37 @@ class LFPG_SorterController extends ViewController
         if (!m_IsPaired) return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(outputIdx);
         if (!outCfg) return;
+
+        // P4: Read rule type BEFORE removing so we know which buttons to refresh
+        int removedType = -1;
+        if (ruleIdx >= 0 && ruleIdx < outCfg.m_Rules.Count())
+        {
+            LFPG_SortFilterRule rule = outCfg.m_Rules[ruleIdx];
+            if (rule)
+            {
+                removedType = rule.m_Type;
+            }
+        }
+
         if (ruleIdx < 0) { outCfg.m_IsCatchAll = false; }
         else { outCfg.RemoveRuleAt(ruleIdx); }
-        RefreshAll();
+
+        // P4: Targeted button refresh based on removed rule type
+        ReBindButtons();
+        if (ruleIdx < 0)
+        {
+            RefreshCatchAllButton();
+        }
+        else if (removedType == LFPG_SORT_FILTER_CATEGORY)
+        {
+            RefreshCategoryButtons();
+        }
+        else if (removedType == LFPG_SORT_FILTER_SLOT)
+        {
+            RefreshSlotButtons();
+        }
+        // PREFIX and CONTAINS have no toggle buttons — no button refresh needed
+        RefreshRulesDisplay();
     }
 
     // =========================================================
@@ -1125,13 +1180,26 @@ class LFPG_SorterController extends ViewController
         ReBindButtons();
         RefreshOutputTabs();
         RefreshViewTabs();
-        RefreshCategoryButtons();
-        RefreshSlotButtons();
-        RefreshCatchAllButton();
+        RefreshFilterButtons();
+        RefreshRulesDisplay();
+        RefreshDestIndicator();
+        // v3: Refresh edit hints
+        LFPG_SorterView.RefreshHints();
+        // Apply disabled visual after all refreshes (v2.2)
+        SetControlsEnabled(m_IsPaired);
+    }
+
+    // =========================================================
+    // P4: Granular refresh helpers — subsets of RefreshAll for
+    // handlers that only modify rules (not output/tab context).
+    // Order matters: TagsList uses named widgets (safe before NPC),
+    // then RuleCount/MatchCount call NotifyPropertyChanged.
+    // =========================================================
+    protected void RefreshRulesDisplay()
+    {
         RefreshTagsList();
         RefreshRuleCount();
         RefreshMatchCount();
-        // v2.6: Request server preview if on preview tab, else just count
         if (!m_ShowRules)
         {
             RequestPreview();
@@ -1140,11 +1208,13 @@ class LFPG_SorterController extends ViewController
         {
             RefreshPreviewCount();
         }
-        RefreshDestIndicator();
-        // v3: Refresh edit hints
-        LFPG_SorterView.RefreshHints();
-        // Apply disabled visual after all refreshes (v2.2)
-        SetControlsEnabled(m_IsPaired);
+    }
+
+    protected void RefreshFilterButtons()
+    {
+        RefreshCategoryButtons();
+        RefreshSlotButtons();
+        RefreshCatchAllButton();
     }
 
     protected void RefreshOutputTabs()

@@ -1,10 +1,16 @@
 // =========================================================
-// LF_PowerGrid — Sorter View (Dabs MVC, v2.5 Sprint)
+// LF_PowerGrid — Sorter View (Dabs MVC, v3.3)
 //
 // CREATION: LFPG_SorterView.Init() from MissionGameplay.OnInit
 //   pre-creates the view HIDDEN (safe context). Avoids
 //   RPC-context CreateWidgets corruption.
 // OPEN/CLOSE: .Open() shows + pushes data. .Close() hides.
+//
+// v3.3 changes (Sprint 3 — Performance):
+//   M4: Hover O(1) — parallel arrays replaced by per-widget
+//       SetUserData/GetUserData (LFPG_ColorData). No more O(n) scan.
+//   M5: ClampPanelPos helper — DPI-safe clamp shared between
+//       CenterPanel and drag, eliminates 45 lines of duplication.
 //
 // v2.5 changes:
 //   B1-B3: UIScaler — resolution-proportional scaling via
@@ -32,6 +38,18 @@
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
 
+// M4: Per-widget color data for O(1) hover lookup via SetUserData.
+// Replaces parallel arrays (m_CacheWidgets/m_CacheColors) with O(n) scan.
+class LFPG_ColorData extends Managed
+{
+    int m_BaseColor;
+
+    void LFPG_ColorData(int color)
+    {
+        m_BaseColor = color;
+    }
+};
+
 class LFPG_SorterView extends ScriptView
 {
     protected static ref LFPG_SorterView s_Instance;
@@ -43,10 +61,7 @@ class LFPG_SorterView extends ScriptView
     protected float m_DragOffX;
     protected float m_DragOffY;
 
-    // ── Hover color cache (v2.2) ──
-    // Parallel arrays: widget ref + its base color (no GetColor / no map<Widget> in DayZ)
-    protected ref array<Widget> m_CacheWidgets;
-    protected ref array<int> m_CacheColors;
+    // ── Hover color cache (v2.2, M4: per-widget via SetUserData) ──
     // Currently hovered bg (null if none)
     protected ImageWidget m_HoveredBg;
     // N3: Tracks whether controls are enabled (unpaired = false).
@@ -221,61 +236,14 @@ class LFPG_SorterView extends ScriptView
             GetMousePos(mx, my);
             float newX = mx - m_DragOffX;
             float newY = my - m_DragOffY;
-            // Clamp to screen bounds
-            int scrW = 0;
-            int scrH = 0;
-            GetScreenSize(scrW, scrH);
-            float panW = 0.0;
-            float panH = 0.0;
+            // M5: Clamp via shared helper (minY=5 keeps header visible)
+            float clampedX = 0.0;
+            float clampedY = 0.0;
+            float dragMinY = 5.0;
+            ClampPanelPos(newX, newY, dragMinY, clampedX, clampedY);
             if (SorterPanel)
             {
-                SorterPanel.GetSize(panW, panH);
-            }
-            if (newX < 0.0)
-            {
-                newX = 0.0;
-            }
-            // v2.6: Keep header visible — small safety margin at top.
-            // Combined with z-sort 50000 this prevents header hiding
-            // behind other mod/admin HUD bars.
-            if (newY < 5.0)
-            {
-                newY = 5.0;
-            }
-            // v3.2: DPI-safe max — cap to panel dimensions
-            float maxX = scrW - panW;
-            float maxY = scrH - panH;
-            float dpiCapX = panW;
-            float dpiCapY = panH * 0.5;
-            if (maxX > dpiCapX)
-            {
-                maxX = dpiCapX;
-            }
-            if (maxY > dpiCapY)
-            {
-                maxY = dpiCapY;
-            }
-            // v2.6: At very low resolutions, max could be < min.
-            // Clamp to min values so the panel stays on screen.
-            if (maxX < 0.0)
-            {
-                maxX = 0.0;
-            }
-            if (maxY < 5.0)
-            {
-                maxY = 5.0;
-            }
-            if (newX > maxX)
-            {
-                newX = maxX;
-            }
-            if (newY > maxY)
-            {
-                newY = maxY;
-            }
-            if (SorterPanel)
-            {
-                SorterPanel.SetPos(newX, newY);
+                SorterPanel.SetPos(clampedX, clampedY);
             }
         }
 
@@ -297,8 +265,6 @@ class LFPG_SorterView extends ScriptView
         m_Dragging = false;
         m_DragOffX = 0.0;
         m_DragOffY = 0.0;
-        m_CacheWidgets = new array<Widget>();
-        m_CacheColors = new array<int>();
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
@@ -591,16 +557,6 @@ class LFPG_SorterView extends ScriptView
 
     protected void ApplyColors()
     {
-        // E9 fix: Clear stale hover color cache before re-populating
-        if (m_CacheWidgets)
-        {
-            m_CacheWidgets.Clear();
-        }
-        if (m_CacheColors)
-        {
-            m_CacheColors.Clear();
-        }
-
         // Bug #1: ModalOverlay removed
         Tint(PanelBg, COL_BG_PANEL);
         Tint(AccentLine, COL_GREEN);
@@ -743,44 +699,35 @@ class LFPG_SorterView extends ScriptView
         CacheColorLocal(img, color);
     }
 
-    // Store/update color for a widget in parallel arrays
+    // M4: Store color on the widget itself via SetUserData (O(1) lookup)
+    // Reuses existing LFPG_ColorData if present (avoids alloc+GC churn on refresh).
     protected void CacheColorLocal(Widget w, int color)
     {
         if (!w)
             return;
-        if (!m_CacheWidgets)
-            return;
-        int i = 0;
-        int count = m_CacheWidgets.Count();
-        for (i = 0; i < count; i = i + 1)
+        Class rawData = null;
+        w.GetUserData(rawData);
+        LFPG_ColorData existing = LFPG_ColorData.Cast(rawData);
+        if (existing)
         {
-            if (m_CacheWidgets[i] == w)
-            {
-                m_CacheColors[i] = color;
-                return;
-            }
+            existing.m_BaseColor = color;
+            return;
         }
-        m_CacheWidgets.Insert(w);
-        m_CacheColors.Insert(color);
+        LFPG_ColorData data = new LFPG_ColorData(color);
+        w.SetUserData(data);
     }
 
-    // Find cached color for a widget, returns 0 (transparent) if not found
+    // M4: O(1) color retrieval via GetUserData — replaces O(n) array scan
     protected int FindCachedColor(Widget w)
     {
         if (!w)
             return 0;
-        if (!m_CacheWidgets)
+        Class rawData = null;
+        w.GetUserData(rawData);
+        LFPG_ColorData colorData = LFPG_ColorData.Cast(rawData);
+        if (!colorData)
             return 0;
-        int i = 0;
-        int count = m_CacheWidgets.Count();
-        for (i = 0; i < count; i = i + 1)
-        {
-            if (m_CacheWidgets[i] == w)
-            {
-                return m_CacheColors[i];
-            }
-        }
-        return 0;
+        return colorData.m_BaseColor;
     }
 
     // =========================================================
@@ -1040,21 +987,54 @@ class LFPG_SorterView extends ScriptView
     }
 
     // =========================================================
-    // Center panel on screen (called on open)
-    // Panel is 720×590 fixed pixels (designed for 1080p).
-    // At 4K it appears smaller (18.75%) but fully functional.
-    // Full proportional scaling requires layout redesign (future sprint).
+    // M5: DPI-safe position clamp — shared between CenterPanel and drag.
+    // minY allows drag to keep header visible (5.0) while center uses 0.0.
+    // At DPI > 100%, physical screen is larger than logical viewport.
+    // Caps ensure panel stays visible regardless of DPI.
     // =========================================================
-    // =========================================================
-    // v3.2: DPI-safe centering.
-    // GetScreenSize returns physical pixels, but SetPos operates
-    // in logical pixels. At DPI > 100% the viewport is smaller
-    // than reported. We can't detect this, so we use a heuristic:
-    // cap vertical position to panH * 0.5 (panel always stays
-    // in the top half), horizontal to panW (safe at any DPI).
-    // At 1080p/2K (no DPI) this still centers normally because
-    // the centered position is smaller than the cap.
-    // =========================================================
+    protected void ClampPanelPos(float inX, float inY, float minY, out float outX, out float outY)
+    {
+        int scrW = 0;
+        int scrH = 0;
+        GetScreenSize(scrW, scrH);
+        float panW = 0.0;
+        float panH = 0.0;
+        if (SorterPanel)
+        {
+            SorterPanel.GetSize(panW, panH);
+        }
+
+        // DPI-safe max — at DPI > 100%, physical > logical viewport
+        float maxX = scrW - panW;
+        float maxY = scrH - panH;
+        float dpiCapX = panW;
+        float dpiCapY = panH * 0.5;
+        if (maxX > dpiCapX)
+        {
+            maxX = dpiCapX;
+        }
+        if (maxY > dpiCapY)
+        {
+            maxY = dpiCapY;
+        }
+        // At very low resolutions, max could be < min
+        if (maxX < 0.0)
+        {
+            maxX = 0.0;
+        }
+        if (maxY < minY)
+        {
+            maxY = minY;
+        }
+
+        outX = inX;
+        outY = inY;
+        if (outX < 0.0) { outX = 0.0; }
+        if (outY < minY) { outY = minY; }
+        if (outX > maxX) { outX = maxX; }
+        if (outY > maxY) { outY = maxY; }
+    }
+
     protected void CenterPanel()
     {
         if (!SorterPanel)
@@ -1070,30 +1050,12 @@ class LFPG_SorterView extends ScriptView
         float cx = (scrW - panW) * 0.5;
         float cy = (scrH - panH) * 0.5;
 
-        // DPI-safe caps: at DPI > 100%, physical screen is larger
-        // than logical viewport. These caps ensure the panel stays
-        // visible regardless of DPI.
-        float maxCx = panW;
-        float maxCy = panH * 0.5;
-        if (cx > maxCx)
-        {
-            cx = maxCx;
-        }
-        if (cy > maxCy)
-        {
-            cy = maxCy;
-        }
-
-        // Floor clamp
-        if (cx < 0.0)
-        {
-            cx = 0.0;
-        }
-        if (cy < 0.0)
-        {
-            cy = 0.0;
-        }
-        SorterPanel.SetPos(cx, cy);
+        // M5: Clamp via shared helper (minY=0 for centering)
+        float clampedX = 0.0;
+        float clampedY = 0.0;
+        float minY = 0.0;
+        ClampPanelPos(cx, cy, minY, clampedX, clampedY);
+        SorterPanel.SetPos(clampedX, clampedY);
     }
 
     // =========================================================
