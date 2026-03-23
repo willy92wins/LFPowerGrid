@@ -1476,6 +1476,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+        varQuantityMax = 10000;
 
         hiddenSelections[] = {"light_led_0", "light_led_1", "light_led_2", "light_led_3", "light_led_4", "light_led_5", "light_led_6"};
         hiddenSelectionsTextures[] = {"", "", "", "", "", "", ""};
@@ -1564,6 +1565,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+        varQuantityMax = 50000;
 
         hiddenSelections[] = {"light_led_0", "light_led_1", "light_led_2", "light_led_3", "light_led_4", "light_led_5", "light_led_6"};
         hiddenSelectionsTextures[] = {"", "", "", "", "", "", ""};

@@ -103,8 +103,7 @@ class LFPG_SorterController extends ViewController
     // Slot — arrays prevent Dabs auto-bind corruption
     protected ref array<ImageWidget> m_SlotBgs;
     protected ref array<TextWidget> m_SlotTexts;
-    // Layout root — stored for re-binding buttons after Dabs corruption
-    protected Widget m_LayoutRoot;
+    // m_LayoutRoot — inherited from ViewController (ScriptedWidgetEventHandler)
     // Catch-all
     ImageWidget BtnCatchAllBg; TextWidget BtnCatchAllText;
     // Footer + header button BGs

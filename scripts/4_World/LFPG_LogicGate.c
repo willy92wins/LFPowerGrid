@@ -186,6 +186,17 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     }
 
     // ---- Lifecycle ----
+    override void LFPG_OnInitDevice()
+    {
+        // Force correct symbol texture on client at spawn time.
+        // DayZ caches the first texture loaded for a shared p3d,
+        // so all gates (AND/OR/XOR/Mem) show the same (OR) symbol
+        // unless we explicitly SetObjectTexture on init.
+        // OnVariablesSynchronized only fires on SyncVar CHANGE,
+        // which never happens on fresh spawn (all defaults = false).
+        LFPG_UpdateVisuals();
+    }
+
     override void LFPG_OnKilled()
     {
         #ifdef SERVER

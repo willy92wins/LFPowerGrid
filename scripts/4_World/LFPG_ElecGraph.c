@@ -3156,6 +3156,18 @@ class LFPG_ElecGraph
                             if (ptHasDown && targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
                             {
                                 edgeDemand = targetNode.m_MaxOutput;
+                                // v2.4 (Battery oscillation fix): Cap cold-start
+                                // estimate to what the source can actually provide.
+                                // Without this, a battery with m_MaxOutput=120
+                                // connected to a 50 u/s generator triggers overload
+                                // on epoch 1 → allocation 0 → cold-start again → loop.
+                                // Capping to availableOutput lets the first epoch
+                                // converge without false overload. Real demand via
+                                // m_LastStableOutput takes over from epoch 2 onward.
+                                if (edgeDemand > availableOutput)
+                                {
+                                    edgeDemand = availableOutput;
+                                }
                             }
                             else
                             {

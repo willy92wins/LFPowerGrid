@@ -4934,6 +4934,20 @@ class LFPG_NetworkManager
             float selfCons = node.m_Consumption;
             float netFlow = inputReceived - outputDelivered - selfCons;
 
+            // v2.4 (Battery oscillation fix): Clamp netFlow to physical limits.
+            // Defensive cap: even if graph has transient desync between epochs,
+            // stored energy never corrupts. Also fixes chargeRateDisplay which
+            // reads netFlow directly (previously showed -171 u/s uncapped).
+            if (netFlow > maxCharge)
+            {
+                netFlow = maxCharge;
+            }
+            float negMaxDischarge = -maxDischarge;
+            if (netFlow < negMaxDischarge)
+            {
+                netFlow = negMaxDischarge;
+            }
+
             // --- Apply energy delta ---
             float energyDelta = 0.0;
             if (netFlow > LFPG_PROPAGATION_EPSILON)

@@ -229,6 +229,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         #ifdef SERVER
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, 500, false);
         #endif
+
+        // Force correct symbol texture on client at spawn.
+        // Same shared-p3d cache bug as LogicGateBase.
+        LFPG_UpdateVisuals();
     }
 
     // ---- Lifecycle hooks ----

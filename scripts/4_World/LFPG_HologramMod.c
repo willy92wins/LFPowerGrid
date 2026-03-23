@@ -97,6 +97,12 @@ modded class Hologram
             {
                 return fridgeKit.GetDeployedClassname();
             }
+
+            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+            if (batLargeKit)
+            {
+                return batLargeKit.GetDeployedClassname();
+            }
         }
 
         return super.ProjectionBasedOnParent();
@@ -128,6 +134,12 @@ modded class Hologram
             if (fridgeKit)
             {
                 return fridgeKit.GetDeployedClassname();
+            }
+
+            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+            if (batLargeKit)
+            {
+                return batLargeKit.GetDeployedClassname();
             }
         }
 
@@ -161,6 +173,12 @@ modded class Hologram
 
             LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
             if (fridgeKit)
+            {
+                return entity_for_placing;
+            }
+
+            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+            if (batLargeKit)
             {
                 return entity_for_placing;
             }
@@ -228,6 +246,19 @@ modded class Hologram
                 }
                 return;
             }
+
+            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+            if (batLargeKit)
+            {
+                vector batLargeOffset = batLargeKit.GetDeployPositionOffset();
+                vector batLargeFinal = position + batLargeOffset;
+
+                if (m_Projection)
+                {
+                    m_Projection.SetPosition(batLargeFinal);
+                }
+                return;
+            }
         }
 
         super.SetProjectionPosition(position);
@@ -272,6 +303,15 @@ modded class Hologram
                 vector fridgeOriOff = fridgeKit.GetDeployOrientationOffset();
                 vector fridgeResult = fridgeBase + fridgeOriOff;
                 return fridgeResult;
+            }
+
+            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+            if (batLargeKit)
+            {
+                vector batLargeBase = super.GetDefaultOrientation();
+                vector batLargeOriOff = batLargeKit.GetDeployOrientationOffset();
+                vector batLargeResult = batLargeBase + batLargeOriOff;
+                return batLargeResult;
             }
         }
 
@@ -338,6 +378,8 @@ modded class Hologram
             return true;
         if (m_Parent && m_Parent.IsKindOf("LF_Fridge_Kit"))
             return true;
+        if (m_Parent && m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
+            return true;
 
         return false;
     }
@@ -401,6 +443,8 @@ modded class Hologram
             return true;
         if (m_Parent.IsKindOf("LF_Fridge_Kit"))
             return true;
+        if (m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
+            return true;
         return false;
     }
 
@@ -420,16 +464,15 @@ modded class Hologram
     // SwitchV2, SwitchRemote, SwitchV2Remote p3d models have local
     // Y axis inverted, causing upside-down placement in every mode.
     // 180° roll flips them upright.
+    // ---- Helper: per-kit GLOBAL roll offset (degrees) ----
+    // Applied in ALL modes (floor, wall, ceiling) via ApplySmoothed.
+    // v4.1: Removed 180° roll for SwitchV2/SwitchRemote/SwitchV2Remote.
+    // py3d inspection confirmed Y axis is correct (0→1.0 upward).
+    // The 180° roll was CAUSING upside-down text, not fixing it.
     protected float LFPG_GetKitRollOffset(EntityAI projection)
     {
         if (!projection)
             return 0.0;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return 180.0;
-        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return 180.0;
-        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
-            return 180.0;
         return 0.0;
     }
 
@@ -486,10 +529,10 @@ modded class Hologram
     {
         if (!projection)
             return LFPG_HOLO_SURFACE_OFFSET;
-        // Camera model: Z extends -0.057 to +0.057, backHalf=0.057
-        // Offset 0.14 places back face ~8cm from wall (prevents embedding).
+        // Camera model: previous 0.14m still embeds into walls.
+        // Increased to 0.22m based on in-game testing. Adjust if needed.
         if (projection.IsKindOf("LF_Camera_Kit"))
-            return 0.14;
+            return 0.22;
         // Monitor model: Z extends -0.307, very deep
         if (projection.IsKindOf("LF_Monitor_Kit"))
             return 0.32;
@@ -513,12 +556,15 @@ modded class Hologram
     // ---- Helper: per-kit FLOOR Y offset (metres) ----
     // Replaces the global LFPG_HOLO_FLOOR_GROUND_SNAP for specific kits.
     // PressurePad is very thin and clips into terrain at 0.05m.
+    // Monitor origin is near center of body → needs extra Y lift on floor.
     protected float LFPG_GetKitFloorYOffset(EntityAI projection)
     {
         if (!projection)
             return LFPG_HOLO_FLOOR_GROUND_SNAP;
         if (projection.IsKindOf("LFPG_PressurePad_Kit"))
             return 0.015;
+        if (projection.IsKindOf("LF_Monitor_Kit"))
+            return 0.15;
         return LFPG_HOLO_FLOOR_GROUND_SNAP;
     }
 
@@ -928,6 +974,14 @@ modded class Hologram
             vector fridgeOff = fridgeKit.GetDeployPositionOffset();
             vector fridgeOut = pos + fridgeOff;
             return fridgeOut;
+        }
+
+        LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
+        if (batLargeKit)
+        {
+            vector batLargeOff = batLargeKit.GetDeployPositionOffset();
+            vector batLargeOut = pos + batLargeOff;
+            return batLargeOut;
         }
 
         return pos;
