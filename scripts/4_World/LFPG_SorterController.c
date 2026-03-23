@@ -1596,7 +1596,6 @@ class LFPG_SorterController extends ViewController
             return "";
         return m_Dests.Get(idx);
     }
-    }
 
     // =========================================================
     // BUG #1 fix: MatchCount was never updated — show rule total
