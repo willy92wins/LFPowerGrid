@@ -70,23 +70,15 @@ class LFPG_SorterController extends ViewController
     protected int m_SorterNetLow;
     protected int m_SorterNetHigh;
 
-    // ── Dest names ──
-    protected string m_Dest0;
-    protected string m_Dest1;
-    protected string m_Dest2;
-    protected string m_Dest3;
-    protected string m_Dest4;
-    protected string m_Dest5;
+    // ── Dest names (array replaces m_Dest0..5) ──
+    protected ref array<string> m_Dests;
 
-    // ── Category ──
-    protected string m_CatLabel0; protected string m_CatValue0;
-    protected string m_CatLabel1; protected string m_CatValue1;
-    protected string m_CatLabel2; protected string m_CatValue2;
-    protected string m_CatLabel3; protected string m_CatValue3;
-    protected string m_CatLabel4; protected string m_CatValue4;
-    protected string m_CatLabel5; protected string m_CatValue5;
-    protected string m_CatLabel6; protected string m_CatValue6;
-    protected string m_CatLabel7; protected string m_CatValue7;
+    // ── Category (arrays replace m_CatLabel0..7 / m_CatValue0..7) ──
+    protected ref array<string> m_CatLabels;
+    protected ref array<string> m_CatValues;
+    // ── Slot preset values (for index-based dispatch) ──
+    protected ref array<string> m_SlotValues;
+    protected ref array<string> m_SlotLabels;
 
     // ── Widget refs (resolved by child-walk in EnsureBindings) ──
     TextWidget StatusLabel;
@@ -129,9 +121,8 @@ class LFPG_SorterController extends ViewController
     Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
-    // v3: Tab dots (P-III)
-    ImageWidget TabDot0; ImageWidget TabDot1; ImageWidget TabDot2;
-    ImageWidget TabDot3; ImageWidget TabDot4; ImageWidget TabDot5;
+    // v3: Tab dots (array replaces TabDot0..5)
+    protected ref array<ImageWidget> m_TabDots;
     // v3: View tab indicator (C)
     ImageWidget ViewTabIndicator;
     // v3: Empty state extras (P-IV)
@@ -186,17 +177,45 @@ class LFPG_SorterController extends ViewController
         m_SorterNetHigh = 0;
         m_IsPaired = false;
         m_ContainerDisplayName = "";
-        m_CatLabel0 = "Weapons";    m_CatValue0 = "WEAPON";
-        m_CatLabel1 = "Attach";     m_CatValue1 = "ATTACHMENT";
-        m_CatLabel2 = "Ammo";       m_CatValue2 = "AMMO";
-        m_CatLabel3 = "Clothing";   m_CatValue3 = "CLOTHING";
-        m_CatLabel4 = "Food";       m_CatValue4 = "FOOD";
-        m_CatLabel5 = "Medical";    m_CatValue5 = "MEDICAL";
-        m_CatLabel6 = "Tools";      m_CatValue6 = "TOOL";
-        m_CatLabel7 = "Misc";       m_CatValue7 = "MISC";
 
-        m_Dest0 = ""; m_Dest1 = ""; m_Dest2 = "";
-        m_Dest3 = ""; m_Dest4 = ""; m_Dest5 = "";
+        // M1: Category labels + values (data-driven)
+        m_CatLabels = new array<string>;
+        m_CatValues = new array<string>;
+        string lW = "Weapons";  string vW = "WEAPON";     m_CatLabels.Insert(lW); m_CatValues.Insert(vW);
+        string lAt = "Attach";  string vAt = "ATTACHMENT"; m_CatLabels.Insert(lAt); m_CatValues.Insert(vAt);
+        string lAm = "Ammo";   string vAm = "AMMO";      m_CatLabels.Insert(lAm); m_CatValues.Insert(vAm);
+        string lCl = "Clothing"; string vCl = "CLOTHING"; m_CatLabels.Insert(lCl); m_CatValues.Insert(vCl);
+        string lFo = "Food";   string vFo = "FOOD";      m_CatLabels.Insert(lFo); m_CatValues.Insert(vFo);
+        string lMe = "Medical"; string vMe = "MEDICAL";   m_CatLabels.Insert(lMe); m_CatValues.Insert(vMe);
+        string lTo = "Tools";  string vTo = "TOOL";       m_CatLabels.Insert(lTo); m_CatValues.Insert(vTo);
+        string lMi = "Misc";   string vMi = "MISC";       m_CatLabels.Insert(lMi); m_CatValues.Insert(vMi);
+
+        // M1: Slot preset values (index-based dispatch)
+        m_SlotValues = new array<string>;
+        m_SlotValues.Insert(LFPG_SORT_SLOT_TINY);
+        m_SlotValues.Insert(LFPG_SORT_SLOT_SMALL);
+        m_SlotValues.Insert(LFPG_SORT_SLOT_MEDIUM);
+        m_SlotValues.Insert(LFPG_SORT_SLOT_LARGE);
+        m_SlotLabels = new array<string>;
+        string slT = "Tiny"; string slS = "Small"; string slM = "Med"; string slL = "Large";
+        m_SlotLabels.Insert(slT); m_SlotLabels.Insert(slS); m_SlotLabels.Insert(slM); m_SlotLabels.Insert(slL);
+
+        // M1: Dest names array
+        m_Dests = new array<string>;
+        int di = 0;
+        for (di = 0; di < 6; di = di + 1)
+        {
+            string emptyDest = "";
+            m_Dests.Insert(emptyDest);
+        }
+
+        // M1: TabDot array
+        m_TabDots = new array<ImageWidget>;
+        int dti = 0;
+        for (dti = 0; dti < 6; dti = dti + 1)
+        {
+            m_TabDots.Insert(null);
+        }
     }
 
     // =========================================================
@@ -335,19 +354,18 @@ class LFPG_SorterController extends ViewController
         wn = "DestIndicator";
         if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wn); }
 
-        // v3: Tab dots
-        wn = "TabDot0";
-        if (!TabDot0) { TabDot0 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "TabDot1";
-        if (!TabDot1) { TabDot1 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "TabDot2";
-        if (!TabDot2) { TabDot2 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "TabDot3";
-        if (!TabDot3) { TabDot3 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "TabDot4";
-        if (!TabDot4) { TabDot4 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "TabDot5";
-        if (!TabDot5) { TabDot5 = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
+        // v3: Tab dots (M1: array-based loop)
+        int dotIdx = 0;
+        string dotPrefix = "TabDot";
+        for (dotIdx = 0; dotIdx < 6; dotIdx = dotIdx + 1)
+        {
+            if (!m_TabDots.Get(dotIdx))
+            {
+                wn = dotPrefix;
+                wn = wn + dotIdx.ToString();
+                m_TabDots.Set(dotIdx, ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)));
+            }
+        }
         // v3: View tab indicator
         wn = "ViewTabIndicator";
         if (!ViewTabIndicator) { ViewTabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
@@ -459,8 +477,8 @@ class LFPG_SorterController extends ViewController
         m_ShowRules = true;
         m_ResetConfirmActive = false;
         m_FeedbackTimer = 0.0;
-        m_Dest0 = d0; m_Dest1 = d1; m_Dest2 = d2;
-        m_Dest3 = d3; m_Dest4 = d4; m_Dest5 = d5;
+        m_Dests.Set(0, d0); m_Dests.Set(1, d1); m_Dests.Set(2, d2);
+        m_Dests.Set(3, d3); m_Dests.Set(4, d4); m_Dests.Set(5, d5);
 
         // Pairing state (Bug #5/#6)
         m_ContainerDisplayName = containerName;
@@ -590,23 +608,18 @@ class LFPG_SorterController extends ViewController
 
     protected void ApplyInitialLabels()
     {
-        SetBtnLabel(m_CatTexts.Get(0), m_CatLabel0);
-        SetBtnLabel(m_CatTexts.Get(1), m_CatLabel1);
-        SetBtnLabel(m_CatTexts.Get(2), m_CatLabel2);
-        SetBtnLabel(m_CatTexts.Get(3), m_CatLabel3);
-        SetBtnLabel(m_CatTexts.Get(4), m_CatLabel4);
-        SetBtnLabel(m_CatTexts.Get(5), m_CatLabel5);
-        SetBtnLabel(m_CatTexts.Get(6), m_CatLabel6);
-        SetBtnLabel(m_CatTexts.Get(7), m_CatLabel7);
-
-        string lblTiny = "Tiny";
-        string lblSmall = "Small";
-        string lblMed = "Med";
-        string lblLarge = "Large";
-        SetBtnLabel(m_SlotTexts.Get(0), lblTiny);
-        SetBtnLabel(m_SlotTexts.Get(1), lblSmall);
-        SetBtnLabel(m_SlotTexts.Get(2), lblMed);
-        SetBtnLabel(m_SlotTexts.Get(3), lblLarge);
+        // M1: Data-driven category labels
+        int ci = 0;
+        for (ci = 0; ci < 8; ci = ci + 1)
+        {
+            SetBtnLabel(m_CatTexts.Get(ci), m_CatLabels.Get(ci));
+        }
+        // M1: Data-driven slot labels
+        int si = 0;
+        for (si = 0; si < 4; si = si + 1)
+        {
+            SetBtnLabel(m_SlotTexts.Get(si), m_SlotLabels.Get(si));
+        }
     }
 
     protected void SetBtnLabel(TextWidget txt, string label)
@@ -652,20 +665,20 @@ class LFPG_SorterController extends ViewController
             SetTxtCol(BtnSortHeaderText, dimTxt);
 
             // Dim all category buttons
-            TintBg(m_CatBgs.Get(0), dimBg); SetTxtCol(m_CatTexts.Get(0), dimTxt);
-            TintBg(m_CatBgs.Get(1), dimBg); SetTxtCol(m_CatTexts.Get(1), dimTxt);
-            TintBg(m_CatBgs.Get(2), dimBg); SetTxtCol(m_CatTexts.Get(2), dimTxt);
-            TintBg(m_CatBgs.Get(3), dimBg); SetTxtCol(m_CatTexts.Get(3), dimTxt);
-            TintBg(m_CatBgs.Get(4), dimBg); SetTxtCol(m_CatTexts.Get(4), dimTxt);
-            TintBg(m_CatBgs.Get(5), dimBg); SetTxtCol(m_CatTexts.Get(5), dimTxt);
-            TintBg(m_CatBgs.Get(6), dimBg); SetTxtCol(m_CatTexts.Get(6), dimTxt);
-            TintBg(m_CatBgs.Get(7), dimBg); SetTxtCol(m_CatTexts.Get(7), dimTxt);
+            int dci = 0;
+            for (dci = 0; dci < 8; dci = dci + 1)
+            {
+                TintBg(m_CatBgs.Get(dci), dimBg);
+                SetTxtCol(m_CatTexts.Get(dci), dimTxt);
+            }
 
             // Dim all slot preset buttons
-            TintBg(m_SlotBgs.Get(0), dimBg); SetTxtCol(m_SlotTexts.Get(0), dimTxt);
-            TintBg(m_SlotBgs.Get(1), dimBg); SetTxtCol(m_SlotTexts.Get(1), dimTxt);
-            TintBg(m_SlotBgs.Get(2), dimBg); SetTxtCol(m_SlotTexts.Get(2), dimTxt);
-            TintBg(m_SlotBgs.Get(3), dimBg); SetTxtCol(m_SlotTexts.Get(3), dimTxt);
+            int dsi = 0;
+            for (dsi = 0; dsi < 4; dsi = dsi + 1)
+            {
+                TintBg(m_SlotBgs.Get(dsi), dimBg);
+                SetTxtCol(m_SlotTexts.Get(dsi), dimTxt);
+            }
 
             // Dim add buttons
             TintBg(BtnPrefixAddBg, dimBg);
@@ -801,14 +814,9 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     // Relay_Commands — output tabs
     // =========================================================
-    void TabOut0() { SelectOutput(0); }
-    void TabOut1() { SelectOutput(1); }
-    void TabOut2() { SelectOutput(2); }
-    void TabOut3() { SelectOutput(3); }
-    void TabOut4() { SelectOutput(4); }
-    void TabOut5() { SelectOutput(5); }
-
-    protected void SelectOutput(int idx)
+    // M2: Index-based handlers (called from View OnClick dispatch)
+    // =========================================================
+    void SelectOutput(int idx)
     {
         // N2: No output tab switching when unpaired
         if (!m_IsPaired)
@@ -821,22 +829,21 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
-    // Relay_Commands — view tabs
+    // View tabs
     // =========================================================
     void TabRules()  { m_ShowRules = true;  RefreshViewTabs(); }
     void TabPreview() { m_ShowRules = false; RefreshViewTabs(); RequestPreview(); }
 
     // =========================================================
-    // Relay_Commands — category toggles (Bug #6: guard unpaired)
+    // M1: Category toggle by index (replaces CatBtn0..7)
     // =========================================================
-    void CatBtn0() { if (!m_IsPaired) return; ToggleCategory(m_CatValue0); }
-    void CatBtn1() { if (!m_IsPaired) return; ToggleCategory(m_CatValue1); }
-    void CatBtn2() { if (!m_IsPaired) return; ToggleCategory(m_CatValue2); }
-    void CatBtn3() { if (!m_IsPaired) return; ToggleCategory(m_CatValue3); }
-    void CatBtn4() { if (!m_IsPaired) return; ToggleCategory(m_CatValue4); }
-    void CatBtn5() { if (!m_IsPaired) return; ToggleCategory(m_CatValue5); }
-    void CatBtn6() { if (!m_IsPaired) return; ToggleCategory(m_CatValue6); }
-    void CatBtn7() { if (!m_IsPaired) return; ToggleCategory(m_CatValue7); }
+    void ToggleCategoryByIdx(int idx)
+    {
+        if (!m_IsPaired) return;
+        if (idx < 0 || idx >= m_CatValues.Count()) return;
+        string catValue = m_CatValues.Get(idx);
+        ToggleCategory(catValue);
+    }
 
     protected void ToggleCategory(string catValue)
     {
@@ -849,12 +856,15 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
-    // Relay_Commands — slot toggles (Bug #6: guard unpaired)
+    // M1: Slot toggle by index (replaces SlotPre0..3)
     // =========================================================
-    void SlotPre0() { if (!m_IsPaired) return; ToggleSlot(LFPG_SORT_SLOT_TINY); }
-    void SlotPre1() { if (!m_IsPaired) return; ToggleSlot(LFPG_SORT_SLOT_SMALL); }
-    void SlotPre2() { if (!m_IsPaired) return; ToggleSlot(LFPG_SORT_SLOT_MEDIUM); }
-    void SlotPre3() { if (!m_IsPaired) return; ToggleSlot(LFPG_SORT_SLOT_LARGE); }
+    void ToggleSlotByIdx(int idx)
+    {
+        if (!m_IsPaired) return;
+        if (idx < 0 || idx >= m_SlotValues.Count()) return;
+        string slotValue = m_SlotValues.Get(idx);
+        ToggleSlot(slotValue);
+    }
 
     protected void ToggleSlot(string slotValue)
     {
@@ -1276,13 +1286,9 @@ class LFPG_SorterController extends ViewController
     // v3: Tab dot accessor
     protected ImageWidget GetTabDot(int idx)
     {
-        if (idx == 0) return TabDot0;
-        if (idx == 1) return TabDot1;
-        if (idx == 2) return TabDot2;
-        if (idx == 3) return TabDot3;
-        if (idx == 4) return TabDot4;
-        if (idx == 5) return TabDot5;
-        return null;
+        if (idx < 0 || idx >= m_TabDots.Count())
+            return null;
+        return m_TabDots.Get(idx);
     }
 
     protected void RefreshViewTabs()
@@ -1328,28 +1334,36 @@ class LFPG_SorterController extends ViewController
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        RefreshToggleBtn(m_CatBgs.Get(0), m_CatTexts.Get(0), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue0), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel0);
-        RefreshToggleBtn(m_CatBgs.Get(1), m_CatTexts.Get(1), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue1), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel1);
-        RefreshToggleBtn(m_CatBgs.Get(2), m_CatTexts.Get(2), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue2), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel2);
-        RefreshToggleBtn(m_CatBgs.Get(3), m_CatTexts.Get(3), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue3), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel3);
-        RefreshToggleBtn(m_CatBgs.Get(4), m_CatTexts.Get(4), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue4), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel4);
-        RefreshToggleBtn(m_CatBgs.Get(5), m_CatTexts.Get(5), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue5), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel5);
-        RefreshToggleBtn(m_CatBgs.Get(6), m_CatTexts.Get(6), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue6), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel6);
-        RefreshToggleBtn(m_CatBgs.Get(7), m_CatTexts.Get(7), outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, m_CatValue7), LFPG_SorterView.COL_GREEN_BTN, LFPG_SorterView.COL_GREEN, m_CatLabel7);
+        int ci = 0;
+        int gbtn = LFPG_SorterView.COL_GREEN_BTN;
+        int gtxt = LFPG_SorterView.COL_GREEN;
+        bool hasRule = false;
+        string catVal = "";
+        string catLbl = "";
+        for (ci = 0; ci < 8; ci = ci + 1)
+        {
+            catVal = m_CatValues.Get(ci);
+            catLbl = m_CatLabels.Get(ci);
+            hasRule = outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catVal);
+            RefreshToggleBtn(m_CatBgs.Get(ci), m_CatTexts.Get(ci), hasRule, gbtn, gtxt, catLbl);
+        }
     }
 
     protected void RefreshSlotButtons()
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        string lblTiny = "Tiny";
-        string lblSmall = "Small";
-        string lblMed = "Med";
-        string lblLarge = "Large";
-        RefreshToggleBtn(m_SlotBgs.Get(0), m_SlotTexts.Get(0), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_TINY), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblTiny);
-        RefreshToggleBtn(m_SlotBgs.Get(1), m_SlotTexts.Get(1), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_SMALL), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblSmall);
-        RefreshToggleBtn(m_SlotBgs.Get(2), m_SlotTexts.Get(2), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_MEDIUM), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblMed);
-        RefreshToggleBtn(m_SlotBgs.Get(3), m_SlotTexts.Get(3), outCfg.HasRule(LFPG_SORT_FILTER_SLOT, LFPG_SORT_SLOT_LARGE), LFPG_SorterView.COL_BLUE_BTN, LFPG_SorterView.COL_BLUE, lblLarge);
+        int bbtn = LFPG_SorterView.COL_BLUE_BTN;
+        int btxt = LFPG_SorterView.COL_BLUE;
+        bool hasRule = false;
+        string slotVal = "";
+        int si = 0;
+        for (si = 0; si < 4; si = si + 1)
+        {
+            slotVal = m_SlotValues.Get(si);
+            hasRule = outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotVal);
+            RefreshToggleBtn(m_SlotBgs.Get(si), m_SlotTexts.Get(si), hasRule, bbtn, btxt, m_SlotLabels.Get(si));
+        }
     }
 
     // Unified toggle button refresh: active/inactive with custom active colors
@@ -1508,10 +1522,10 @@ class LFPG_SorterController extends ViewController
 
     protected string GetDestName(int idx)
     {
-        if (idx == 0) return m_Dest0; if (idx == 1) return m_Dest1;
-        if (idx == 2) return m_Dest2; if (idx == 3) return m_Dest3;
-        if (idx == 4) return m_Dest4; if (idx == 5) return m_Dest5;
-        return "";
+        if (idx < 0 || idx >= m_Dests.Count())
+            return "";
+        return m_Dests.Get(idx);
+    }
     }
 
     // =========================================================

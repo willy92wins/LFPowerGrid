@@ -54,6 +54,8 @@ class LFPG_SorterView extends ScriptView
     protected bool m_ControlsEnabled;
     // P3: Track first Tint pass (LoadImageFile only needed once)
     protected bool m_ColorsInitialized;
+    // M2: Track first AssignButtonIDs pass (UserIDs don't change)
+    protected bool m_ButtonIDsAssigned;
 
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
@@ -157,6 +159,26 @@ class LFPG_SorterView extends ScriptView
     static const int COL_RED_BTN_BORDER  = 0x40F87171;
     static const int COL_CATCHALL_BG     = 0x10FBBF24;
     static const int COL_PURPLE          = 0xFFA78BFA;
+
+    // ── M2: Button UserID ranges (int dispatch replaces string comparison) ──
+    // 100+i: output tabs, 110-111: view tabs, 200+i: categories,
+    // 300+i: slots, 400-402: adds, 500+: actions
+    static const int UID_TAB_OUT_BASE  = 100;
+    static const int UID_TAB_RULES     = 110;
+    static const int UID_TAB_PREVIEW   = 111;
+    static const int UID_CAT_BASE      = 200;
+    static const int UID_SLOT_BASE     = 300;
+    static const int UID_PREFIX_ADD    = 400;
+    static const int UID_CONTAINS_ADD  = 401;
+    static const int UID_SLOT_ADD      = 402;
+    static const int UID_CATCH_ALL     = 500;
+    static const int UID_CLEAR_OUT     = 501;
+    static const int UID_RESET_ALL     = 502;
+    static const int UID_SAVE          = 503;
+    static const int UID_SORT          = 504;
+    static const int UID_CLOSE         = 505;
+    static const int UID_CLOSE_X       = 506;
+    static const int UID_SORT_HEADER   = 507;
 
     override string GetLayoutFile()
     {
@@ -456,6 +478,115 @@ class LFPG_SorterView extends ScriptView
         if (!EditSlotMaxHint) { EditSlotMaxHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "FooterEscHint";
         if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
+    }
+
+    // =========================================================
+    // M2: Assign UserIDs to buttons for int-based dispatch.
+    // Called once from DoOpen after EnsureViewBindings.
+    // =========================================================
+    protected void AssignButtonIDs()
+    {
+        if (m_ButtonIDsAssigned)
+            return;
+        Widget root = GetLayoutRoot();
+        if (!root)
+            return;
+        string wn = "";
+        Widget btn = null;
+
+        // Output tabs (100+i)
+        int ti = 0;
+        string tabPrefix = "TabOut";
+        for (ti = 0; ti < 6; ti = ti + 1)
+        {
+            wn = tabPrefix;
+            wn = wn + ti.ToString();
+            btn = root.FindAnyWidget(wn);
+            if (btn)
+            {
+                int tabId = UID_TAB_OUT_BASE;
+                tabId = tabId + ti;
+                btn.SetUserID(tabId);
+            }
+        }
+
+        // View tabs
+        wn = "TabRules";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_TAB_RULES); }
+        wn = "TabPreview";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_TAB_PREVIEW); }
+
+        // Category buttons (200+i)
+        int ci = 0;
+        string catPrefix = "CatBtn";
+        for (ci = 0; ci < 8; ci = ci + 1)
+        {
+            wn = catPrefix;
+            wn = wn + ci.ToString();
+            btn = root.FindAnyWidget(wn);
+            if (btn)
+            {
+                int catId = UID_CAT_BASE;
+                catId = catId + ci;
+                btn.SetUserID(catId);
+            }
+        }
+
+        // Slot presets (300+i)
+        int si = 0;
+        string slotPrefix = "SlotPre";
+        for (si = 0; si < 4; si = si + 1)
+        {
+            wn = slotPrefix;
+            wn = wn + si.ToString();
+            btn = root.FindAnyWidget(wn);
+            if (btn)
+            {
+                int slotId = UID_SLOT_BASE;
+                slotId = slotId + si;
+                btn.SetUserID(slotId);
+            }
+        }
+
+        // Add buttons
+        wn = "BtnPrefixAdd";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_PREFIX_ADD); }
+        wn = "BtnContainsAdd";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_CONTAINS_ADD); }
+        wn = "BtnSlotAdd";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_SLOT_ADD); }
+
+        // Action buttons
+        wn = "BtnCatchAll";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_CATCH_ALL); }
+        wn = "BtnClearOut";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_CLEAR_OUT); }
+        wn = "BtnResetAll";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_RESET_ALL); }
+        wn = "BtnSave";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_SAVE); }
+        wn = "BtnSort";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_SORT); }
+        wn = "BtnClose";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_CLOSE); }
+        wn = "BtnCloseX";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_CLOSE_X); }
+        wn = "BtnSortHeader";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_SORT_HEADER); }
+        m_ButtonIDsAssigned = true;
     }
 
     protected void ApplyColors()
@@ -790,8 +921,6 @@ class LFPG_SorterView extends ScriptView
             return baseNoBtn;
         }
 
-        string bName = btn.GetName();
-
         LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
         if (!ctrl)
         {
@@ -799,79 +928,46 @@ class LFPG_SorterView extends ScriptView
             return baseNoCtrl;
         }
 
-        // Output tabs
-        string nTabOut0 = "TabOut0";
-        string nTabOut1 = "TabOut1";
-        string nTabOut2 = "TabOut2";
-        string nTabOut3 = "TabOut3";
-        string nTabOut4 = "TabOut4";
-        string nTabOut5 = "TabOut5";
-        if (bName == nTabOut0) { ctrl.TabOut0(); return true; }
-        if (bName == nTabOut1) { ctrl.TabOut1(); return true; }
-        if (bName == nTabOut2) { ctrl.TabOut2(); return true; }
-        if (bName == nTabOut3) { ctrl.TabOut3(); return true; }
-        if (bName == nTabOut4) { ctrl.TabOut4(); return true; }
-        if (bName == nTabOut5) { ctrl.TabOut5(); return true; }
+        // M2: Dispatch by UserID (int) — no string comparisons
+        int uid = btn.GetUserID();
 
+        // Output tabs: 100..105
+        if (uid >= UID_TAB_OUT_BASE && uid < UID_TAB_OUT_BASE + 6)
+        {
+            int tabIdx = uid - UID_TAB_OUT_BASE;
+            ctrl.SelectOutput(tabIdx);
+            return true;
+        }
         // View tabs
-        string nTabRules = "TabRules";
-        string nTabPreview = "TabPreview";
-        if (bName == nTabRules) { ctrl.TabRules(); return true; }
-        if (bName == nTabPreview) { ctrl.TabPreview(); return true; }
-
-        // Category buttons
-        string nCat0 = "CatBtn0";
-        string nCat1 = "CatBtn1";
-        string nCat2 = "CatBtn2";
-        string nCat3 = "CatBtn3";
-        string nCat4 = "CatBtn4";
-        string nCat5 = "CatBtn5";
-        string nCat6 = "CatBtn6";
-        string nCat7 = "CatBtn7";
-        if (bName == nCat0) { ctrl.CatBtn0(); return true; }
-        if (bName == nCat1) { ctrl.CatBtn1(); return true; }
-        if (bName == nCat2) { ctrl.CatBtn2(); return true; }
-        if (bName == nCat3) { ctrl.CatBtn3(); return true; }
-        if (bName == nCat4) { ctrl.CatBtn4(); return true; }
-        if (bName == nCat5) { ctrl.CatBtn5(); return true; }
-        if (bName == nCat6) { ctrl.CatBtn6(); return true; }
-        if (bName == nCat7) { ctrl.CatBtn7(); return true; }
-
-        // Slot presets
-        string nSlot0 = "SlotPre0";
-        string nSlot1 = "SlotPre1";
-        string nSlot2 = "SlotPre2";
-        string nSlot3 = "SlotPre3";
-        if (bName == nSlot0) { ctrl.SlotPre0(); return true; }
-        if (bName == nSlot1) { ctrl.SlotPre1(); return true; }
-        if (bName == nSlot2) { ctrl.SlotPre2(); return true; }
-        if (bName == nSlot3) { ctrl.SlotPre3(); return true; }
-
+        if (uid == UID_TAB_RULES)   { ctrl.TabRules();   return true; }
+        if (uid == UID_TAB_PREVIEW) { ctrl.TabPreview();  return true; }
+        // Category buttons: 200..207
+        if (uid >= UID_CAT_BASE && uid < UID_CAT_BASE + 8)
+        {
+            int catIdx = uid - UID_CAT_BASE;
+            ctrl.ToggleCategoryByIdx(catIdx);
+            return true;
+        }
+        // Slot presets: 300..303
+        if (uid >= UID_SLOT_BASE && uid < UID_SLOT_BASE + 4)
+        {
+            int slotIdx = uid - UID_SLOT_BASE;
+            ctrl.ToggleSlotByIdx(slotIdx);
+            return true;
+        }
         // Add buttons
-        string nPrefixAdd = "BtnPrefixAdd";
-        string nContainsAdd = "BtnContainsAdd";
-        string nSlotAdd = "BtnSlotAdd";
-        if (bName == nPrefixAdd) { ctrl.BtnPrefixAdd(); return true; }
-        if (bName == nContainsAdd) { ctrl.BtnContainsAdd(); return true; }
-        if (bName == nSlotAdd) { ctrl.BtnSlotAdd(); return true; }
-
+        if (uid == UID_PREFIX_ADD)   { ctrl.BtnPrefixAdd();   return true; }
+        if (uid == UID_CONTAINS_ADD) { ctrl.BtnContainsAdd(); return true; }
+        if (uid == UID_SLOT_ADD)     { ctrl.BtnSlotAdd();     return true; }
         // Action buttons
-        string nCatchAll = "BtnCatchAll";
-        string nClearOut = "BtnClearOut";
-        string nResetAll = "BtnResetAll";
-        string nSave = "BtnSave";
-        string nSort = "BtnSort";
-        string nClose = "BtnClose";
-        string nCloseX = "BtnCloseX";
-        string nSortHeader = "BtnSortHeader";
-        if (bName == nCatchAll) { ctrl.BtnCatchAll(); return true; }
-        if (bName == nClearOut) { ctrl.BtnClearOut(); return true; }
-        if (bName == nResetAll) { ctrl.BtnResetAll(); return true; }
-        if (bName == nSave) { ctrl.BtnSave(); return true; }
-        if (bName == nSort) { ctrl.BtnSort(); return true; }
-        if (bName == nClose) { ctrl.BtnClose(); return true; }
-        if (bName == nCloseX) { ctrl.BtnCloseX(); return true; }
-        if (bName == nSortHeader) { ctrl.BtnSortHeader(); return true; }
+        if (uid == UID_CATCH_ALL)    { ctrl.BtnCatchAll();    return true; }
+        if (uid == UID_CLEAR_OUT)    { ctrl.BtnClearOut();    return true; }
+        if (uid == UID_RESET_ALL)    { ctrl.BtnResetAll();    return true; }
+        if (uid == UID_SAVE)         { ctrl.BtnSave();        return true; }
+        if (uid == UID_SORT)         { ctrl.BtnSort();        return true; }
+        if (uid == UID_CLOSE)        { ctrl.BtnClose();       return true; }
+        if (uid == UID_CLOSE_X)      { ctrl.BtnCloseX();      return true; }
+        if (uid == UID_SORT_HEADER)  { ctrl.BtnSortHeader();  return true; }
 
         // Unrecognized button — delegate to ScriptView base class
         // so Relay_Command still works for any future buttons
@@ -1292,6 +1388,8 @@ class LFPG_SorterView extends ScriptView
         // v2.6: Manual binding fallback — fixes white tabs (Dabs auto-bind miss).
         // Must run BEFORE ApplyColors/InitFromRPC so all widget refs are available.
         EnsureViewBindings();
+        // M2: Assign int IDs to buttons (only first open)
+        AssignButtonIDs();
         LFPG_SorterController ctrl = LFPG_SorterController.Cast(GetController());
         if (ctrl)
         {
