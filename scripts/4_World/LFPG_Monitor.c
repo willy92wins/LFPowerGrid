@@ -31,7 +31,12 @@ class LF_Monitor_Kit : LFPG_KitBase
 
     override float LFPG_GetFloorYOffset()
     {
-        return 0.15;
+        return 0.22;
+    }
+
+    override float LFPG_GetFloorYawOffset()
+    {
+        return -90.0;
     }
 };
 

@@ -1502,6 +1502,14 @@ class CfgVehicles
 
         class DamageSystem
         {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 200;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}}};
+                };
+            };
             class DamageZones
             {
                 class GlobalHealth
@@ -1510,6 +1518,10 @@ class CfgVehicles
                     {
                         hitpoints = 200;
                     };
+                    fatalInjuryCoef = -1;
+                    componentNames[] = {};
+                    transferToZonesNames[] = {};
+                    transferToZonesCoefs[] = {};
                 };
             };
         };
@@ -1591,6 +1603,14 @@ class CfgVehicles
 
         class DamageSystem
         {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 500;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}}};
+                };
+            };
             class DamageZones
             {
                 class GlobalHealth
@@ -1599,6 +1619,10 @@ class CfgVehicles
                     {
                         hitpoints = 500;
                     };
+                    fatalInjuryCoef = -1;
+                    componentNames[] = {};
+                    transferToZonesNames[] = {};
+                    transferToZonesCoefs[] = {};
                 };
             };
         };
@@ -1991,6 +2015,14 @@ class CfgVehicles
 
         class DamageSystem
         {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 100;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}}};
+                };
+            };
             class DamageZones
             {
                 class GlobalHealth
@@ -1999,6 +2031,10 @@ class CfgVehicles
                     {
                         hitpoints = 100;
                     };
+                    fatalInjuryCoef = -1;
+                    componentNames[] = {};
+                    transferToZonesNames[] = {};
+                    transferToZonesCoefs[] = {};
                 };
             };
         };

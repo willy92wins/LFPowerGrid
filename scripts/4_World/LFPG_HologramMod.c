@@ -285,6 +285,24 @@ modded class Hologram
         return LFPG_HOLO_FLOOR_GROUND_SNAP;
     }
 
+    protected float LFPG_GetKitFloorYawOffset()
+    {
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetFloorYawOffset();
+        }
+        return 0.0;
+    }
+
+    protected float LFPG_GetKitFloorPitchOffset()
+    {
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetFloorPitchOffset();
+        }
+        return 0.0;
+    }
+
     protected bool LFPG_KitAdaptsToTerrain()
     {
         if (m_LFPG_CachedSameKit)
@@ -456,6 +474,25 @@ modded class Hologram
             ceilThreshold = LFPG_HOLO_EXIT_WALL_THRESHOLD;
         }
 
+        // FIX: Looking-down guard. When camera points steeply downward
+        // (camDir[1] < -0.65), the ray can clip vertical edges of
+        // floor geometry (curbs, stairs, foundations) whose horizontal
+        // normal falsely triggers wall mode. Raise the wall-enter
+        // threshold so only clearly vertical surfaces activate it.
+        float lookDownLimit = -0.65;
+        if (camDir[1] < lookDownLimit)
+        {
+            float raisedThreshold = 0.75;
+            if (floorThreshold < raisedThreshold)
+            {
+                floorThreshold = raisedThreshold;
+            }
+            if (ceilThreshold < raisedThreshold)
+            {
+                ceilThreshold = raisedThreshold;
+            }
+        }
+
         // ================================================================
         // FLOOR MODE: normalY > threshold (normal points UP)
         // ================================================================
@@ -612,6 +649,20 @@ modded class Hologram
         vector defOri = GetDefaultOrientation();
         vector scrollRot = GetProjectionRotation();
         vector result = defOri + scrollRot;
+
+        // Per-kit floor yaw offset (e.g. DoorController faces backward -> +180)
+        float floorYawOff = LFPG_GetKitFloorYawOffset();
+        if (floorYawOff != 0.0)
+        {
+            result[0] = result[0] + floorYawOff;
+        }
+
+        // Per-kit floor pitch offset (e.g. Combiner/Splitter lie flat -> -90)
+        float floorPitchOff = LFPG_GetKitFloorPitchOffset();
+        if (floorPitchOff != 0.0)
+        {
+            result[1] = result[1] + floorPitchOff;
+        }
 
         // Normalize yaw to [-180, 180]
         if (result[0] > 180.0)

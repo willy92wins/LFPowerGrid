@@ -30,6 +30,11 @@ class LFPG_SwitchV2Remote_Kit : LFPG_KitBase
     {
         return 0.04;
     }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 // ---------------------------------------------------------

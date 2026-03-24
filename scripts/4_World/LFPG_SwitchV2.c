@@ -42,12 +42,12 @@ class LFPG_SwitchV2_Kit : LFPG_KitBase
 
     override float LFPG_GetWallPitchOffset()
     {
-        return -90.0;
+        return 0.0;
     }
 
     override float LFPG_GetWallYawOffset()
     {
-        return 180.0;
+        return 0.0;
     }
 };
 

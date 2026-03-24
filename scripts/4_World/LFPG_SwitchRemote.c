@@ -36,7 +36,7 @@ class LFPG_SwitchRemote_Kit : LFPG_KitBase
 
     override float LFPG_GetWallPitchOffset()
     {
-        return 180.0;
+        return 0.0;
     }
 };
 

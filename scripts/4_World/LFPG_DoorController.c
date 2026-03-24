@@ -30,6 +30,21 @@ class LF_DoorController_Kit : LFPG_KitBase
     {
         return 1;
     }
+
+    override float LFPG_GetWallPitchOffset()
+    {
+        return 90.0;
+    }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
+
+    override float LFPG_GetFloorYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 // ---------------------------------------------------------

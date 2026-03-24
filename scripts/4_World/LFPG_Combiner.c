@@ -23,6 +23,21 @@ class LF_Combiner_Kit : LFPG_KitBase
     {
         return 1;
     }
+
+    override float LFPG_GetFloorPitchOffset()
+    {
+        return -90.0;
+    }
+
+    override float LFPG_GetFloorYOffset()
+    {
+        return 0.12;
+    }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 // ---------------------------------------------------------

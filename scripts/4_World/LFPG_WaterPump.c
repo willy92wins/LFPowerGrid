@@ -1,7 +1,7 @@
 // =========================================================
 // LF_PowerGrid - Water Pump device (v4.1 Registry Refactor)
 //
-// LF_WaterPump_Kit:  DeployableContainer_Base pattern (box → hologram).
+// LF_WaterPump_Kit:  LFPG_KitBaseDeployable (box → hologram).
 // LF_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
 // LF_WaterPump_T2:   PASSTHROUGH, 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
 //
@@ -12,89 +12,15 @@
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT: DeployableContainer_Base pattern (unchanged)
+// KIT: LFPG_KitBaseDeployable (box → hologram of pump model)
+// v4.2: Migrated from DeployableContainer_Base to fix
+//   hologram detection (Cast to LFPG_KitBaseDeployable).
 // ---------------------------------------------------------
-class LF_WaterPump_Kit : DeployableContainer_Base
+class LF_WaterPump_Kit : LFPG_KitBaseDeployable
 {
-    string GetDeployedClassname()
+    override string LFPG_GetSpawnClassname()
     {
         return "LF_WaterPump";
-    }
-
-    vector GetDeployPositionOffset()
-    {
-        return "0 0 0";
-    }
-
-    vector GetDeployOrientationOffset()
-    {
-        return "0 0 0";
-    }
-
-    override void OnPlacementComplete(Man player, vector position = "0 0 0", vector orientation = "0 0 0")
-    {
-        super.OnPlacementComplete(player, position, orientation);
-
-        #ifdef SERVER
-        vector finalPos = position;
-        vector finalOri = orientation;
-
-        string tLog = "[WaterPump_Kit] OnPlacementComplete: param=";
-        tLog = tLog + position.ToString();
-        tLog = tLog + " kitPos=";
-        tLog = tLog + GetPosition().ToString();
-        LFPG_Util.Info(tLog);
-
-        string className = "LF_WaterPump";
-        EntityAI pump = GetGame().CreateObjectEx(className, finalPos, ECE_CREATEPHYSICS);
-        if (pump)
-        {
-            pump.SetPosition(finalPos);
-            pump.SetOrientation(finalOri);
-            pump.Update();
-
-            string deployMsg = "[WaterPump_Kit] Deployed LF_WaterPump at ";
-            deployMsg = deployMsg + finalPos.ToString();
-            LFPG_Util.Info(deployMsg);
-            GetGame().ObjectDelete(this);
-        }
-        else
-        {
-            string errKit = "[WaterPump_Kit] Failed to create LF_WaterPump! Kit preserved.";
-            LFPG_Util.Error(errKit);
-            PlayerBase pb = PlayerBase.Cast(player);
-            if (pb)
-            {
-                string errPlayer = "[LFPG] Water Pump placement failed. Kit preserved.";
-                pb.MessageStatus(errPlayer);
-            }
-        }
-        #endif
-    }
-
-    override bool IsBasebuildingKit()
-    {
-        return true;
-    }
-
-    override bool IsDeployable()
-    {
-        return true;
-    }
-
-    override bool CanDisplayCargo()
-    {
-        return false;
-    }
-
-    override string GetDeploySoundset()
-    {
-        return "placeBarbedWire_SoundSet";
-    }
-
-    override string GetLoopDeploySoundset()
-    {
-        return "";
     }
 };
 

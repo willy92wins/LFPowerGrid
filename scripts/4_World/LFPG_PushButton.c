@@ -28,6 +28,11 @@ class LFPG_PushButton_Kit : LFPG_KitBase
     {
         return 1;
     }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 // ---------------------------------------------------------

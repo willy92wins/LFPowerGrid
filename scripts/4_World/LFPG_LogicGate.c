@@ -38,6 +38,11 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
     {
         return 90.0;
     }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit

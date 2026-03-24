@@ -44,6 +44,16 @@ class LF_BatteryAdapter_Kit : LFPG_KitBase
     {
         return "LF_BatteryAdapter";
     }
+
+    override float LFPG_GetFloorPitchOffset()
+    {
+        return -90.0;
+    }
+
+    override float LFPG_GetFloorYOffset()
+    {
+        return 0.10;
+    }
 };
 
 // ---------------------------------------------------------

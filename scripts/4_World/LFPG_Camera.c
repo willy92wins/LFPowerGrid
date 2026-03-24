@@ -27,7 +27,7 @@ class LF_Camera_Kit : LFPG_KitBase
 
     override float LFPG_GetWallSurfaceOffset()
     {
-        return 0.22;
+        return 0.30;
     }
 };
 

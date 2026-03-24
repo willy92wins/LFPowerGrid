@@ -89,6 +89,18 @@ class LFPG_KitBase : Inventory_Base
         return 0.05;
     }
 
+    // Floor: yaw offset (degrees) — rotation around vertical axis
+    float LFPG_GetFloorYawOffset()
+    {
+        return 0.0;
+    }
+
+    // Floor: pitch offset (degrees) — tilt forward/backward
+    float LFPG_GetFloorPitchOffset()
+    {
+        return 0.0;
+    }
+
     // Floor: adapt orientation to terrain slope?
     bool LFPG_AdaptsToTerrain()
     {
