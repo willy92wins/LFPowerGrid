@@ -75,6 +75,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     protected bool m_PoweredNet    = false;
     protected bool m_Input0Powered = false;
     protected bool m_Input1Powered = false;
+    protected bool m_GateOpen      = false;
     protected bool m_Overloaded    = false;
 
     void LFPG_LogicGateBase()
@@ -121,23 +122,10 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         return "";
     }
 
-    // ---- Gate evaluation via virtual dispatch (replaces GetType() string comparison) ----
+    // ---- Gate state: latched in SetPowered, read by ElecGraph ----
     override bool LFPG_IsGateOpen()
     {
-        #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
-        if (!nm)
-            return false;
-
-        string portIn0 = "input_0";
-        string portIn1 = "input_1";
-        bool in0 = nm.IsPortReceivingPower(m_DeviceId, portIn0);
-        bool in1 = nm.IsPortReceivingPower(m_DeviceId, portIn1);
-
-        return LFPG_EvaluateGateLogic(in0, in1);
-        #else
-        return false;
-        #endif
+        return m_GateOpen;
     }
 
     override void LFPG_SetPowered(bool powered)
@@ -153,6 +141,14 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
             string portIn1 = "input_1";
             newIn0 = nm.IsPortReceivingPower(m_DeviceId, portIn0);
             newIn1 = nm.IsPortReceivingPower(m_DeviceId, portIn1);
+        }
+
+        bool newGate = LFPG_EvaluateGateLogic(newIn0, newIn1);
+        bool gateChanged = false;
+        if (m_GateOpen != newGate)
+        {
+            m_GateOpen = newGate;
+            gateChanged = true;
         }
 
         bool changed = false;
@@ -180,12 +176,19 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
             SetSynchDirty();
         }
 
+        if (gateChanged && nm)
+        {
+            nm.RequestPropagate(m_DeviceId);
+        }
+
         string dbgLog = "[LogicGate] SetPowered(";
         dbgLog = dbgLog + powered.ToString();
         dbgLog = dbgLog + ") in0=";
         dbgLog = dbgLog + newIn0.ToString();
         dbgLog = dbgLog + " in1=";
         dbgLog = dbgLog + newIn1.ToString();
+        dbgLog = dbgLog + " gate=";
+        dbgLog = dbgLog + m_GateOpen.ToString();
         dbgLog = dbgLog + " id=";
         dbgLog = dbgLog + m_DeviceId;
         dbgLog = dbgLog + " type=";
@@ -224,6 +227,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
         if (m_Input0Powered) { m_Input0Powered = false; dirty = true; }
         if (m_Input1Powered) { m_Input1Powered = false; dirty = true; }
+        if (m_GateOpen) { m_GateOpen = false; dirty = true; }
         if (dirty) { SetSynchDirty(); }
         #endif
     }
@@ -235,6 +239,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
         if (m_Input0Powered) { m_Input0Powered = false; dirty = true; }
         if (m_Input1Powered) { m_Input1Powered = false; dirty = true; }
+        if (m_GateOpen) { m_GateOpen = false; dirty = true; }
         if (dirty) { SetSynchDirty(); }
         #endif
     }
