@@ -4,7 +4,7 @@
 // Replaces LFPG_ActionViewCamera (v0.9.0).
 // Server-authoritative camera list via RPC.
 //
-// Aparece al mirar un LF_Monitor que:
+// Aparece al mirar un LFPG_Monitor que:
 //   - este encendido (m_PoweredNet = true)
 //   - el viewport NO este ya activo
 //
@@ -15,7 +15,7 @@
 //   Server: resuelve monitor → filtra cameras powered → responde
 //   Client: recibe CAMERA_LIST_RESPONSE → CameraViewport.EnterFromList
 //
-// Registrar en LF_Monitor.SetActions() y LFPG_ActionRegistration.
+// Registrar en LFPG_Monitor.SetActions() y LFPG_ActionRegistration.
 //
 // v0.9.3 (Bug 2 fix): Changed parent from ActionSingleUseBase to ActionInteractBase.
 // v0.9.4 (Bug fix): Removed client-side HasWireStore/GetWires/Count check.
@@ -60,7 +60,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!targetObj)
             return false;
 
-        string monitorType = "LF_Monitor";
+        string monitorType = "LFPG_Monitor";
         if (!targetObj.IsKindOf(monitorType))
             return false;
 
@@ -68,7 +68,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (distSq > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return false;
 
-        LF_Monitor monitor = LF_Monitor.Cast(targetObj);
+        LFPG_Monitor monitor = LFPG_Monitor.Cast(targetObj);
         if (!monitor)
             return false;
 
@@ -102,7 +102,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!targetObj)
             return;
 
-        string monitorCheck = "LF_Monitor";
+        string monitorCheck = "LFPG_Monitor";
         if (!targetObj.IsKindOf(monitorCheck))
             return;
 

@@ -1106,10 +1106,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Monitor monitor = LF_Monitor.Cast(monEnt);
+        LFPG_Monitor monitor = LFPG_Monitor.Cast(monEnt);
         if (!monitor)
         {
-            LFPG_Util.Warn("[RequestCameraList] entity is not LF_Monitor");
+            LFPG_Util.Warn("[RequestCameraList] entity is not LFPG_Monitor");
             return;
         }
 
@@ -1149,7 +1149,7 @@ modded class PlayerBase
         ref array<string> camLabels = new array<string>;
 
         EntityAI camEnt = null;
-        LF_Camera cam = null;
+        LFPG_Camera cam = null;
         string camDevId = "";
         int idLen = 0;
         string camLabel = "";
@@ -1179,7 +1179,7 @@ modded class PlayerBase
                 continue;
             }
 
-            cam = LF_Camera.Cast(camEnt);
+            cam = LFPG_Camera.Cast(camEnt);
             if (!cam)
                 continue;
 
@@ -1339,10 +1339,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+        LFPG_Searchlight sl = LFPG_Searchlight.Cast(slObj);
         if (!sl)
         {
-            LFPG_Util.Warn("[Searchlight_Enter] Object is not LF_Searchlight");
+            LFPG_Util.Warn("[Searchlight_Enter] Object is not LFPG_Searchlight");
             return;
         }
 
@@ -1423,7 +1423,7 @@ modded class PlayerBase
         if (!slObj)
             return;
 
-        LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+        LFPG_Searchlight sl = LFPG_Searchlight.Cast(slObj);
         if (!sl)
             return;
 
@@ -1517,7 +1517,7 @@ modded class PlayerBase
         Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
         if (slObj)
         {
-            LF_Searchlight sl = LF_Searchlight.Cast(slObj);
+            LFPG_Searchlight sl = LFPG_Searchlight.Cast(slObj);
             if (sl)
             {
                 // Validate sender is the current operator (anti-cheat)
@@ -2275,10 +2275,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
         if (!sorter)
         {
-            LFPG_Util.Warn("[SorterConfigRequest] entity is not LF_Sorter");
+            LFPG_Util.Warn("[SorterConfigRequest] entity is not LFPG_Sorter");
             return;
         }
 
@@ -2335,7 +2335,7 @@ modded class PlayerBase
             string portName = "";
             int portNum = 0;
             EntityAI targetEnt = null;
-            LF_Sorter targetSorter = null;
+            LFPG_Sorter targetSorter = null;
             EntityAI destCont = null;
             string resolvedName = "";
             LFPG_WireData wd = null;
@@ -2365,7 +2365,7 @@ modded class PlayerBase
                     if (!targetEnt)
                         break;
 
-                    targetSorter = LF_Sorter.Cast(targetEnt);
+                    targetSorter = LFPG_Sorter.Cast(targetEnt);
                     if (!targetSorter)
                         break;
 
@@ -2448,10 +2448,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
         if (!sorter)
         {
-            LFPG_Util.Warn("[SorterConfigSave] entity is not LF_Sorter");
+            LFPG_Util.Warn("[SorterConfigSave] entity is not LFPG_Sorter");
             return;
         }
 
@@ -2522,10 +2522,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
         if (!sorter)
         {
-            LFPG_Util.Warn("[SorterRequestSort] entity is not LF_Sorter");
+            LFPG_Util.Warn("[SorterRequestSort] entity is not LFPG_Sorter");
             return;
         }
 
@@ -2691,10 +2691,10 @@ modded class PlayerBase
             return;
         }
 
-        LF_Sorter sorter = LF_Sorter.Cast(devEnt);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
         if (!sorter)
         {
-            string warnNotSorter = "[SorterResync] entity is not LF_Sorter";
+            string warnNotSorter = "[SorterResync] entity is not LFPG_Sorter";
             LFPG_Util.Warn(warnNotSorter);
             return;
         }
@@ -2808,10 +2808,10 @@ modded class PlayerBase
 
         // Resolve sorter
         EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
-        LF_Sorter sorter = null;
+        LFPG_Sorter sorter = null;
         if (devEnt)
         {
-            sorter = LF_Sorter.Cast(devEnt);
+            sorter = LFPG_Sorter.Cast(devEnt);
         }
 
         bool canProceed = false;

@@ -4,7 +4,7 @@
 // LFPG_SwitchRemote_Kit: Holdable, deployable.
 // LFPG_SwitchRemote:     PASSTHROUGH, 1 IN + 1 OUT.
 //                      Momentary pulse (ON for LFPG_BUTTON_PULSE_MS, then OFF).
-//                      RF-CAPABLE: toggleable via LF_Intercom.
+//                      RF-CAPABLE: toggleable via LFPG_Intercom.
 //                      Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
 // LED states (hiddenSelections[2] = "light_led"):

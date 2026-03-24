@@ -5,7 +5,7 @@
 // No item required (CCINone) — player walks up and interacts.
 //
 // Conditions:
-//   - Target must be LF_Intercom
+//   - Target must be LFPG_Intercom
 //   - Within interact distance
 //   - Must have power (m_PoweredNet == true)
 //
@@ -40,7 +40,7 @@ class LFPG_ActionToggleIntercom : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return false;
 
@@ -80,7 +80,7 @@ class LFPG_ActionToggleIntercom : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return;
 

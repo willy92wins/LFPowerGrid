@@ -392,7 +392,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         if (!player || !item)
             return false;
 
-        if (!item.IsInherited(LF_CableReel))
+        if (!item.IsInherited(LFPG_CableReel))
             return false;
 
         // Block wiring actions while Sorter panel is open.
@@ -578,7 +578,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         if (!player || !item)
             return false;
 
-        if (!item.IsInherited(LF_CableReel))
+        if (!item.IsInherited(LFPG_CableReel))
             return false;
 
         if (GetGame().IsDedicatedServer())
@@ -641,7 +641,7 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         if (!player || !item)
             return false;
 
-        if (!item.IsInherited(LF_CableReel))
+        if (!item.IsInherited(LFPG_CableReel))
             return false;
 
         if (GetGame().IsDedicatedServer())
@@ -1131,7 +1131,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         if (!player || !item)
             return false;
 
-        if (!item.IsInherited(LF_CableReel))
+        if (!item.IsInherited(LFPG_CableReel))
             return false;
 
         if (!target)
@@ -1148,10 +1148,10 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         // v2.6: Suppress DebugStatus on linked Sorters — the Sorter
         // has its own full config panel (LFPG_ActionOpenSorterPanel).
         // Showing both DebugStatus + Port actions clutters the scroll menu.
-        string sorterType = "LF_Sorter";
+        string sorterType = "LFPG_Sorter";
         if (dev.IsKindOf(sorterType))
         {
-            LF_Sorter sorterCast = LF_Sorter.Cast(dev);
+            LFPG_Sorter sorterCast = LFPG_Sorter.Cast(dev);
             if (sorterCast)
             {
                 if (sorterCast.LFPG_IsLinked())

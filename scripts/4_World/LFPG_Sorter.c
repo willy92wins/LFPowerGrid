@@ -1,10 +1,10 @@
 // =========================================================
 // LF_PowerGrid - Sorter device (v4.0 Refactor)
 //
-// LF_Sorter_Kit: Holdable item (same-model deployment).
-// LF_Sorter:     PASSTHROUGH, 1 IN + 6 OUT, 5 u/s self-consumption.
+// LFPG_Sorter_Kit: Holdable item (same-model deployment).
+// LFPG_Sorter:     PASSTHROUGH, 1 IN + 6 OUT, 5 u/s self-consumption.
 //                Sorts items from linked container to downstream Sorters.
-//                OUT ports restricted to LF_Sorter only (CanConnectTo).
+//                OUT ports restricted to LFPG_Sorter only (CanConnectTo).
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, base CanConnectTo — all in base.
@@ -20,11 +20,11 @@ static const float LFPG_SORTER_LINK_RADIUS = 3.0;
 static const string LFPG_SORTER_RVMAT_OFF = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_off.rvmat";
 static const string LFPG_SORTER_RVMAT_ON  = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_on.rvmat";
 
-class LF_Sorter_Kit : LFPG_KitBase
+class LFPG_Sorter_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Sorter";
+        return "LFPG_Sorter";
     }
 };
 
@@ -32,7 +32,7 @@ class LF_Sorter_Kit : LFPG_KitBase
 // DEVICE — PASSTHROUGH : LFPG_WireOwnerBase
 // 1 IN (input_1) + 6 OUT (output_1..6), 5 u/s
 // ---------------------------------------------------------
-class LF_Sorter : LFPG_WireOwnerBase
+class LFPG_Sorter : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected int  m_LinkedContainerLow  = 0;
@@ -50,7 +50,7 @@ class LF_Sorter : LFPG_WireOwnerBase
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_Sorter()
+    void LFPG_Sorter()
     {
         m_FilterConfig = new LFPG_SortConfig();
 
@@ -114,7 +114,7 @@ class LF_Sorter : LFPG_WireOwnerBase
         if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT))
             return false;
 
-        string kSorter = "LF_Sorter";
+        string kSorter = "LFPG_Sorter";
         if (!other.IsKindOf(kSorter))
             return false;
 
@@ -167,7 +167,7 @@ class LF_Sorter : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_Sorter] SetPowered(";
+        string msg = "[LFPG_Sorter] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -236,7 +236,7 @@ class LF_Sorter : LFPG_WireOwnerBase
                 m_LinkedContainerLow = 0;
                 m_LinkedContainerHigh = 0;
                 LFPG_LinkNearestContainer(GetPosition());
-                relinkMsg = "[LF_Sorter] Post-restart re-link attempted at ";
+                relinkMsg = "[LFPG_Sorter] Post-restart re-link attempted at ";
                 relinkMsg = relinkMsg + GetPosition().ToString();
                 LFPG_Util.Info(relinkMsg);
             }
@@ -325,21 +325,21 @@ class LF_Sorter : LFPG_WireOwnerBase
     {
         if (!ctx.Read(m_LinkedContainerLow))
         {
-            string errLow = "[LF_Sorter] OnStoreLoad failed: m_LinkedContainerLow";
+            string errLow = "[LFPG_Sorter] OnStoreLoad failed: m_LinkedContainerLow";
             LFPG_Util.Error(errLow);
             return false;
         }
 
         if (!ctx.Read(m_LinkedContainerHigh))
         {
-            string errHigh = "[LF_Sorter] OnStoreLoad failed: m_LinkedContainerHigh";
+            string errHigh = "[LFPG_Sorter] OnStoreLoad failed: m_LinkedContainerHigh";
             LFPG_Util.Error(errHigh);
             return false;
         }
 
         if (!ctx.Read(m_FilterJSON))
         {
-            string errFilter = "[LF_Sorter] OnStoreLoad failed: m_FilterJSON";
+            string errFilter = "[LFPG_Sorter] OnStoreLoad failed: m_FilterJSON";
             LFPG_Util.Error(errFilter);
             return false;
         }
@@ -430,7 +430,7 @@ class LF_Sorter : LFPG_WireOwnerBase
 
             SetSynchDirty();
 
-            string linkLog = "[LF_Sorter] Linked container: ";
+            string linkLog = "[LFPG_Sorter] Linked container: ";
             linkLog = linkLog + bestContainer.GetType();
             linkLog = linkLog + " netId=";
             linkLog = linkLog + linkLow.ToString();
@@ -440,7 +440,7 @@ class LF_Sorter : LFPG_WireOwnerBase
         }
         else
         {
-            string noFoundMsg = "[LF_Sorter] No container found within ";
+            string noFoundMsg = "[LFPG_Sorter] No container found within ";
             noFoundMsg = noFoundMsg + LFPG_SORTER_LINK_RADIUS.ToString();
             noFoundMsg = noFoundMsg + "m";
             LFPG_Util.Warn(noFoundMsg);
@@ -461,7 +461,7 @@ class LF_Sorter : LFPG_WireOwnerBase
             m_LinkedContainerLow = 0;
             m_LinkedContainerHigh = 0;
             SetSynchDirty();
-            string warnMsg = "[LF_Sorter] Linked container no longer exists — cleared stale reference";
+            string warnMsg = "[LFPG_Sorter] Linked container no longer exists — cleared stale reference";
             LFPG_Util.Warn(warnMsg);
             #endif
             return null;
@@ -534,7 +534,7 @@ class LF_Sorter : LFPG_WireOwnerBase
         bool parseOk = testConfig.FromJSON(json);
         if (!parseOk)
         {
-            string rejectMsg = "[LF_Sorter] SetFilterJSON rejected: malformed JSON";
+            string rejectMsg = "[LFPG_Sorter] SetFilterJSON rejected: malformed JSON";
             LFPG_Util.Warn(rejectMsg);
             return false;
         }

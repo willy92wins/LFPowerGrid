@@ -1,7 +1,7 @@
 // =========================================================
 // LF_PowerGrid - Searchlight light classes (v1.5.0)
 //
-// 4 light classes for the LF_Searchlight device:
+// 4 light classes for the LFPG_Searchlight device:
 //   LFPG_SearchlightBeamCore  — primary spot, 120m, narrow 16°, shadows ON
 //   LFPG_SearchlightBeamSpill — secondary spot, 80m, wide 40°, shadows OFF
 //   LFPG_SearchlightHalo      — lens glow, 5m radius point light

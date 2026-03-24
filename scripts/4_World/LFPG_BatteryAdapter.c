@@ -1,9 +1,9 @@
 // =========================================================
 // LF_PowerGrid - Battery Adapter (v1.0)
 //
-// LF_BatteryAdapter_Kit: same-model kit → spawns LF_BatteryAdapter.
+// LFPG_BatteryAdapter_Kit: same-model kit → spawns LFPG_BatteryAdapter.
 //
-// LF_BatteryAdapter:  PASSTHROUGH (1 IN + 1 OUT) with energy storage
+// LFPG_BatteryAdapter:  PASSTHROUGH (1 IN + 1 OUT) with energy storage
 //                     proxied through vanilla battery CompEM.
 //
 // Accepts CarBattery (500 CompEM → 1000 LFPG) or
@@ -38,11 +38,11 @@ static const float LFPG_ADAPTER_TRUCK_MAX_OUTPUT    = 60.0;
 // ---------------------------------------------------------
 // KIT: same-model deploy
 // ---------------------------------------------------------
-class LF_BatteryAdapter_Kit : LFPG_KitBase
+class LFPG_BatteryAdapter_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_BatteryAdapter";
+        return "LFPG_BatteryAdapter";
     }
 
     override float LFPG_GetFloorPitchOffset()
@@ -59,7 +59,7 @@ class LF_BatteryAdapter_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE: PASSTHROUGH : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_BatteryAdapter : LFPG_WireOwnerBase
+class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 {
     // ---- SyncVars ----
     protected bool  m_PoweredNet        = false;
@@ -76,7 +76,7 @@ class LF_BatteryAdapter : LFPG_WireOwnerBase
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_BatteryAdapter()
+    void LFPG_BatteryAdapter()
     {
         string pIn = "input_1";
         string lIn = "input_1";
@@ -263,7 +263,7 @@ class LF_BatteryAdapter : LFPG_WireOwnerBase
         m_AttachedBattery = item;
         m_BatteryType = batType;
 
-        string attachMsg = "[LF_BatteryAdapter] Battery attached type=";
+        string attachMsg = "[LFPG_BatteryAdapter] Battery attached type=";
         attachMsg = attachMsg + batType.ToString();
         string itemType = item.GetType();
         attachMsg = attachMsg + " class=";
@@ -294,7 +294,7 @@ class LF_BatteryAdapter : LFPG_WireOwnerBase
         if (batType == 0)
             return;
 
-        string detachMsg = "[LF_BatteryAdapter] Battery detached type=";
+        string detachMsg = "[LFPG_BatteryAdapter] Battery detached type=";
         detachMsg = detachMsg + batType.ToString();
         LFPG_Util.Info(detachMsg);
 
@@ -382,7 +382,7 @@ class LF_BatteryAdapter : LFPG_WireOwnerBase
             m_AttachedBattery = carBat;
             m_BatteryType = 1;
             LFPG_RefreshStoredFromCompEM();
-            string carMsg = "[LF_BatteryAdapter] Detected existing CarBattery on init";
+            string carMsg = "[LFPG_BatteryAdapter] Detected existing CarBattery on init";
             LFPG_Util.Info(carMsg);
             return;
         }
@@ -395,7 +395,7 @@ class LF_BatteryAdapter : LFPG_WireOwnerBase
             m_AttachedBattery = truckBat;
             m_BatteryType = 2;
             LFPG_RefreshStoredFromCompEM();
-            string truckMsg = "[LF_BatteryAdapter] Detected existing TruckBattery on init";
+            string truckMsg = "[LFPG_BatteryAdapter] Detected existing TruckBattery on init";
             LFPG_Util.Info(truckMsg);
             return;
         }

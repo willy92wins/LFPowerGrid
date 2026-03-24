@@ -6,7 +6,7 @@
 //
 // Conditions:
 //   - No item in hand (CCINone)
-//   - Target is LF_Sorter
+//   - Target is LFPG_Sorter
 //   - Target is powered
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
@@ -18,7 +18,7 @@
 //   Client: receive → LFPG_SorterView.Open(...)
 //
 // Pattern: ActionInteractBase (same as LFPG_ActionWatchMonitor)
-// Register in LFPG_ActionRegistration + LF_Sorter.SetActions
+// Register in LFPG_ActionRegistration + LFPG_Sorter.SetActions
 // =========================================================
 
 class LFPG_ActionOpenSorterPanel : ActionInteractBase
@@ -48,11 +48,11 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
         if (!targetObj)
             return false;
 
-        string sorterType = "LF_Sorter";
+        string sorterType = "LFPG_Sorter";
         if (!targetObj.IsKindOf(sorterType))
             return false;
 
-        LF_Sorter sorter = LF_Sorter.Cast(targetObj);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(targetObj);
         if (!sorter)
             return false;
 
@@ -88,7 +88,7 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
         if (!targetObj)
             return;
 
-        string checkType = "LF_Sorter";
+        string checkType = "LFPG_Sorter";
         if (!targetObj.IsKindOf(checkType))
             return;
 

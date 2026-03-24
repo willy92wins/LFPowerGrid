@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Furnace (Incinerator) SOURCE device (v4.0 Refactor)
 //
-// LF_Furnace_Kit:  DeployableContainer_Base pattern (different-model).
-// LF_Furnace:      SOURCE device (50 u/s constant while burning).
+// LFPG_Furnace_Kit:  DeployableContainer_Base pattern (different-model).
+// LFPG_Furnace:      SOURCE device (50 u/s constant while burning).
 //                  Burns any item for fuel. 1 output (output_1).
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
@@ -18,11 +18,11 @@
 // KIT: DeployableContainer_Base pattern
 // ---------------------------------------------------------
 
-class LF_Furnace_Kit : LFPG_KitBaseDeployable
+class LFPG_Furnace_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Furnace";
+        return "LFPG_Furnace";
     }
 };
 
@@ -30,7 +30,7 @@ class LF_Furnace_Kit : LFPG_KitBaseDeployable
 // DEVICE — SOURCE : LFPG_WireOwnerBase
 // 1 OUT (output_1), 50 u/s while burning
 // ---------------------------------------------------------
-class LF_Furnace : LFPG_WireOwnerBase
+class LFPG_Furnace : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected bool  m_SourceOn     = false;
@@ -46,7 +46,7 @@ class LF_Furnace : LFPG_WireOwnerBase
     // ============================================
     // Constructor — port + SyncVars
     // ============================================
-    void LF_Furnace()
+    void LFPG_Furnace()
     {
         string pOut = "output_1";
         string lOut = "Output";
@@ -251,14 +251,14 @@ class LF_Furnace : LFPG_WireOwnerBase
     {
         if (!ctx.Read(m_SourceOn))
         {
-            string errSrc = "[LF_Furnace] OnStoreLoad failed: m_SourceOn";
+            string errSrc = "[LFPG_Furnace] OnStoreLoad failed: m_SourceOn";
             LFPG_Util.Error(errSrc);
             return false;
         }
 
         if (!ctx.Read(m_FuelCurrent))
         {
-            string errFuel = "[LF_Furnace] OnStoreLoad failed: m_FuelCurrent";
+            string errFuel = "[LFPG_Furnace] OnStoreLoad failed: m_FuelCurrent";
             LFPG_Util.Error(errFuel);
             return false;
         }
@@ -304,7 +304,7 @@ class LF_Furnace : LFPG_WireOwnerBase
                 {
                     LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
                 }
-                string offMsg = "[LF_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
+                string offMsg = "[LFPG_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
                 offMsg = offMsg + m_DeviceId;
                 LFPG_Util.Info(offMsg);
             }
@@ -327,7 +327,7 @@ class LF_Furnace : LFPG_WireOwnerBase
             {
                 LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
             }
-            string offMsg = "[LF_Furnace] Toggled OFF. fuel=";
+            string offMsg = "[LFPG_Furnace] Toggled OFF. fuel=";
             offMsg = offMsg + m_FuelCurrent.ToString();
             offMsg = offMsg + " id=";
             offMsg = offMsg + m_DeviceId;
@@ -360,7 +360,7 @@ class LF_Furnace : LFPG_WireOwnerBase
                 {
                     LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
                 }
-                string onMsg = "[LF_Furnace] Toggled ON. fuel=";
+                string onMsg = "[LFPG_Furnace] Toggled ON. fuel=";
                 onMsg = onMsg + m_FuelCurrent.ToString();
                 onMsg = onMsg + " id=";
                 onMsg = onMsg + m_DeviceId;
@@ -451,7 +451,7 @@ class LF_Furnace : LFPG_WireOwnerBase
         }
         SetSynchDirty();
 
-        string fuelMsg = "[LF_Furnace] Fuel added: +";
+        string fuelMsg = "[LFPG_Furnace] Fuel added: +";
         fuelMsg = fuelMsg + amount.ToString();
         fuelMsg = fuelMsg + " total=";
         fuelMsg = fuelMsg + m_FuelCurrent.ToString();
@@ -554,7 +554,7 @@ class LF_Furnace : LFPG_WireOwnerBase
 
         SetSynchDirty();
 
-        string acLog = "[LF_Furnace] Auto-consumed ";
+        string acLog = "[LFPG_Furnace] Auto-consumed ";
         acLog = acLog + burnedType;
         acLog = acLog + " +";
         acLog = acLog + bestFuel.ToString();

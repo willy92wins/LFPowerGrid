@@ -7,8 +7,8 @@
 //
 // Requirements:
 //   - Player holds Screwdriver in hands
-//   - Target: LF_Intercom with m_RadioInstalled == false
-//   - LF_Intercom has a PersonalRadio in its WalkieTalkie slot
+//   - Target: LFPG_Intercom with m_RadioInstalled == false
+//   - LFPG_Intercom has a PersonalRadio in its WalkieTalkie slot
 //
 // On completion (server):
 //   1. Set m_RadioInstalled = true (locks slot via CanReleaseAttachment)
@@ -69,7 +69,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
         if (!targetObj)
             return false;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return false;
 
@@ -99,7 +99,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
         if (!targetObj)
             return;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return;
 
@@ -138,7 +138,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
     }
 
     // Helper: find a PersonalRadio in the intercom's attachment slot
-    static EntityAI LFPG_FindIntercomRadio(LF_Intercom ic)
+    static EntityAI LFPG_FindIntercomRadio(LFPG_Intercom ic)
     {
         if (!ic)
             return null;
@@ -159,7 +159,7 @@ class LFPG_ActionInstallMic : ActionContinuousBase
 
         // Exclude ghost radios (should never be here, but safety)
         string typeName = att.GetType();
-        if (typeName == "LF_GhostRadio")
+        if (typeName == "LFPG_GhostRadio")
             return null;
 
         return att;

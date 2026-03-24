@@ -566,7 +566,7 @@ static const float LFPG_MOVE_DETECT_THRESHOLD_SQ = 0.09;   // 0.3² pre-computed
 
 // ---- Cable reel type string (Sprint 5) ----
 // Used by DeviceInspector and WiringClient to check held item.
-static const string LFPG_CABLE_REEL_TYPE = "LF_CableReel";
+static const string LFPG_CABLE_REEL_TYPE = "LFPG_CableReel";
 
 // ---- Device Inspector UI (Sprint 5, v0.8.0) ----
 static const float LFPG_INSPECT_PANEL_W          = 300.0;   // panel width (px)
@@ -597,7 +597,7 @@ static const int LFPG_SORT_INSPECTOR  = 10001;
 static const bool LFPG_DIAG_PT_CHAIN = false;
 
 // ---- v0.8.0: Centralized Solar Timer ----
-// Moved from LF_SolarPanel per-panel constants to shared defines.
+// Moved from LFPG_SolarPanel per-panel constants to shared defines.
 // NetworkManager runs a single timer that updates all solar panels atomically.
 static const int   LFPG_SOLAR_CHECK_MS   = 15000;  // check interval (ms)
 static const int   LFPG_SOLAR_DAWN_HOUR  = 6;      // daylight start hour

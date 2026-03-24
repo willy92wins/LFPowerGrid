@@ -4,7 +4,7 @@
 // Shared data classes for filter rules and output configuration.
 // Used by:
 //   - LFPG_SorterUI.c (client: build/edit filters)
-//   - LF_Sorter.c (server: persist + evaluate, Sprint S2/S3)
+//   - LFPG_Sorter.c (server: persist + evaluate, Sprint S2/S3)
 //   - LFPG_TickSorters (server: evaluate items, Sprint S3)
 //
 // JSON serialization format (compact):

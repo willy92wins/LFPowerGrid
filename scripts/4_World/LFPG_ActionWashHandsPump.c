@@ -57,7 +57,7 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
         if (!targetObj)
             return false;
 
-        LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
+        LFPG_WaterPump pump1 = LFPG_WaterPump.Cast(targetObj);
         if (pump1)
         {
             // v5.1: T1 water goes entirely to sprinkler — no washing
@@ -68,7 +68,7 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
             return LFPG_PumpHelper.VerifyPowered(ent1);
         }
 
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(targetObj);
         if (pump2)
         {
             EntityAI ent2 = EntityAI.Cast(targetObj);
@@ -112,8 +112,8 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
         bool powered = false;
         int tankLiquidType = 0;
 
-        LF_WaterPump pump1 = LF_WaterPump.Cast(targetObj);
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
+        LFPG_WaterPump pump1 = LFPG_WaterPump.Cast(targetObj);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(targetObj);
 
         if (pump1)
         {

@@ -8,7 +8,7 @@
 // Conditions to turn OFF: always available if furnace is on
 //
 // Base: ActionInteractBase (CCINone, no item in hand)
-// Target: LF_Furnace
+// Target: LFPG_Furnace
 // v1.2.1: CCTObject→CCTCursor + manual DistSq (fixes interaction
 //         reliability on small Geometry LOD models).
 // =========================================================
@@ -40,7 +40,7 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Furnace furnace = LF_Furnace.Cast(targetObj);
+        LFPG_Furnace furnace = LFPG_Furnace.Cast(targetObj);
         if (!furnace)
             return false;
 
@@ -107,7 +107,7 @@ class LFPG_ActionToggleFurnace : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Furnace furnace = LF_Furnace.Cast(targetObj);
+        LFPG_Furnace furnace = LFPG_Furnace.Cast(targetObj);
         if (!furnace)
             return;
 

@@ -39,7 +39,7 @@ class LFPG_SorterTagView extends ScriptView
 
     override string GetLayoutFile()
     {
-        return "LFPowerGrid/gui/layouts/LF_SorterTag.layout";
+        return "LFPowerGrid/gui/layouts/LFPG_SorterTag.layout";
     }
 
     override typename GetControllerType()

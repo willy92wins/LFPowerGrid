@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Searchlight device (v4.0 Refactor)
 //
-// LF_Searchlight_Kit:  Holdable, deployable (same-model pattern).
-// LF_Searchlight:      CONSUMER, 1 IN (input_0), 25 u/s, no wire store.
+// LFPG_Searchlight_Kit:  Holdable, deployable (same-model pattern).
+// LFPG_Searchlight:      CONSUMER, 1 IN (input_0), 25 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 //   All boilerplate (SyncVars DeviceId, lifecycle, persistence,
@@ -26,11 +26,11 @@ static const string LFPG_SL_RVMAT_ON  = "\\LFPowerGrid\\data\\searchlight\\lf_se
 
 static const float LFPG_SL_SPLASH_Y_OFFSET = 0.05;
 
-class LF_Searchlight_Kit : LFPG_KitBase
+class LFPG_Searchlight_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Searchlight";
+        return "LFPG_Searchlight";
     }
 };
 
@@ -38,7 +38,7 @@ class LF_Searchlight_Kit : LFPG_KitBase
 // DEVICE — CONSUMER : LFPG_DeviceBase
 // 1 IN (input_0), 25 u/s, no wire store
 // ---------------------------------------------------------
-class LF_Searchlight : LFPG_DeviceBase
+class LFPG_Searchlight : LFPG_DeviceBase
 {
     // ---- Device-specific SyncVars ----
     protected bool  m_PoweredNet = false;
@@ -66,7 +66,7 @@ class LF_Searchlight : LFPG_DeviceBase
     // ============================================
     // Constructor — port + SyncVars
     // ============================================
-    void LF_Searchlight()
+    void LFPG_Searchlight()
     {
         string pIn = "input_0";
         string lIn = "Power Input";
@@ -132,7 +132,7 @@ class LF_Searchlight : LFPG_DeviceBase
             LFPG_KickOperator();
         }
 
-        string msg = "[LF_Searchlight] SetPowered(";
+        string msg = "[LFPG_Searchlight] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -264,14 +264,14 @@ class LF_Searchlight : LFPG_DeviceBase
     {
         if (!ctx.Read(m_AimYaw))
         {
-            string errYaw = "[LF_Searchlight] OnStoreLoad failed: m_AimYaw";
+            string errYaw = "[LFPG_Searchlight] OnStoreLoad failed: m_AimYaw";
             LFPG_Util.Error(errYaw);
             return false;
         }
 
         if (!ctx.Read(m_AimPitch))
         {
-            string errPitch = "[LF_Searchlight] OnStoreLoad failed: m_AimPitch";
+            string errPitch = "[LFPG_Searchlight] OnStoreLoad failed: m_AimPitch";
             LFPG_Util.Error(errPitch);
             return false;
         }
@@ -315,7 +315,7 @@ class LF_Searchlight : LFPG_DeviceBase
             m_LightSplash.SetBrightnessTo(0.0);
         }
 
-        string logMsg = "[LF_Searchlight] CreateAllLights id=";
+        string logMsg = "[LFPG_Searchlight] CreateAllLights id=";
         logMsg = logMsg + m_DeviceId;
         LFPG_Util.Debug(logMsg);
         #endif
@@ -345,7 +345,7 @@ class LF_Searchlight : LFPG_DeviceBase
             m_LightSplash = null;
         }
 
-        string logDest = "[LF_Searchlight] DestroyAllLights";
+        string logDest = "[LFPG_Searchlight] DestroyAllLights";
         LFPG_Util.Debug(logDest);
         #endif
     }
@@ -549,7 +549,7 @@ class LF_Searchlight : LFPG_DeviceBase
         Object opObj = GetGame().GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
         if (!opObj)
         {
-            string warnGone = "[LF_Searchlight] Operator entity gone (disconnect?) — clearing lock";
+            string warnGone = "[LFPG_Searchlight] Operator entity gone (disconnect?) — clearing lock";
             LFPG_Util.Warn(warnGone);
             m_OperatorNetLow  = 0;
             m_OperatorNetHigh = 0;
@@ -606,7 +606,7 @@ class LF_Searchlight : LFPG_DeviceBase
                     int kickSubId = LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM;
                     kickRpc.Write(kickSubId);
                     kickRpc.Send(opPlayer, LFPG_RPC_CHANNEL, true, opId);
-                    string kickMsg = "[LF_Searchlight] Kicked operator";
+                    string kickMsg = "[LFPG_Searchlight] Kicked operator";
                     LFPG_Util.Info(kickMsg);
                 }
             }

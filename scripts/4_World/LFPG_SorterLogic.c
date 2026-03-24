@@ -770,7 +770,7 @@ class LFPG_SorterLogic
     //   output index → output port → wire → target Sorter → its container
     // Returns null if wire/target missing.
     // ---------------------------------------------------------
-    static EntityAI ResolveOutputContainer(LF_Sorter sorter, int outputIdx)
+    static EntityAI ResolveOutputContainer(LFPG_Sorter sorter, int outputIdx)
     {
         if (!sorter)
             return null;
@@ -801,12 +801,12 @@ class LFPG_SorterLogic
         if (!targetWire)
             return null;
 
-        // 3. Resolve target device (another LF_Sorter) by NetworkID
+        // 3. Resolve target device (another LFPG_Sorter) by NetworkID
         EntityAI targetDev = LFPG_DeviceAPI.ResolveByNetworkId(targetWire.m_TargetNetLow, targetWire.m_TargetNetHigh);
         if (!targetDev)
             return null;
 
-        LF_Sorter targetSorter = LF_Sorter.Cast(targetDev);
+        LFPG_Sorter targetSorter = LFPG_Sorter.Cast(targetDev);
         if (!targetSorter)
             return null;
 

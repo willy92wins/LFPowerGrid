@@ -6,7 +6,7 @@
 //
 // Conditions:
 //   - No item in hand (CCINone)
-//   - Target is LF_Sorter
+//   - Target is LFPG_Sorter
 //   - Target is powered
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
@@ -48,11 +48,11 @@ class LFPG_ActionSyncSorter : ActionInteractBase
         if (!targetObj)
             return false;
 
-        string sorterType = "LF_Sorter";
+        string sorterType = "LFPG_Sorter";
         if (!targetObj.IsKindOf(sorterType))
             return false;
 
-        LF_Sorter sorter = LF_Sorter.Cast(targetObj);
+        LFPG_Sorter sorter = LFPG_Sorter.Cast(targetObj);
         if (!sorter)
             return false;
 

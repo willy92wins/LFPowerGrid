@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Solar Panel devices (v4.1 Registry Refactor)
 //
-// LF_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
-// LF_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
+// LFPG_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
+// LFPG_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
 //                     Sun-driven via centralized NM timer.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
@@ -15,11 +15,11 @@
 // KIT (unchanged)
 // ---------------------------------------------------------
 
-class LF_SolarPanel_Kit : LFPG_KitBaseDeployable
+class LFPG_SolarPanel_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_SolarPanel";
+        return "LFPG_SolarPanel";
     }
 
     override vector GetDeployOrientationOffset()
@@ -31,14 +31,14 @@ class LF_SolarPanel_Kit : LFPG_KitBaseDeployable
 // ---------------------------------------------------------
 // DEVICE - SOURCE : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_SolarPanel : LFPG_WireOwnerBase
+class LFPG_SolarPanel : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected bool  m_SourceOn   = false;
     protected float m_LoadRatio  = 0.0;
     protected bool  m_Overloaded = false;
 
-    void LF_SolarPanel()
+    void LFPG_SolarPanel()
     {
         string pOut = "output_1";
         LFPG_AddPort(pOut, LFPG_PortDir.OUT, "Output");
@@ -118,7 +118,7 @@ class LF_SolarPanel : LFPG_WireOwnerBase
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         }
 
-        string sunMsg = "[LF_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString();
+        string sunMsg = "[LFPG_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString();
         sunMsg = sunMsg + " id=";
         sunMsg = sunMsg + m_DeviceId;
         LFPG_Util.Info(sunMsg);
@@ -184,7 +184,7 @@ class LF_SolarPanel : LFPG_WireOwnerBase
     {
         if (!ctx.Read(m_SourceOn))
         {
-            string errSrc = "[LF_SolarPanel] OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId;
+            string errSrc = "[LFPG_SolarPanel] OnStoreLoad: failed to read m_SourceOn for " + m_DeviceId;
             LFPG_Util.Error(errSrc);
             return false;
         }
@@ -195,7 +195,7 @@ class LF_SolarPanel : LFPG_WireOwnerBase
 // ---------------------------------------------------------
 // T2: Upgraded Solar Panel SOURCE (50 u/s during daylight)
 // ---------------------------------------------------------
-class LF_SolarPanel_T2 : LF_SolarPanel
+class LFPG_SolarPanel_T2 : LFPG_SolarPanel
 {
     override float LFPG_GetCapacity()
     {

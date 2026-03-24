@@ -7,7 +7,7 @@
 // When ON:  normal operation (charge + discharge + passthrough).
 //
 // Conditions:
-//   - Target must be LF_BatteryBase (any tier)
+//   - Target must be LFPG_BatteryBase (any tier)
 //   - Tier must be gate-capable (Medium/Large have switch)
 //   - Within interact distance
 //
@@ -43,7 +43,7 @@ class LFPG_ActionToggleBatteryOutput : ActionInteractBase
             return false;
 
         // Must be a battery device (any tier)
-        LF_BatteryBase bat = LF_BatteryBase.Cast(targetObj);
+        LFPG_BatteryBase bat = LFPG_BatteryBase.Cast(targetObj);
         if (!bat)
             return false;
 
@@ -76,7 +76,7 @@ class LFPG_ActionToggleBatteryOutput : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_BatteryBase bat = LF_BatteryBase.Cast(targetObj);
+        LFPG_BatteryBase bat = LFPG_BatteryBase.Cast(targetObj);
         if (!bat)
             return;
 

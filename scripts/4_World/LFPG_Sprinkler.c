@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Sprinkler device (v4.1 Registry Refactor)
 //
-// LF_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
-// LF_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
+// LFPG_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
+// LFPG_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 // v4.1: RegisterSprinkler/UnregisterSprinkler in NM.
@@ -13,18 +13,18 @@
 // KIT (unchanged)
 // ---------------------------------------------------------
 
-class LF_Sprinkler_Kit : LFPG_KitBase
+class LFPG_Sprinkler_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Sprinkler";
+        return "LFPG_Sprinkler";
     }
 };
 
 // ---------------------------------------------------------
 // DEVICE - CONSUMER : LFPG_DeviceBase
 // ---------------------------------------------------------
-class LF_Sprinkler : LFPG_DeviceBase
+class LFPG_Sprinkler : LFPG_DeviceBase
 {
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet      = false;
@@ -38,7 +38,7 @@ class LF_Sprinkler : LFPG_DeviceBase
     // ---- Client: sound ----
     protected EffectSound m_LoopSound;
 
-    void LF_Sprinkler()
+    void LFPG_Sprinkler()
     {
         string pIn = "input_0";
         string lIn = "Power Input";
@@ -82,7 +82,7 @@ class LF_Sprinkler : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_Sprinkler] SetPowered(";
+        string msg = "[LFPG_Sprinkler] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -105,7 +105,7 @@ class LF_Sprinkler : LFPG_DeviceBase
         m_SprinklerActive = active;
         SetSynchDirty();
 
-        string msg = "[LF_Sprinkler] SetSprinklerActive(";
+        string msg = "[LFPG_Sprinkler] SetSprinklerActive(";
         msg = msg + active.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;

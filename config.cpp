@@ -1,30 +1,30 @@
 // ---- v0.8.0: Attachment slots for Solar Panel upgrade materials ----
 class CfgSlots
 {
-    class Slot_LF_SolarPlate
+    class Slot_LFPG_SolarPlate
     {
-        name = "LF_SolarPlate";
+        name = "LFPG_SolarPlate";
         displayName = "Metal Plate";
         ghostIcon = "missing";
     };
-    class Slot_LF_SolarNails
+    class Slot_LFPG_SolarNails
     {
-        name = "LF_SolarNails";
+        name = "LFPG_SolarNails";
         displayName = "Nails";
         ghostIcon = "missing";
     };
     // v3.1.0: Intercom radio slot — uses vanilla WalkieTalkie slot.
     // No custom slot needed; PersonalRadio already has inventorySlot="WalkieTalkie".
     // v1.1.0: Water Pump slots
-    class Slot_LF_PumpPlate
+    class Slot_LFPG_PumpPlate
     {
-        name = "LF_PumpPlate";
+        name = "LFPG_PumpPlate";
         displayName = "Metal Plate";
         ghostIcon = "missing";
     };
-    class Slot_LF_PumpNails
+    class Slot_LFPG_PumpNails
     {
-        name = "LF_PumpNails";
+        name = "LFPG_PumpNails";
         displayName = "Nails";
         ghostIcon = "missing";
     };
@@ -143,7 +143,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge", "LF_Sprinkler_Kit", "LF_Sprinkler", "LF_BatteryAdapter_Kit", "LF_BatteryAdapter"};
+        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio"};
@@ -196,7 +196,7 @@ class CfgVehicles
     class PowerGenerator;
     class Spotlight;
 
-    class LF_CableReel : CableReel
+    class LFPG_CableReel : CableReel
     {
         scope = 2;
         isDeployable = 0;
@@ -227,7 +227,7 @@ class CfgVehicles
 
     // ---- Splitter Kit (holdable, deployable) ----
     class Inventory_Base;
-    class LF_Splitter_Kit : Inventory_Base
+    class LFPG_Splitter_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "Splitter Kit";
@@ -247,7 +247,7 @@ class CfgVehicles
     };
 
     // ---- Splitter (placed device) ----
-    class LF_Splitter : Inventory_Base
+    class LFPG_Splitter : Inventory_Base
     {
         scope = 2;
         displayName = "Power Splitter";
@@ -262,7 +262,7 @@ class CfgVehicles
     };
 
     // ---- CeilingLight Kit (holdable, deployable) ----
-    class LF_CeilingLight_Kit : Inventory_Base
+    class LFPG_CeilingLight_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "Ceiling Light Kit";
@@ -279,7 +279,7 @@ class CfgVehicles
     };
 
     // ---- CeilingLight (placed device) ----
-    class LF_CeilingLight : Inventory_Base
+    class LFPG_CeilingLight : Inventory_Base
     {
         scope = 2;
         displayName = "Ceiling Light";
@@ -301,7 +301,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Solar Panel Kit ----
-    class LF_SolarPanel_Kit : Inventory_Base
+    class LFPG_SolarPanel_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_KIT";
@@ -319,7 +319,7 @@ class CfgVehicles
     };
 
     // ---- Solar Panel T1 (placed device, SOURCE 20 u/s) ----
-    class LF_SolarPanel : Inventory_Base
+    class LFPG_SolarPanel : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_T1";
@@ -331,21 +331,21 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"LF_SolarPlate", "LF_SolarNails"};
+        attachments[] = {"LFPG_SolarPlate", "LFPG_SolarNails"};
         class GUIInventoryAttachmentsProps
         {
             class UpgradeMaterials
             {
                 name = "Upgrade Materials";
                 description = "";
-                attachmentSlots[] = {"LF_SolarPlate", "LF_SolarNails"};
+                attachmentSlots[] = {"LFPG_SolarPlate", "LFPG_SolarNails"};
                 icon = "missing";
             };
         };
     };
 
     // ---- Solar Panel T2 (upgraded device, SOURCE 50 u/s) ----
-    class LF_SolarPanel_T2 : Inventory_Base
+    class LFPG_SolarPanel_T2 : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_T2";
@@ -364,7 +364,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Combiner Kit (holdable, deployable) ----
-    class LF_Combiner_Kit : Inventory_Base
+    class LFPG_Combiner_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_CombinerKit";
@@ -382,7 +382,7 @@ class CfgVehicles
     };
 
     // ---- Combiner (placed device) ----
-    class LF_Combiner : Inventory_Base
+    class LFPG_Combiner : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Combiner";
@@ -402,7 +402,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Camera Kit (holdable, deployable) ----
-    class LF_Camera_Kit : Inventory_Base
+    class LFPG_Camera_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_CameraKit";
@@ -420,7 +420,7 @@ class CfgVehicles
     };
 
     // ---- Camera (placed device) ----
-    class LF_Camera : Inventory_Base
+    class LFPG_Camera : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Camera";
@@ -438,7 +438,7 @@ class CfgVehicles
     };
 
     // ---- Monitor Kit (holdable, deployable) ----
-    class LF_Monitor_Kit : Inventory_Base
+    class LFPG_Monitor_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_MonitorKit";
@@ -456,7 +456,7 @@ class CfgVehicles
     };
 
     // ---- Monitor (placed device) ----
-    class LF_Monitor : Inventory_Base
+    class LFPG_Monitor : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Monitor";
@@ -654,7 +654,7 @@ class CfgVehicles
     // Ports: input_1, output_1 (memory points: port_input_0, port_output_0)
     // Toggle: latching ON/OFF (persisted across restart).
     // LED: green (passing power), red (blocking), off (disconnected)
-    // RF: toggleable remotely via LF_Intercom broadcast
+    // RF: toggleable remotely via LFPG_Intercom broadcast
     class LFPG_SwitchRemote : Inventory_Base
     {
         scope = 2;
@@ -732,7 +732,7 @@ class CfgVehicles
     // Ports: input_1, output_1 (memory points: port_input_0, port_output_0)
     // Toggle: latching ON/OFF (persisted across restart).
     // LED: green (passing power), red (blocking), off (disconnected)
-    // RF: toggleable remotely via LF_Intercom broadcast
+    // RF: toggleable remotely via LFPG_Intercom broadcast
     class LFPG_SwitchV2Remote : Inventory_Base
     {
         scope = 2;
@@ -787,11 +787,11 @@ class CfgVehicles
     // =========================================================
     class MetalPlate
     {
-        inventorySlot[] += {"LF_SolarPlate", "LF_PumpPlate"};
+        inventorySlot[] += {"LFPG_SolarPlate", "LFPG_PumpPlate"};
     };
     class Nail
     {
-        inventorySlot[] += {"LF_SolarNails", "LF_PumpNails"};
+        inventorySlot[] += {"LFPG_SolarNails", "LFPG_PumpNails"};
     };
     // v1.1.0: GasMask_Filter — NO override needed.
     // Vanilla defines inventorySlot = "GasMask_Filter" (scalar).
@@ -807,7 +807,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Water Pump Kit (holdable, different-model deploy like Solar Panel) ----
-    class LF_WaterPump_Kit : Inventory_Base
+    class LFPG_WaterPump_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_KIT";
@@ -825,7 +825,7 @@ class CfgVehicles
     };
 
     // ---- Water Pump T1 (placed device, PASSTHROUGH 50 u/s, cap 100 u/s) ----
-    class LF_WaterPump : Inventory_Base
+    class LFPG_WaterPump : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_T1";
@@ -837,7 +837,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"GasMask_Filter", "LF_PumpPlate", "LF_PumpNails"};
+        attachments[] = {"GasMask_Filter", "LFPG_PumpPlate", "LFPG_PumpNails"};
         hiddenSelections[] = {"pump_led"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
@@ -854,14 +854,14 @@ class CfgVehicles
             {
                 name = "Upgrade Materials";
                 description = "";
-                attachmentSlots[] = {"LF_PumpPlate", "LF_PumpNails"};
+                attachmentSlots[] = {"LFPG_PumpPlate", "LFPG_PumpNails"};
                 icon = "missing";
             };
         };
     };
 
     // ---- Water Pump T2 (upgraded device, PASSTHROUGH 50 u/s, cap 100 u/s + tank 50L) ----
-    class LF_WaterPump_T2 : Inventory_Base
+    class LFPG_WaterPump_T2 : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_T2";
@@ -894,7 +894,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Furnace Kit (holdable, different-model deploy) ----
-    class LF_Furnace_Kit : Inventory_Base
+    class LFPG_Furnace_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_FURNACE_KIT";
@@ -912,7 +912,7 @@ class CfgVehicles
     };
 
     // ---- Furnace (placed device, SOURCE 50 u/s) ----
-    class LF_Furnace : Inventory_Base
+    class LFPG_Furnace : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_FURNACE";
@@ -930,7 +930,7 @@ class CfgVehicles
     };
 
     // ---- Sorter Kit (holdable, deployable) ----
-    class LF_Sorter_Kit : Inventory_Base
+    class LFPG_Sorter_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SorterKit";
@@ -950,7 +950,7 @@ class CfgVehicles
     };
 
     // ---- Sorter (placed device, PASSTHROUGH 5 u/s) ----
-    class LF_Sorter : Inventory_Base
+    class LFPG_Sorter : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Sorter";
@@ -972,7 +972,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Searchlight Kit (holdable, deployable, same-model) ----
-    class LF_Searchlight_Kit : Inventory_Base
+    class LFPG_Searchlight_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SearchlightKit";
@@ -990,7 +990,7 @@ class CfgVehicles
     };
 
     // ---- Searchlight (placed device) ----
-    class LF_Searchlight : Inventory_Base
+    class LFPG_Searchlight : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Searchlight";
@@ -1446,7 +1446,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- BatteryMedium Kit (holdable, deployable, same-model) ----
-    class LF_BatteryMedium_Kit : Inventory_Base
+    class LFPG_BatteryMedium_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryMediumKit";
@@ -1464,7 +1464,7 @@ class CfgVehicles
     };
 
     // ---- BatteryMedium (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
-    class LF_BatteryMedium : Inventory_Base
+    class LFPG_BatteryMedium : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryMedium";
@@ -1547,7 +1547,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- BatteryLarge Kit (box, different-model hologram) ----
-    class LF_BatteryLarge_Kit : Inventory_Base
+    class LFPG_BatteryLarge_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryLargeKit";
@@ -1565,7 +1565,7 @@ class CfgVehicles
     };
 
     // ---- BatteryLarge (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
-    class LF_BatteryLarge : Inventory_Base
+    class LFPG_BatteryLarge : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryLarge";
@@ -1650,7 +1650,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- DoorController Kit (holdable, deployable, same-model) ----
-    class LF_DoorController_Kit : Inventory_Base
+    class LFPG_DoorController_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_DoorController_Kit";
@@ -1668,7 +1668,7 @@ class CfgVehicles
     };
 
     // ---- DoorController (placed device, CONSUMER 1 IN) ----
-    class LF_DoorController : Inventory_Base
+    class LFPG_DoorController : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_DoorController";
@@ -1727,7 +1727,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Intercom Kit (holdable, same-model deploy) ----
-    class LF_Intercom_Kit : Inventory_Base
+    class LFPG_Intercom_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_INTERCOM_KIT";
@@ -1765,7 +1765,7 @@ class CfgVehicles
     // Memory: port_input_0 -> input_1, port_output_0 -> input_toggle
     // T1: 10 u/s consumption, toggle on/off, LED1 feedback
     // T2: 20 u/s consumption, ghost radio, frequency cycling, LED2
-    class LF_Intercom : Inventory_Base
+    class LFPG_Intercom : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_INTERCOM";
@@ -1850,7 +1850,7 @@ class CfgVehicles
     // CompEM disabled in script. Tiny invisible model.
     // =========================================================
 	class PersonalRadio;
-    class LF_GhostRadio : PersonalRadio
+    class LFPG_GhostRadio : PersonalRadio
     {
         scope = 1;
         displayName = "";
@@ -1869,7 +1869,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Fridge Kit (holdable box, hologram shows fridge) ----
-    class LF_Fridge_Kit : Inventory_Base
+    class LFPG_Fridge_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_FridgeKit";
@@ -1889,7 +1889,7 @@ class CfgVehicles
     };
 
     // ---- Fridge (placed device, CONSUMER 1 IN, 20 u/s) ----
-    class LF_Fridge : Inventory_Base
+    class LFPG_Fridge : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_Fridge";
@@ -1926,7 +1926,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- Sprinkler Kit (holdable, deployable, same-model) ----
-    class LF_Sprinkler_Kit : Inventory_Base
+    class LFPG_Sprinkler_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SPRINKLER_KIT";
@@ -1944,7 +1944,7 @@ class CfgVehicles
     };
 
     // ---- Sprinkler (placed device, CONSUMER 1 IN) ----
-    class LF_Sprinkler : Inventory_Base
+    class LFPG_Sprinkler : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_SPRINKLER";
@@ -1966,7 +1966,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- BatteryAdapter Kit (holdable, deployable, same-model) ----
-    class LF_BatteryAdapter_Kit : Inventory_Base
+    class LFPG_BatteryAdapter_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryAdapterKit";
@@ -1984,7 +1984,7 @@ class CfgVehicles
     };
 
     // ---- BatteryAdapter (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
-    class LF_BatteryAdapter : Inventory_Base
+    class LFPG_BatteryAdapter : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryAdapter";

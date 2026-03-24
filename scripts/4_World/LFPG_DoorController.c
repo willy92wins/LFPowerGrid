@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Door Controller device (v4.0 Refactor)
 //
-// LF_DoorController_Kit:  Holdable, deployable (same-model pattern).
-// LF_DoorController:      CONSUMER, 1 IN (input_1), 5 u/s, no wire store.
+// LFPG_DoorController_Kit:  Holdable, deployable (same-model pattern).
+// LFPG_DoorController:      CONSUMER, 1 IN (input_1), 5 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 //   Boilerplate removed. Door logic preserved unchanged.
@@ -19,11 +19,11 @@ static const float LFPG_DC_PAIR_RADIUS     = 1.0;
 static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
 static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
 
-class LF_DoorController_Kit : LFPG_KitBase
+class LFPG_DoorController_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_DoorController";
+        return "LFPG_DoorController";
     }
 
     override int LFPG_GetPlacementModes()
@@ -50,7 +50,7 @@ class LF_DoorController_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE - CONSUMER : LFPG_DeviceBase
 // ---------------------------------------------------------
-class LF_DoorController : LFPG_DeviceBase
+class LFPG_DoorController : LFPG_DeviceBase
 {
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet = false;
@@ -60,7 +60,7 @@ class LF_DoorController : LFPG_DeviceBase
     protected int    m_DoorType     = 0;
     protected int    m_DoorIndex    = -1;
 
-    void LF_DoorController()
+    void LFPG_DoorController()
     {
         string pIn = "input_1";
         string lIn = "IN";
@@ -79,7 +79,7 @@ class LF_DoorController : LFPG_DeviceBase
             return ModelToWorld(GetMemoryPointPos(memPoint));
         }
 
-        string warnMsg = "[LF_DoorController] Missing memory point for port: " + portName;
+        string warnMsg = "[LFPG_DoorController] Missing memory point for port: " + portName;
         LFPG_Util.Warn(warnMsg);
         vector p = GetPosition();
         p[1] = p[1] - 0.1;
@@ -111,7 +111,7 @@ class LF_DoorController : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_DoorController] SetPowered(";
+        string msg = "[LFPG_DoorController] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -224,7 +224,7 @@ class LF_DoorController : LFPG_DeviceBase
 
             if (distSq > LFPG_DC_PAIR_RADIUS_SQ)
             {
-                string unpairMsg = "[LF_DoorController] Door moved out of range, unpairing. id=" + m_DeviceId;
+                string unpairMsg = "[LFPG_DoorController] Door moved out of range, unpairing. id=" + m_DeviceId;
                 LFPG_Util.Debug(unpairMsg);
                 LFPG_UnpairDoor();
                 return;
@@ -386,7 +386,7 @@ class LF_DoorController : LFPG_DeviceBase
             m_DoorIndex = bestIndex;
 
             float bestDist = Math.Sqrt(bestDistSq);
-            string pairMsg = "[LF_DoorController] Paired to door type=" + bestType.ToString();
+            string pairMsg = "[LFPG_DoorController] Paired to door type=" + bestType.ToString();
             pairMsg = pairMsg + " idx=";
             pairMsg = pairMsg + bestIndex.ToString();
             pairMsg = pairMsg + " dist=";
@@ -462,7 +462,7 @@ class LF_DoorController : LFPG_DeviceBase
                 {
                     f.OpenFence();
 
-                    string openFenceMsg = "[LF_DoorController] Opened fence. id=" + m_DeviceId;
+                    string openFenceMsg = "[LFPG_DoorController] Opened fence. id=" + m_DeviceId;
                     LFPG_Util.Debug(openFenceMsg);
                 }
             }
@@ -478,7 +478,7 @@ class LF_DoorController : LFPG_DeviceBase
                 {
                     b.OpenDoor(m_DoorIndex);
 
-                    string openDoorMsg = "[LF_DoorController] Opened building door idx=" + m_DoorIndex.ToString();
+                    string openDoorMsg = "[LFPG_DoorController] Opened building door idx=" + m_DoorIndex.ToString();
                     openDoorMsg = openDoorMsg + " id=";
                     openDoorMsg = openDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(openDoorMsg);
@@ -504,7 +504,7 @@ class LF_DoorController : LFPG_DeviceBase
                 {
                     f.CloseFence();
 
-                    string closeFenceMsg = "[LF_DoorController] Closed fence. id=" + m_DeviceId;
+                    string closeFenceMsg = "[LFPG_DoorController] Closed fence. id=" + m_DeviceId;
                     LFPG_Util.Debug(closeFenceMsg);
                 }
             }
@@ -520,7 +520,7 @@ class LF_DoorController : LFPG_DeviceBase
                 {
                     b.CloseDoor(m_DoorIndex);
 
-                    string closeDoorMsg = "[LF_DoorController] Closed building door idx=" + m_DoorIndex.ToString();
+                    string closeDoorMsg = "[LFPG_DoorController] Closed building door idx=" + m_DoorIndex.ToString();
                     closeDoorMsg = closeDoorMsg + " id=";
                     closeDoorMsg = closeDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(closeDoorMsg);

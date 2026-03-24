@@ -45,7 +45,7 @@ class LFPG_ActionFillPump : ActionContinuousBase
             return false;
 
         // Only T2 (T1 has no tank)
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(targetObj);
         if (!pump2)
             return false;
 
@@ -87,7 +87,7 @@ class LFPG_ActionFillPump : ActionContinuousBase
         if (!targetObj)
             return false;
 
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(targetObj);
         if (!pump2)
             return false;
 
@@ -115,7 +115,7 @@ class LFPG_ActionFillPump : ActionContinuousBase
         if (!targetObj)
             return;
 
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(targetObj);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(targetObj);
         if (!pump2)
             return;
 

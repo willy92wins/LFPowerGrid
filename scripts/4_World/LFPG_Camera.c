@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Camera device (v4.0 Refactor)
 //
-// LF_Camera_Kit:  Holdable, deployable (same-model pattern).
-// LF_Camera:      CONSUMER, 1 IN (input_1), 15 u/s, no wire store.
+// LFPG_Camera_Kit:  Holdable, deployable (same-model pattern).
+// LFPG_Camera:      CONSUMER, 1 IN (input_1), 15 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 //   All boilerplate (SyncVars DeviceId, lifecycle, persistence,
@@ -13,11 +13,11 @@
 static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_off.rvmat";
 static const string LFPG_CAMERA_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_on.rvmat";
 
-class LF_Camera_Kit : LFPG_KitBase
+class LFPG_Camera_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Camera";
+        return "LFPG_Camera";
     }
 
     override int LFPG_GetPlacementModes()
@@ -34,12 +34,12 @@ class LF_Camera_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE - CONSUMER : LFPG_DeviceBase
 // ---------------------------------------------------------
-class LF_Camera : LFPG_DeviceBase
+class LFPG_Camera : LFPG_DeviceBase
 {
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet = false;
 
-    void LF_Camera()
+    void LFPG_Camera()
     {
         string pIn = "input_1";
         string lIn = "Power Input";
@@ -74,7 +74,7 @@ class LF_Camera : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_Camera] SetPowered(";
+        string msg = "[LFPG_Camera] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;

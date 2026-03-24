@@ -5,7 +5,7 @@
 // Dynamic text: "Open Fridge" / "Close Fridge"
 //
 // Base: ActionInteractBase (CCINone, no item in hand)
-// Target: LF_Fridge
+// Target: LFPG_Fridge
 // =========================================================
 
 class LFPG_ActionToggleFridgeDoor : ActionInteractBase
@@ -35,7 +35,7 @@ class LFPG_ActionToggleFridgeDoor : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Fridge fridge = LF_Fridge.Cast(targetObj);
+        LFPG_Fridge fridge = LFPG_Fridge.Cast(targetObj);
         if (!fridge)
             return false;
 
@@ -67,7 +67,7 @@ class LFPG_ActionToggleFridgeDoor : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Fridge fridge = LF_Fridge.Cast(targetObj);
+        LFPG_Fridge fridge = LFPG_Fridge.Cast(targetObj);
         if (!fridge)
             return;
 

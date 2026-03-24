@@ -1,7 +1,7 @@
 // =========================================================
 // LF_PowerGrid - CeilingLight point light effect (v0.7.47)
 //
-// Client-side only. Created/destroyed by LF_CeilingLight
+// Client-side only. Created/destroyed by LFPG_CeilingLight
 // in OnVariablesSynchronized based on m_PoweredNet state.
 //
 // Compared to LFPG_LampLight (radius=6, brightness=2.5):

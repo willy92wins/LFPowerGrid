@@ -8,18 +8,18 @@
 // Base: ActionInteractBase (CCINone — no item restriction)
 //   DayZ only evaluates ActionSingleUseBase from the ITEM's
 //   action list, not the target's. Since Feed is registered
-//   on LF_Furnace (the target), it MUST be ActionInteractBase
+//   on LFPG_Furnace (the target), it MUST be ActionInteractBase
 //   so the ActionManager finds it in the target's interact list.
 //   Item-in-hand is resolved manually via player.GetItemInHands().
 //
-// Target: LF_Furnace
+// Target: LFPG_Furnace
 // v1.2.2: CCTObject→CCTCursor + manual DistSq (fixes interaction
 //         reliability on small Geometry LOD models).
 //
 // Filtered items (ActionCondition rejects):
 //   - Empty hands (no item)
 //   - Ruined items
-//   - LF_CableReel (wiring tool, not fuel)
+//   - LFPG_CableReel (wiring tool, not fuel)
 //   - Any LFPG kit class (deployment kits)
 //   - Items with itemSize 0 in either dimension
 //
@@ -64,8 +64,8 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (!targetObj)
             return false;
 
-        // Target must be LF_Furnace
-        LF_Furnace furnace = LF_Furnace.Cast(targetObj);
+        // Target must be LFPG_Furnace
+        LFPG_Furnace furnace = LFPG_Furnace.Cast(targetObj);
         if (!furnace)
             return false;
 
@@ -76,7 +76,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
             return false;
 
         // Filter: CableReel is a wiring tool, not fuel
-        if (handItem.IsKindOf("LF_CableReel"))
+        if (handItem.IsKindOf("LFPG_CableReel"))
             return false;
 
         // Filter: LFPG kit items (Splitter_Kit, SolarPanel_Kit, etc.)
@@ -147,7 +147,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Furnace furnace = LF_Furnace.Cast(targetObj);
+        LFPG_Furnace furnace = LFPG_Furnace.Cast(targetObj);
         if (!furnace)
             return;
 
@@ -203,27 +203,27 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
     protected bool LFPG_IsLFPGKit(string typeName)
     {
         // Check ALL known LFPG kit types (must match config.cpp units[])
-        if (typeName == "LF_Splitter_Kit")
+        if (typeName == "LFPG_Splitter_Kit")
             return true;
-        if (typeName == "LF_CeilingLight_Kit")
+        if (typeName == "LFPG_CeilingLight_Kit")
             return true;
-        if (typeName == "LF_SolarPanel_Kit")
+        if (typeName == "LFPG_SolarPanel_Kit")
             return true;
-        if (typeName == "LF_Combiner_Kit")
+        if (typeName == "LFPG_Combiner_Kit")
             return true;
-        if (typeName == "LF_Camera_Kit")
+        if (typeName == "LFPG_Camera_Kit")
             return true;
-        if (typeName == "LF_Monitor_Kit")
+        if (typeName == "LFPG_Monitor_Kit")
             return true;
-        if (typeName == "LF_WaterPump_Kit")
+        if (typeName == "LFPG_WaterPump_Kit")
             return true;
-        if (typeName == "LF_Furnace_Kit")
+        if (typeName == "LFPG_Furnace_Kit")
             return true;
         if (typeName == "LFPG_PushButton_Kit")
             return true;
-        if (typeName == "LF_Sorter_Kit")
+        if (typeName == "LFPG_Sorter_Kit")
             return true;
-        if (typeName == "LF_Searchlight_Kit")
+        if (typeName == "LFPG_Searchlight_Kit")
             return true;
         if (typeName == "LFPG_SwitchV2_Kit")
             return true;
@@ -241,7 +241,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
             return true;
         if (typeName == "LFPG_ElectronicCounter_Kit")
             return true;
-        if (typeName == "LF_BatteryMedium_Kit")
+        if (typeName == "LFPG_BatteryMedium_Kit")
             return true;
 
         return false;

@@ -119,7 +119,7 @@ class LFPG_NetworkManager
     protected int m_SorterCursor = 0;
 
     // v1.2.0 (Sprint S5): Dedicated sorter registry — avoids iterating all devices
-    protected ref array<LF_Sorter> m_RegisteredSorters;
+    protected ref array<LFPG_Sorter> m_RegisteredSorters;
 
     // v1.2.0 (Sprint S5): Reusable item cache for TickSorters (GC reduction)
     protected ref array<EntityAI> m_SorterItemCache;
@@ -140,26 +140,26 @@ class LFPG_NetworkManager
     protected float m_BatteryLastTickMs;
 
     // v3.0: Intercom toggle input evaluation registry
-    protected ref array<LF_Intercom> m_RegisteredIntercoms;
+    protected ref array<LFPG_Intercom> m_RegisteredIntercoms;
 
     // v3.1: Furnace centralized burn timer registry
     // Replaces per-device CallLater (N timers → 1 timer)
-    protected ref array<LF_Furnace> m_RegisteredFurnaces;
+    protected ref array<LFPG_Furnace> m_RegisteredFurnaces;
 
     // v4.0: Fridge centralized cooling timer registry
-    protected ref array<LF_Fridge> m_RegisteredFridges;
+    protected ref array<LFPG_Fridge> m_RegisteredFridges;
 
     // v4.0: DoorController centralized poll timer registry
-    protected ref array<LF_DoorController> m_RegisteredDoorControllers;
+    protected ref array<LFPG_DoorController> m_RegisteredDoorControllers;
 
     // v4.1: Solar panel dedicated registry (replaces GetAll+Cast scan)
-    protected ref array<LF_SolarPanel> m_RegisteredSolars;
+    protected ref array<LFPG_SolarPanel> m_RegisteredSolars;
 
     // v4.1: Water pump + sprinkler dedicated registries (replaces GetAll+Cast scan)
     // T1 and T2 are separate classes (T2 does NOT inherit T1).
-    protected ref array<LF_WaterPump>    m_RegisteredT1Pumps;
-    protected ref array<LF_WaterPump_T2> m_RegisteredT2Pumps;
-    protected ref array<LF_Sprinkler>    m_RegisteredSprinklers;
+    protected ref array<LFPG_WaterPump>    m_RegisteredT1Pumps;
+    protected ref array<LFPG_WaterPump_T2> m_RegisteredT2Pumps;
+    protected ref array<LFPG_Sprinkler>    m_RegisteredSprinklers;
 
     // v4.1: Player Detection consolidated tick sub-counters.
     // One timer at 300ms drives lasers (every tick), pads (every 2nd), sensors (every 10th).
@@ -252,20 +252,20 @@ class LFPG_NetworkManager
         m_DeferredBroadcastVanillaObjs = new array<EntityAI>;
 
         // v1.2.0: Always allocate (Register/Unregister not guarded with #ifdef)
-        m_RegisteredSorters = new array<LF_Sorter>;
+        m_RegisteredSorters = new array<LFPG_Sorter>;
         m_SorterItemCache = new array<EntityAI>;
         m_RegisteredSensors = new array<LFPG_MotionSensor>;
         m_RegisteredPads = new array<LFPG_PressurePad>;
         m_RegisteredLasers = new array<LFPG_LaserDetector>;
         m_RegisteredBatteries = new array<EntityAI>;
-        m_RegisteredIntercoms = new array<LF_Intercom>;
-        m_RegisteredFurnaces = new array<LF_Furnace>;
-        m_RegisteredFridges = new array<LF_Fridge>;
-        m_RegisteredDoorControllers = new array<LF_DoorController>;
-        m_RegisteredSolars = new array<LF_SolarPanel>;
-        m_RegisteredT1Pumps = new array<LF_WaterPump>;
-        m_RegisteredT2Pumps = new array<LF_WaterPump_T2>;
-        m_RegisteredSprinklers = new array<LF_Sprinkler>;
+        m_RegisteredIntercoms = new array<LFPG_Intercom>;
+        m_RegisteredFurnaces = new array<LFPG_Furnace>;
+        m_RegisteredFridges = new array<LFPG_Fridge>;
+        m_RegisteredDoorControllers = new array<LFPG_DoorController>;
+        m_RegisteredSolars = new array<LFPG_SolarPanel>;
+        m_RegisteredT1Pumps = new array<LFPG_WaterPump>;
+        m_RegisteredT2Pumps = new array<LFPG_WaterPump_T2>;
+        m_RegisteredSprinklers = new array<LFPG_Sprinkler>;
 
         // v3.1 (GC reduction): Initialize reusable tick arrays
         m_ReusablePlayers = new array<Man>;
@@ -3415,7 +3415,7 @@ class LFPG_NetworkManager
     // Periodic tick (every LFPG_SOLAR_CHECK_MS = 15s).
     // Recomputes sun state; if unchanged, returns immediately (O(1)).
     // If changed, iterates registered solar panels.
-    // LF_SolarPanel_T2 inherits LF_SolarPanel → auto-registered via base.
+    // LFPG_SolarPanel_T2 inherits LFPG_SolarPanel → auto-registered via base.
     protected void LFPG_TickSolarPanels()
     {
         #ifdef SERVER
@@ -3434,7 +3434,7 @@ class LFPG_NetworkManager
 
         int i;
         int updated = 0;
-        LF_SolarPanel panel;
+        LFPG_SolarPanel panel;
         for (i = 0; i < total; i = i + 1)
         {
             if (i >= m_RegisteredSolars.Count())
@@ -3475,8 +3475,8 @@ class LFPG_NetworkManager
             return;
 
         // Check if source is a pump (T1 or T2)
-        LF_WaterPump rp1 = LF_WaterPump.Cast(srcEnt);
-        LF_WaterPump_T2 rp2 = LF_WaterPump_T2.Cast(srcEnt);
+        LFPG_WaterPump rp1 = LFPG_WaterPump.Cast(srcEnt);
+        LFPG_WaterPump_T2 rp2 = LFPG_WaterPump_T2.Cast(srcEnt);
         if (!rp1 && !rp2)
             return;
 
@@ -3486,7 +3486,7 @@ class LFPG_NetworkManager
             EntityAI removedEnt = reg.FindById(removedTargetId);
             if (removedEnt)
             {
-                LF_Sprinkler removedSpr = LF_Sprinkler.Cast(removedEnt);
+                LFPG_Sprinkler removedSpr = LFPG_Sprinkler.Cast(removedEnt);
                 if (removedSpr)
                 {
                     string curSource = removedSpr.LFPG_GetWaterSourceId();
@@ -3524,7 +3524,7 @@ class LFPG_NetworkManager
         LFPG_WireData rpWd;
         string rpTid;
         EntityAI rpTEnt;
-        LF_Sprinkler rpTSpr;
+        LFPG_Sprinkler rpTSpr;
         bool rpSprActive;
 
         // Pass 1: Count sprinklers + set water source + T1 activation
@@ -3546,7 +3546,7 @@ class LFPG_NetworkManager
             if (!rpTEnt)
                 continue;
 
-            rpTSpr = LF_Sprinkler.Cast(rpTEnt);
+            rpTSpr = LFPG_Sprinkler.Cast(rpTEnt);
             if (!rpTSpr)
                 continue;
 
@@ -3608,7 +3608,7 @@ class LFPG_NetworkManager
                 if (!rpTEnt)
                     continue;
 
-                rpTSpr = LF_Sprinkler.Cast(rpTEnt);
+                rpTSpr = LFPG_Sprinkler.Cast(rpTEnt);
                 if (!rpTSpr)
                     continue;
 
@@ -3663,7 +3663,7 @@ class LFPG_NetworkManager
         // ============================================================
         int i;
         int sprTotal = m_RegisteredSprinklers.Count();
-        LF_Sprinkler castSpr;
+        LFPG_Sprinkler castSpr;
         float elapsed;
 
         // Reset all registered sprinklers (Phase B/C re-activates if connected)
@@ -3682,7 +3682,7 @@ class LFPG_NetworkManager
 
         // T1 filter degradation
         int t1Total = m_RegisteredT1Pumps.Count();
-        LF_WaterPump castT1;
+        LFPG_WaterPump castT1;
         for (i = 0; i < t1Total; i = i + 1)
         {
             if (i >= m_RegisteredT1Pumps.Count())
@@ -3702,7 +3702,7 @@ class LFPG_NetworkManager
 
         // T2 filter degradation
         int t2Total = m_RegisteredT2Pumps.Count();
-        LF_WaterPump_T2 castT2;
+        LFPG_WaterPump_T2 castT2;
         for (i = 0; i < t2Total; i = i + 1)
         {
             if (i >= m_RegisteredT2Pumps.Count())
@@ -3730,12 +3730,12 @@ class LFPG_NetworkManager
         int wi;
         int wireCount;
         int sprCount;
-        LF_WaterPump curT1;
+        LFPG_WaterPump curT1;
         array<ref LFPG_WireData> wires;
         LFPG_WireData wd;
         string targetId;
         EntityAI targetEnt;
-        LF_Sprinkler targetSpr;
+        LFPG_Sprinkler targetSpr;
         bool pumpPowered;
         string pumpId;
         bool hasSprOut;
@@ -3769,7 +3769,7 @@ class LFPG_NetworkManager
                 if (!targetEnt)
                     continue;
 
-                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
 
@@ -3793,7 +3793,7 @@ class LFPG_NetworkManager
         //          set m_ConnectedSprinklerCount, adjusted tank fill.
         // ============================================================
         int t2Count = m_RegisteredT2Pumps.Count();
-        LF_WaterPump_T2 curT2B;
+        LFPG_WaterPump_T2 curT2B;
         bool sprActive;
         float curTank;
         float level;
@@ -3834,7 +3834,7 @@ class LFPG_NetworkManager
                 if (!targetEnt)
                     continue;
 
-                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
 
@@ -3875,7 +3875,7 @@ class LFPG_NetworkManager
                 if (!targetEnt)
                     continue;
 
-                targetSpr = LF_Sprinkler.Cast(targetEnt);
+                targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
 
@@ -3936,9 +3936,9 @@ class LFPG_NetworkManager
     // v4.1: Solar Panel Registry
     // ===========================
     // Replaces GetAll+Cast full scan in TickSolarPanels.
-    // LF_SolarPanel_T2 inherits LF_SolarPanel → registered via base class.
+    // LFPG_SolarPanel_T2 inherits LFPG_SolarPanel → registered via base class.
 
-    void RegisterSolar(LF_SolarPanel panel)
+    void RegisterSolar(LFPG_SolarPanel panel)
     {
         if (!panel)
             return;
@@ -3948,7 +3948,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterSolar(LF_SolarPanel panel)
+    void UnregisterSolar(LFPG_SolarPanel panel)
     {
         if (!panel)
             return;
@@ -3965,7 +3965,7 @@ class LFPG_NetworkManager
     // Replaces GetAll+Cast full scan in TickWaterPumps Phase A.
     // T1 and T2 are separate classes (T2 does NOT inherit T1).
 
-    void RegisterT1Pump(LF_WaterPump pump)
+    void RegisterT1Pump(LFPG_WaterPump pump)
     {
         if (!pump)
             return;
@@ -3975,7 +3975,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterT1Pump(LF_WaterPump pump)
+    void UnregisterT1Pump(LFPG_WaterPump pump)
     {
         if (!pump)
             return;
@@ -3986,7 +3986,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void RegisterT2Pump(LF_WaterPump_T2 pump)
+    void RegisterT2Pump(LFPG_WaterPump_T2 pump)
     {
         if (!pump)
             return;
@@ -3996,7 +3996,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterT2Pump(LF_WaterPump_T2 pump)
+    void UnregisterT2Pump(LFPG_WaterPump_T2 pump)
     {
         if (!pump)
             return;
@@ -4007,7 +4007,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void RegisterSprinkler(LF_Sprinkler spr)
+    void RegisterSprinkler(LFPG_Sprinkler spr)
     {
         if (!spr)
             return;
@@ -4017,7 +4017,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterSprinkler(LF_Sprinkler spr)
+    void UnregisterSprinkler(LFPG_Sprinkler spr)
     {
         if (!spr)
             return;
@@ -4040,8 +4040,8 @@ class LFPG_NetworkManager
     // Timer: 5000ms (LFPG_SORTER_TICK_MS).
 
     // v1.2.0 (Sprint S5): Dedicated registry — avoids iterating all devices.
-    // Called from LF_Sorter.EEInit / EEDelete / EEKilled.
-    void RegisterSorter(LF_Sorter sorter)
+    // Called from LFPG_Sorter.EEInit / EEDelete / EEKilled.
+    void RegisterSorter(LFPG_Sorter sorter)
     {
         if (!sorter)
             return;
@@ -4051,7 +4051,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterSorter(LF_Sorter sorter)
+    void UnregisterSorter(LFPG_Sorter sorter)
     {
         if (!sorter)
             return;
@@ -4088,7 +4088,7 @@ class LFPG_NetworkManager
 
         // 3. Process batch
         int bi;
-        LF_Sorter sorter;
+        LFPG_Sorter sorter;
         EntityAI inputContainer;
         CargoBase inputCargo;
         LFPG_SortConfig filterConfig;
@@ -4269,7 +4269,7 @@ class LFPG_NetworkManager
 
     // v3.2: Returns moved count (-1 = error/skip, 0+ = items moved).
     // Caller (PlayerRPC) sends SORT_ACK with the result.
-    int HandleSorterRequestSort(LF_Sorter sorter)
+    int HandleSorterRequestSort(LFPG_Sorter sorter)
     {
         #ifdef SERVER
         if (!sorter)
@@ -4526,7 +4526,7 @@ class LFPG_NetworkManager
     }
 
     // v3.0: Intercom Registration (for toggle input evaluation)
-    void RegisterIntercom(LF_Intercom ic)
+    void RegisterIntercom(LFPG_Intercom ic)
     {
         if (!ic)
             return;
@@ -4536,7 +4536,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterIntercom(LF_Intercom ic)
+    void UnregisterIntercom(LFPG_Intercom ic)
     {
         if (!ic)
             return;
@@ -4553,7 +4553,7 @@ class LFPG_NetworkManager
     // Tick absorbed into LFPG_TickSimpleDevices (offset 2, ~5s effective).
     // Only active furnaces (m_SourceOn) are registered.
 
-    void RegisterFurnace(LF_Furnace furnace)
+    void RegisterFurnace(LFPG_Furnace furnace)
     {
         if (!furnace)
             return;
@@ -4563,7 +4563,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterFurnace(LF_Furnace furnace)
+    void UnregisterFurnace(LFPG_Furnace furnace)
     {
         if (!furnace)
             return;
@@ -4579,7 +4579,7 @@ class LFPG_NetworkManager
     // ===========================
     // Tick absorbed into LFPG_TickSimpleDevices (offset 6, ~10s effective).
 
-    void RegisterFridge(LF_Fridge fridge)
+    void RegisterFridge(LFPG_Fridge fridge)
     {
         if (!fridge)
             return;
@@ -4589,7 +4589,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterFridge(LF_Fridge fridge)
+    void UnregisterFridge(LFPG_Fridge fridge)
     {
         if (!fridge)
             return;
@@ -4605,7 +4605,7 @@ class LFPG_NetworkManager
     // ===========================
     // Tick absorbed into LFPG_TickSimpleDevices (offset 1, ~2s effective).
 
-    void RegisterDoorController(LF_DoorController dc)
+    void RegisterDoorController(LFPG_DoorController dc)
     {
         if (!dc)
             return;
@@ -4615,7 +4615,7 @@ class LFPG_NetworkManager
         }
     }
 
-    void UnregisterDoorController(LF_DoorController dc)
+    void UnregisterDoorController(LFPG_DoorController dc)
     {
         if (!dc)
             return;
@@ -4659,7 +4659,7 @@ class LFPG_NetworkManager
         if (totalIc > 0)
         {
             int ii;
-            LF_Intercom ic;
+            LFPG_Intercom ic;
 
             for (ii = 0; ii < totalIc; ii = ii + 1)
             {
@@ -4679,7 +4679,7 @@ class LFPG_NetworkManager
         if (dcMod == 1 && totalDc > 0)
         {
             int di;
-            LF_DoorController dc;
+            LFPG_DoorController dc;
 
             for (di = 0; di < totalDc; di = di + 1)
             {
@@ -4699,7 +4699,7 @@ class LFPG_NetworkManager
         if (furMod == 2 && totalFur > 0)
         {
             int fi;
-            LF_Furnace furnace;
+            LFPG_Furnace furnace;
 
             for (fi = 0; fi < totalFur; fi = fi + 1)
             {
@@ -4725,7 +4725,7 @@ class LFPG_NetworkManager
         if (m_SimpleTickCounter == 6 && totalFri > 0)
         {
             int ri;
-            LF_Fridge fridge;
+            LFPG_Fridge fridge;
 
             for (ri = 0; ri < totalFri; ri = ri + 1)
             {

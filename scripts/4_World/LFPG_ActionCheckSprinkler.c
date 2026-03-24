@@ -37,7 +37,7 @@ class LFPG_ActionCheckSprinkler : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Sprinkler spr = LF_Sprinkler.Cast(targetObj);
+        LFPG_Sprinkler spr = LFPG_Sprinkler.Cast(targetObj);
         if (!spr)
             return false;
 
@@ -68,7 +68,7 @@ class LFPG_ActionCheckSprinkler : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Sprinkler spr = LF_Sprinkler.Cast(targetObj);
+        LFPG_Sprinkler spr = LFPG_Sprinkler.Cast(targetObj);
         if (!spr)
             return;
 

@@ -5,9 +5,9 @@
 //
 // Requirements:
 //   - Player holds Hammer (item in hands)
-//   - Target: LF_SolarPanel (T1, NOT T2)
-//   - T1 has MetalPlate in slot LF_SolarPlate with qty >= 5
-//   - T1 has Nail in slot LF_SolarNails with qty >= 20
+//   - Target: LFPG_SolarPanel (T1, NOT T2)
+//   - T1 has MetalPlate in slot LFPG_SolarPlate with qty >= 5
+//   - T1 has Nail in slot LFPG_SolarNails with qty >= 20
 //
 // On completion:
 //   1. Consume materials (excess returned to ground)
@@ -67,16 +67,16 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
             return false;
 
         // Target must be T1 solar panel
-        LF_SolarPanel panel = LF_SolarPanel.Cast(targetObj);
+        LFPG_SolarPanel panel = LFPG_SolarPanel.Cast(targetObj);
         if (!panel)
             return false;
 
         // Must NOT be T2 already
-        if (panel.IsKindOf("LF_SolarPanel_T2"))
+        if (panel.IsKindOf("LFPG_SolarPanel_T2"))
             return false;
 
         // Check materials in attachment slots
-        EntityAI plate = panel.FindAttachmentBySlotName("LF_SolarPlate");
+        EntityAI plate = panel.FindAttachmentBySlotName("LFPG_SolarPlate");
         if (!plate)
             return false;
 
@@ -84,7 +84,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         if (plateQty < LFPG_SOLAR_PLATE_REQUIRED)
             return false;
 
-        EntityAI nails = panel.FindAttachmentBySlotName("LF_SolarNails");
+        EntityAI nails = panel.FindAttachmentBySlotName("LFPG_SolarNails");
         if (!nails)
             return false;
 
@@ -106,19 +106,19 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         if (!targetObj)
             return;
 
-        LF_SolarPanel panel = LF_SolarPanel.Cast(targetObj);
+        LFPG_SolarPanel panel = LFPG_SolarPanel.Cast(targetObj);
         if (!panel)
             return;
 
         // Re-validate T2 check (anti-exploit: action could be started on T1 then swapped)
-        if (panel.IsKindOf("LF_SolarPanel_T2"))
+        if (panel.IsKindOf("LFPG_SolarPanel_T2"))
         {
             LFPG_Util.Warn("[UpgradeSolar] Target is already T2, aborting.");
             return;
         }
 
         // ---- Re-validate materials (server authority) ----
-        EntityAI plate = panel.FindAttachmentBySlotName("LF_SolarPlate");
+        EntityAI plate = panel.FindAttachmentBySlotName("LFPG_SolarPlate");
         if (!plate)
         {
             LFPG_Util.Warn("[UpgradeSolar] No MetalPlate found, aborting.");
@@ -132,7 +132,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
             return;
         }
 
-        EntityAI nails = panel.FindAttachmentBySlotName("LF_SolarNails");
+        EntityAI nails = panel.FindAttachmentBySlotName("LFPG_SolarNails");
         if (!nails)
         {
             LFPG_Util.Warn("[UpgradeSolar] No Nails found, aborting.");
@@ -174,7 +174,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         GetGame().ObjectDelete(panel);
 
         // ---- Spawn T2 at same position ----
-        EntityAI t2 = GetGame().CreateObjectEx("LF_SolarPanel_T2", pos, ECE_CREATEPHYSICS);
+        EntityAI t2 = GetGame().CreateObjectEx("LFPG_SolarPanel_T2", pos, ECE_CREATEPHYSICS);
         if (t2)
         {
             t2.SetPosition(pos);
@@ -184,7 +184,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         }
         else
         {
-            LFPG_Util.Error("[UpgradeSolar] Failed to create LF_SolarPanel_T2!");
+            LFPG_Util.Error("[UpgradeSolar] Failed to create LFPG_SolarPanel_T2!");
         }
     }
 

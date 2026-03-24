@@ -6,9 +6,9 @@
 //
 // Requirements:
 //   - Player holds Hammer (item in hands)
-//   - Target: LF_WaterPump (T1, NOT T2)
-//   - T1 has MetalPlate in slot LF_PumpPlate with qty >= LFPG_PUMP_UPGRADE_PLATES
-//   - T1 has Nail in slot LF_PumpNails with qty >= LFPG_PUMP_UPGRADE_NAILS
+//   - Target: LFPG_WaterPump (T1, NOT T2)
+//   - T1 has MetalPlate in slot LFPG_PumpPlate with qty >= LFPG_PUMP_UPGRADE_PLATES
+//   - T1 has Nail in slot LFPG_PumpNails with qty >= LFPG_PUMP_UPGRADE_NAILS
 //
 // On completion:
 //   1. Capture pos/ori and filter state
@@ -63,16 +63,16 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             return false;
 
         // Target must be T1 water pump
-        LF_WaterPump pump = LF_WaterPump.Cast(targetObj);
+        LFPG_WaterPump pump = LFPG_WaterPump.Cast(targetObj);
         if (!pump)
             return false;
 
         // Must NOT be T2 already
-        if (pump.IsKindOf("LF_WaterPump_T2"))
+        if (pump.IsKindOf("LFPG_WaterPump_T2"))
             return false;
 
         // Check materials in attachment slots
-        EntityAI plate = pump.FindAttachmentBySlotName("LF_PumpPlate");
+        EntityAI plate = pump.FindAttachmentBySlotName("LFPG_PumpPlate");
         if (!plate)
             return false;
 
@@ -80,7 +80,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         if (plateQty < LFPG_PUMP_UPGRADE_PLATES)
             return false;
 
-        EntityAI nails = pump.FindAttachmentBySlotName("LF_PumpNails");
+        EntityAI nails = pump.FindAttachmentBySlotName("LFPG_PumpNails");
         if (!nails)
             return false;
 
@@ -102,19 +102,19 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         if (!targetObj)
             return;
 
-        LF_WaterPump pump = LF_WaterPump.Cast(targetObj);
+        LFPG_WaterPump pump = LFPG_WaterPump.Cast(targetObj);
         if (!pump)
             return;
 
         // Re-validate T2 check (anti-exploit)
-        if (pump.IsKindOf("LF_WaterPump_T2"))
+        if (pump.IsKindOf("LFPG_WaterPump_T2"))
         {
             LFPG_Util.Warn("[UpgradePump] Target is already T2, aborting.");
             return;
         }
 
         // ---- Re-validate materials (server authority) ----
-        EntityAI plate = pump.FindAttachmentBySlotName("LF_PumpPlate");
+        EntityAI plate = pump.FindAttachmentBySlotName("LFPG_PumpPlate");
         if (!plate)
         {
             LFPG_Util.Warn("[UpgradePump] No MetalPlate found, aborting.");
@@ -128,7 +128,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             return;
         }
 
-        EntityAI nails = pump.FindAttachmentBySlotName("LF_PumpNails");
+        EntityAI nails = pump.FindAttachmentBySlotName("LFPG_PumpNails");
         if (!nails)
         {
             LFPG_Util.Warn("[UpgradePump] No Nails found, aborting.");
@@ -148,7 +148,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
 
         // ---- Capture filter state before deletion ----
         int filterQty = 0;
-        EntityAI filterItem = pump.FindAttachmentBySlotName("LF_PumpFilter");
+        EntityAI filterItem = pump.FindAttachmentBySlotName("LFPG_PumpFilter");
         if (filterItem)
         {
             filterQty = filterItem.GetQuantity();
@@ -197,7 +197,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         // ---- Delete T1 (deferred — object persists in physics until end of frame) ----
         GetGame().ObjectDelete(pump);
 
-        EntityAI t2 = GetGame().CreateObjectEx("LF_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS);
+        EntityAI t2 = GetGame().CreateObjectEx("LFPG_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS);
         if (t2)
         {
             t2.SetPosition(spawnPos);
@@ -222,7 +222,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         }
         else
         {
-            LFPG_Util.Error("[UpgradePump] Failed to create LF_WaterPump_T2!");
+            LFPG_Util.Error("[UpgradePump] Failed to create LFPG_WaterPump_T2!");
         }
     }
 

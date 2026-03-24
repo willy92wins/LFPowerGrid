@@ -1,10 +1,10 @@
 // =========================================================
 // LF_PowerGrid - Monitor device (v4.0 Refactor)
 //
-// LF_Monitor_Kit:  Holdable (same-model deployment).
-// LF_Monitor:      PASSTHROUGH, 1 IN + 4 OUT (camera ports).
+// LFPG_Monitor_Kit:  Holdable (same-model deployment).
+// LFPG_Monitor:      PASSTHROUGH, 1 IN + 4 OUT (camera ports).
 //                  Self-consumption 10 u/s, throughput cap 70 u/s.
-//                  OUT ports restricted to LF_Camera only.
+//                  OUT ports restricted to LFPG_Camera only.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 // =========================================================
@@ -12,11 +12,11 @@
 static const string LFPG_MONITOR_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_monitor_off.rvmat";
 static const string LFPG_MONITOR_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_monitor_on.rvmat";
 
-class LF_Monitor_Kit : LFPG_KitBase
+class LFPG_Monitor_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Monitor";
+        return "LFPG_Monitor";
     }
 
     override int LFPG_GetPlacementModes()
@@ -43,12 +43,12 @@ class LF_Monitor_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE - PASSTHROUGH : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_Monitor : LFPG_WireOwnerBase
+class LFPG_Monitor : LFPG_WireOwnerBase
 {
     protected bool m_PoweredNet = false;
     protected bool m_Overloaded = false;
 
-    void LF_Monitor()
+    void LFPG_Monitor()
     {
         string pIn = "input_1";
         LFPG_AddPort(pIn, LFPG_PortDir.IN, "Power Input");
@@ -88,7 +88,7 @@ class LF_Monitor : LFPG_WireOwnerBase
             return;
         m_PoweredNet = powered;
         SetSynchDirty();
-        string dbgMsg = "[LF_Monitor] SetPowered(";
+        string dbgMsg = "[LFPG_Monitor] SetPowered(";
         dbgMsg = dbgMsg + powered.ToString();
         dbgMsg = dbgMsg + ") id=";
         dbgMsg = dbgMsg + m_DeviceId;
@@ -118,7 +118,7 @@ class LF_Monitor : LFPG_WireOwnerBase
         if (!LFPG_HasPort(myPort, LFPG_PortDir.OUT))
             return false;
 
-        string kCamera = "LF_Camera";
+        string kCamera = "LFPG_Camera";
         if (!other.IsKindOf(kCamera))
             return false;
 

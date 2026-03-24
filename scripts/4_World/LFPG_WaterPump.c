@@ -1,9 +1,9 @@
 // =========================================================
 // LF_PowerGrid - Water Pump device (v4.1 Registry Refactor)
 //
-// LF_WaterPump_Kit:  LFPG_KitBaseDeployable (box → hologram).
-// LF_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
-// LF_WaterPump_T2:   PASSTHROUGH, 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
+// LFPG_WaterPump_Kit:  LFPG_KitBaseDeployable (box → hologram).
+// LFPG_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
+// LFPG_WaterPump_T2:   PASSTHROUGH, 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
@@ -16,11 +16,11 @@
 // v4.2: Migrated from DeployableContainer_Base to fix
 //   hologram detection (Cast to LFPG_KitBaseDeployable).
 // ---------------------------------------------------------
-class LF_WaterPump_Kit : LFPG_KitBaseDeployable
+class LFPG_WaterPump_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_WaterPump";
+        return "LFPG_WaterPump";
     }
 };
 
@@ -28,7 +28,7 @@ class LF_WaterPump_Kit : LFPG_KitBaseDeployable
 // WATER PUMP T1: PASSTHROUGH : LFPG_WireOwnerBase
 // 1 IN + 1 OUT, 50 u/s self-consumption, 100 u/s cap
 // ---------------------------------------------------------
-class LF_WaterPump : LFPG_WireOwnerBase
+class LFPG_WaterPump : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet        = false;
@@ -44,7 +44,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_WaterPump()
+    void LFPG_WaterPump()
     {
         string pIn = "input_1";
         string lIn = "Input";
@@ -63,7 +63,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
         RegisterNetSyncVariableBool(varSprOut);
     }
 
-    void ~LF_WaterPump()
+    void ~LFPG_WaterPump()
     {
         if (m_PumpLoopSound)
         {
@@ -137,7 +137,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_WaterPump] SetPowered(";
+        string msg = "[LFPG_WaterPump] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -261,7 +261,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        string slotName = "LF_PumpFilter";
+        string slotName = "LFPG_PumpFilter";
         EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;
@@ -343,7 +343,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
 // 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
 // Independent class (NOT inherited from T1)
 // ---------------------------------------------------------
-class LF_WaterPump_T2 : LFPG_WireOwnerBase
+class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected bool  m_PoweredNet             = false;
@@ -361,7 +361,7 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_WaterPump_T2()
+    void LFPG_WaterPump_T2()
     {
         string pIn = "input_1";
         string lIn = "Input 1";
@@ -392,7 +392,7 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
         RegisterNetSyncVariableInt(varSprCnt);
     }
 
-    void ~LF_WaterPump_T2()
+    void ~LFPG_WaterPump_T2()
     {
         if (m_PumpLoopSound)
         {
@@ -467,7 +467,7 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LF_WaterPump_T2] SetPowered(";
+        string msg = "[LFPG_WaterPump_T2] SetPowered(";
         msg = msg + powered.ToString();
         msg = msg + ") id=";
         msg = msg + m_DeviceId;
@@ -586,14 +586,14 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
     {
         if (!ctx.Read(m_TankLevel))
         {
-            string errTank = "[LF_WaterPump_T2] OnStoreLoad failed: m_TankLevel";
+            string errTank = "[LFPG_WaterPump_T2] OnStoreLoad failed: m_TankLevel";
             LFPG_Util.Error(errTank);
             return false;
         }
 
         if (!ctx.Read(m_TankLiquidType))
         {
-            string errLiq = "[LF_WaterPump_T2] OnStoreLoad failed: m_TankLiquidType";
+            string errLiq = "[LFPG_WaterPump_T2] OnStoreLoad failed: m_TankLiquidType";
             LFPG_Util.Error(errLiq);
             return false;
         }
@@ -617,7 +617,7 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        string slotName = "LF_PumpFilter";
+        string slotName = "LFPG_PumpFilter";
         EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;

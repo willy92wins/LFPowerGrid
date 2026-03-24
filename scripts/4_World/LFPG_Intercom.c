@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Intercom / RF Broadcaster (v4.0 Refactor)
 //
-// LF_Intercom_Kit: Holdable, deployable (same-model pattern).
-// LF_Intercom:     CONSUMER, 2 IN ports (input_1 + input_toggle).
+// LFPG_Intercom_Kit: Holdable, deployable (same-model pattern).
+// LFPG_Intercom:     CONSUMER, 2 IN ports (input_1 + input_toggle).
 //                   No output, no wire store.
 //                   T1: 10 u/s, gate toggle on/off, RF toggle.
 //                   T2: 20 u/s, ghost radio bidirectional VOIP.
@@ -48,11 +48,11 @@ static const string LFPG_INTERCOM_SND_RF_BEEP      = "LFPG_Intercom_RFBeep_Sound
 static const string LFPG_INTERCOM_SND_KNOB_CLICK   = "LFPG_Intercom_KnobClick_SoundSet";
 static const string LFPG_INTERCOM_SND_STATIC_BURST  = "LFPG_Intercom_Static_SoundSet";
 
-class LF_Intercom_Kit : LFPG_KitBase
+class LFPG_Intercom_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Intercom";
+        return "LFPG_Intercom";
     }
 
     override int LFPG_GetPlacementModes()
@@ -65,7 +65,7 @@ class LF_Intercom_Kit : LFPG_KitBase
 // DEVICE — CONSUMER : LFPG_DeviceBase
 // 2 IN (input_1 + input_toggle), no output, no wire store
 // ---------------------------------------------------------
-class LF_Intercom : LFPG_DeviceBase
+class LFPG_Intercom : LFPG_DeviceBase
 {
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet      = false;
@@ -80,12 +80,12 @@ class LF_Intercom : LFPG_DeviceBase
     protected int  m_LastRFToggleTime  = 0;
 
     // ---- Ghost radio (T2 bidirectional VOIP) ----
-    protected LF_GhostRadio m_GhostRadio;
+    protected LFPG_GhostRadio m_GhostRadio;
 
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_Intercom()
+    void LFPG_Intercom()
     {
         string pIn1 = "input_1";
         string lIn1 = "Power In";
@@ -131,7 +131,7 @@ class LF_Intercom : LFPG_DeviceBase
             return false;
 
         string typeName = attachment.GetType();
-        string ghostType = "LF_GhostRadio";
+        string ghostType = "LFPG_GhostRadio";
         if (typeName == ghostType)
             return false;
 
@@ -226,7 +226,7 @@ class LF_Intercom : LFPG_DeviceBase
 
         LFPG_UpdateGhostRadio();
 
-        string pwrMsg = "[LF_Intercom] SetPowered(";
+        string pwrMsg = "[LFPG_Intercom] SetPowered(";
         pwrMsg = pwrMsg + powered.ToString();
         pwrMsg = pwrMsg + ") id=";
         pwrMsg = pwrMsg + m_DeviceId;
@@ -351,33 +351,33 @@ class LF_Intercom : LFPG_DeviceBase
     {
         if (!ctx.Read(m_SwitchOn))
         {
-            string errSwitch = "[LF_Intercom] OnStoreLoad failed: m_SwitchOn";
+            string errSwitch = "[LFPG_Intercom] OnStoreLoad failed: m_SwitchOn";
             LFPG_Util.Error(errSwitch);
             return false;
         }
 
         if (!ctx.Read(m_RadioInstalled))
         {
-            string errRadio = "[LF_Intercom] OnStoreLoad failed: m_RadioInstalled";
+            string errRadio = "[LFPG_Intercom] OnStoreLoad failed: m_RadioInstalled";
             LFPG_Util.Error(errRadio);
             return false;
         }
 
         if (!ctx.Read(m_BroadcastEnabled))
         {
-            string errBcast = "[LF_Intercom] OnStoreLoad failed: m_BroadcastEnabled";
+            string errBcast = "[LFPG_Intercom] OnStoreLoad failed: m_BroadcastEnabled";
             LFPG_Util.Error(errBcast);
             return false;
         }
 
         if (!ctx.Read(m_FrequencyIndex))
         {
-            string errFreq = "[LF_Intercom] OnStoreLoad failed: m_FrequencyIndex";
+            string errFreq = "[LFPG_Intercom] OnStoreLoad failed: m_FrequencyIndex";
             LFPG_Util.Error(errFreq);
             return false;
         }
 
-        string loadMsg = "[LF_Intercom] Loaded id=";
+        string loadMsg = "[LFPG_Intercom] Loaded id=";
         loadMsg = loadMsg + m_DeviceId;
         loadMsg = loadMsg + " switchOn=";
         loadMsg = loadMsg + m_SwitchOn.ToString();
@@ -398,7 +398,7 @@ class LF_Intercom : LFPG_DeviceBase
         super.AfterStoreLoad();
 
         #ifdef SERVER
-        string afterMsg = "[LF_Intercom] AfterStoreLoad id=";
+        string afterMsg = "[LFPG_Intercom] AfterStoreLoad id=";
         afterMsg = afterMsg + m_DeviceId;
         afterMsg = afterMsg + " radio=";
         afterMsg = afterMsg + m_RadioInstalled.ToString();
@@ -491,7 +491,7 @@ class LF_Intercom : LFPG_DeviceBase
         }
         SetSynchDirty();
 
-        string togMsg = "[LF_Intercom] Toggle ";
+        string togMsg = "[LFPG_Intercom] Toggle ";
         if (m_SwitchOn)
         {
             togMsg = togMsg + "ON";
@@ -584,7 +584,7 @@ class LF_Intercom : LFPG_DeviceBase
             }
         }
 
-        string rfMsg = "[LF_Intercom] RF toggle executed: ";
+        string rfMsg = "[LFPG_Intercom] RF toggle executed: ";
         rfMsg = rfMsg + toggled.ToString();
         rfMsg = rfMsg + " devices toggled, id=";
         rfMsg = rfMsg + m_DeviceId;
@@ -636,7 +636,7 @@ class LF_Intercom : LFPG_DeviceBase
 
         if (currentInput && !m_PrevToggleInput)
         {
-            string edgeMsg = "[LF_Intercom] Toggle input rising edge detected, id=";
+            string edgeMsg = "[LFPG_Intercom] Toggle input rising edge detected, id=";
             edgeMsg = edgeMsg + m_DeviceId;
             LFPG_Util.Info(edgeMsg);
             LFPG_ExecuteRFToggle();
@@ -656,12 +656,12 @@ class LF_Intercom : LFPG_DeviceBase
             return;
 
         vector pos = GetPosition();
-        string ghostClass = "LF_GhostRadio";
+        string ghostClass = "LFPG_GhostRadio";
         Object ghostObj = GetGame().CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
-        m_GhostRadio = LF_GhostRadio.Cast(ghostObj);
+        m_GhostRadio = LFPG_GhostRadio.Cast(ghostObj);
         if (!m_GhostRadio)
         {
-            string errGhost = "[LF_Intercom] Failed to spawn GhostRadio at ";
+            string errGhost = "[LFPG_Intercom] Failed to spawn GhostRadio at ";
             errGhost = errGhost + pos.ToString();
             LFPG_Util.Error(errGhost);
             return;
@@ -678,7 +678,7 @@ class LF_Intercom : LFPG_DeviceBase
         m_GhostRadio.SetFrequencyByIndex(m_FrequencyIndex);
         m_GhostRadio.SetSynchDirty();
 
-        string spawnMsg = "[LF_Intercom] GhostRadio spawned at ";
+        string spawnMsg = "[LFPG_Intercom] GhostRadio spawned at ";
         spawnMsg = spawnMsg + pos.ToString();
         spawnMsg = spawnMsg + " freq=";
         spawnMsg = spawnMsg + m_FrequencyIndex.ToString();
@@ -696,7 +696,7 @@ class LF_Intercom : LFPG_DeviceBase
             GetGame().ObjectDelete(m_GhostRadio);
             m_GhostRadio = null;
 
-            string destroyMsg = "[LF_Intercom] GhostRadio destroyed, id=";
+            string destroyMsg = "[LFPG_Intercom] GhostRadio destroyed, id=";
             destroyMsg = destroyMsg + m_DeviceId;
             LFPG_Util.Info(destroyMsg);
         }
@@ -735,7 +735,7 @@ class LF_Intercom : LFPG_DeviceBase
 
         LFPG_UpdateGhostRadio();
 
-        string installMsg = "[LF_Intercom] Radio installed, id=";
+        string installMsg = "[LFPG_Intercom] Radio installed, id=";
         installMsg = installMsg + m_DeviceId;
         LFPG_Util.Info(installMsg);
         #endif
@@ -759,7 +759,7 @@ class LF_Intercom : LFPG_DeviceBase
 
         LFPG_UpdateGhostRadio();
 
-        string bcMsg = "[LF_Intercom] Broadcast ";
+        string bcMsg = "[LFPG_Intercom] Broadcast ";
         if (m_BroadcastEnabled)
         {
             bcMsg = bcMsg + "ENABLED";
@@ -798,7 +798,7 @@ class LF_Intercom : LFPG_DeviceBase
             m_GhostRadio.SetSynchDirty();
         }
 
-        string freqMsg = "[LF_Intercom] Frequency changed to index=";
+        string freqMsg = "[LFPG_Intercom] Frequency changed to index=";
         freqMsg = freqMsg + m_FrequencyIndex.ToString();
         freqMsg = freqMsg + " id=";
         freqMsg = freqMsg + m_DeviceId;

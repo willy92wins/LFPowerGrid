@@ -1,7 +1,7 @@
 // =========================================================
 // LF_PowerGrid - Action: Operate Searchlight (v1.5.0)
 //
-// Toggle action on LF_Searchlight (CCINone, CCTCursor).
+// Toggle action on LFPG_Searchlight (CCINone, CCTCursor).
 //   - If NOT grabbing: "Operate Searchlight" -> sends ENTER RPC
 //   - If already grabbing THIS searchlight: "Release Searchlight" -> local exit
 //
@@ -38,11 +38,11 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (!targetObj)
             return false;
 
-        string slType = "LF_Searchlight";
+        string slType = "LFPG_Searchlight";
         if (!targetObj.IsKindOf(slType))
             return false;
 
-        LF_Searchlight sl = LF_Searchlight.Cast(targetObj);
+        LFPG_Searchlight sl = LFPG_Searchlight.Cast(targetObj);
         if (!sl)
             return false;
 
@@ -85,7 +85,7 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Searchlight sl = LF_Searchlight.Cast(targetObj);
+        LFPG_Searchlight sl = LFPG_Searchlight.Cast(targetObj);
         if (!sl)
             return;
 

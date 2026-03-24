@@ -689,7 +689,7 @@ class LFPG_DeviceInspector
         m_TankLineOffset = 0.0;
         if (m_wTankLine)
         {
-            LF_WaterPump_T2 t2Pump = LF_WaterPump_T2.Cast(device);
+            LFPG_WaterPump_T2 t2Pump = LFPG_WaterPump_T2.Cast(device);
             if (t2Pump)
             {
                 float tankLvl = t2Pump.LFPG_GetTankLevel();
@@ -767,12 +767,12 @@ class LFPG_DeviceInspector
             }
         }
 
-        // ---- v1.2.0: Fuel line (LF_Furnace only) ----
+        // ---- v1.2.0: Fuel line (LFPG_Furnace only) ----
         m_FuelLineOffset = 0.0;
         m_ReserveLineOffset = 0.0;
         if (m_wFuelLine)
         {
-            LF_Furnace furnaceDevice = LF_Furnace.Cast(device);
+            LFPG_Furnace furnaceDevice = LFPG_Furnace.Cast(device);
             if (furnaceDevice)
             {
                 int fuelCur = furnaceDevice.LFPG_GetFuelCurrent();
@@ -873,11 +873,11 @@ class LFPG_DeviceInspector
             }
         }
 
-        // v2.4: Link line (LF_Sorter only)
+        // v2.4: Link line (LFPG_Sorter only)
         m_LinkLineOffset = 0.0;
         if (m_wLinkLine)
         {
-            LF_Sorter sorterInspect = LF_Sorter.Cast(device);
+            LFPG_Sorter sorterInspect = LFPG_Sorter.Cast(device);
             if (sorterInspect)
             {
                 float linkY = 94.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
@@ -906,11 +906,11 @@ class LFPG_DeviceInspector
             }
         }
 
-        // ---- v2.1: Battery line (LF_BatteryBase tiers) ----
+        // ---- v2.1: Battery line (LFPG_BatteryBase tiers) ----
         m_BatteryLineOffset = 0.0;
         if (m_wBatteryLine)
         {
-            LF_BatteryBase batDevice = LF_BatteryBase.Cast(device);
+            LFPG_BatteryBase batDevice = LFPG_BatteryBase.Cast(device);
             if (batDevice)
             {
                 float batStored = batDevice.LFPG_GetStoredEnergy();
@@ -1441,18 +1441,26 @@ class LFPG_DeviceInspector
     // Clean up entity type name for display.
     // "LF_TestLamp" → "Lamp"
     // "LF_TestGenerator" → "Generator"
-    // "LF_Splitter" → "Splitter"
+    // "LFPG_Splitter" → "Splitter"
     protected static string FormatDeviceName(string typeName)
     {
         if (typeName == "")
             return "Unknown";
 
-        // Strip "LF_" prefix
+        // Strip "LFPG_" prefix (production devices), then "LF_" (test devices)
         string result = typeName;
-        if (result.Length() > 3)
+        if (result.Length() > 5)
         {
-            string prefix = result.Substring(0, 3);
-            if (prefix == "LF_")
+            string pfxLong = result.Substring(0, 5);
+            if (pfxLong == "LFPG_")
+            {
+                result = result.Substring(5, result.Length() - 5);
+            }
+        }
+        if (result == typeName && result.Length() > 3)
+        {
+            string pfxShort = result.Substring(0, 3);
+            if (pfxShort == "LF_")
             {
                 result = result.Substring(3, result.Length() - 3);
             }

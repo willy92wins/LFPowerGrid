@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - Combiner device (v4.0 Refactor)
 //
-// LF_Combiner_Kit:  Holdable (same-model deployment).
-// LF_Combiner:      PASSTHROUGH, 2 IN + 1 OUT, 0 u/s self-consumption.
+// LFPG_Combiner_Kit:  Holdable (same-model deployment).
+// LFPG_Combiner:      PASSTHROUGH, 2 IN + 1 OUT, 0 u/s self-consumption.
 //                   Capacity 500 u/s.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
@@ -12,11 +12,11 @@
 // KIT (unchanged)
 // ---------------------------------------------------------
 
-class LF_Combiner_Kit : LFPG_KitBase
+class LFPG_Combiner_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_Combiner";
+        return "LFPG_Combiner";
     }
 
     override int LFPG_GetPlacementModes()
@@ -43,12 +43,12 @@ class LF_Combiner_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE - PASSTHROUGH : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_Combiner : LFPG_WireOwnerBase
+class LFPG_Combiner : LFPG_WireOwnerBase
 {
     protected bool m_PoweredNet = false;
     protected bool m_Overloaded = false;
 
-    void LF_Combiner()
+    void LFPG_Combiner()
     {
         string pI1 = "input_1";
         LFPG_AddPort(pI1, LFPG_PortDir.IN, "Input 1");
@@ -77,7 +77,7 @@ class LF_Combiner : LFPG_WireOwnerBase
             return;
         m_PoweredNet = powered;
         SetSynchDirty();
-        string dbgMsg = "[LF_Combiner] SetPowered(";
+        string dbgMsg = "[LFPG_Combiner] SetPowered(";
         dbgMsg = dbgMsg + powered.ToString();
         dbgMsg = dbgMsg + ") id=";
         dbgMsg = dbgMsg + m_DeviceId;

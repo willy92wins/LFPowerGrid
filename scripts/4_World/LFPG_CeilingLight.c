@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - CeilingLight device (v4.0 Refactor)
 //
-// LF_CeilingLight_Kit:  Holdable (ceiling mount via HologramMod).
-// LF_CeilingLight:      PASSTHROUGH, 1 IN + 1 OUT, 10 u/s self, cap 50.
+// LFPG_CeilingLight_Kit:  Holdable (ceiling mount via HologramMod).
+// LFPG_CeilingLight:      PASSTHROUGH, 1 IN + 1 OUT, 10 u/s self, cap 50.
 //                       Light effect on/off via m_PoweredNet.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
@@ -11,11 +11,11 @@
 static const string LFPG_CEILING_RVMAT_OFF = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light.rvmat";
 static const string LFPG_CEILING_RVMAT_ON  = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light_on.rvmat";
 
-class LF_CeilingLight_Kit : LFPG_KitBase
+class LFPG_CeilingLight_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_CeilingLight";
+        return "LFPG_CeilingLight";
     }
 
     override int LFPG_GetPlacementModes()
@@ -27,7 +27,7 @@ class LF_CeilingLight_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE - PASSTHROUGH : LFPG_WireOwnerBase
 // ---------------------------------------------------------
-class LF_CeilingLight : LFPG_WireOwnerBase
+class LFPG_CeilingLight : LFPG_WireOwnerBase
 {
     protected bool m_PoweredNet = false;
     protected bool m_Overloaded = false;
@@ -35,7 +35,7 @@ class LF_CeilingLight : LFPG_WireOwnerBase
     // Client-side light effect (NOT ref — engine object)
     protected ScriptedLightBase m_LFPG_Light;
 
-    void LF_CeilingLight()
+    void LFPG_CeilingLight()
     {
         string pIn = "input_1";
         LFPG_AddPort(pIn, LFPG_PortDir.IN, "Input");
@@ -62,7 +62,7 @@ class LF_CeilingLight : LFPG_WireOwnerBase
             return;
         m_PoweredNet = powered;
         SetSynchDirty();
-        string dbgMsg = "[LF_CeilingLight] SetPowered(";
+        string dbgMsg = "[LFPG_CeilingLight] SetPowered(";
         dbgMsg = dbgMsg + powered.ToString();
         dbgMsg = dbgMsg + ") id=";
         dbgMsg = dbgMsg + m_DeviceId;

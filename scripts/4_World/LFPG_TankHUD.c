@@ -102,7 +102,7 @@ class LFPG_TankHUD
         }
 
         // Only show for T2
-        LF_WaterPump_T2 t2 = LF_WaterPump_T2.Cast(target);
+        LFPG_WaterPump_T2 t2 = LFPG_WaterPump_T2.Cast(target);
         if (!t2)
         {
             Hide();

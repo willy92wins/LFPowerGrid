@@ -6,7 +6,7 @@
 // When disabled: ghost radio destroyed, LED2 off.
 //
 // Conditions:
-//   - Target must be LF_Intercom
+//   - Target must be LFPG_Intercom
 //   - m_RadioInstalled == true (T2 upgrade completed)
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
@@ -40,7 +40,7 @@ class LFPG_ActionToggleBroadcast : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return false;
 
@@ -70,7 +70,7 @@ class LFPG_ActionToggleBroadcast : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return;
 

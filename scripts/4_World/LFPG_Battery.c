@@ -1,43 +1,43 @@
 // =========================================================
 // LF_PowerGrid - Battery device (v4.1)
 //
-// LF_BatteryMedium_Kit: Deployable kit → spawns BatteryMedium.
-// LF_BatteryLarge_Kit:  DeployableContainer_Base → spawns BatteryLarge.
+// LFPG_BatteryMedium_Kit: Deployable kit → spawns BatteryMedium.
+// LFPG_BatteryLarge_Kit:  DeployableContainer_Base → spawns BatteryLarge.
 //
-// LF_BatteryBase:     PASSTHROUGH (1 IN + 1 OUT) with energy storage.
+// LFPG_BatteryBase:     PASSTHROUGH (1 IN + 1 OUT) with energy storage.
 //                     Charges from surplus, discharges to supplement.
 //
 // v4.1: Removed LF_BatterySmall / LF_Battery_Kit (dead code,
 //   no config.cpp entry). Small battery role covered by
-//   LF_BatteryAdapter + vanilla CarBattery/TruckBattery.
+//   LFPG_BatteryAdapter + vanilla CarBattery/TruckBattery.
 //   Added LFPG_IsGateCapable + LFPG_IsGateOpen + LFPG_UpdateLEDs
-//   to LF_BatteryLarge (was missing toggle + LED support).
+//   to LFPG_BatteryLarge (was missing toggle + LED support).
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
 //
-// LF_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
-// LF_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
+// LFPG_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
+// LFPG_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
 // =========================================================
 
 // ---------------------------------------------------------
 // KITS
 // ---------------------------------------------------------
 
-class LF_BatteryMedium_Kit : LFPG_KitBase
+class LFPG_BatteryMedium_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_BatteryMedium";
+        return "LFPG_BatteryMedium";
     }
 };
 
-class LF_BatteryLarge_Kit : LFPG_KitBaseDeployable
+class LFPG_BatteryLarge_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_BatteryLarge";
+        return "LFPG_BatteryLarge";
     }
 };
 
@@ -45,7 +45,7 @@ class LF_BatteryLarge_Kit : LFPG_KitBaseDeployable
 // DEVICE BASE: PASSTHROUGH : LFPG_WireOwnerBase
 // Tiers inherit and override capacity/rates.
 // ---------------------------------------------------------
-class LF_BatteryBase : LFPG_WireOwnerBase
+class LFPG_BatteryBase : LFPG_WireOwnerBase
 {
     // ---- Device-specific SyncVars ----
     protected bool  m_PoweredNet       = false;
@@ -66,7 +66,7 @@ class LF_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
-    void LF_BatteryBase()
+    void LFPG_BatteryBase()
     {
         string pIn = "input_1";
         string lIn = "input_1";
@@ -268,21 +268,21 @@ class LF_BatteryBase : LFPG_WireOwnerBase
 
         if (!ctx.Read(m_StoredEnergy))
         {
-            string errStored = "[LF_Battery] OnStoreLoad failed: m_StoredEnergy";
+            string errStored = "[LFPG_Battery] OnStoreLoad failed: m_StoredEnergy";
             LFPG_Util.Error(errStored);
             return false;
         }
 
         if (!ctx.Read(m_DischargeEnabled))
         {
-            string errDisch = "[LF_Battery] OnStoreLoad failed: m_DischargeEnabled";
+            string errDisch = "[LFPG_Battery] OnStoreLoad failed: m_DischargeEnabled";
             LFPG_Util.Error(errDisch);
             return false;
         }
 
         if (!ctx.Read(m_OutputEnabled))
         {
-            string errOutput = "[LF_Battery] OnStoreLoad failed: m_OutputEnabled";
+            string errOutput = "[LFPG_Battery] OnStoreLoad failed: m_OutputEnabled";
             LFPG_Util.Error(errOutput);
             return false;
         }
@@ -463,7 +463,7 @@ static const string LFPG_BAT_MED_LED_GREEN = "\\LFPowerGrid\\data\\battery_mediu
 static const string LFPG_BAT_MED_LED_OFF   = "\\LFPowerGrid\\data\\battery_medium\\ups_led_off.rvmat";
 static const int    LFPG_BAT_MED_LED_COUNT  = 7;
 
-class LF_BatteryMedium : LF_BatteryBase
+class LFPG_BatteryMedium : LFPG_BatteryBase
 {
     override float LFPG_GetMaxStoredEnergy()
     {
@@ -564,7 +564,7 @@ static const string LFPG_BAT_LRG_LED_GREEN = "\\LFPowerGrid\\data\\battery_large
 static const string LFPG_BAT_LRG_LED_OFF   = "\\LFPowerGrid\\data\\battery_large\\substation_transformer_led_off.rvmat";
 static const int    LFPG_BAT_LRG_LED_COUNT  = 7;
 
-class LF_BatteryLarge : LF_BatteryBase
+class LFPG_BatteryLarge : LFPG_BatteryBase
 {
     override float LFPG_GetMaxStoredEnergy()
     {

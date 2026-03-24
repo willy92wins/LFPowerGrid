@@ -18,7 +18,7 @@ class LFPG_WorldUtil
         EntityAI inHands = inv.GetEntityInHands();
         if (!inHands) return false;
 
-        return inHands.IsKindOf("LF_CableReel");
+        return inHands.IsKindOf("LFPG_CableReel");
     }
 
     // Server-authoritative check for cut action (requires Pliers or similar).

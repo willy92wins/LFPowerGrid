@@ -18,7 +18,7 @@
 // Spawn standardized to CreateObjectEx(ECE_CREATEPHYSICS) + ObjectDelete.
 // (Previously Solar/BatteryLarge used CreateObject+DeleteSafe — legacy.)
 //
-// NOTE: LF_WaterPump_Kit is NOT migrated (uses DeployableContainer_Base
+// NOTE: LFPG_WaterPump_Kit is NOT migrated (uses DeployableContainer_Base
 // super for placement via a different mechanism; works fine as-is).
 // =========================================================
 

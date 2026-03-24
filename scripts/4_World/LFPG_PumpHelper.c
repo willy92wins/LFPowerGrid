@@ -54,7 +54,7 @@ class LFPG_PumpHelper
         if (!device)
             return false;
 
-        EntityAI filter = device.FindAttachmentBySlotName("LF_PumpFilter");
+        EntityAI filter = device.FindAttachmentBySlotName("LFPG_PumpFilter");
         if (!filter)
             return false;
 
@@ -73,7 +73,7 @@ class LFPG_PumpHelper
         if (!device)
             return 0.0;
 
-        LF_WaterPump_T2 t2 = LF_WaterPump_T2.Cast(device);
+        LFPG_WaterPump_T2 t2 = LFPG_WaterPump_T2.Cast(device);
         if (!t2)
             return 0.0;
 
@@ -87,7 +87,7 @@ class LFPG_PumpHelper
         if (!device)
             return;
 
-        LF_WaterPump_T2 t2 = LF_WaterPump_T2.Cast(device);
+        LFPG_WaterPump_T2 t2 = LFPG_WaterPump_T2.Cast(device);
         if (!t2)
             return;
 
@@ -121,11 +121,11 @@ class LFPG_PumpHelper
         return graph.VerifyPassthroughPowered(devId);
         #else
         // Client: trust SyncVar (no graph access)
-        LF_WaterPump pump1 = LF_WaterPump.Cast(device);
+        LFPG_WaterPump pump1 = LFPG_WaterPump.Cast(device);
         if (pump1)
             return pump1.LFPG_GetPoweredNet();
 
-        LF_WaterPump_T2 pump2 = LF_WaterPump_T2.Cast(device);
+        LFPG_WaterPump_T2 pump2 = LFPG_WaterPump_T2.Cast(device);
         if (pump2)
             return pump2.LFPG_GetPoweredNet();
 

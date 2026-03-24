@@ -1,7 +1,7 @@
 // =========================================================
 // LF_PowerGrid - Ghost Radio (v3.0.0)
 //
-// Invisible radio entity used by LF_Intercom for bidirectional VOIP.
+// Invisible radio entity used by LFPG_Intercom for bidirectional VOIP.
 // Inherits from TransmitterBase (script) / PersonalRadio (config).
 //
 // Config inherits PersonalRadio so the C++ engine creates an
@@ -23,7 +23,7 @@
 // Config: scope=1 (not spawnable), Stone.p3d (tiny invisible model).
 // =========================================================
 
-class LF_GhostRadio : TransmitterBase
+class LFPG_GhostRadio : TransmitterBase
 {
     // Give CompEM pseudo-infinite energy so CanWork() returns true.
     override void EEInit()

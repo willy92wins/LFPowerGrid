@@ -28,7 +28,7 @@ class LFPG_SearchlightController
     protected bool   m_Active;
 
     // ---- Cached searchlight ref (resolved once on Enter) ----
-    protected LF_Searchlight m_TargetSl;
+    protected LFPG_Searchlight m_TargetSl;
 
     // ---- Aim state ----
     protected float  m_AimYaw;
@@ -92,7 +92,7 @@ class LFPG_SearchlightController
     }
 
     // Returns true if this controller is operating the given entity
-    bool IsOperatingEntity(LF_Searchlight sl)
+    bool IsOperatingEntity(LFPG_Searchlight sl)
     {
         if (!m_Active)
             return false;
@@ -127,10 +127,10 @@ class LFPG_SearchlightController
             return;
         }
 
-        m_TargetSl = LF_Searchlight.Cast(slObj);
+        m_TargetSl = LFPG_Searchlight.Cast(slObj);
         if (!m_TargetSl)
         {
-            LFPG_Util.Error("[SearchlightCtrl] Object is not LF_Searchlight on Enter");
+            LFPG_Util.Error("[SearchlightCtrl] Object is not LFPG_Searchlight on Enter");
             return;
         }
 

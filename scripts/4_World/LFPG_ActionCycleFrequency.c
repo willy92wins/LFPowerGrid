@@ -7,7 +7,7 @@
 // Frequencies: 87.8, 89.5, 91.3, 94.6, 96.6, 99.7, 102.5 MHz
 //
 // Conditions:
-//   - Target must be LF_Intercom
+//   - Target must be LFPG_Intercom
 //   - m_RadioInstalled == true (T2 upgrade completed)
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
@@ -41,7 +41,7 @@ class LFPG_ActionCycleFrequency : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return false;
 
@@ -71,7 +71,7 @@ class LFPG_ActionCycleFrequency : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_Intercom ic = LF_Intercom.Cast(targetObj);
+        LFPG_Intercom ic = LFPG_Intercom.Cast(targetObj);
         if (!ic)
             return;
 

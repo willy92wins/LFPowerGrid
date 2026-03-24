@@ -2,7 +2,7 @@
 // LF_PowerGrid - wiring tool item
 // =========================================================
 
-class LF_CableReel : CableReel
+class LFPG_CableReel : CableReel
 {
     protected static bool s_SetActionsLogged;
 
@@ -58,13 +58,13 @@ class LF_CableReel : CableReel
         if (!s_SetActionsLogged)
         {
             s_SetActionsLogged = true;
-            LFPG_Util.Info("[Items] LF_CableReel.SetActions v" + LFPG_VERSION_STR + " (12 actions)");
+            LFPG_Util.Info("[Items] LFPG_CableReel.SetActions v" + LFPG_VERSION_STR + " (12 actions)");
         }
     }
 
     override void EEInit()
     {
         super.EEInit();
-        LFPG_Bootstrap.LogOnce("LF_CableReel EEInit reached -> script class active");
+        LFPG_Bootstrap.LogOnce("LFPG_CableReel EEInit reached -> script class active");
     }
 };
