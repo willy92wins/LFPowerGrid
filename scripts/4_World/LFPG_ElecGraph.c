@@ -2196,12 +2196,25 @@ class LFPG_ElecGraph
                     // Eliminates redundant O(K) edge iteration + map lookups.
                     float downstreamSoft = m_LastAllocSoftDemand;
 
-                    // v2.0: Demand signal includes:
-                    //   hard = downstreamDemand - downstreamSoft + selfConsumption - virtualGen
+                    // v2.5 (Battery charge fix): Demand signal split into hard + soft.
+                    //   hard = (downstreamDemand - downstreamSoft) + selfConsumption
                     //   soft = downstreamSoft + node.m_SoftDemand (charge want)
-                    //   virtualGen subtracted (storage covers part of demand)
+                    //   virtualGen offsets ONLY hard portion (storage covers downstream).
+                    //   Soft demand (charging) is NEVER cancelled by virtualGen.
+                    //   Without this, virtualGen > hardBase makes demandSignal=0
+                    //   and the battery stops requesting charge power from upstream.
                     float totalSoft = downstreamSoft + node.m_SoftDemand;
-                    float demandSignal = downstreamDemand + node.m_Consumption + node.m_SoftDemand - node.m_VirtualGeneration;
+                    float hardBase = downstreamDemand - downstreamSoft + node.m_Consumption;
+                    if (hardBase < 0.0)
+                    {
+                        hardBase = 0.0;
+                    }
+                    float virtualOffset = node.m_VirtualGeneration;
+                    if (virtualOffset > hardBase)
+                    {
+                        virtualOffset = hardBase;
+                    }
+                    float demandSignal = hardBase - virtualOffset + totalSoft;
                     if (demandSignal < 0.0)
                     {
                         demandSignal = 0.0;

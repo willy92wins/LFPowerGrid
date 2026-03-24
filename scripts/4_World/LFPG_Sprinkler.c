@@ -1,12 +1,20 @@
 // =========================================================
-// LF_PowerGrid - Sprinkler device (v4.1 Registry Refactor)
+// LF_PowerGrid - Sprinkler device (v5.2 Watering)
 //
 // LFPG_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
 // LFPG_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 // v4.1: RegisterSprinkler/UnregisterSprinkler in NM.
-//   Added LFPG_OnInit override (bug fix: was never registered).
+// v5.2: Watering logic (GardenBase + SetWet).
+//
+// Watering: LFPG_TickWatering() called by NM every ~15s.
+//   - Finds GardenBase within LFPG_SPRINKLER_RADIUS → waters all slots
+//   - Finds ItemBase within LFPG_SPRINKLER_RADIUS → increases wetness
+//   - Uses pre-allocated m_ arrays (no alloc in tick)
+//
+// Particle: PENDING — needs custom sprinkler_spray.ptc.
+//   No vanilla looping water particle exists.
 // =========================================================
 
 // ---------------------------------------------------------
@@ -35,6 +43,10 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     protected string m_WaterSourceId  = "";
     protected string m_SourcePort     = "";
 
+    // ---- Server-only: reusable arrays for spatial query (no alloc in tick) ----
+    protected ref array<Object>    m_WaterNearby;
+    protected ref array<CargoBase> m_WaterCargos;
+
     // ---- Client: sound ----
     protected EffectSound m_LoopSound;
 
@@ -48,6 +60,12 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         RegisterNetSyncVariableBool(varPowered);
         string varActive = "m_SprinklerActive";
         RegisterNetSyncVariableBool(varActive);
+
+        // Pre-allocate arrays for server-side spatial queries (server only)
+        #ifdef SERVER
+        m_WaterNearby = new array<Object>;
+        m_WaterCargos = new array<CargoBase>;
+        #endif
     }
 
     // ---- Actions (add sprinkler-specific) ----
@@ -155,9 +173,6 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     }
 
     // ---- Lifecycle hooks ----
-    // v4.1: LFPG_OnInit called from DeviceBase.EEInit after TryRegister.
-    // Sprinkler extends DeviceBase (not WireOwnerBase), so LFPG_OnInit
-    // is the correct hook (not LFPG_OnInitDevice which is WireOwnerBase chain).
     override void LFPG_OnInit()
     {
         LFPG_NetworkManager.Get().RegisterSprinkler(this);
@@ -182,7 +197,6 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         {
             SetSynchDirty();
         }
-        // v5.1: Notify parent pump to rescan (skip this dying sprinkler)
         if (m_WaterSourceId != "")
         {
             LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
@@ -198,7 +212,6 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     {
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterSprinkler(this);
-        // v5.1: Notify parent pump to rescan (skip this dying sprinkler)
         if (m_WaterSourceId != "")
         {
             LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
@@ -221,10 +234,13 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         #endif
     }
 
-    // ---- VarSync: sound toggle ----
+    // =========================================================
+    // VarSync: sound toggle (CLIENT)
+    // =========================================================
     override void LFPG_OnVarSync()
     {
         #ifndef SERVER
+        // ---- Sound toggle ----
         if (m_SprinklerActive && !m_LoopSound)
         {
             string soundSet = LFPG_SPRINKLER_LOOP_SOUNDSET;
@@ -239,7 +255,110 @@ class LFPG_Sprinkler : LFPG_DeviceBase
             m_LoopSound.SoundStop();
             m_LoopSound = null;
         }
-        // TODO S4: particle toggle
+        // TODO: custom sprinkler_spray.ptc particle toggle here
+        #endif
+    }
+
+    // =========================================================
+    // LFPG_TickWatering — SERVER: water nearby gardens + wet items
+    //
+    // Called by NM every LFPG_SPRINKLER_WATER_TICK_COUNT ticks (~15s).
+    // Only called when m_SprinklerActive == true (NM pre-filters).
+    //
+    // Phase A: Find GardenBase within radius → LFPG_WaterFromSprinkler()
+    // Phase B: Find ItemBase within radius → SetWet() increment
+    // =========================================================
+    void LFPG_TickWatering()
+    {
+        #ifdef SERVER
+        vector sprPos = GetPosition();
+
+        // Clear reusable arrays
+        m_WaterNearby.Clear();
+        m_WaterCargos.Clear();
+
+        // Spatial query: all objects within radius
+        float radius = LFPG_SPRINKLER_RADIUS;
+        GetGame().GetObjectsAtPosition3D(sprPos, radius, m_WaterNearby, m_WaterCargos);
+
+        int objCount = m_WaterNearby.Count();
+        int i;
+        Object obj;
+        EntityAI ent;
+        float distSq;
+        float radiusSq = radius * radius;
+
+        // Hoisted variables (Enforce: no declarations inside loop body)
+        GardenBase garden;
+        ItemBase item;
+        float waterAmt;
+        float curWet;
+        float newWet;
+        int gardensWatered = 0;
+        int itemsWetted = 0;
+
+        for (i = 0; i < objCount; i = i + 1)
+        {
+            obj = m_WaterNearby[i];
+            if (!obj)
+                continue;
+
+            // Skip self
+            if (obj == this)
+                continue;
+
+            ent = EntityAI.Cast(obj);
+            if (!ent)
+                continue;
+
+            // Precise 3D distance check (engine query can overshoot)
+            distSq = LFPG_WorldUtil.DistSq(sprPos, ent.GetPosition());
+            if (distSq > radiusSq)
+                continue;
+
+            // Phase A: GardenBase watering
+            garden = GardenBase.Cast(ent);
+            if (garden)
+            {
+                // Skip ruined gardens
+                if (garden.IsRuined())
+                    continue;
+
+                waterAmt = LFPG_SPRINKLER_WATER_AMOUNT;
+                garden.LFPG_WaterFromSprinkler(waterAmt);
+                gardensWatered = gardensWatered + 1;
+                continue;
+            }
+
+            // Phase B: ItemBase wetting (clothes, items on ground)
+            item = ItemBase.Cast(ent);
+            if (item)
+            {
+                curWet = item.GetWet();
+
+                // Skip items already fully wet
+                if (curWet >= 1.0)
+                    continue;
+
+                newWet = curWet + LFPG_SPRINKLER_WET_AMOUNT;
+                if (newWet > 1.0)
+                {
+                    newWet = 1.0;
+                }
+                item.SetWet(newWet);
+                itemsWetted = itemsWetted + 1;
+            }
+        }
+
+        // Debug log OUTSIDE loop (1 string per tick, not per object)
+        if (gardensWatered > 0 || itemsWetted > 0)
+        {
+            string tickLog = "[Sprinkler] Watered gardens=";
+            tickLog = tickLog + gardensWatered.ToString();
+            tickLog = tickLog + " items=";
+            tickLog = tickLog + itemsWetted.ToString();
+            LFPG_Util.Debug(tickLog);
+        }
         #endif
     }
 

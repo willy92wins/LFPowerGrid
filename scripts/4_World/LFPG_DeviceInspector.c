@@ -317,7 +317,7 @@ class LFPG_DeviceInspector
         if (m_wBatteryLine)
         {
             m_wBatteryLine.SetPos(14, 94);
-            m_wBatteryLine.SetSize(274, 16);
+            m_wBatteryLine.SetSize(360, 18);
             m_wBatteryLine.SetColor(ARGB(255, 255, 200, 50));
             m_wBatteryLine.Show(false);
         }
