@@ -1480,7 +1480,6 @@ class CfgVehicles
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
-
         hiddenSelections[] = {"light_led_0", "light_led_1", "light_led_2", "light_led_3", "light_led_4", "light_led_5", "light_led_6"};
         hiddenSelectionsTextures[] = {"", "", "", "", "", "", ""};
         hiddenSelectionsMaterials[] = {
@@ -1584,7 +1583,6 @@ class CfgVehicles
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
-
         hiddenSelections[] = {"light_led_0", "light_led_1", "light_led_2", "light_led_3", "light_led_4", "light_led_5", "light_led_6"};
         hiddenSelectionsTextures[] = {"", "", "", "", "", "", ""};
         hiddenSelectionsMaterials[] = {
@@ -2044,5 +2042,20 @@ class CfgVehicles
                 };
             };
         };
+    };
+};
+
+// =========================================================
+// v2.2: Proxy definitions for BatteryAdapter attachments
+// Allows CarBattery / TruckBattery to render visually on the adapter.
+// =========================================================
+class CfgNonAIVehicles
+{
+    class ProxyAttachment;
+    class ProxyLFPG_BatterySlot : ProxyAttachment
+    {
+        scope = 2;
+        inventorySlot[] = {"CarBattery", "TruckBattery"};
+        model = "\LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
     };
 };

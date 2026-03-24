@@ -140,6 +140,9 @@ FrameWidgetClass SorterRoot {
 							font "gui/fonts/Metron"
 							ignorepointer 1
 							{
+								ScriptParamsClass {
+									Binding_Name "HeaderTitle"
+								}
 							}
 						}
 
@@ -1200,6 +1203,10 @@ FrameWidgetClass SorterRoot {
 							vexactsize 1
 							font "gui/fonts/MetronBook"
 							{
+								ScriptParamsClass {
+									Binding_Name "EditPrefix"
+									Two_Way_Binding 1
+								}
 							}
 						}
 						// Hint placeholder (E)
@@ -1304,6 +1311,10 @@ FrameWidgetClass SorterRoot {
 							vexactsize 1
 							font "gui/fonts/MetronBook"
 							{
+								ScriptParamsClass {
+									Binding_Name "EditContains"
+									Two_Way_Binding 1
+								}
 							}
 						}
 						// Hint placeholder (E)
@@ -1557,6 +1568,10 @@ FrameWidgetClass SorterRoot {
 							vexactsize 1
 							font "gui/fonts/MetronBook"
 							{
+								ScriptParamsClass {
+									Binding_Name "EditSlotMin"
+									Two_Way_Binding 1
+								}
 							}
 						}
 						// Hint placeholder (E)
@@ -1623,6 +1638,10 @@ FrameWidgetClass SorterRoot {
 							vexactsize 1
 							font "gui/fonts/MetronBook"
 							{
+								ScriptParamsClass {
+									Binding_Name "EditSlotMax"
+									Two_Way_Binding 1
+								}
 							}
 						}
 						// Hint placeholder (E)
@@ -1796,6 +1815,9 @@ FrameWidgetClass SorterRoot {
 							"text halign" right
 							ignorepointer 1
 							{
+								ScriptParamsClass {
+									Binding_Name "RuleCount"
+								}
 							}
 						}
 
@@ -1845,6 +1867,9 @@ FrameWidgetClass SorterRoot {
 									font "gui/fonts/MetronBook"
 									ignorepointer 1
 									{
+										ScriptParamsClass {
+											Binding_Name "DestName"
+										}
 									}
 								}
 							}
@@ -1873,6 +1898,9 @@ FrameWidgetClass SorterRoot {
 									Margin 3
 									"Size To Content V" 1
 									{
+										ScriptParamsClass {
+											Binding_Name "TagsList"
+										}
 									}
 								}
 							}
@@ -1960,6 +1988,9 @@ FrameWidgetClass SorterRoot {
 									font "gui/fonts/MetronBook"
 									ignorepointer 1
 									{
+										ScriptParamsClass {
+											Binding_Name "MatchCount"
+										}
 									}
 								}
 							}
@@ -2017,6 +2048,9 @@ FrameWidgetClass SorterRoot {
 							"text halign" right
 							ignorepointer 1
 							{
+								ScriptParamsClass {
+									Binding_Name "PreviewCount"
+								}
 							}
 						}
 
@@ -2043,6 +2077,9 @@ FrameWidgetClass SorterRoot {
 									Padding 1
 									"Size To Content V" 1
 									{
+										ScriptParamsClass {
+											Binding_Name "PreviewItems"
+										}
 									}
 								}
 							}
