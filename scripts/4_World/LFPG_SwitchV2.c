@@ -29,6 +29,26 @@ class LFPG_SwitchV2_Kit : LFPG_KitBase
     {
         return "LFPG_SwitchV2";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.04;
+    }
+
+    override float LFPG_GetWallPitchOffset()
+    {
+        return -90.0;
+    }
+
+    override float LFPG_GetWallYawOffset()
+    {
+        return 180.0;
+    }
 };
 
 // ---------------------------------------------------------

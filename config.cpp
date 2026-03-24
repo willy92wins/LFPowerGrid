@@ -143,7 +143,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge", "LF_Sprinkler_Kit", "LF_Sprinkler"};
+        units[] = { "LF_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LF_Splitter_Kit", "LF_Splitter", "LF_CeilingLight_Kit", "LF_CeilingLight", "LF_SolarPanel_Kit", "LF_SolarPanel", "LF_SolarPanel_T2", "LF_Combiner_Kit", "LF_Combiner", "LF_Camera_Kit", "LF_Camera", "LF_Monitor_Kit", "LF_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LF_WaterPump_Kit", "LF_WaterPump", "LF_WaterPump_T2", "LF_Furnace_Kit", "LF_Furnace", "LF_Sorter_Kit", "LF_Sorter", "LF_Searchlight_Kit", "LF_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LF_BatteryMedium_Kit", "LF_BatteryMedium", "LF_BatteryLarge_Kit", "LF_BatteryLarge", "LF_DoorController_Kit", "LF_DoorController", "LF_Intercom_Kit", "LF_Intercom", "LF_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LF_Fridge_Kit", "LF_Fridge", "LF_Sprinkler_Kit", "LF_Sprinkler", "LF_BatteryAdapter_Kit", "LF_BatteryAdapter"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio"};
@@ -1933,5 +1933,74 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         hiddenSelections[] = {};
+    };
+
+    // =========================================================
+    // v2.1: BATTERY ADAPTER (cradle for vanilla Car/Truck batteries)
+    // Same-model kit → spawns adapter. Accepts CarBattery or TruckBattery
+    // as attachment. Proxies CompEM via factor ×2.
+    // =========================================================
+
+    // ---- BatteryAdapter Kit (holdable, deployable, same-model) ----
+    class LF_BatteryAdapter_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_BatteryAdapterKit";
+        descriptionShort = "$STR_LFPG_BatteryAdapterKit_Desc";
+        model = "\LFPowerGrid\data\battery_adapter\battery_adapter.p3d";
+        weight = 5000;
+        itemSize[] = {4, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- BatteryAdapter (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
+    class LF_BatteryAdapter : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_BatteryAdapter";
+        descriptionShort = "$STR_LFPG_BatteryAdapter_Desc";
+        model = "\LFPowerGrid\data\battery_adapter\battery_adapter.p3d";
+        weight = 5000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {};
+
+        // Accepts vanilla CarBattery or TruckBattery as attachment.
+        // Slots are defined in vanilla CfgSlots — no custom slot needed.
+        attachments[] = {"CarBattery", "TruckBattery"};
+
+        class GUIInventoryAttachmentsProps
+        {
+            class Battery
+            {
+                name = "Battery";
+                description = "";
+                icon = "missing";
+                attachmentSlots[] = {"CarBattery", "TruckBattery"};
+            };
+        };
+
+        class DamageSystem
+        {
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 100;
+                    };
+                };
+            };
+        };
     };
 };

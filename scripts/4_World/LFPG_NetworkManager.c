@@ -152,6 +152,15 @@ class LFPG_NetworkManager
     // v4.0: DoorController centralized poll timer registry
     protected ref array<LF_DoorController> m_RegisteredDoorControllers;
 
+    // v4.1: Solar panel dedicated registry (replaces GetAll+Cast scan)
+    protected ref array<LF_SolarPanel> m_RegisteredSolars;
+
+    // v4.1: Water pump + sprinkler dedicated registries (replaces GetAll+Cast scan)
+    // T1 and T2 are separate classes (T2 does NOT inherit T1).
+    protected ref array<LF_WaterPump>    m_RegisteredT1Pumps;
+    protected ref array<LF_WaterPump_T2> m_RegisteredT2Pumps;
+    protected ref array<LF_Sprinkler>    m_RegisteredSprinklers;
+
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
 
@@ -162,15 +171,8 @@ class LFPG_NetworkManager
     protected ref array<string>   m_ReusableMovedIds;
     protected ref array<EntityAI> m_ReusableMovedDevs;
     protected ref array<string>   m_ReusableDisappearedIds;
-    protected ref array<EntityAI> m_ReusableAllDevs;
     protected ref Param1<float>   m_ReusableParamFloat;
     protected ref Param1<bool>    m_ReusableParamBool;
-
-    // v5.1 (Sprinkler tick): Reusable pump/sprinkler arrays for
-    // two-phase TickWaterPumps. Avoids double-iterating all devices.
-    protected ref array<LF_WaterPump>     m_ReusableT1Pumps;
-    protected ref array<LF_WaterPump_T2>  m_ReusableT2Pumps;
-    protected ref array<LF_Sprinkler>     m_ReusableSprinklers;
 
     // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
@@ -249,18 +251,18 @@ class LFPG_NetworkManager
         m_RegisteredFurnaces = new array<LF_Furnace>;
         m_RegisteredFridges = new array<LF_Fridge>;
         m_RegisteredDoorControllers = new array<LF_DoorController>;
+        m_RegisteredSolars = new array<LF_SolarPanel>;
+        m_RegisteredT1Pumps = new array<LF_WaterPump>;
+        m_RegisteredT2Pumps = new array<LF_WaterPump_T2>;
+        m_RegisteredSprinklers = new array<LF_Sprinkler>;
 
         // v3.1 (GC reduction): Initialize reusable tick arrays
         m_ReusablePlayers = new array<Man>;
         m_ReusableMovedIds = new array<string>;
         m_ReusableMovedDevs = new array<EntityAI>;
         m_ReusableDisappearedIds = new array<string>;
-        m_ReusableAllDevs = new array<EntityAI>;
         m_ReusableParamFloat = new Param1<float>(0.0);
         m_ReusableParamBool = new Param1<bool>(false);
-        m_ReusableT1Pumps = new array<LF_WaterPump>;
-        m_ReusableT2Pumps = new array<LF_WaterPump_T2>;
-        m_ReusableSprinklers = new array<LF_Sprinkler>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -3414,8 +3416,8 @@ class LFPG_NetworkManager
 
     // Periodic tick (every LFPG_SOLAR_CHECK_MS = 15s).
     // Recomputes sun state; if unchanged, returns immediately (O(1)).
-    // If changed, iterates all registered devices, updates solar panels.
-    // LF_SolarPanel.Cast catches both T1 and T2 (T2 inherits T1).
+    // If changed, iterates registered solar panels.
+    // LF_SolarPanel_T2 inherits LF_SolarPanel → auto-registered via base.
     protected void LFPG_TickSolarPanels()
     {
         #ifdef SERVER
@@ -3427,15 +3429,20 @@ class LFPG_NetworkManager
         if (m_SolarHasSun == prevSun)
             return;
 
-        // Sun state changed — update all solar panels
-        m_ReusableAllDevs.Clear();
-        LFPG_DeviceRegistry.Get().GetAll(m_ReusableAllDevs);
+        // Sun state changed — update all registered solar panels
+        int total = m_RegisteredSolars.Count();
+        if (total == 0)
+            return;
 
         int i;
         int updated = 0;
-        for (i = 0; i < m_ReusableAllDevs.Count(); i = i + 1)
+        LF_SolarPanel panel;
+        for (i = 0; i < total; i = i + 1)
         {
-            LF_SolarPanel panel = LF_SolarPanel.Cast(m_ReusableAllDevs[i]);
+            if (i >= m_RegisteredSolars.Count())
+                break;
+
+            panel = m_RegisteredSolars[i];
             if (!panel)
                 continue;
 
@@ -3443,7 +3450,11 @@ class LFPG_NetworkManager
             updated = updated + 1;
         }
 
-        string msg = "[Solar] Sun changed to " + m_SolarHasSun.ToString() + ", updated " + updated.ToString() + " panels";
+        string msg = "[Solar] Sun changed to ";
+        msg = msg + m_SolarHasSun.ToString();
+        msg = msg + ", updated ";
+        msg = msg + updated.ToString();
+        msg = msg + " panels";
         LFPG_Util.Info(msg);
         #endif
     }
@@ -3623,6 +3634,7 @@ class LFPG_NetworkManager
     }
 
     // Periodic tick (every LFPG_PUMP_CHECK_MS = 60s)
+    // v4.1: Uses dedicated registries instead of GetAll+Cast.
     protected void LFPG_TickWaterPumps()
     {
         #ifdef SERVER
@@ -3648,59 +3660,65 @@ class LFPG_NetworkManager
         }
 
         // ============================================================
-        // Phase A: Single pass — collect pumps/sprinklers, reset
-        //          sprinkler water state, filter degradation.
+        // Phase A: Reset sprinklers + filter degradation (registries).
+        // Replaces GetAll+Cast full scan with direct registry iteration.
         // ============================================================
-        m_ReusableAllDevs.Clear();
-        LFPG_DeviceRegistry.Get().GetAll(m_ReusableAllDevs);
-        m_ReusableT1Pumps.Clear();
-        m_ReusableT2Pumps.Clear();
-        m_ReusableSprinklers.Clear();
-
         int i;
-        int devCount = m_ReusableAllDevs.Count();
-        LF_WaterPump castT1;
-        LF_WaterPump_T2 castT2;
+        int sprTotal = m_RegisteredSprinklers.Count();
         LF_Sprinkler castSpr;
         float elapsed;
 
-        for (i = 0; i < devCount; i = i + 1)
+        // Reset all registered sprinklers (Phase B/C re-activates if connected)
+        for (i = 0; i < sprTotal; i = i + 1)
         {
-            // --- Sprinkler: reset water state (Phase B re-activates if connected) ---
-            castSpr = LF_Sprinkler.Cast(m_ReusableAllDevs[i]);
-            if (castSpr)
-            {
-                castSpr.LFPG_SetHasWaterSource(false);
-                castSpr.LFPG_SetSprinklerActive(false);
-                m_ReusableSprinklers.Insert(castSpr);
-                continue;
-            }
+            if (i >= m_RegisteredSprinklers.Count())
+                break;
 
-            // --- T1: filter degradation + collect ---
-            castT1 = LF_WaterPump.Cast(m_ReusableAllDevs[i]);
-            if (castT1)
-            {
-                elapsed = nowMs - castT1.LFPG_GetFilterLastMs();
-                if (elapsed >= thresholdMs)
-                {
-                    castT1.LFPG_DegradeFilter();
-                    castT1.LFPG_SetFilterLastMs(nowMs);
-                }
-                m_ReusableT1Pumps.Insert(castT1);
+            castSpr = m_RegisteredSprinklers[i];
+            if (!castSpr)
                 continue;
-            }
 
-            // --- T2: filter degradation + collect ---
-            castT2 = LF_WaterPump_T2.Cast(m_ReusableAllDevs[i]);
-            if (castT2)
+            castSpr.LFPG_SetHasWaterSource(false);
+            castSpr.LFPG_SetSprinklerActive(false);
+        }
+
+        // T1 filter degradation
+        int t1Total = m_RegisteredT1Pumps.Count();
+        LF_WaterPump castT1;
+        for (i = 0; i < t1Total; i = i + 1)
+        {
+            if (i >= m_RegisteredT1Pumps.Count())
+                break;
+
+            castT1 = m_RegisteredT1Pumps[i];
+            if (!castT1)
+                continue;
+
+            elapsed = nowMs - castT1.LFPG_GetFilterLastMs();
+            if (elapsed >= thresholdMs)
             {
-                elapsed = nowMs - castT2.LFPG_GetFilterLastMs();
-                if (elapsed >= thresholdMs)
-                {
-                    castT2.LFPG_DegradeFilter();
-                    castT2.LFPG_SetFilterLastMs(nowMs);
-                }
-                m_ReusableT2Pumps.Insert(castT2);
+                castT1.LFPG_DegradeFilter();
+                castT1.LFPG_SetFilterLastMs(nowMs);
+            }
+        }
+
+        // T2 filter degradation
+        int t2Total = m_RegisteredT2Pumps.Count();
+        LF_WaterPump_T2 castT2;
+        for (i = 0; i < t2Total; i = i + 1)
+        {
+            if (i >= m_RegisteredT2Pumps.Count())
+                break;
+
+            castT2 = m_RegisteredT2Pumps[i];
+            if (!castT2)
+                continue;
+
+            elapsed = nowMs - castT2.LFPG_GetFilterLastMs();
+            if (elapsed >= thresholdMs)
+            {
+                castT2.LFPG_DegradeFilter();
+                castT2.LFPG_SetFilterLastMs(nowMs);
             }
         }
 
@@ -3709,7 +3727,7 @@ class LFPG_NetworkManager
         //          set m_HasSprinklerOutput.
         // ============================================================
         LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
-        int t1Count = m_ReusableT1Pumps.Count();
+        int t1Count = m_RegisteredT1Pumps.Count();
         int pi;
         int wi;
         int wireCount;
@@ -3726,7 +3744,13 @@ class LFPG_NetworkManager
 
         for (pi = 0; pi < t1Count; pi = pi + 1)
         {
-            curT1 = m_ReusableT1Pumps[pi];
+            if (pi >= m_RegisteredT1Pumps.Count())
+                break;
+
+            curT1 = m_RegisteredT1Pumps[pi];
+            if (!curT1)
+                continue;
+
             wires = curT1.LFPG_GetWires();
             wireCount = wires.Count();
             sprCount = 0;
@@ -3770,8 +3794,8 @@ class LFPG_NetworkManager
         // Phase C: T2 pumps — wire scan → activate connected sprinklers,
         //          set m_ConnectedSprinklerCount, adjusted tank fill.
         // ============================================================
-        int t2Count = m_ReusableT2Pumps.Count();
-        LF_WaterPump_T2 curT2;
+        int t2Count = m_RegisteredT2Pumps.Count();
+        LF_WaterPump_T2 curT2B;
         bool sprActive;
         float curTank;
         float level;
@@ -3783,13 +3807,19 @@ class LFPG_NetworkManager
 
         for (pi = 0; pi < t2Count; pi = pi + 1)
         {
-            curT2 = m_ReusableT2Pumps[pi];
-            wires = curT2.LFPG_GetWires();
+            if (pi >= m_RegisteredT2Pumps.Count())
+                break;
+
+            curT2B = m_RegisteredT2Pumps[pi];
+            if (!curT2B)
+                continue;
+
+            wires = curT2B.LFPG_GetWires();
             wireCount = wires.Count();
             sprCount = 0;
-            pumpPowered = curT2.LFPG_GetPoweredNet();
-            pumpId = curT2.LFPG_GetDeviceId();
-            curTank = curT2.LFPG_GetTankLevel();
+            pumpPowered = curT2B.LFPG_GetPoweredNet();
+            pumpId = curT2B.LFPG_GetDeviceId();
+            curTank = curT2B.LFPG_GetTankLevel();
 
             // Pass 1: Count sprinklers + set water source (no activation yet)
             for (wi = 0; wi < wireCount; wi = wi + 1)
@@ -3815,7 +3845,7 @@ class LFPG_NetworkManager
                 targetSpr.LFPG_SetWaterSourceId(pumpId);
             }
 
-            curT2.LFPG_SetConnectedSprinklerCount(sprCount);
+            curT2B.LFPG_SetConnectedSprinklerCount(sprCount);
 
             // Determine activation: 1-2 sprinklers always work if powered
             // (net flow >= 0, system is sustainable). 3+ require tank > 0.
@@ -3857,7 +3887,7 @@ class LFPG_NetworkManager
             // --- T2 tank fill with sprinkler drain adjustment ---
             if (doTankFill && pumpPowered)
             {
-                level = curT2.LFPG_GetTankLevel();
+                level = curT2B.LFPG_GetTankLevel();
 
                 // netFill = fillAmount * (1.0 - sprCount * 0.5)
                 // 0 spr → +fill, 1 → +0.5*fill, 2 → 0, 3 → -0.5*fill
@@ -3881,27 +3911,123 @@ class LFPG_NetworkManager
                 if (netFill > 0.0)
                 {
                     incomingType = LIQUID_RIVERWATER;
-                    if (LFPG_PumpHelper.HasActiveFilter(curT2))
+                    if (LFPG_PumpHelper.HasActiveFilter(curT2B))
                     {
                         incomingType = LIQUID_CLEANWATER;
                     }
 
-                    currentType = curT2.LFPG_GetTankLiquidType();
+                    currentType = curT2B.LFPG_GetTankLiquidType();
 
                     if (level < 0.01)
                     {
-                        curT2.LFPG_SetTankLiquidType(incomingType);
+                        curT2B.LFPG_SetTankLiquidType(incomingType);
                     }
                     else if (incomingType != currentType)
                     {
-                        curT2.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
+                        curT2B.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
                     }
                 }
 
-                curT2.LFPG_SetTankLevel(level);
+                curT2B.LFPG_SetTankLevel(level);
             }
         }
         #endif
+    }
+
+    // ===========================
+    // v4.1: Solar Panel Registry
+    // ===========================
+    // Replaces GetAll+Cast full scan in TickSolarPanels.
+    // LF_SolarPanel_T2 inherits LF_SolarPanel → registered via base class.
+
+    void RegisterSolar(LF_SolarPanel panel)
+    {
+        if (!panel)
+            return;
+        if (m_RegisteredSolars.Find(panel) < 0)
+        {
+            m_RegisteredSolars.Insert(panel);
+        }
+    }
+
+    void UnregisterSolar(LF_SolarPanel panel)
+    {
+        if (!panel)
+            return;
+        int idx = m_RegisteredSolars.Find(panel);
+        if (idx >= 0)
+        {
+            m_RegisteredSolars.Remove(idx);
+        }
+    }
+
+    // ===========================
+    // v4.1: Water Pump + Sprinkler Registries
+    // ===========================
+    // Replaces GetAll+Cast full scan in TickWaterPumps Phase A.
+    // T1 and T2 are separate classes (T2 does NOT inherit T1).
+
+    void RegisterT1Pump(LF_WaterPump pump)
+    {
+        if (!pump)
+            return;
+        if (m_RegisteredT1Pumps.Find(pump) < 0)
+        {
+            m_RegisteredT1Pumps.Insert(pump);
+        }
+    }
+
+    void UnregisterT1Pump(LF_WaterPump pump)
+    {
+        if (!pump)
+            return;
+        int idx = m_RegisteredT1Pumps.Find(pump);
+        if (idx >= 0)
+        {
+            m_RegisteredT1Pumps.Remove(idx);
+        }
+    }
+
+    void RegisterT2Pump(LF_WaterPump_T2 pump)
+    {
+        if (!pump)
+            return;
+        if (m_RegisteredT2Pumps.Find(pump) < 0)
+        {
+            m_RegisteredT2Pumps.Insert(pump);
+        }
+    }
+
+    void UnregisterT2Pump(LF_WaterPump_T2 pump)
+    {
+        if (!pump)
+            return;
+        int idx = m_RegisteredT2Pumps.Find(pump);
+        if (idx >= 0)
+        {
+            m_RegisteredT2Pumps.Remove(idx);
+        }
+    }
+
+    void RegisterSprinkler(LF_Sprinkler spr)
+    {
+        if (!spr)
+            return;
+        if (m_RegisteredSprinklers.Find(spr) < 0)
+        {
+            m_RegisteredSprinklers.Insert(spr);
+        }
+    }
+
+    void UnregisterSprinkler(LF_Sprinkler spr)
+    {
+        if (!spr)
+            return;
+        int idx = m_RegisteredSprinklers.Find(spr);
+        if (idx >= 0)
+        {
+            m_RegisteredSprinklers.Remove(idx);
+        }
     }
 
     // ===========================

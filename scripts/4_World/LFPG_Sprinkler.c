@@ -1,10 +1,12 @@
 // =========================================================
-// LF_PowerGrid - Sprinkler device (v4.0 Refactor)
+// LF_PowerGrid - Sprinkler device (v4.1 Registry Refactor)
 //
 // LF_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
 // LF_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
+// v4.1: RegisterSprinkler/UnregisterSprinkler in NM.
+//   Added LFPG_OnInit override (bug fix: was never registered).
 // =========================================================
 
 // ---------------------------------------------------------
@@ -153,9 +155,18 @@ class LF_Sprinkler : LFPG_DeviceBase
     }
 
     // ---- Lifecycle hooks ----
+    // v4.1: LFPG_OnInit called from DeviceBase.EEInit after TryRegister.
+    // Sprinkler extends DeviceBase (not WireOwnerBase), so LFPG_OnInit
+    // is the correct hook (not LFPG_OnInitDevice which is WireOwnerBase chain).
+    override void LFPG_OnInit()
+    {
+        LFPG_NetworkManager.Get().RegisterSprinkler(this);
+    }
+
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSprinkler(this);
         bool dirty = false;
         if (m_PoweredNet)
         {
@@ -186,6 +197,7 @@ class LF_Sprinkler : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSprinkler(this);
         // v5.1: Notify parent pump to rescan (skip this dying sprinkler)
         if (m_WaterSourceId != "")
         {

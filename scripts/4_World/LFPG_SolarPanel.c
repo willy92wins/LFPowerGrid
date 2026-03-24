@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Solar Panel devices (v4.0 Refactor)
+// LF_PowerGrid - Solar Panel devices (v4.1 Registry Refactor)
 //
 // LF_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
 // LF_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
@@ -7,6 +7,8 @@
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Persists m_SourceOn via LFPG_OnStoreSaveDevice hook.
+// v4.1: RegisterSolar/UnregisterSolar in NM. Eliminates GetAll+Cast.
+//   Added LFPG_OnDeleted override (bug fix: admin ObjectDelete path).
 // =========================================================
 
 // ---------------------------------------------------------
@@ -127,6 +129,8 @@ class LF_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().RegisterSolar(this);
+
         bool preState = m_SourceOn;
         bool cachedSun = LFPG_NetworkManager.Get().LFPG_GetCachedSunState();
         LFPG_UpdateSunState(cachedSun);
@@ -143,11 +147,19 @@ class LF_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSolar(this);
         if (m_SourceOn)
         {
             m_SourceOn = false;
             SetSynchDirty();
         }
+        #endif
+    }
+
+    override void LFPG_OnDeleted()
+    {
+        #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterSolar(this);
         #endif
     }
 

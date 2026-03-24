@@ -18,6 +18,11 @@ class LF_Combiner_Kit : LFPG_KitBase
     {
         return "LF_Combiner";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

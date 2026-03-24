@@ -23,6 +23,11 @@ class LFPG_ElectronicCounter_Kit : LFPG_KitBase
     {
         return "LFPG_ElectronicCounter";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

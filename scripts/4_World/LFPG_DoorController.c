@@ -25,6 +25,11 @@ class LF_DoorController_Kit : LFPG_KitBase
     {
         return "LF_DoorController";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

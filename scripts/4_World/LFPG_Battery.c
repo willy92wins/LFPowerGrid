@@ -1,33 +1,29 @@
 // =========================================================
-// LF_PowerGrid - Battery device (v4.0 Refactor)
+// LF_PowerGrid - Battery device (v4.1)
 //
-// LF_Battery_Kit:     Deployable kit → spawns BatterySmall.
 // LF_BatteryMedium_Kit: Deployable kit → spawns BatteryMedium.
 // LF_BatteryLarge_Kit:  DeployableContainer_Base → spawns BatteryLarge.
 //
 // LF_BatteryBase:     PASSTHROUGH (1 IN + 1 OUT) with energy storage.
 //                     Charges from surplus, discharges to supplement.
 //
+// v4.1: Removed LF_BatterySmall / LF_Battery_Kit (dead code,
+//   no config.cpp entry). Small battery role covered by
+//   LF_BatteryAdapter + vanilla CarBattery/TruckBattery.
+//   Added LFPG_IsGateCapable + LFPG_IsGateOpen + LFPG_UpdateLEDs
+//   to LF_BatteryLarge (was missing toggle + LED support).
+//
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
 //
-// LF_BatterySmall:    2,000 u capacity, 30 chg, 40 dis, 92% eff
 // LF_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
 // LF_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
 // =========================================================
 
 // ---------------------------------------------------------
-// KIT (SMALL): same-model deploy pattern
+// KITS
 // ---------------------------------------------------------
-
-class LF_Battery_Kit : LFPG_KitBase
-{
-    override string LFPG_GetSpawnClassname()
-    {
-        return "LF_BatterySmall";
-    }
-};
 
 class LF_BatteryMedium_Kit : LFPG_KitBase
 {
@@ -453,18 +449,10 @@ class LF_BatteryBase : LFPG_WireOwnerBase
     }
 
     // Virtual hook for tier LED updates (client only).
-    // Base no-op: BatterySmall has no LED selections.
+    // Base no-op: subclasses override for their LED patterns.
     void LFPG_UpdateLEDs()
     {
     }
-};
-
-// =========================================================
-// TIER 1: Small (portable backup)
-// =========================================================
-class LF_BatterySmall : LF_BatteryBase
-{
-    // Uses base class defaults (SMALL constants).
 };
 
 // =========================================================
@@ -569,8 +557,13 @@ class LF_BatteryMedium : LF_BatteryBase
 };
 
 // =========================================================
-// TIER 3: Large (industrial grid bank)
+// TIER 3: Large (industrial grid bank) — transformer model with 7 LEDs
 // =========================================================
+
+static const string LFPG_BAT_LRG_LED_GREEN = "\\LFPowerGrid\\data\\battery_large\\substation_transformer_led_green.rvmat";
+static const string LFPG_BAT_LRG_LED_OFF   = "\\LFPowerGrid\\data\\battery_large\\substation_transformer_led_off.rvmat";
+static const int    LFPG_BAT_LRG_LED_COUNT  = 7;
+
 class LF_BatteryLarge : LF_BatteryBase
 {
     override float LFPG_GetMaxStoredEnergy()
@@ -596,5 +589,70 @@ class LF_BatteryLarge : LF_BatteryBase
     override float LFPG_GetCapacity()
     {
         return LFPG_BATTERY_LARGE_MAX_OUTPUT;
+    }
+
+    override bool LFPG_IsGateCapable()
+    {
+        return true;
+    }
+
+    override bool LFPG_IsGateOpen()
+    {
+        return m_OutputEnabled;
+    }
+
+    override void LFPG_UpdateLEDs()
+    {
+        #ifndef SERVER
+        if (m_OutputEnabled)
+        {
+            string animSwOn = "switch";
+            SetAnimationPhase(animSwOn, 1.0);
+        }
+        else
+        {
+            string animSwOff = "switch";
+            SetAnimationPhase(animSwOff, 0.0);
+        }
+
+        float maxStored = LFPG_GetMaxStoredEnergy();
+        float ratio = 0.0;
+        if (maxStored > 0.1)
+        {
+            ratio = m_StoredEnergy / maxStored;
+        }
+        if (ratio > 1.0)
+        {
+            ratio = 1.0;
+        }
+
+        float litFloat = ratio * 7.0;
+        int numLit = litFloat;
+        if (numLit < 0)
+        {
+            numLit = 0;
+        }
+        if (numLit < 1 && m_StoredEnergy > 0.1)
+        {
+            numLit = 1;
+        }
+        if (numLit > LFPG_BAT_LRG_LED_COUNT)
+        {
+            numLit = LFPG_BAT_LRG_LED_COUNT;
+        }
+
+        int i = 0;
+        for (i = 0; i < LFPG_BAT_LRG_LED_COUNT; i = i + 1)
+        {
+            if (i < numLit)
+            {
+                SetObjectMaterial(i, LFPG_BAT_LRG_LED_GREEN);
+            }
+            else
+            {
+                SetObjectMaterial(i, LFPG_BAT_LRG_LED_OFF);
+            }
+        }
+        #endif
     }
 };

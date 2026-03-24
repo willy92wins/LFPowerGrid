@@ -24,6 +24,16 @@ class LFPG_LaserDetector_Kit : LFPG_KitBase
     {
         return "LFPG_LaserDetector";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetPitchOffset()
+    {
+        return 90.0;
+    }
 };
 
 // ---------------------------------------------------------

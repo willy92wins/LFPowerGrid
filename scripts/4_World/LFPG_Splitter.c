@@ -18,6 +18,11 @@ class LF_Splitter_Kit : LFPG_KitBase
     {
         return "LF_Splitter";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

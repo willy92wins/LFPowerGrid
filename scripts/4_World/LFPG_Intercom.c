@@ -54,6 +54,11 @@ class LF_Intercom_Kit : LFPG_KitBase
     {
         return "LF_Intercom";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

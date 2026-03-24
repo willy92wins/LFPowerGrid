@@ -17,6 +17,11 @@ class LF_CeilingLight_Kit : LFPG_KitBase
     {
         return "LF_CeilingLight";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 2;
+    }
 };
 
 // ---------------------------------------------------------

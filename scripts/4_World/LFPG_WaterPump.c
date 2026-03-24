@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Water Pump device (v4.0 Refactor)
+// LF_PowerGrid - Water Pump device (v4.1 Registry Refactor)
 //
 // LF_WaterPump_Kit:  DeployableContainer_Base pattern (box → hologram).
 // LF_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
@@ -8,6 +8,7 @@
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   WaterPump_T2 is independent (NOT inherited from T1).
+// v4.1: RegisterT1Pump/RegisterT2Pump in NM. Eliminates GetAll+Cast.
 // =========================================================
 
 // ---------------------------------------------------------
@@ -238,11 +239,12 @@ class LF_WaterPump : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // Lifecycle hooks
+    // Lifecycle hooks (T1)
     // ============================================
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().RegisterT1Pump(this);
         m_FilterLastRealMs = GetGame().GetTime();
         #endif
     }
@@ -250,6 +252,7 @@ class LF_WaterPump : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterT1Pump(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -260,6 +263,10 @@ class LF_WaterPump : LFPG_WireOwnerBase
 
     override void LFPG_OnDeleted()
     {
+        #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterT1Pump(this);
+        #endif
+
         if (m_PumpLoopSound)
         {
             m_PumpLoopSound.SoundStop();
@@ -562,11 +569,12 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // Lifecycle hooks
+    // Lifecycle hooks (T2)
     // ============================================
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().RegisterT2Pump(this);
         m_FilterLastRealMs = GetGame().GetTime();
         #endif
     }
@@ -574,6 +582,7 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterT2Pump(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -584,6 +593,10 @@ class LF_WaterPump_T2 : LFPG_WireOwnerBase
 
     override void LFPG_OnDeleted()
     {
+        #ifdef SERVER
+        LFPG_NetworkManager.Get().UnregisterT2Pump(this);
+        #endif
+
         if (m_PumpLoopSound)
         {
             m_PumpLoopSound.SoundStop();

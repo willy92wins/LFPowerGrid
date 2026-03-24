@@ -19,6 +19,16 @@ class LF_Camera_Kit : LFPG_KitBase
     {
         return "LF_Camera";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.22;
+    }
 };
 
 // ---------------------------------------------------------

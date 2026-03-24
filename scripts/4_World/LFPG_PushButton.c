@@ -23,6 +23,11 @@ class LFPG_PushButton_Kit : LFPG_KitBase
     {
         return "LFPG_PushButton";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
 };
 
 // ---------------------------------------------------------

@@ -1,21 +1,22 @@
 // =========================================================
-// LF_PowerGrid - Hologram override v2.0
+// LF_PowerGrid - Hologram override v3.0
 //
-// COMPLETE REWRITE: Camera-based placement for ALL LFPG kits.
+// Camera-based placement for ALL LFPG kits.
 //
-// v2.0 Changes:
-//   - ALL LFPG kits now use camera raycast for positioning
-//     (including floor mode). Vanilla heading-based distance
-//     caused hologram to appear far from where the player looks.
-//   - Position smoothing (lerp) eliminates jitter.
-//   - Orientation smoothing prevents 90-degree yaw jumps when
-//     raycast hits edge geometry between wall components.
-//   - Hysteresis on floor/wall threshold prevents mode flicker
-//     at the transition boundary.
-//   - Scroll-wheel rotation (m_Rotation) supported in ALL modes.
-//   - Different-model kits (Solar, WaterPump) also use camera
-//     raycast for consistent placement feel.
-//   - Ceiling mode preserved for CeilingLight_Kit.
+// v3.0 Changes (Fase 4B):
+//   - All per-kit IsKindOf chains replaced by virtual dispatch.
+//     Kit base classes (LFPG_KitBase / LFPG_KitBaseDeployable)
+//     expose placement virtuals; HologramMod just calls them.
+//   - New kits "just work" without touching this file.
+//   - LFPG_IsLFPGKitProjection() replaced by Cast-based check.
+//   - Diff-model overrides (6 methods) reduced to single Cast.
+//
+// v2.0 (preserved):
+//   - Camera raycast for positioning (all modes incl. floor).
+//   - Position + orientation smoothing (lerp).
+//   - Hysteresis on floor/wall threshold.
+//   - Scroll-wheel rotation in all modes.
+//   - Ceiling mode for kits with placementModes == 2.
 //
 // Surface classification (with hysteresis):
 //   FLOOR:   normalY > +threshold  (normal points UP)
@@ -57,6 +58,10 @@ modded class Hologram
     protected bool m_LFPG_IsWallMode;
     protected bool m_LFPG_IsLFPGKit;
 
+    // Cached kit reference: set once per frame in UpdateHologram,
+    // used by all helpers to avoid redundant Cast calls (~8x/frame).
+    protected LFPG_KitBase m_LFPG_CachedSameKit;
+
     // Smoothing state
     protected vector m_LFPG_SmoothedPos;
     protected vector m_LFPG_SmoothedOri;
@@ -67,41 +72,17 @@ modded class Hologram
 
     // ============================================
     // Different-model kit hologram overrides
-    // (Solar Panel, Water Pump: box kit -> deployed model)
+    // v3.0: Single Cast to LFPG_KitBaseDeployable
     // ============================================
 
     override string ProjectionBasedOnParent()
     {
         if (m_Parent)
         {
-            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-            if (solarKit)
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
             {
-                return solarKit.GetDeployedClassname();
-            }
-
-            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-            if (pumpKit)
-            {
-                return pumpKit.GetDeployedClassname();
-            }
-
-            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-            if (furnaceKit)
-            {
-                return furnaceKit.GetDeployedClassname();
-            }
-
-            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-            if (fridgeKit)
-            {
-                return fridgeKit.GetDeployedClassname();
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                return batLargeKit.GetDeployedClassname();
+                return deployKit.GetDeployedClassname();
             }
         }
 
@@ -112,34 +93,10 @@ modded class Hologram
     {
         if (m_Parent)
         {
-            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-            if (solarKit)
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
             {
-                return solarKit.GetDeployedClassname();
-            }
-
-            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-            if (pumpKit)
-            {
-                return pumpKit.GetDeployedClassname();
-            }
-
-            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-            if (furnaceKit)
-            {
-                return furnaceKit.GetDeployedClassname();
-            }
-
-            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-            if (fridgeKit)
-            {
-                return fridgeKit.GetDeployedClassname();
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                return batLargeKit.GetDeployedClassname();
+                return deployKit.GetDeployedClassname();
             }
         }
 
@@ -153,32 +110,8 @@ modded class Hologram
     {
         if (m_Parent)
         {
-            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-            if (solarKit)
-            {
-                return entity_for_placing;
-            }
-
-            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-            if (pumpKit)
-            {
-                return entity_for_placing;
-            }
-
-            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-            if (furnaceKit)
-            {
-                return entity_for_placing;
-            }
-
-            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-            if (fridgeKit)
-            {
-                return entity_for_placing;
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
             {
                 return entity_for_placing;
             }
@@ -188,74 +121,22 @@ modded class Hologram
     }
 
     // Position offset for different-model kits.
-    // NOTE: In v2.0, floor positioning is done by our camera raycast
+    // NOTE: In v2.0+, floor positioning is done by our camera raycast
     // so this only applies when vanilla code paths call SetProjectionPosition
     // (e.g., during hologram creation before first UpdateHologram tick).
     override void SetProjectionPosition(vector position)
     {
         if (m_Parent)
         {
-            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-            if (solarKit)
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
             {
-                vector solarOffset = solarKit.GetDeployPositionOffset();
-                vector solarFinal = position + solarOffset;
+                vector depOffset = deployKit.GetDeployPositionOffset();
+                vector depFinal = position + depOffset;
 
                 if (m_Projection)
                 {
-                    m_Projection.SetPosition(solarFinal);
-                }
-                return;
-            }
-
-            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-            if (pumpKit)
-            {
-                vector pumpOffset = pumpKit.GetDeployPositionOffset();
-                vector pumpFinal = position + pumpOffset;
-
-                if (m_Projection)
-                {
-                    m_Projection.SetPosition(pumpFinal);
-                }
-                return;
-            }
-
-            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-            if (furnaceKit)
-            {
-                vector furnaceOffset = furnaceKit.GetDeployPositionOffset();
-                vector furnaceFinal = position + furnaceOffset;
-
-                if (m_Projection)
-                {
-                    m_Projection.SetPosition(furnaceFinal);
-                }
-                return;
-            }
-
-            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-            if (fridgeKit)
-            {
-                vector fridgeOffset = fridgeKit.GetDeployPositionOffset();
-                vector fridgeFinal = position + fridgeOffset;
-
-                if (m_Projection)
-                {
-                    m_Projection.SetPosition(fridgeFinal);
-                }
-                return;
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                vector batLargeOffset = batLargeKit.GetDeployPositionOffset();
-                vector batLargeFinal = position + batLargeOffset;
-
-                if (m_Projection)
-                {
-                    m_Projection.SetPosition(batLargeFinal);
+                    m_Projection.SetPosition(depFinal);
                 }
                 return;
             }
@@ -269,49 +150,13 @@ modded class Hologram
     {
         if (m_Parent)
         {
-            LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-            if (solarKit)
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
             {
-                vector solarBase = super.GetDefaultOrientation();
-                vector solarOriOff = solarKit.GetDeployOrientationOffset();
-                vector solarResult = solarBase + solarOriOff;
-                return solarResult;
-            }
-
-            LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-            if (pumpKit)
-            {
-                vector pumpBase = super.GetDefaultOrientation();
-                vector pumpOriOff = pumpKit.GetDeployOrientationOffset();
-                vector pumpResult = pumpBase + pumpOriOff;
-                return pumpResult;
-            }
-
-            LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-            if (furnaceKit)
-            {
-                vector furnaceBase = super.GetDefaultOrientation();
-                vector furnaceOriOff = furnaceKit.GetDeployOrientationOffset();
-                vector furnaceResult = furnaceBase + furnaceOriOff;
-                return furnaceResult;
-            }
-
-            LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-            if (fridgeKit)
-            {
-                vector fridgeBase = super.GetDefaultOrientation();
-                vector fridgeOriOff = fridgeKit.GetDeployOrientationOffset();
-                vector fridgeResult = fridgeBase + fridgeOriOff;
-                return fridgeResult;
-            }
-
-            LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-            if (batLargeKit)
-            {
-                vector batLargeBase = super.GetDefaultOrientation();
-                vector batLargeOriOff = batLargeKit.GetDeployOrientationOffset();
-                vector batLargeResult = batLargeBase + batLargeOriOff;
-                return batLargeResult;
+                vector baseOri = super.GetDefaultOrientation();
+                vector oriOff = deployKit.GetDeployOrientationOffset();
+                vector oriResult = baseOri + oriOff;
+                return oriResult;
             }
         }
 
@@ -319,270 +164,142 @@ modded class Hologram
     }
 
     // ============================================
-    // Kit projection detection helper
+    // Kit detection helpers (v3.0: Cast-based)
     // ============================================
 
     protected bool LFPG_IsLFPGKitProjection()
     {
         EntityAI proj = GetProjectionEntity();
-        if (!proj)
-            return false;
+        if (proj)
+        {
+            // Same-model kits: projection IS the kit
+            LFPG_KitBase sameKit = LFPG_KitBase.Cast(proj);
+            if (sameKit)
+            {
+                return true;
+            }
+        }
 
-        // Same-model kits: projection IS the kit type
-        if (proj.IsKindOf("LF_Splitter_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_CeilingLight_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Combiner_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Camera_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Monitor_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_PushButton_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Searchlight_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_SwitchV2_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_SwitchV2Remote_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_MotionSensor_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_PressurePad_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_LaserDetector_Kit"))
-            return true;
-        // Logic gate kits (AND, OR, XOR, MemoryCell all inherit LFPG_LogicGate_Kit)
-        if (proj.IsKindOf("LFPG_LogicGate_Kit"))
-            return true;
-        if (proj.IsKindOf("LFPG_ElectronicCounter_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Sorter_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_BatteryMedium_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_DoorController_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Intercom_Kit"))
-            return true;
-        if (proj.IsKindOf("LF_Sprinkler_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_SolarPanel_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_WaterPump_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_Furnace_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_Fridge_Kit"))
-            return true;
-        if (m_Parent && m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
-            return true;
+        // Diff-model kits: parent is the kit, projection is the deployed model
+        if (m_Parent)
+        {
+            LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+            if (deployKit)
+            {
+                return true;
+            }
+        }
 
         return false;
     }
 
-    // ---- Helper: Check which placement modes a kit supports ----
-    // Returns: 0 = floor only, 1 = floor + wall, 2 = floor + wall + ceiling
-    protected int LFPG_GetKitPlacementModes(EntityAI projection)
-    {
-        if (!projection)
-            return 0;
-
-        // CeilingLight supports all three modes
-        if (projection.IsKindOf("LF_CeilingLight_Kit"))
-            return 2;
-
-        // Wall-capable same-model kits
-        if (projection.IsKindOf("LF_Splitter_Kit"))
-            return 1;
-        if (projection.IsKindOf("LF_Combiner_Kit"))
-            return 1;
-        if (projection.IsKindOf("LF_Camera_Kit"))
-            return 1;
-        if (projection.IsKindOf("LF_Monitor_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_PushButton_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
-            return 2;
-        if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
-            return 1;
-        if (projection.IsKindOf("LFPG_ElectronicCounter_Kit"))
-            return 1;
-        if (projection.IsKindOf("LF_DoorController_Kit"))
-            return 1;
-        if (projection.IsKindOf("LF_Intercom_Kit"))
-            return 1;
-        // Logic gates (AND, OR, XOR, MemoryCell): floor + wall
-        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
-            return 1;
-
-        // Different-model kits and everything else: floor only
-        return 0;
-    }
-
-    // ---- Helper: detect if parent is a different-model kit ----
     protected bool LFPG_IsDifferentModelKit()
     {
         if (!m_Parent)
             return false;
-        if (m_Parent.IsKindOf("LF_SolarPanel_Kit"))
+
+        LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+        if (deployKit)
+        {
             return true;
-        if (m_Parent.IsKindOf("LF_WaterPump_Kit"))
-            return true;
-        if (m_Parent.IsKindOf("LF_Furnace_Kit"))
-            return true;
-        if (m_Parent.IsKindOf("LF_Fridge_Kit"))
-            return true;
-        if (m_Parent.IsKindOf("LF_BatteryLarge_Kit"))
-            return true;
+        }
         return false;
     }
 
-    // ---- Helper: per-kit pitch offset (degrees) ----
-    // LaserDetector deploys rotated 90° in pitch (ori[1]).
-    protected float LFPG_GetKitPitchOffset(EntityAI projection)
+    // ============================================
+    // Placement helpers (v3.0: virtual dispatch)
+    // All read from m_LFPG_CachedSameKit (set once per frame
+    // in UpdateHologram). No per-call Cast overhead.
+    // Diff-model kits: cache is null -> defaults apply.
+    // ============================================
+
+    protected int LFPG_GetKitPlacementModes()
     {
-        if (!projection)
-            return 0.0;
-        if (projection.IsKindOf("LFPG_LaserDetector_Kit"))
-            return 90.0;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetPlacementModes();
+        }
+        return 0;
+    }
+
+    protected float LFPG_GetKitPitchOffset()
+    {
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetPitchOffset();
+        }
         return 0.0;
     }
 
-    // ---- Helper: per-kit GLOBAL roll offset (degrees) ----
-    // Applied in ALL modes (floor, wall, ceiling) via ApplySmoothed.
-    // SwitchV2, SwitchRemote, SwitchV2Remote p3d models have local
-    // Y axis inverted, causing upside-down placement in every mode.
-    // 180° roll flips them upright.
-    // ---- Helper: per-kit GLOBAL roll offset (degrees) ----
-    // Applied in ALL modes (floor, wall, ceiling) via ApplySmoothed.
-    // v4.1: Removed 180° roll for SwitchV2/SwitchRemote/SwitchV2Remote.
-    // py3d inspection confirmed Y axis is correct (0→1.0 upward).
-    // The 180° roll was CAUSING upside-down text, not fixing it.
-    protected float LFPG_GetKitRollOffset(EntityAI projection)
+    protected float LFPG_GetKitRollOffset()
     {
-        if (!projection)
-            return 0.0;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetRollOffset();
+        }
         return 0.0;
     }
 
-    // ---- Helper: per-kit WALL yaw offset (degrees) ----
-    // Added to wallYaw after normal-based calculation + scroll.
-    // SwitchV2 model faces backward by default → 180° to face player.
-    protected float LFPG_GetKitWallYawOffset(EntityAI projection)
+    protected float LFPG_GetKitWallYawOffset()
     {
-        if (!projection)
-            return 0.0;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return 180.0;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetWallYawOffset();
+        }
         return 0.0;
     }
 
-    // ---- Helper: per-kit WALL pitch offset (degrees) ----
-    // Applied only in wall mode. MotionSensor is ceiling-oriented
-    // (sensor dome at -Y), so on a wall we pitch -90° to rotate
-    // dome outward (toward room) and housing top against wall.
-    // DayZ pitch convention: +pitch rotates +Y toward +Z (outward),
-    // which puts dome(-Y) INTO wall. -90° is the correct sign:
-    // +Y→-Z (top against wall), -Y→+Z (dome outward).
-    protected float LFPG_GetKitWallPitchOffset(EntityAI projection)
+    protected float LFPG_GetKitWallPitchOffset()
     {
-        if (!projection)
-            return 0.0;
-        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
-            return -90.0;
-        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
-            return 90.0;
-        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return 180.0;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return -90.0;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetWallPitchOffset();
+        }
         return 0.0;
     }
 
-    // ---- Helper: per-kit WALL roll offset (degrees) ----
-    // Applied in wall mode to flip model 180° around its facing axis
-    // so labels/displays read correctly (not upside-down).
-    protected float LFPG_GetKitWallRollOffset(EntityAI projection)
+    protected float LFPG_GetKitWallRollOffset()
     {
-        if (!projection)
-            return 0.0;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetWallRollOffset();
+        }
         return 0.0;
     }
 
-    // ---- Helper: per-kit WALL surface offset (metres) ----
-    // Distance from wall surface to model origin along the normal.
-    // Default LFPG_HOLO_SURFACE_OFFSET (0.03m) works for small/flat kits.
-    // Larger models need more offset to avoid embedding in the wall.
-    // Value = backHalf depth of model in local -Z + small margin.
-    protected float LFPG_GetKitWallSurfaceOffset(EntityAI projection)
+    protected float LFPG_GetKitWallSurfaceOffset()
     {
-        if (!projection)
-            return LFPG_HOLO_SURFACE_OFFSET;
-        // Camera model: previous 0.14m still embeds into walls.
-        // Increased to 0.22m based on in-game testing. Adjust if needed.
-        if (projection.IsKindOf("LF_Camera_Kit"))
-            return 0.22;
-        // Monitor model: Z extends -0.307, very deep
-        if (projection.IsKindOf("LF_Monitor_Kit"))
-            return 0.32;
-        // Logic gates: origin at base (Y=0), model extends 0.17m.
-        // 0.05m offset keeps back face off the wall surface.
-        if (projection.IsKindOf("LFPG_LogicGate_Kit"))
-            return 0.05;
-        if (projection.IsKindOf("LFPG_SwitchRemote_Kit"))
-            return 0.04;
-        if (projection.IsKindOf("LFPG_SwitchV2_Kit"))
-            return 0.04;
-        if (projection.IsKindOf("LFPG_SwitchV2Remote_Kit"))
-            return 0.04;
-        // MotionSensor: dome protrudes ~0.06m from origin. Wall pitch
-        // of -90° rotates dome outward, but default 0.03m embeds housing.
-        if (projection.IsKindOf("LFPG_MotionSensor_Kit"))
-            return 0.08;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetWallSurfaceOffset();
+        }
         return LFPG_HOLO_SURFACE_OFFSET;
     }
 
-    // ---- Helper: per-kit FLOOR Y offset (metres) ----
-    // Replaces the global LFPG_HOLO_FLOOR_GROUND_SNAP for specific kits.
-    // PressurePad is very thin and clips into terrain at 0.05m.
-    // Monitor origin is near center of body → needs extra Y lift on floor.
-    protected float LFPG_GetKitFloorYOffset(EntityAI projection)
+    protected float LFPG_GetKitFloorYOffset()
     {
-        if (!projection)
-            return LFPG_HOLO_FLOOR_GROUND_SNAP;
-        if (projection.IsKindOf("LFPG_PressurePad_Kit"))
-            return 0.015;
-        if (projection.IsKindOf("LF_Monitor_Kit"))
-            return 0.15;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_GetFloorYOffset();
+        }
         return LFPG_HOLO_FLOOR_GROUND_SNAP;
     }
 
-    // ---- Helper: does this kit adapt orientation to terrain slope? ----
-    // PressurePad should lie flat on slopes, not always world-horizontal.
-    protected bool LFPG_KitAdaptsToTerrain(EntityAI projection)
+    protected bool LFPG_KitAdaptsToTerrain()
     {
-        if (!projection)
-            return false;
-        if (projection.IsKindOf("LFPG_PressurePad_Kit"))
-            return true;
+        if (m_LFPG_CachedSameKit)
+        {
+            return m_LFPG_CachedSameKit.LFPG_AdaptsToTerrain();
+        }
         return false;
     }
 
-    // ---- Helper: compute orientation from terrain normal ----
+    // ============================================
+    // Helper: compute orientation from terrain normal
     // Converts a surface normal into yaw/pitch/roll so the kit
     // lies flush with the ground surface. Adds scroll rotation.
     // Uses only Math.Atan2 (verified Enforce API).
+    // ============================================
     protected vector LFPG_CalcTerrainOrientation(vector normal)
     {
         // Pitch and roll from normal (Y-up convention)
@@ -625,6 +342,7 @@ modded class Hologram
         EntityAI projection = GetProjectionEntity();
         m_LFPG_IsLFPGKit = false;
         m_LFPG_IsWallMode = false;
+        m_LFPG_CachedSameKit = null;
 
         if (!projection)
         {
@@ -659,8 +377,14 @@ modded class Hologram
 
         m_LFPG_IsLFPGKit = true;
 
+        // Cache the LFPG_KitBase cast once per frame.
+        // All helpers read from this instead of re-casting (~8x/frame).
+        // For diff-model kits, projection is the deployed model (not a kit)
+        // so this stays null — helpers return safe defaults.
+        m_LFPG_CachedSameKit = LFPG_KitBase.Cast(projection);
+
         // Get placement capability for this kit
-        int placementModes = LFPG_GetKitPlacementModes(projection);
+        int placementModes = LFPG_GetKitPlacementModes();
 
         // --- Camera raycast ---
         PlayerBase player = m_Player;
@@ -741,11 +465,11 @@ modded class Hologram
 
             // Camera-based floor position.
             // When normal is nearly vertical (normalY > 0.9), the camera
-            // ray hit a flat floor directly — hitPos Y is already accurate.
+            // ray hit a flat floor directly - hitPos Y is already accurate.
             // Skip the expensive ground-snap raycast in that case.
             vector floorPos;
             float flatFloorThreshold = 0.9;
-            float kitFloorY = LFPG_GetKitFloorYOffset(projection);
+            float kitFloorY = LFPG_GetKitFloorYOffset();
             if (rawNormalY > flatFloorThreshold)
             {
                 // Pure flat floor: use hitPos directly with small Y offset
@@ -760,7 +484,7 @@ modded class Hologram
 
             // Orientation: adapt to terrain normal for floor-hugging kits
             vector floorOri;
-            if (LFPG_KitAdaptsToTerrain(projection) && rawNormalY < 0.999)
+            if (LFPG_KitAdaptsToTerrain() && rawNormalY < 0.999)
             {
                 floorOri = LFPG_CalcTerrainOrientation(hitNormal);
             }
@@ -785,7 +509,7 @@ modded class Hologram
         float negCeilThreshold = -1.0 * ceilThreshold;
         if (rawNormalY <= negCeilThreshold)
         {
-            // Only CeilingLight supports ceiling (placementModes == 2)
+            // Only kits with placementModes == 2 support ceiling
             if (placementModes < 2)
             {
                 // Kit doesn't support ceiling: ground-snap below hit point
@@ -840,7 +564,7 @@ modded class Hologram
         m_LFPG_WasWallMode = true;
 
         // Position: hit point + per-kit offset along surface normal (away from wall)
-        float wallSurfOff = LFPG_GetKitWallSurfaceOffset(projection);
+        float wallSurfOff = LFPG_GetKitWallSurfaceOffset();
         vector wallPos = hitPos + (hitNormal * wallSurfOff);
 
         // Orientation: model faces outward from wall.
@@ -867,13 +591,13 @@ modded class Hologram
         float scrollWall = GetProjectionRotation()[0];
         wallYaw = wallYaw + scrollWall;
 
-        // Per-kit wall yaw offset (e.g. SwitchV2 faces backward → +180°)
-        float wallYawOff = LFPG_GetKitWallYawOffset(projection);
+        // Per-kit wall yaw offset (e.g. SwitchV2 faces backward -> +180)
+        float wallYawOff = LFPG_GetKitWallYawOffset();
         wallYaw = wallYaw + wallYawOff;
 
         // Per-kit wall pitch and roll
-        float wallPitchOff = LFPG_GetKitWallPitchOffset(projection);
-        float wallRollOff = LFPG_GetKitWallRollOffset(projection);
+        float wallPitchOff = LFPG_GetKitWallPitchOffset();
+        float wallRollOff = LFPG_GetKitWallRollOffset();
         vector wallOri = Vector(wallYaw, wallPitchOff, wallRollOff);
 
         LFPG_ApplySmoothed(wallPos, wallOri, timeslice, projection);
@@ -938,50 +662,19 @@ modded class Hologram
 
     // ============================================
     // Helper: Apply position offset for different-model kits
+    // v3.0: Single Cast to LFPG_KitBaseDeployable
     // ============================================
     protected vector LFPG_ApplyDiffModelPosOffset(vector pos)
     {
         if (!m_Parent)
             return pos;
 
-        LF_SolarPanel_Kit solarKit = LF_SolarPanel_Kit.Cast(m_Parent);
-        if (solarKit)
+        LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
+        if (deployKit)
         {
-            vector solarOff = solarKit.GetDeployPositionOffset();
-            vector solarOut = pos + solarOff;
-            return solarOut;
-        }
-
-        LF_WaterPump_Kit pumpKit = LF_WaterPump_Kit.Cast(m_Parent);
-        if (pumpKit)
-        {
-            vector pumpOff = pumpKit.GetDeployPositionOffset();
-            vector pumpOut = pos + pumpOff;
-            return pumpOut;
-        }
-
-        LF_Furnace_Kit furnaceKit = LF_Furnace_Kit.Cast(m_Parent);
-        if (furnaceKit)
-        {
-            vector furnaceOff = furnaceKit.GetDeployPositionOffset();
-            vector furnaceOut = pos + furnaceOff;
-            return furnaceOut;
-        }
-
-        LF_Fridge_Kit fridgeKit = LF_Fridge_Kit.Cast(m_Parent);
-        if (fridgeKit)
-        {
-            vector fridgeOff = fridgeKit.GetDeployPositionOffset();
-            vector fridgeOut = pos + fridgeOff;
-            return fridgeOut;
-        }
-
-        LF_BatteryLarge_Kit batLargeKit = LF_BatteryLarge_Kit.Cast(m_Parent);
-        if (batLargeKit)
-        {
-            vector batLargeOff = batLargeKit.GetDeployPositionOffset();
-            vector batLargeOut = pos + batLargeOff;
-            return batLargeOut;
+            vector depOff = deployKit.GetDeployPositionOffset();
+            vector depOut = pos + depOff;
+            return depOut;
         }
 
         return pos;
@@ -992,16 +685,15 @@ modded class Hologram
     // ============================================
     protected void LFPG_ApplySmoothed(vector targetPos, vector targetOri, float timeslice, EntityAI projection)
     {
-        // Per-kit pitch offset (e.g. LaserDetector 90°) — applied BEFORE smoothing
-        float kitPitch = LFPG_GetKitPitchOffset(projection);
+        // Per-kit pitch offset (e.g. LaserDetector 90) - applied BEFORE smoothing
+        float kitPitch = LFPG_GetKitPitchOffset();
         if (kitPitch != 0.0)
         {
             targetOri[1] = targetOri[1] + kitPitch;
         }
 
-        // Per-kit roll offset (e.g. SwitchV2/Remote 180° to flip upright)
-        // Applied globally (floor + wall + ceiling) BEFORE smoothing.
-        float kitRoll = LFPG_GetKitRollOffset(projection);
+        // Per-kit roll offset - applied BEFORE smoothing
+        float kitRoll = LFPG_GetKitRollOffset();
         if (kitRoll != 0.0)
         {
             targetOri[2] = targetOri[2] + kitRoll;

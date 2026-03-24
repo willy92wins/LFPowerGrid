@@ -20,6 +20,16 @@ class LFPG_SwitchV2Remote_Kit : LFPG_KitBase
     {
         return "LFPG_SwitchV2Remote";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.04;
+    }
 };
 
 // ---------------------------------------------------------

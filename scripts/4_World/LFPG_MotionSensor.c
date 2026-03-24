@@ -33,6 +33,21 @@ class LFPG_MotionSensor_Kit : LFPG_KitBase
     {
         return "LFPG_MotionSensor";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 2;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.08;
+    }
+
+    override float LFPG_GetWallPitchOffset()
+    {
+        return -90.0;
+    }
 };
 
 // ---------------------------------------------------------

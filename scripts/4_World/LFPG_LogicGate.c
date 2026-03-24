@@ -23,6 +23,21 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
     {
         AddAction(LFPG_ActionPlaceLogicGate);
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.05;
+    }
+
+    override float LFPG_GetWallPitchOffset()
+    {
+        return 90.0;
+    }
 };
 
 class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit

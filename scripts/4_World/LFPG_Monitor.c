@@ -18,6 +18,21 @@ class LF_Monitor_Kit : LFPG_KitBase
     {
         return "LF_Monitor";
     }
+
+    override int LFPG_GetPlacementModes()
+    {
+        return 1;
+    }
+
+    override float LFPG_GetWallSurfaceOffset()
+    {
+        return 0.32;
+    }
+
+    override float LFPG_GetFloorYOffset()
+    {
+        return 0.15;
+    }
 };
 
 // ---------------------------------------------------------
