@@ -62,6 +62,8 @@ class LFPG_SorterView extends ScriptView
     protected float m_DragOffY;
 
     // ── Hover color cache (v2.2, M4: per-widget via SetUserData) ──
+    // Strong refs to prevent GC — SetUserData does NOT hold strong ref!
+    protected ref array<ref LFPG_ColorData> m_ColorDataRefs;
     // Currently hovered bg (null if none)
     protected ImageWidget m_HoveredBg;
     // N3: Tracks whether controls are enabled (unpaired = false).
@@ -268,6 +270,7 @@ class LFPG_SorterView extends ScriptView
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
+        m_ColorDataRefs = new array<ref LFPG_ColorData>();
     }
 
     // S1 fix: destructor releases input lock if destroyed while open
@@ -701,6 +704,7 @@ class LFPG_SorterView extends ScriptView
 
     // M4: Store color on the widget itself via SetUserData (O(1) lookup)
     // Reuses existing LFPG_ColorData if present (avoids alloc+GC churn on refresh).
+    // FIX: SetUserData does NOT hold strong ref — m_ColorDataRefs keeps objects alive.
     protected void CacheColorLocal(Widget w, int color)
     {
         if (!w)
@@ -715,6 +719,7 @@ class LFPG_SorterView extends ScriptView
         }
         LFPG_ColorData data = new LFPG_ColorData(color);
         w.SetUserData(data);
+        m_ColorDataRefs.Insert(data);
     }
 
     // M4: O(1) color retrieval via GetUserData — replaces O(n) array scan
