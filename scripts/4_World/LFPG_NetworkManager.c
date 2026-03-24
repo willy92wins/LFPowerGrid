@@ -133,8 +133,8 @@ class LFPG_NetworkManager
     // v1.9.0: Laser Detector dedicated registry
     protected ref array<LFPG_LaserDetector> m_RegisteredLasers;
 
-    // v2.0: Battery energy accounting timer state.
-    // Registered batteries are iterated every LFPG_BATTERY_TICK_MS.
+    // v2.0: Battery energy accounting state.
+    // Iterated from LFPG_TickSimpleDevices (offset 4, ~5s effective).
     // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
     protected ref array<EntityAI> m_RegisteredBatteries;
     protected float m_BatteryLastTickMs;
@@ -160,6 +160,17 @@ class LFPG_NetworkManager
     protected ref array<LF_WaterPump>    m_RegisteredT1Pumps;
     protected ref array<LF_WaterPump_T2> m_RegisteredT2Pumps;
     protected ref array<LF_Sprinkler>    m_RegisteredSprinklers;
+
+    // v4.1: Player Detection consolidated tick sub-counters.
+    // One timer at 300ms drives lasers (every tick), pads (every 2nd), sensors (every 10th).
+    // LaserBeamCounter starts at 22 so first beam fires at tick 1 (300ms post-init).
+    protected int m_PlayerDetectCounter;
+    protected int m_LaserBeamCounter;
+
+    // v4.1: Simple Devices consolidated tick sub-counter.
+    // One timer at 1,000ms drives intercoms/DC/furnaces/batteries/fridges with stagger offsets.
+    // Cycle 1-10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
+    protected int m_SimpleTickCounter;
 
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
@@ -315,33 +326,20 @@ class LFPG_NetworkManager
         // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
 
-        // v1.5.0: Motion sensor detection tick (3s interval)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickMotionSensors, LFPG_SENSOR_TICK_MS, bTrue);
+        // v4.1: Consolidated player detection tick (lasers 300ms + pads 600ms + sensors 3s).
+        // Replaces 4 separate timers. Sub-counters gate slower devices.
+        m_PlayerDetectCounter = 0;
+        m_LaserBeamCounter = 22;
+        int pdTickMs = 300;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPlayerDetection, pdTickMs, bTrue);
 
-        // v1.8.1: Pressure pad detection tick (500ms — fast polling for small surface)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPressurePads, LFPG_PAD_TICK_MS, bTrue);
-
-        // v1.9.0: Laser detector beam raycast (7s — walls don't move)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickLaserBeams, LFPG_LASER_BEAM_TICK_MS, bTrue);
-
-        // v1.9.0: Laser detector player crossing (300ms — thin beam, fast poll)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickLaserCrossing, LFPG_LASER_CROSS_TICK_MS, bTrue);
-
-        // v2.0: Battery energy accounting timer (5s — balance charge/discharge)
+        // v4.1: Consolidated simple devices tick (intercoms/DC/furnaces/batteries/fridges).
+        // Replaces 5 separate timers. Stagger offsets prevent spike alignment.
+        // Intercoms=every tick, DC=%2==1, Furnaces=%5==2, Batteries=%5==4, Fridges=%10==6.
+        m_SimpleTickCounter = 0;
         m_BatteryLastTickMs = GetGame().GetTime();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBatteries, LFPG_BATTERY_TICK_MS, bTrue);
-
-        // v3.0: Intercom toggle input evaluation (1s — rising edge detection)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickIntercoms, LFPG_INTERCOM_TOGGLE_TICK_MS, bTrue);
-
-        // v3.1: Centralized furnace burn timer (5s poll — per-furnace timing at 30s)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickFurnaces, LFPG_FURNACE_POLL_MS, bTrue);
-
-        // v4.0: Centralized fridge cooling timer (10s)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickFridges, LFPG_FRIDGE_TICK_MS, bTrue);
-
-        // v4.0: Centralized door controller poll timer (2s)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickDoorControllers, LFPG_DC_TICK_MS, bTrue);
+        int simpleTickMs = 1000;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSimpleDevices, simpleTickMs, bTrue);
         #endif
     }
 
@@ -4549,39 +4547,11 @@ class LFPG_NetworkManager
         }
     }
 
-    // Intercom toggle input tick (v3.0).
-    // Runs at LFPG_INTERCOM_TOGGLE_TICK_MS (1s).
-    // Evaluates rising edge on input_toggle port for each registered intercom.
-    protected void LFPG_TickIntercoms()
-    {
-        #ifdef SERVER
-        int totalIntercoms = m_RegisteredIntercoms.Count();
-        if (totalIntercoms == 0)
-            return;
-
-        int i;
-        LF_Intercom ic;
-
-        for (i = 0; i < totalIntercoms; i = i + 1)
-        {
-            if (i >= m_RegisteredIntercoms.Count())
-                break;
-
-            ic = m_RegisteredIntercoms[i];
-            if (!ic)
-                continue;
-
-            ic.LFPG_EvaluateToggleInput();
-        }
-        #endif
-    }
-
     // ===========================
-    // v3.1: Furnace Centralized Burn Timer
+    // v3.1: Furnace Registration
     // ===========================
-    // Replaces per-device CallLater (N timers → 1 timer).
-    // Pattern: identical to Sensor/Intercom registration.
-    // Only active furnaces (m_SourceOn) are ticked.
+    // Tick absorbed into LFPG_TickSimpleDevices (offset 2, ~5s effective).
+    // Only active furnaces (m_SourceOn) are registered.
 
     void RegisterFurnace(LF_Furnace furnace)
     {
@@ -4604,36 +4574,10 @@ class LFPG_NetworkManager
         }
     }
 
-    // Centralized burn tick (every LFPG_FURNACE_POLL_MS = 5s).
-    // Per-furnace timing via m_BurnNextMs ensures exact 30s burn intervals.
-    // Iterates all registered furnaces; BurnTick skips if not yet due.
-    protected void LFPG_TickFurnaces()
-    {
-        #ifdef SERVER
-        int totalFurnaces = m_RegisteredFurnaces.Count();
-        if (totalFurnaces == 0)
-            return;
-
-        int i;
-        LF_Furnace furnace;
-
-        for (i = 0; i < totalFurnaces; i = i + 1)
-        {
-            if (i >= m_RegisteredFurnaces.Count())
-                break;
-
-            furnace = m_RegisteredFurnaces[i];
-            if (!furnace)
-                continue;
-
-            furnace.LFPG_BurnTick();
-        }
-        #endif
-    }
-
     // ===========================
-    // v4.0: Fridge Centralized Cooling Timer
+    // v4.0: Fridge Registration
     // ===========================
+    // Tick absorbed into LFPG_TickSimpleDevices (offset 6, ~10s effective).
 
     void RegisterFridge(LF_Fridge fridge)
     {
@@ -4656,33 +4600,10 @@ class LFPG_NetworkManager
         }
     }
 
-    protected void LFPG_TickFridges()
-    {
-        #ifdef SERVER
-        int totalFridges = m_RegisteredFridges.Count();
-        if (totalFridges == 0)
-            return;
-
-        int i;
-        LF_Fridge fridge;
-
-        for (i = 0; i < totalFridges; i = i + 1)
-        {
-            if (i >= m_RegisteredFridges.Count())
-                break;
-
-            fridge = m_RegisteredFridges[i];
-            if (!fridge)
-                continue;
-
-            fridge.LFPG_OnCoolTick();
-        }
-        #endif
-    }
-
     // ===========================
-    // v4.0: DoorController Centralized Poll Timer
+    // v4.0: DoorController Registration
     // ===========================
+    // Tick absorbed into LFPG_TickSimpleDevices (offset 1, ~2s effective).
 
     void RegisterDoorController(LF_DoorController dc)
     {
@@ -4705,212 +4626,310 @@ class LFPG_NetworkManager
         }
     }
 
-    protected void LFPG_TickDoorControllers()
+    // ===========================
+    // v4.1: Consolidated Simple Devices Tick
+    // ===========================
+    // Single 1,000ms timer drives 5 device subsystems via staggered sub-counters.
+    // Cycle 1→10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
+    //   - Intercoms:       every tick       (1,000ms)  — ticks 1,2,3,4,5,6,7,8,9,10
+    //   - DoorControllers: counter % 2 == 1 (2,000ms)  — ticks 1,3,5,7,9
+    //   - Furnaces:        counter % 5 == 2 (5,000ms)  — ticks 2,7
+    //   - Batteries:       counter % 5 == 4 (5,000ms)  — ticks 4,9
+    //   - Fridges:         counter % 10 == 6 (10,000ms) — tick 6
+    // OPT-2: Early-out when all registries empty.
+    protected void LFPG_TickSimpleDevices()
     {
         #ifdef SERVER
-        int totalDCs = m_RegisteredDoorControllers.Count();
-        if (totalDCs == 0)
+        int totalIc = m_RegisteredIntercoms.Count();
+        int totalDc = m_RegisteredDoorControllers.Count();
+        int totalFur = m_RegisteredFurnaces.Count();
+        int totalBat = m_RegisteredBatteries.Count();
+        int totalFri = m_RegisteredFridges.Count();
+        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri;
+        if (totalSimple == 0)
             return;
 
-        int i;
-        LF_DoorController dc;
-
-        for (i = 0; i < totalDCs; i = i + 1)
+        m_SimpleTickCounter = m_SimpleTickCounter + 1;
+        if (m_SimpleTickCounter >= 10)
         {
-            if (i >= m_RegisteredDoorControllers.Count())
-                break;
-
-            dc = m_RegisteredDoorControllers[i];
-            if (!dc)
-                continue;
-
-            dc.LFPG_OnDoorPoll();
+            m_SimpleTickCounter = 0;
         }
-        #endif
-    }
 
-    // Motion sensor detection tick (v1.5.0, split from unified v1.8.1).
-    // Runs at LFPG_SENSOR_TICK_MS (3s) — sensors have large range, no need for fast poll.
-    protected void LFPG_TickMotionSensors()
-    {
-        #ifdef SERVER
-        int totalSensors = m_RegisteredSensors.Count();
-        if (totalSensors == 0)
-            return;
-
-        m_ReusablePlayers.Clear();
-        GetGame().GetPlayers(m_ReusablePlayers);
-
-        int i;
-        int changed = 0;
-        LFPG_MotionSensor sensor;
-        bool sensorChanged;
-        string sensorId;
-
-        for (i = 0; i < totalSensors; i = i + 1)
+        // --- Intercoms: every tick (1s) ---
+        if (totalIc > 0)
         {
-            if (i >= m_RegisteredSensors.Count())
-                break;
+            int ii;
+            LF_Intercom ic;
 
-            sensor = m_RegisteredSensors[i];
-            if (!sensor)
-                continue;
-
-            sensorChanged = sensor.LFPG_EvaluateDetection(m_ReusablePlayers);
-            if (sensorChanged)
+            for (ii = 0; ii < totalIc; ii = ii + 1)
             {
-                sensorId = sensor.LFPG_GetDeviceId();
-                if (sensorId != "")
-                {
-                    RequestPropagate(sensorId);
-                }
-                changed = changed + 1;
+                if (ii >= m_RegisteredIntercoms.Count())
+                    break;
+
+                ic = m_RegisteredIntercoms[ii];
+                if (!ic)
+                    continue;
+
+                ic.LFPG_EvaluateToggleInput();
             }
         }
 
-        if (changed > 0)
+        // --- DoorControllers: every 2nd tick (2s) ---
+        int dcMod = m_SimpleTickCounter % 2;
+        if (dcMod == 1 && totalDc > 0)
         {
-            string tickMsg = "[Sensors] Tick: ";
-            tickMsg = tickMsg + changed.ToString();
-            tickMsg = tickMsg + " sensors changed state";
-            LFPG_Util.Debug(tickMsg);
-        }
-        #endif
-    }
+            int di;
+            LF_DoorController dc;
 
-    // Pressure pad detection tick (v1.8.1).
-    // Runs at LFPG_PAD_TICK_MS (500ms) — pads cover tiny surface area,
-    // a player at sprint speed crosses in <1s so fast polling is required.
-    protected void LFPG_TickPressurePads()
-    {
-        #ifdef SERVER
-        int totalPads = m_RegisteredPads.Count();
-        if (totalPads == 0)
-            return;
-
-        m_ReusablePlayers.Clear();
-        GetGame().GetPlayers(m_ReusablePlayers);
-
-        int i;
-        int changed = 0;
-        LFPG_PressurePad pad;
-        bool padChanged;
-        string padId;
-
-        for (i = 0; i < totalPads; i = i + 1)
-        {
-            if (i >= m_RegisteredPads.Count())
-                break;
-
-            pad = m_RegisteredPads[i];
-            if (!pad)
-                continue;
-
-            padChanged = pad.LFPG_EvaluatePresence(m_ReusablePlayers);
-            if (padChanged)
+            for (di = 0; di < totalDc; di = di + 1)
             {
-                padId = pad.LFPG_GetDeviceId();
-                if (padId != "")
-                {
-                    RequestPropagate(padId);
-                }
-                changed = changed + 1;
+                if (di >= m_RegisteredDoorControllers.Count())
+                    break;
+
+                dc = m_RegisteredDoorControllers[di];
+                if (!dc)
+                    continue;
+
+                dc.LFPG_OnDoorPoll();
             }
         }
 
-        if (changed > 0)
+        // --- Furnaces: every 5th tick, offset 2 (ticks 2,7) ---
+        int furMod = m_SimpleTickCounter % 5;
+        if (furMod == 2 && totalFur > 0)
         {
-            string padMsg = "[Pads] Tick: ";
-            padMsg = padMsg + changed.ToString();
-            padMsg = padMsg + " pads changed state";
-            LFPG_Util.Debug(padMsg);
-        }
-        #endif
-    }
+            int fi;
+            LF_Furnace furnace;
 
-    // Laser detector beam raycast tick (v1.9.0).
-    // Runs at LFPG_LASER_BEAM_TICK_MS (7s) — walls/objects rarely move.
-    // Updates beam length for each laser (used by client renderer).
-    protected void LFPG_TickLaserBeams()
-    {
-        #ifdef SERVER
-        int totalLasers = m_RegisteredLasers.Count();
-        if (totalLasers == 0)
-            return;
-
-        int i;
-        LFPG_LaserDetector laser;
-
-        for (i = 0; i < totalLasers; i = i + 1)
-        {
-            if (i >= m_RegisteredLasers.Count())
-                break;
-
-            laser = m_RegisteredLasers[i];
-            if (!laser)
-                continue;
-
-            laser.LFPG_UpdateBeamRaycast();
-        }
-        #endif
-    }
-
-    // Laser detector player crossing tick (v1.9.0).
-    // Runs at LFPG_LASER_CROSS_TICK_MS (300ms) — fast poll for thin beam line.
-    // A player sprinting crosses the beam in ~0.2s, so 300ms catches most crossings.
-    protected void LFPG_TickLaserCrossing()
-    {
-        #ifdef SERVER
-        int totalLasers = m_RegisteredLasers.Count();
-        if (totalLasers == 0)
-            return;
-
-        m_ReusablePlayers.Clear();
-        GetGame().GetPlayers(m_ReusablePlayers);
-
-        int i;
-        int changed = 0;
-        LFPG_LaserDetector laser;
-        bool laserChanged;
-        string laserId;
-
-        for (i = 0; i < totalLasers; i = i + 1)
-        {
-            if (i >= m_RegisteredLasers.Count())
-                break;
-
-            laser = m_RegisteredLasers[i];
-            if (!laser)
-                continue;
-
-            laserChanged = laser.LFPG_EvaluateCrossing(m_ReusablePlayers);
-            if (laserChanged)
+            for (fi = 0; fi < totalFur; fi = fi + 1)
             {
-                laserId = laser.LFPG_GetDeviceId();
-                if (laserId != "")
-                {
-                    RequestPropagate(laserId);
-                }
-                changed = changed + 1;
+                if (fi >= m_RegisteredFurnaces.Count())
+                    break;
+
+                furnace = m_RegisteredFurnaces[fi];
+                if (!furnace)
+                    continue;
+
+                furnace.LFPG_BurnTick();
             }
         }
 
-        if (changed > 0)
+        // --- Batteries: every 5th tick, offset 4 (ticks 4,9) — never overlaps Furnaces ---
+        int batMod = m_SimpleTickCounter % 5;
+        if (batMod == 4 && totalBat > 0)
         {
-            string laserMsg = "[Lasers] Tick: ";
-            laserMsg = laserMsg + changed.ToString();
-            laserMsg = laserMsg + " lasers changed state";
-            LFPG_Util.Debug(laserMsg);
+            LFPG_TickBatteriesInternal();
+        }
+
+        // --- Fridges: every 10th tick, offset 6 (tick 6) ---
+        if (m_SimpleTickCounter == 6 && totalFri > 0)
+        {
+            int ri;
+            LF_Fridge fridge;
+
+            for (ri = 0; ri < totalFri; ri = ri + 1)
+            {
+                if (ri >= m_RegisteredFridges.Count())
+                    break;
+
+                fridge = m_RegisteredFridges[ri];
+                if (!fridge)
+                    continue;
+
+                fridge.LFPG_OnCoolTick();
+            }
         }
         #endif
     }
 
     // ===========================
-    // v2.0: Battery Registration + Energy Timer
+    // v4.1: Consolidated Player Detection Tick
+    // ===========================
+    // Single 300ms timer drives three detection subsystems via sub-counters:
+    //   - Lasers: crossing every tick (300ms), beam raycast every 23 ticks (~6.9s)
+    //   - Pads: every 2nd tick (600ms)
+    //   - Sensors: every 10th tick (3,000ms)
+    // One GetPlayers call shared by all. OPT-1: early-out when no detection devices.
+    // Beam fires BEFORE crossing in same iteration for immediate m_BeamLength use.
+    protected void LFPG_TickPlayerDetection()
+    {
+        #ifdef SERVER
+        int totalLasers = m_RegisteredLasers.Count();
+        int totalPads = m_RegisteredPads.Count();
+        int totalSensors = m_RegisteredSensors.Count();
+        int totalDetect = totalLasers + totalPads + totalSensors;
+        if (totalDetect == 0)
+            return;
+
+        m_PlayerDetectCounter = m_PlayerDetectCounter + 1;
+        m_LaserBeamCounter = m_LaserBeamCounter + 1;
+
+        // Pre-compute which subsystems fire this tick to avoid unnecessary GetPlayers.
+        // Lasers: crossing every tick needs players.
+        // Pads: every 2nd tick. Sensors: every 10th tick.
+        int padMod = m_PlayerDetectCounter % 2;
+        bool needPlayers = false;
+        if (totalLasers > 0)
+        {
+            needPlayers = true;
+        }
+        if (padMod == 0 && totalPads > 0)
+        {
+            needPlayers = true;
+        }
+        if (m_PlayerDetectCounter >= 10 && totalSensors > 0)
+        {
+            needPlayers = true;
+        }
+
+        if (needPlayers)
+        {
+            m_ReusablePlayers.Clear();
+            GetGame().GetPlayers(m_ReusablePlayers);
+        }
+
+        // --- Lasers: crossing every tick, beam every 23 ticks (~6.9s) ---
+        if (totalLasers > 0)
+        {
+            bool doBeam = false;
+            if (m_LaserBeamCounter >= 23)
+            {
+                m_LaserBeamCounter = 0;
+                doBeam = true;
+            }
+
+            int li;
+            int laserChanged = 0;
+            LFPG_LaserDetector laser;
+            bool lcChanged;
+            string laserId;
+
+            for (li = 0; li < totalLasers; li = li + 1)
+            {
+                if (li >= m_RegisteredLasers.Count())
+                    break;
+
+                laser = m_RegisteredLasers[li];
+                if (!laser)
+                    continue;
+
+                if (doBeam)
+                {
+                    laser.LFPG_UpdateBeamRaycast();
+                }
+
+                lcChanged = laser.LFPG_EvaluateCrossing(m_ReusablePlayers);
+                if (lcChanged)
+                {
+                    laserId = laser.LFPG_GetDeviceId();
+                    if (laserId != "")
+                    {
+                        RequestPropagate(laserId);
+                    }
+                    laserChanged = laserChanged + 1;
+                }
+            }
+
+            if (laserChanged > 0)
+            {
+                string laserMsg = "[PlayerDetect] Lasers: ";
+                laserMsg = laserMsg + laserChanged.ToString();
+                laserMsg = laserMsg + " changed state";
+                LFPG_Util.Info(laserMsg);
+            }
+        }
+
+        // --- Pads: every 2nd tick (600ms) ---
+        if (padMod == 0 && totalPads > 0)
+        {
+            int pi;
+            int padChanged = 0;
+            LFPG_PressurePad pad;
+            bool pcChanged;
+            string padId;
+
+            for (pi = 0; pi < totalPads; pi = pi + 1)
+            {
+                if (pi >= m_RegisteredPads.Count())
+                    break;
+
+                pad = m_RegisteredPads[pi];
+                if (!pad)
+                    continue;
+
+                pcChanged = pad.LFPG_EvaluatePresence(m_ReusablePlayers);
+                if (pcChanged)
+                {
+                    padId = pad.LFPG_GetDeviceId();
+                    if (padId != "")
+                    {
+                        RequestPropagate(padId);
+                    }
+                    padChanged = padChanged + 1;
+                }
+            }
+
+            if (padChanged > 0)
+            {
+                string padMsg = "[PlayerDetect] Pads: ";
+                padMsg = padMsg + padChanged.ToString();
+                padMsg = padMsg + " changed state";
+                LFPG_Util.Info(padMsg);
+            }
+        }
+
+        // --- Sensors: every 10th tick (3,000ms) ---
+        if (m_PlayerDetectCounter >= 10)
+        {
+            m_PlayerDetectCounter = 0;
+
+            if (totalSensors > 0)
+            {
+                int si;
+                int sensorChanged = 0;
+                LFPG_MotionSensor sensor;
+                bool scChanged;
+                string sensorId;
+
+                for (si = 0; si < totalSensors; si = si + 1)
+                {
+                    if (si >= m_RegisteredSensors.Count())
+                        break;
+
+                    sensor = m_RegisteredSensors[si];
+                    if (!sensor)
+                        continue;
+
+                    scChanged = sensor.LFPG_EvaluateDetection(m_ReusablePlayers);
+                    if (scChanged)
+                    {
+                        sensorId = sensor.LFPG_GetDeviceId();
+                        if (sensorId != "")
+                        {
+                            RequestPropagate(sensorId);
+                        }
+                        sensorChanged = sensorChanged + 1;
+                    }
+                }
+
+                if (sensorChanged > 0)
+                {
+                    string sensorMsg = "[PlayerDetect] Sensors: ";
+                    sensorMsg = sensorMsg + sensorChanged.ToString();
+                    sensorMsg = sensorMsg + " changed state";
+                    LFPG_Util.Info(sensorMsg);
+                }
+            }
+        }
+        #endif
+    }
+
+    // ===========================
+    // v2.0: Battery Registration + Energy Accounting
     // ===========================
     // Pattern: identical to Sensor/Laser registration.
     // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
-    // Timer runs every LFPG_BATTERY_TICK_MS (~5s), uses real delta time.
+    // v4.1: Timer absorbed into LFPG_TickSimpleDevices (offset 4, ~5s effective).
     //
     // Energy accounting per battery per tick:
     //   1. Read node.m_InputPower (actual received from upstream)
@@ -4942,7 +4961,9 @@ class LFPG_NetworkManager
         }
     }
 
-    protected void LFPG_TickBatteries()
+    // v4.1: Battery energy accounting (called from LFPG_TickSimpleDevices, offset 4).
+    // Uses real delta time via m_BatteryLastTickMs. ~5s effective interval.
+    protected void LFPG_TickBatteriesInternal()
     {
         #ifdef SERVER
         int batCount = m_RegisteredBatteries.Count();
@@ -5211,11 +5232,12 @@ class LFPG_NetworkManager
 
         if (dirtyCount > 0)
         {
-            string batMsg = "[Battery] Tick: ";
+            string batMsg = "[SimpleDevices] Batteries: ";
             batMsg = batMsg + dirtyCount.ToString();
-            batMsg = batMsg + "/" + batCount.ToString();
-            batMsg = batMsg + " batteries triggered propagation";
-            LFPG_Util.Debug(batMsg);
+            batMsg = batMsg + "/";
+            batMsg = batMsg + batCount.ToString();
+            batMsg = batMsg + " triggered propagation";
+            LFPG_Util.Info(batMsg);
         }
         #endif
     }

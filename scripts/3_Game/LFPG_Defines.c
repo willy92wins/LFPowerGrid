@@ -288,22 +288,17 @@ static const int LFPG_SORTER_BATCH_SIZE     = 8;      // max sorters processed p
 static const int LFPG_SORTER_MAX_EVAL       = 20;     // max rule evaluations per sorter per tick
 static const int LFPG_SORTER_PREVIEW_CAP    = 50;     // max items in preview RPC response
 
-// ---- Motion Sensor tick constants (v1.5.0) ----
-static const int   LFPG_SENSOR_TICK_MS      = 3000;   // 3s between scan ticks
+// ---- Motion Sensor constants (v1.5.0) ----
+// Tick interval removed in v4.1 (absorbed into LFPG_TickPlayerDetection).
 static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres)
 static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
 
-// ---- Pressure Pad tick constants (v1.8.1) ----
-// Separate from SENSOR_TICK_MS because pads cover a tiny surface area.
-// At 3s a player running across the pad is missed entirely.
-// 500ms guarantees detection even at sprint speed.
-static const int   LFPG_PAD_TICK_MS         = 500;    // 0.5s between pad scan ticks
+// ---- Pressure Pad constants (v1.8.1) ----
+// Tick interval removed in v4.1 (absorbed into LFPG_TickPlayerDetection).
 
 // ---- Laser Detector constants (v1.9.0) ----
-// Two ticks: slow (beam raycast) and fast (player crossing).
-static const int   LFPG_LASER_BEAM_TICK_MS    = 7000;   // 7s — beam raycast (walls don't move)
-static const int   LFPG_LASER_CROSS_TICK_MS   = 300;    // 300ms — player crossing detection (fast)
+// Tick intervals removed in v4.1 (absorbed into LFPG_TickPlayerDetection).
 static const float LFPG_LASER_BEAM_RANGE_M    = 5.0;    // max beam length (metres)
 static const float LFPG_LASER_CROSS_RADIUS    = 0.35;   // crossing detection radius (metres)
 static const float LFPG_LASER_CROSS_RADIUS_SQ = 0.1225; // 0.35² pre-computed
@@ -648,7 +643,7 @@ static const string LFPG_PUMP_WATER_SOUNDSET           = "LFPG_WaterPump_Water_S
 static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output while burning
 static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
 static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns
-static const int   LFPG_FURNACE_POLL_MS               = 5000;    // v3.1: centralized tick poll rate (per-furnace timing filters)
+// LFPG_FURNACE_POLL_MS removed in v4.1 (absorbed into LFPG_TickSimpleDevices)
 
 // ---- v1.5.1: Searchlight (CONSUMER, grab system) ----
 static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s
@@ -662,7 +657,7 @@ static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // server rayca
 // =========================================================
 // v2.0: BATTERY constants (energy storage devices)
 // =========================================================
-static const int   LFPG_BATTERY_TICK_MS               = 5000;     // ~5s between energy accounting ticks
+// LFPG_BATTERY_TICK_MS removed in v4.1 (absorbed into LFPG_TickSimpleDevices)
 static const float LFPG_BATTERY_DISCHARGE_OFF_PCT     = 0.01;     // 1% — disable discharge below this
 static const float LFPG_BATTERY_DISCHARGE_ON_PCT      = 0.05;     // 5% — re-enable discharge above this
 static const float LFPG_BATTERY_SELF_DISCHARGE_RATE   = 0.0005;   // 0.05% per hour idle drain
@@ -699,11 +694,8 @@ static const float LFPG_INTERCOM_RF_RANGE_SQ           = 2500.0;  // 50^2 pre-co
 static const int   LFPG_INTERCOM_RF_COOLDOWN_MS        = 2000;    // ms between RF toggles
 static const int   LFPG_INTERCOM_INSTALL_TIME_MS       = 5000;    // ms for mic install action
 static const int   LFPG_INTERCOM_FREQ_COUNT            = 7;       // vanilla frequency count
-static const int   LFPG_INTERCOM_TOGGLE_TICK_MS        = 1000;    // 1s between toggle input evaluation ticks
-
-// v4.0: Fridge + DoorController centralized tick intervals
-static const int   LFPG_FRIDGE_TICK_MS                 = 10000;   // 10s between fridge cooling ticks
-static const int   LFPG_DC_TICK_MS                     = 2000;    // 2s between door controller poll ticks
+// LFPG_INTERCOM_TOGGLE_TICK_MS, LFPG_FRIDGE_TICK_MS, LFPG_DC_TICK_MS removed in v4.1
+// (absorbed into LFPG_TickSimpleDevices)
 
 // =========================================================
 // v5.0: SPRINKLER constants (CONSUMER, water delivery)
