@@ -3052,6 +3052,7 @@ modded class PlayerBase
     // Send TX_RESULT RPC to this player.
     protected void LFPG_SendBTCTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount)
     {
+        int cashOnInv = LFPG_BTCCountPlayerCash();
         ScriptRPC rpc = new ScriptRPC();
         int subId = LFPG_RPC_SubId.BTC_TX_RESULT;
         rpc.Write(subId);
@@ -3061,6 +3062,7 @@ modded class PlayerBase
         rpc.Write(newBalance);
         rpc.Write(btcMoved);
         rpc.Write(eurAmount);
+        rpc.Write(cashOnInv);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
     }
 
@@ -3404,6 +3406,33 @@ modded class PlayerBase
         return atm;
     }
 
+    // Count total EUR value of all currency items on this player.
+    // Iterates all currencies from config, multiplies count × value.
+    protected int LFPG_BTCCountPlayerCash()
+    {
+        int total = 0;
+        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        if (!currencies)
+            return 0;
+
+        int curIdx = 0;
+        int curCount = currencies.Count();
+        for (curIdx = 0; curIdx < curCount; curIdx = curIdx + 1)
+        {
+            LFPG_BTCCurrency cur = currencies[curIdx];
+            if (!cur)
+                continue;
+
+            string cn = cur.classname;
+            int itemCount = LFPG_BTCCountPlayerItems(cn);
+            int curValue = cur.value;
+            int subtotal = itemCount * curValue;
+            total = total + subtotal;
+        }
+
+        return total;
+    }
+
     // =========================================================
     // BTC ATM: Server Handlers (Sprint BTC-3)
     // =========================================================
@@ -3458,6 +3487,9 @@ modded class PlayerBase
         int stock = atm.LFPG_GetBtcStock();
         bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
 
+        // Player cash on person
+        int cashOnInv = LFPG_BTCCountPlayerCash();
+
         // Send response
         ScriptRPC rpc = new ScriptRPC();
         int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
@@ -3465,6 +3497,7 @@ modded class PlayerBase
         rpc.Write(price);
         rpc.Write(stock);
         rpc.Write(balance);
+        rpc.Write(cashOnInv);
         rpc.Write(withdrawOnly);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
 
@@ -3868,6 +3901,7 @@ modded class PlayerBase
         float price = 0.0;
         int stock = 0;
         int balance = 0;
+        int cashOnInv = 0;
         bool withdrawOnly = false;
 
         if (!ctx.Read(price))
@@ -3876,10 +3910,12 @@ modded class PlayerBase
             return;
         if (!ctx.Read(balance))
             return;
+        if (!ctx.Read(cashOnInv))
+            return;
         if (!ctx.Read(withdrawOnly))
             return;
 
-        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, withdrawOnly);
+        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly);
 
         string logResp = "[BTCOpenResponse] price=";
         logResp = logResp + price.ToString();
@@ -3887,12 +3923,13 @@ modded class PlayerBase
         logResp = logResp + stock.ToString();
         logResp = logResp + " bal=";
         logResp = logResp + balance.ToString();
+        logResp = logResp + " cash=";
+        logResp = logResp + cashOnInv.ToString();
         logResp = logResp + " wo=";
         logResp = logResp + withdrawOnly.ToString();
         LFPG_Util.Info(logResp);
 
-        // Sprint BTC-4: open UI here
-        // LFPG_BTCAtmView.Open();
+        LFPG_BTCAtmView.Open();
     }
 
     // ---- TX RESULT: server sent transaction outcome ----
@@ -3904,6 +3941,7 @@ modded class PlayerBase
         int newBalance = 0;
         int btcMoved = 0;
         float eurAmount = 0.0;
+        int cashOnInv = 0;
 
         if (!ctx.Read(txType))
             return;
@@ -3917,8 +3955,10 @@ modded class PlayerBase
             return;
         if (!ctx.Read(eurAmount))
             return;
+        if (!ctx.Read(cashOnInv))
+            return;
 
-        LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount);
+        LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv);
 
         string logTx = "[BTCTxResult] type=";
         logTx = logTx + txType.ToString();
@@ -3930,10 +3970,11 @@ modded class PlayerBase
         logTx = logTx + newBalance.ToString();
         logTx = logTx + " btc=";
         logTx = logTx + btcMoved.ToString();
+        logTx = logTx + " cash=";
+        logTx = logTx + cashOnInv.ToString();
         LFPG_Util.Info(logTx);
 
-        // Sprint BTC-4: update UI here
-        // LFPG_BTCAtmView.OnTxResult();
+        LFPG_BTCAtmView.OnTxResult();
     }
 
     // ---- PRICE UNAVAILABLE: no BTC price from API ----
@@ -3944,7 +3985,6 @@ modded class PlayerBase
         string logNA = "[BTCPriceUnavailable] price not available from API";
         LFPG_Util.Info(logNA);
 
-        // Sprint BTC-4: show error in UI
-        // LFPG_BTCAtmView.OnPriceUnavailable();
+        LFPG_BTCAtmView.OnPriceUnavailable();
     }
 };

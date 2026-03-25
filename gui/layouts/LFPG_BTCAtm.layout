@@ -1,0 +1,822 @@
+// =========================================================
+// LF_PowerGrid — BTC ATM UI (Sprint BTC-4)
+// Floating window panel 420×380px, no Relay_Command.
+// All button dispatch via LFPG_BTCAtmView.OnClick (Sorter pattern).
+// =========================================================
+FrameWidgetClass BTCAtmRoot {
+	size 1 1
+	hexactpos 0
+	vexactpos 0
+	hexactsize 0
+	vexactsize 0
+	visible 0
+	ignorepointer 1
+	{
+		FrameWidgetClass BTCAtmPanel {
+			halign left_ref
+			valign top_ref
+			position 0 0
+			size 420 380
+			hexactpos 1
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			clipchildren 1
+			{
+				// ── Panel background ──
+				ImageWidgetClass PanelBg {
+					position 0 0
+					size 420 380
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+
+				// ── Header (drag area) y=0 h=36 ──
+				FrameWidgetClass HeaderFrame {
+					position 0 0
+					size 420 36
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass HeaderBg {
+							position 0 0
+							size 420 36
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass HeaderIcon {
+							position 12 0
+							size 20 36
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "B"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass HeaderTitle {
+							position 34 0
+							size 200 36
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "BTC ATM"
+							font "gui/fonts/Metron"
+							"text halign" left
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass DragHandle {
+							position 330 0
+							size 50 36
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "drag"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						ButtonWidgetClass BtnCloseX {
+							position 388 6
+							size 24 24
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							{
+								ImageWidgetClass BtnCloseXBg {
+									position 0 0
+									size 24 24
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
+									stretch 1
+									ignorepointer 1
+									{
+									}
+								}
+								TextWidgetClass BtnCloseXText {
+									position 0 0
+									size 24 24
+									hexactpos 1
+									vexactpos 1
+									hexactsize 1
+									vexactsize 1
+									ignorepointer 1
+									text "X"
+									font "gui/fonts/Metron"
+									"text halign" center
+									"text valign" center
+									{
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// ── Accent line y=36 h=2 ──
+				ImageWidgetClass AccentLine {
+					position 0 36
+					size 420 2
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+
+				// ── Info cards row y=46 ──
+				// Card 1: Precio BTC (x=12)
+				ImageWidgetClass CardPriceBg {
+					position 12 46
+					size 93 48
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass CardPriceLabel {
+					position 18 52
+					size 81 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "PRECIO BTC"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass PriceText {
+					position 18 68
+					size 81 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "---"
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// Card 2: Stock ATM (x=113)
+				ImageWidgetClass CardStockBg {
+					position 113 46
+					size 93 48
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass CardStockLabel {
+					position 119 52
+					size 81 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "STOCK ATM"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass StockText {
+					position 119 68
+					size 81 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "---"
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// Card 3: Tu saldo (x=214)
+				ImageWidgetClass CardBalanceBg {
+					position 214 46
+					size 93 48
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass CardBalanceLabel {
+					position 220 52
+					size 81 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "TU SALDO"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass BalanceText {
+					position 220 68
+					size 81 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "---"
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// Card 4: Efectivo (x=315)
+				ImageWidgetClass CardCashBg {
+					position 315 46
+					size 93 48
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass CardCashLabel {
+					position 321 52
+					size 81 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "EFECTIVO"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass CashText {
+					position 321 68
+					size 81 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "---"
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// ── Amount section y=102 h=82 ──
+				ImageWidgetClass AmountBg {
+					position 12 102
+					size 396 82
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass AmountLabel {
+					position 22 108
+					size 100 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "Cantidad"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// BTC input column
+				TextWidgetClass BtcLabel {
+					position 22 126
+					size 50 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "BTC"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				ImageWidgetClass EditBtcBorder {
+					position 22 142
+					size 168 28
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				ImageWidgetClass EditBtcBg {
+					position 23 143
+					size 166 26
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				EditBoxWidgetClass EditBtcAmount {
+					position 26 144
+					size 160 24
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// Arrow
+				TextWidgetClass ArrowLabel {
+					position 196 148
+					size 24 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "<>"
+					font "gui/fonts/MetronBook"
+					"text halign" center
+					"text valign" center
+					{
+					}
+				}
+
+				// EUR input column
+				TextWidgetClass EurLabel {
+					position 226 126
+					size 60 14
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "EUR"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				ImageWidgetClass EditEurBorder {
+					position 226 142
+					size 170 28
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				ImageWidgetClass EditEurBg {
+					position 227 143
+					size 168 26
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				EditBoxWidgetClass EditEurAmount {
+					position 230 144
+					size 162 24
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					font "gui/fonts/Metron"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// ── Checkbox row y=192 ──
+				CheckBoxWidgetClass ChkToAccount {
+					position 12 192
+					size 16 16
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+					}
+				}
+				TextWidgetClass ChkToAccountLabel {
+					position 34 192
+					size 340 16
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "Ingresar a cuenta (sin efectivo)"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// ── Button grid y=218 ──
+				// Buy (green)
+				ButtonWidgetClass BtnBuy {
+					position 12 218
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnBuyBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnBuyText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "Comprar"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnBuyHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "EUR > BTC"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+
+				// Sell (red)
+				ButtonWidgetClass BtnSell {
+					position 216 218
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnSellBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnSellText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "Vender"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnSellHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "BTC > EUR"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+
+				// Withdraw (blue)
+				ButtonWidgetClass BtnWithdraw {
+					position 12 264
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnWithdrawBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnWithdrawText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "Retirar"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnWithdrawHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "ATM > mochila"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+
+				// Deposit (neutral)
+				ButtonWidgetClass BtnDeposit {
+					position 216 264
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnDepositBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnDepositText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "Ingresar"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnDepositHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "mochila > ATM"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+
+				// ── Status row y=310 h=30 ──
+				ImageWidgetClass StatusBg {
+					position 12 310
+					size 396 30
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass StatusText {
+					position 24 310
+					size 372 30
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text ""
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
+				// ── Footer y=348 ──
+				ImageWidgetClass FooterSep {
+					position 0 348
+					size 420 1
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				ImageWidgetClass FooterBg {
+					position 0 349
+					size 420 31
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
+					ignorepointer 1
+					{
+					}
+				}
+				TextWidgetClass FooterEscHint {
+					position 12 349
+					size 200 31
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "ESC para cerrar"
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass FooterBrand {
+					position 300 349
+					size 108 31
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "LF PowerGrid"
+					font "gui/fonts/MetronBook"
+					"text halign" right
+					"text valign" center
+					{
+					}
+				}
+			}
+		}
+	}
+}

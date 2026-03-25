@@ -85,6 +85,10 @@ class LFPG_ActionOpenBTCAtm : ActionInteractBase
         int netHigh = 0;
         targetObj.GetNetworkID(netLow, netHigh);
 
+        // Save NetID for subsequent UI RPCs (Buy/Sell/etc)
+        LFPG_BTCAtmClientData.s_NetLow = netLow;
+        LFPG_BTCAtmClientData.s_NetHigh = netHigh;
+
         ScriptRPC rpc = new ScriptRPC();
         int subId = LFPG_RPC_SubId.BTC_OPEN_REQUEST;
         rpc.Write(subId);
