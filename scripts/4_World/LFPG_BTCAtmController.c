@@ -369,6 +369,9 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
     {
         #ifndef SERVER
+        if (!GetGame())
+            return;
+
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (!player)
             return;
@@ -386,6 +389,9 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool toAccount)
     {
         #ifndef SERVER
+        if (!GetGame())
+            return;
+
         PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
         if (!player)
             return;
