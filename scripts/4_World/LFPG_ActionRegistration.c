@@ -98,7 +98,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionToggleBurner1);
         actions.Insert(LFPG_ActionToggleBurner2);
         actions.Insert(LFPG_ActionToggleBurner3);
-
+		
+		// --- BTC ATM :) ---
+		actions.Insert(LFPG_ActionOpenBTCAtm);
+		
         LFPG_Util.Debug("[Actions] LFPG actions registered (50)");
     }
 };

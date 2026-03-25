@@ -278,7 +278,16 @@ enum LFPG_RPC_SubId
 	SORTER_RESYNC_ACK          = 30,  // v2.4: Server→Client: result (containerName)
 	SORTER_PREVIEW_REQUEST     = 31,  // v2.6: Client→Server: request matching items for preview
 	SORTER_PREVIEW_RESPONSE    = 32,  // v2.6: Server→Client: matched item list (cap 50)
-	SORTER_SORT_ACK            = 33   // v3.2: Server→Client: sort result (success, movedCount)
+	SORTER_SORT_ACK            = 33,   // v3.2: Server→Client: sort result (success, movedCount)*
+	// ---- BTC ATM (Sprint BTC) ----
+    BTC_OPEN_REQUEST       = 40,
+    BTC_OPEN_RESPONSE      = 41,
+    BTC_BUY                = 42,
+    BTC_SELL               = 43,
+    BTC_WITHDRAW           = 44,
+    BTC_DEPOSIT            = 45,
+    BTC_TX_RESULT          = 46,
+    BTC_PRICE_UNAVAILABLE  = 47
 };
 
 // ---- Sorter tick constants (Sprint S3) ----

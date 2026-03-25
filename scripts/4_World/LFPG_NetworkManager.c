@@ -177,6 +177,9 @@ class LFPG_NetworkManager
 
     // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
+	
+    // v5.0: BTC ATM price fetcher (server-only)
+    protected ref LFPG_BTCPriceFetcher m_BTCPriceFetcher;
 
     // v3.1 (GC reduction): Reusable arrays for high-frequency tick functions.
     // Hoisted from local scope to class members. .Clear() each tick instead of new.
@@ -344,6 +347,25 @@ class LFPG_NetworkManager
         m_BatteryLastTickMs = GetGame().GetTime();
         int simpleTickMs = 1000;
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSimpleDevices, simpleTickMs, bTrue);
+		
+		
+		// v5.0: BTC ATM price fetcher
+        LFPG_BTCConfig.Load();
+        LFPG_BTCPriceFetcher.Create();
+        m_BTCPriceFetcher = LFPG_BTCPriceFetcher.Get();
+        if (m_BTCPriceFetcher)
+        {
+            m_BTCPriceFetcher.Init();
+            int btcTickMs = LFPG_BTC_PRICE_CHECK_MS;
+            bool bTrueBtc = true;
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBTCPrice, btcTickMs, bTrueBtc);
+            string btcInitMsg = "[NM] BTC Price fetcher initialized, tick every ";
+            btcInitMsg = btcInitMsg + btcTickMs.ToString();
+            btcInitMsg = btcInitMsg + "ms";
+            LFPG_Util.Info(btcInitMsg);
+        }
+
+		
         #endif
     }
 
@@ -3387,6 +3409,27 @@ class LFPG_NetworkManager
         return m_SolarHasSun;
     }
 
+	// ===========================
+    // v5.0: BTC Price getters (for RPC handlers in Sprint 3)
+    // ===========================
+    float LFPG_GetBTCPrice()
+    {
+        if (m_BTCPriceFetcher)
+        {
+            return m_BTCPriceFetcher.GetCachedPrice();
+        }
+        return LFPG_BTC_PRICE_UNAVAILABLE;
+    }
+
+    bool LFPG_IsBTCPriceAvailable()
+    {
+        if (m_BTCPriceFetcher)
+        {
+            return m_BTCPriceFetcher.IsPriceAvailable();
+        }
+        return false;
+    }
+
     // Read world time once, update cached sun state.
     // Called by constructor (seed) and by LFPG_TickSolarPanels (periodic).
     protected void LFPG_ComputeSunState()
@@ -3415,7 +3458,20 @@ class LFPG_NetworkManager
         m_SolarHasSun = hasSun;
         #endif
     }
-
+	
+	// ===========================
+    // v5.0: BTC Price Tick
+    // ===========================
+    protected void LFPG_TickBTCPrice()
+    {
+        #ifdef SERVER
+        if (m_BTCPriceFetcher)
+        {
+            m_BTCPriceFetcher.Tick();
+        }
+        #endif
+    }
+	
     // Periodic tick (every LFPG_SOLAR_CHECK_MS = 15s).
     // Recomputes sun state; if unchanged, returns immediately (O(1)).
     // If changed, iterates registered solar panels.
