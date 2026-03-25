@@ -64,8 +64,13 @@ class LFPG_BTCAtmClientData
     static float  s_Price          = -1.0;
     static int    s_Stock          = 0;
     static int    s_Balance        = 0;
+    static int    s_CashOnInventory = 0;
     static bool   s_WithdrawOnly   = false;
     static bool   s_PriceUnavailable = false;
+
+    // ATM network ID (set by action before RPC, used by controller)
+    static int    s_NetLow         = 0;
+    static int    s_NetHigh        = 0;
 
     // From BTC_TX_RESULT
     static int    s_LastTxType     = 0;
@@ -75,16 +80,17 @@ class LFPG_BTCAtmClientData
     static int    s_LastBtcMoved   = 0;
     static float  s_LastEurAmount  = 0.0;
 
-    static void OnOpenResponse(float price, int stock, int balance, bool wo)
+    static void OnOpenResponse(float price, int stock, int balance, int cashOnInv, bool wo)
     {
         s_Price = price;
         s_Stock = stock;
         s_Balance = balance;
+        s_CashOnInventory = cashOnInv;
         s_WithdrawOnly = wo;
         s_PriceUnavailable = false;
     }
 
-    static void OnTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount)
+    static void OnTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount, int cashOnInv)
     {
         s_LastTxType = txType;
         s_LastErrCode = errCode;
@@ -92,9 +98,10 @@ class LFPG_BTCAtmClientData
         s_LastNewBalance = newBalance;
         s_LastBtcMoved = btcMoved;
         s_LastEurAmount = eurAmount;
-        // Also update live stock/balance
+        // Also update live stock/balance/cash
         s_Stock = newStock;
         s_Balance = newBalance;
+        s_CashOnInventory = cashOnInv;
     }
 
     static void OnPriceUnavailable()

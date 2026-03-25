@@ -59,6 +59,7 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
         LFPG_SorterView.Init();
+        LFPG_BTCAtmView.Init();
         LFPG_LaserBeamRenderer.Reset();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
@@ -86,6 +87,16 @@ modded class MissionGameplay
             if (key == 1)
             {
                 LFPG_SorterView.HandleEscKey();
+            }
+            return;
+        }
+
+        // BTC ATM UI: same pattern as Sorter
+        if (LFPG_BTCAtmView.IsOpen())
+        {
+            if (key == 1)
+            {
+                LFPG_BTCAtmView.HandleEscKey();
             }
             return;
         }
@@ -136,6 +147,29 @@ modded class MissionGameplay
             if (shouldClose)
             {
                 LFPG_SorterView.Close();
+            }
+        }
+
+        // ---- Force-close BTC ATM UI if player dies or goes unconscious ----
+        if (LFPG_BTCAtmView.IsOpen())
+        {
+            PlayerBase btcPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            bool btcShouldClose = false;
+            if (!btcPlayer)
+            {
+                btcShouldClose = true;
+            }
+            else if (!btcPlayer.IsAlive())
+            {
+                btcShouldClose = true;
+            }
+            else if (btcPlayer.IsUnconscious())
+            {
+                btcShouldClose = true;
+            }
+            if (btcShouldClose)
+            {
+                LFPG_BTCAtmView.Close();
             }
         }
 
@@ -277,6 +311,7 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
         LFPG_SorterView.Cleanup();
+        LFPG_BTCAtmView.Cleanup();
 
         super.OnMissionFinish();
     }
