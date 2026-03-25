@@ -88,11 +88,6 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     // ============================================
     // DeviceAPI overrides
     // ============================================
-    override bool LFPG_IsSource()
-    {
-        return false;
-    }
-
     override float LFPG_GetConsumption()
     {
         // Dynamic: 10 u/s per active burner
@@ -152,7 +147,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         }
     }
 
-    override bool LFPG_GetPoweredNet()
+    override bool LFPG_IsPowered()
     {
         return m_PoweredNet;
     }
@@ -576,22 +571,15 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     }
 
     // ============================================
-    // Persistence
+    // Persistence (hooks called by DeviceBase)
     // ============================================
-    override void OnStoreSave(ParamsWriteContext ctx)
+    override void LFPG_OnStoreSaveExtra(ParamsWriteContext ctx)
     {
-        super.OnStoreSave(ctx);
-
-        // Burner mask (persists button state across restarts)
         ctx.Write(m_BurnerMask);
     }
 
-    override bool OnStoreLoad(ParamsReadContext ctx, int version)
+    override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver)
     {
-        if (!super.OnStoreLoad(ctx, version))
-            return false;
-
-        // Burner mask
         int loadedMask = 0;
         if (!ctx.Read(loadedMask))
             return false;

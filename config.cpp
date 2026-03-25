@@ -2159,22 +2159,19 @@ class CfgVehicles
 
     // =========================================================
     // v1.0.0: Vanilla cookware override — add DirectCookingD slot
-    // Allows Pot/FryingPan/Cauldron to attach to the 4th burner.
+    // Allows Pot/FryingPan/Cauldron to attach to the 4th stove burner.
     // =========================================================
-    class Pot;
-    class Pot : Pot
+    class Pot
     {
         inventorySlot[] += {"DirectCookingD"};
     };
 
-    class FryingPan;
-    class FryingPan : FryingPan
+    class FryingPan
     {
         inventorySlot[] += {"DirectCookingD"};
     };
 
-    class Cauldron;
-    class Cauldron : Cauldron
+    class Cauldron
     {
         inventorySlot[] += {"DirectCookingD"};
     };
