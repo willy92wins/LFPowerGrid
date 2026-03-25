@@ -340,6 +340,11 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         {
             m_LastSyncedStored = val;
             SetSynchDirty();
+            // v4.2: Sync quantity bar alongside SyncVars.
+            // With isPassiveDevice=1 + canWork=0, vanilla CompEM never
+            // runs convertEnergyToQuantity. Explicit SetQuantity drives
+            // the white charge bar in inventory item preview.
+            SetQuantity(val, false, false, false);
         }
         #endif
     }
@@ -408,6 +413,11 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     void LFPG_SetChargeRateCurrent(float val)
     {
         #ifdef SERVER
+        // v4.2: Sync on sign change OR significant magnitude delta.
+        // Previous sign-only sync left the client frozen at a stale value
+        // when the rate changed within the same sign (e.g. -164 → -30).
+        bool needsSync = false;
+
         int oldSign = 0;
         if (m_ChargeRateCurrent > LFPG_PROPAGATION_EPSILON)
         {
@@ -428,9 +438,25 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             newSign = -1;
         }
 
+        if (oldSign != newSign)
+        {
+            needsSync = true;
+        }
+
+        // Magnitude delta threshold: sync if rate changed by > 2 u/s
+        float rateDelta = val - m_ChargeRateCurrent;
+        if (rateDelta < 0.0)
+        {
+            rateDelta = -rateDelta;
+        }
+        if (rateDelta > 2.0)
+        {
+            needsSync = true;
+        }
+
         m_ChargeRateCurrent = val;
 
-        if (oldSign != newSign)
+        if (needsSync)
         {
             SetSynchDirty();
         }

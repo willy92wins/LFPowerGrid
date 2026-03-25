@@ -800,6 +800,34 @@ class CfgVehicles
     {
         inventorySlot[] += {"LFPG_SolarNails", "LFPG_PumpNails"};
     };
+	
+	
+	// =========================================================
+    // v1.0.1: Vanilla cookware override — add DirectCookingD slot
+    // Allows Pot/FryingPan/Cauldron to attach to the 4th stove burner.
+    //
+    // IMPORTANT: Explicit parent class required. Without it, the
+    // engine may create a NEW class (scope=0) instead of extending
+    // the vanilla class, causing the item to disappear from spawn.
+    // =========================================================
+    class Pot
+    {
+        inventorySlot[] += {"DirectCookingD"};
+    };
+
+    class FryingPan
+    {
+        inventorySlot[] += {"DirectCookingD"};
+    };
+
+    class Cauldron
+    {
+        inventorySlot[] += {"DirectCookingD"};
+    };
+	
+	
+	
+	
     // v1.1.0: GasMask_Filter — NO override needed.
     // Vanilla defines inventorySlot = "GasMask_Filter" (scalar).
     // WaterPump uses the vanilla slot directly via attachments[]={"GasMask_Filter"}.
@@ -2157,31 +2185,6 @@ class CfgVehicles
         };
     };
 
-    // =========================================================
-    // v1.0.1: Vanilla cookware override — add DirectCookingD slot
-    // Allows Pot/FryingPan/Cauldron to attach to the 4th stove burner.
-    //
-    // IMPORTANT: Explicit parent class required. Without it, the
-    // engine may create a NEW class (scope=0) instead of extending
-    // the vanilla class, causing the item to disappear from spawn.
-    // =========================================================
-    class Pot_Base;
-    class Pot : Pot_Base
-    {
-        inventorySlot[] += {"DirectCookingD"};
-    };
-
-    class FryingPan_Base;
-    class FryingPan : FryingPan_Base
-    {
-        inventorySlot[] += {"DirectCookingD"};
-    };
-
-    class Cauldron_Base;
-    class Cauldron : Cauldron_Base
-    {
-        inventorySlot[] += {"DirectCookingD"};
-    };
 };
 
 // =========================================================

@@ -994,7 +994,7 @@ class LFPG_DeviceInspector
                 m_wBatteryLine.SetText(batText);
                 m_wBatteryLine.SetColor(batColor);
                 m_wBatteryLine.Show(true);
-                m_BatteryLineOffset = 20.0;
+                m_BatteryLineOffset = 26.0;
             }
             else
             {

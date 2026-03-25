@@ -580,6 +580,9 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     void LFPG_SetChargeRateCurrent(float val)
     {
         #ifdef SERVER
+        // v4.2: Sync on sign change OR significant magnitude delta.
+        bool needsSync = false;
+
         int oldSign = 0;
         if (m_ChargeRateCurrent > LFPG_PROPAGATION_EPSILON)
         {
@@ -600,9 +603,24 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
             newSign = -1;
         }
 
+        if (oldSign != newSign)
+        {
+            needsSync = true;
+        }
+
+        float rateDelta = val - m_ChargeRateCurrent;
+        if (rateDelta < 0.0)
+        {
+            rateDelta = -rateDelta;
+        }
+        if (rateDelta > 2.0)
+        {
+            needsSync = true;
+        }
+
         m_ChargeRateCurrent = val;
 
-        if (oldSign != newSign)
+        if (needsSync)
         {
             SetSynchDirty();
         }

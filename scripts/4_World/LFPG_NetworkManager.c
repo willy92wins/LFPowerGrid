@@ -5248,7 +5248,13 @@ class LFPG_NetworkManager
             }
 
             // Write charge rate for UI SyncVar (positive = charging, negative = discharging).
-            float chargeRateDisplay = netFlow;
+            // v4.2: Derived from actual stored energy delta, NOT from graph netFlow.
+            // netFlow reads transient graph state (m_InputPower, SumOutgoingAllocations)
+            // which can desync between propagation epochs, producing values like -164
+            // that exceed physical limits. The real delta (newStored - storedEnergy)
+            // is already clamped by charge/discharge rates and storage bounds,
+            // so it always reflects what actually happened to the battery.
+            float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
             m_ReusableParamFloat.param1 = chargeRateDisplay;
             GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, m_ReusableParamFloat);
 
