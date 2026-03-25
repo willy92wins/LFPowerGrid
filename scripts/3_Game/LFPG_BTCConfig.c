@@ -28,6 +28,10 @@ class LFPG_BTCSettingsData
 {
     int ver;
 
+    // Master toggle: if false, BTC ATM system is completely disabled
+    // (no price fetcher, no timer, no RPC handling)
+    bool enabled;
+
     // API configuration
     string apiUrl;              // Base URL for price API
     string apiPath;             // GET path (appended to apiUrl)
@@ -48,6 +52,7 @@ class LFPG_BTCSettingsData
     void LFPG_BTCSettingsData()
     {
         ver = 1;
+        enabled = true;
         apiUrl = "https://api.coingecko.com";
         apiPath = "/api/v3/simple/price?ids=bitcoin&vs_currencies=eur";
         apiKey = "";
@@ -334,6 +339,8 @@ class LFPG_BTCConfig
             return;
 
         string msg = "[LFPG_BTCConfig] Loaded:";
+        msg = msg + " enabled=";
+        msg = msg + s_Data.enabled.ToString();
         msg = msg + " apiUrl=";
         msg = msg + s_Data.apiUrl;
         msg = msg + " refreshS=";
@@ -357,6 +364,12 @@ class LFPG_BTCConfig
     }
 
     // ---- Convenience getters ----
+
+    static bool IsEnabled()
+    {
+        LFPG_BTCSettingsData d = Get();
+        return d.enabled;
+    }
 
     static float GetRefreshMs()
     {

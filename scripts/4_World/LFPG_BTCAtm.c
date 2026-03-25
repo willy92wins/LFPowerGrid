@@ -347,6 +347,31 @@ class LF_BTCAtm : LFPG_BTCAtmBase
         // Future: swap rvmat or screen texture based on m_PoweredNet
         // Sprint 5 will add visual feedback (screen on/off)
     }
+
+    // ============================================
+    // Power cleanup on kill / wire disconnect
+    // ============================================
+    override void LFPG_OnKilled()
+    {
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+    }
+
+    override void LFPG_OnWiresCut()
+    {
+        #ifdef SERVER
+        if (m_PoweredNet)
+        {
+            m_PoweredNet = false;
+            SetSynchDirty();
+        }
+        #endif
+    }
 };
 
 

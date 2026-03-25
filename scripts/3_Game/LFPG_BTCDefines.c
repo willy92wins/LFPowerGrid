@@ -52,3 +52,54 @@ static const int LFPG_BTC_ERR_INVENTORY_FULL  = 6;   // player inventory full
 static const int LFPG_BTC_ERR_NOT_POWERED     = 7;   // device not powered (consumer variant)
 static const int LFPG_BTC_ERR_TOO_FAR         = 8;   // player too far from ATM
 static const int LFPG_BTC_ERR_INVALID         = 9;   // generic validation failure
+
+// ---- BTC ATM: Safety cap for greedy change ----
+static const int LFPG_BTC_MAX_CHANGE_ITEMS = 500;
+
+// ---- BTC ATM: Client-side data holder (Sprint BTC-3) ----
+// Populated by client RPC handlers, read by UI (Sprint BTC-4).
+class LFPG_BTCAtmClientData
+{
+    // From BTC_OPEN_RESPONSE
+    static float  s_Price          = -1.0;
+    static int    s_Stock          = 0;
+    static int    s_Balance        = 0;
+    static bool   s_WithdrawOnly   = false;
+    static bool   s_PriceUnavailable = false;
+
+    // From BTC_TX_RESULT
+    static int    s_LastTxType     = 0;
+    static int    s_LastErrCode    = 0;
+    static int    s_LastNewStock   = 0;
+    static int    s_LastNewBalance = 0;
+    static int    s_LastBtcMoved   = 0;
+    static float  s_LastEurAmount  = 0.0;
+
+    static void OnOpenResponse(float price, int stock, int balance, bool wo)
+    {
+        s_Price = price;
+        s_Stock = stock;
+        s_Balance = balance;
+        s_WithdrawOnly = wo;
+        s_PriceUnavailable = false;
+    }
+
+    static void OnTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount)
+    {
+        s_LastTxType = txType;
+        s_LastErrCode = errCode;
+        s_LastNewStock = newStock;
+        s_LastNewBalance = newBalance;
+        s_LastBtcMoved = btcMoved;
+        s_LastEurAmount = eurAmount;
+        // Also update live stock/balance
+        s_Stock = newStock;
+        s_Balance = newBalance;
+    }
+
+    static void OnPriceUnavailable()
+    {
+        s_PriceUnavailable = true;
+        s_Price = -1.0;
+    }
+};

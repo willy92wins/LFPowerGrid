@@ -351,18 +351,26 @@ class LFPG_NetworkManager
 		
 		// v5.0: BTC ATM price fetcher
         LFPG_BTCConfig.Load();
-        LFPG_BTCPriceFetcher.Create();
-        m_BTCPriceFetcher = LFPG_BTCPriceFetcher.Get();
-        if (m_BTCPriceFetcher)
+        if (LFPG_BTCConfig.IsEnabled())
         {
-            m_BTCPriceFetcher.Init();
-            int btcTickMs = LFPG_BTC_PRICE_CHECK_MS;
-            bool bTrueBtc = true;
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBTCPrice, btcTickMs, bTrueBtc);
-            string btcInitMsg = "[NM] BTC Price fetcher initialized, tick every ";
-            btcInitMsg = btcInitMsg + btcTickMs.ToString();
-            btcInitMsg = btcInitMsg + "ms";
-            LFPG_Util.Info(btcInitMsg);
+            LFPG_BTCPriceFetcher.Create();
+            m_BTCPriceFetcher = LFPG_BTCPriceFetcher.Get();
+            if (m_BTCPriceFetcher)
+            {
+                m_BTCPriceFetcher.Init();
+                int btcTickMs = LFPG_BTC_PRICE_CHECK_MS;
+                bool bTrueBtc = true;
+                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBTCPrice, btcTickMs, bTrueBtc);
+                string btcInitMsg = "[NM] BTC Price fetcher initialized, tick every ";
+                btcInitMsg = btcInitMsg + btcTickMs.ToString();
+                btcInitMsg = btcInitMsg + "ms";
+                LFPG_Util.Info(btcInitMsg);
+            }
+        }
+        else
+        {
+            string btcOffMsg = "[NM] BTC ATM system DISABLED by config";
+            LFPG_Util.Info(btcOffMsg);
         }
 
 		

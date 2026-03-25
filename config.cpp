@@ -2190,18 +2190,21 @@ class CfgVehicles
     // =========================================================
 
     // ---- BTC ATM Player Kit (deployable, different-model) ----
-    class LF_BTCAtm_Kit : DeployableContainer_Base
+    class LF_BTCAtm_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_KIT";
         descriptionShort = "$STR_LFPG_BTC_ATM_KIT_DESC";
-        model = "\LFPowerGrid\data\btc_atm\lf_btc_atm_kit.p3d";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {4, 4};
-        rotationFlags = 17;
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
         carveNavmesh = 1;
-        physLayer = "item_large";
-        hiddenSelections[] = {};
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // ---- BTC ATM Player (placed device, CONSUMER 1 IN) ----
@@ -2210,7 +2213,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM";
         descriptionShort = "$STR_LFPG_BTC_ATM_DESC";
-        model = "\LFPowerGrid\data\btc_atm\lf_btc_atm.p3d";
+        model = "\LFPowerGrid\data\btc_atm\bitcoin_atm.p3d";
         weight = 15000;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -2222,18 +2225,21 @@ class CfgVehicles
     };
 
     // ---- BTC ATM Admin Kit (deployable, different-model) ----
-    class LF_BTCAtmAdmin_Kit : DeployableContainer_Base
+    class LF_BTCAtmAdmin_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_ADMIN_KIT";
         descriptionShort = "$STR_LFPG_BTC_ATM_ADMIN_KIT_DESC";
-        model = "\LFPowerGrid\data\btc_atm\lf_btc_atm_kit.p3d";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {4, 4};
-        rotationFlags = 17;
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
         carveNavmesh = 1;
-        physLayer = "item_large";
-        hiddenSelections[] = {};
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // ---- BTC ATM Admin (placed device, NO power) ----
@@ -2242,7 +2248,7 @@ class CfgVehicles
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_ADMIN";
         descriptionShort = "$STR_LFPG_BTC_ATM_ADMIN_DESC";
-        model = "\LFPowerGrid\data\btc_atm\lf_btc_atm.p3d";
+        model = "\LFPowerGrid\data\btc_atm\bitcoin_atm.p3d";
         weight = 15000;
         itemSize[] = {0, 0};
         itemBehaviour = 0;

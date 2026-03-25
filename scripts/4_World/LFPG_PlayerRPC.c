@@ -142,6 +142,26 @@ modded class PlayerBase
         {
             HandleLFPG_SearchlightExit(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.BTC_OPEN_REQUEST)
+        {
+            HandleLFPG_BTCOpenRequest(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_BUY)
+        {
+            HandleLFPG_BTCBuy(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_SELL)
+        {
+            HandleLFPG_BTCSell(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_WITHDRAW)
+        {
+            HandleLFPG_BTCWithdraw(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_DEPOSIT)
+        {
+            HandleLFPG_BTCDeposit(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -190,6 +210,18 @@ modded class PlayerBase
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_EXIT_CONFIRM)
         {
             HandleLFPG_SearchlightExitConfirm();
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_OPEN_RESPONSE)
+        {
+            HandleLFPG_BTCOpenResponse(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_TX_RESULT)
+        {
+            HandleLFPG_BTCTxResult(ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_PRICE_UNAVAILABLE)
+        {
+            HandleLFPG_BTCPriceUnavailable();
         }
         #endif
     }
@@ -3011,5 +3043,908 @@ modded class PlayerBase
         logMsg = logMsg + " received=";
         logMsg = logMsg + sentCount.ToString();
         LFPG_Util.Info(logMsg);
+    }
+
+    // =========================================================
+    // BTC ATM: Helpers (Sprint BTC-3)
+    // =========================================================
+
+    // Send TX_RESULT RPC to this player.
+    protected void LFPG_SendBTCTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount)
+    {
+        ScriptRPC rpc = new ScriptRPC();
+        int subId = LFPG_RPC_SubId.BTC_TX_RESULT;
+        rpc.Write(subId);
+        rpc.Write(txType);
+        rpc.Write(errCode);
+        rpc.Write(newStock);
+        rpc.Write(newBalance);
+        rpc.Write(btcMoved);
+        rpc.Write(eurAmount);
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
+    }
+
+    // Count items of classname in this player's full inventory (clothes cargo + hands).
+    protected int LFPG_BTCCountPlayerItems(string classname)
+    {
+        int count = 0;
+        int attIdx = 0;
+        int attCount = 0;
+        int cargoIdx = 0;
+        int cargoCount = 0;
+        EntityAI att = null;
+        EntityAI item = null;
+        CargoBase cargo = null;
+        string itemType = "";
+
+        // Hands
+        HumanInventory hInv = GetHumanInventory();
+        if (hInv)
+        {
+            EntityAI hands = hInv.GetEntityInHands();
+            if (hands)
+            {
+                itemType = hands.GetType();
+                if (itemType == classname)
+                {
+                    count = count + 1;
+                }
+            }
+        }
+
+        // Attachments (clothing) + their cargo
+        attCount = GetInventory().AttachmentCount();
+        for (attIdx = 0; attIdx < attCount; attIdx = attIdx + 1)
+        {
+            att = GetInventory().GetAttachmentFromIndex(attIdx);
+            if (!att)
+                continue;
+
+            itemType = att.GetType();
+            if (itemType == classname)
+            {
+                count = count + 1;
+            }
+
+            if (!att.GetInventory())
+                continue;
+
+            cargo = att.GetInventory().GetCargo();
+            if (!cargo)
+                continue;
+
+            cargoCount = cargo.GetItemCount();
+            for (cargoIdx = 0; cargoIdx < cargoCount; cargoIdx = cargoIdx + 1)
+            {
+                item = cargo.GetItem(cargoIdx);
+                if (!item)
+                    continue;
+                itemType = item.GetType();
+                if (itemType == classname)
+                {
+                    count = count + 1;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // Destroy up to 'amount' items of classname from this player.
+    // Collects first, then deletes (avoids iterator invalidation).
+    // Returns actual count destroyed.
+    protected int LFPG_BTCDestroyPlayerItems(string classname, int amount)
+    {
+        if (amount <= 0)
+            return 0;
+
+        array<EntityAI> toDelete = new array<EntityAI>();
+
+        int attIdx = 0;
+        int attCount = 0;
+        int cargoIdx = 0;
+        int cargoCount = 0;
+        EntityAI att = null;
+        EntityAI item = null;
+        CargoBase cargo = null;
+        string itemType = "";
+
+        // Hands first
+        HumanInventory hInvD = GetHumanInventory();
+        if (hInvD)
+        {
+            EntityAI hands = hInvD.GetEntityInHands();
+            if (hands && toDelete.Count() < amount)
+            {
+                itemType = hands.GetType();
+                if (itemType == classname)
+                {
+                    toDelete.Insert(hands);
+                }
+            }
+        }
+
+        // Attachments cargo
+        attCount = GetInventory().AttachmentCount();
+        for (attIdx = 0; attIdx < attCount; attIdx = attIdx + 1)
+        {
+            if (toDelete.Count() >= amount)
+                break;
+
+            att = GetInventory().GetAttachmentFromIndex(attIdx);
+            if (!att)
+                continue;
+
+            itemType = att.GetType();
+            if (itemType == classname && toDelete.Count() < amount)
+            {
+                toDelete.Insert(att);
+            }
+
+            if (!att.GetInventory())
+                continue;
+
+            cargo = att.GetInventory().GetCargo();
+            if (!cargo)
+                continue;
+
+            cargoCount = cargo.GetItemCount();
+            for (cargoIdx = 0; cargoIdx < cargoCount; cargoIdx = cargoIdx + 1)
+            {
+                if (toDelete.Count() >= amount)
+                    break;
+
+                item = cargo.GetItem(cargoIdx);
+                if (!item)
+                    continue;
+                itemType = item.GetType();
+                if (itemType == classname)
+                {
+                    toDelete.Insert(item);
+                }
+            }
+        }
+
+        // Delete collected items
+        int destroyed = 0;
+        int di = 0;
+        int dCount = toDelete.Count();
+        for (di = 0; di < dCount; di = di + 1)
+        {
+            EntityAI delItem = toDelete[di];
+            if (delItem)
+            {
+                GetGame().ObjectDelete(delItem);
+                destroyed = destroyed + 1;
+            }
+        }
+
+        return destroyed;
+    }
+
+    // Create 'amount' items of classname for this player.
+    // Tries inventory first, falls back to ground near player.
+    // Returns actual count created.
+    protected int LFPG_BTCCreateItemsForPlayer(string classname, int amount)
+    {
+        if (amount <= 0)
+            return 0;
+
+        int created = 0;
+        int groundDrops = 0;
+        int i = 0;
+        EntityAI newItem = null;
+        Object groundObj = null;
+        EntityAI groundItem = null;
+
+        for (i = 0; i < amount; i = i + 1)
+        {
+            newItem = GetInventory().CreateInInventory(classname);
+            if (newItem)
+            {
+                created = created + 1;
+            }
+            else
+            {
+                // Ground fallback
+                vector pos = GetPosition();
+                float ox = Math.RandomFloat(-0.5, 0.5);
+                float oz = Math.RandomFloat(-0.5, 0.5);
+                pos[0] = pos[0] + ox;
+                pos[2] = pos[2] + oz;
+                int flags = ECE_CREATEPHYSICS;
+                groundObj = GetGame().CreateObjectEx(classname, pos, flags);
+                groundItem = EntityAI.Cast(groundObj);
+                if (groundItem)
+                {
+                    created = created + 1;
+                    groundDrops = groundDrops + 1;
+                }
+            }
+        }
+
+        if (groundDrops > 0)
+        {
+            string dropMsg = "[BTC] ";
+            dropMsg = dropMsg + groundDrops.ToString();
+            dropMsg = dropMsg + " items dropped on ground (inventory full)";
+            LFPG_Util.Info(dropMsg);
+            string clientDropMsg = "Some items were dropped on the ground.";
+            LFPG_SendClientMsg(this, clientDropMsg);
+        }
+
+        return created;
+    }
+
+    // Greedy change: create cash bills for eurAmount.
+    // Currencies must be pre-sorted desc (done by config loader).
+    // Caps at LFPG_BTC_MAX_CHANGE_ITEMS to protect server.
+    // Returns the fractional remainder that could not be given.
+    protected float LFPG_BTCGreedyChange(float eurAmount)
+    {
+        if (eurAmount <= 0.0)
+            return 0.0;
+
+        int intAmount = (int)eurAmount;
+        float fractional = eurAmount - intAmount;
+
+        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        if (!currencies)
+            return eurAmount;
+
+        int cCount = currencies.Count();
+        if (cCount == 0)
+            return eurAmount;
+
+        int remaining = intAmount;
+        int totalItems = 0;
+        int ci = 0;
+        int billCount = 0;
+        int spaceLeft = 0;
+        int createdBills = 0;
+        int eurGiven = 0;
+
+        for (ci = 0; ci < cCount; ci = ci + 1)
+        {
+            if (remaining <= 0)
+                break;
+
+            LFPG_BTCCurrency cur = currencies[ci];
+            if (!cur)
+                continue;
+            if (cur.value <= 0)
+                continue;
+
+            billCount = remaining / cur.value;
+            if (billCount <= 0)
+                continue;
+
+            // Safety cap
+            spaceLeft = LFPG_BTC_MAX_CHANGE_ITEMS - totalItems;
+            if (spaceLeft <= 0)
+                break;
+            if (billCount > spaceLeft)
+            {
+                billCount = spaceLeft;
+            }
+
+            createdBills = LFPG_BTCCreateItemsForPlayer(cur.classname, billCount);
+            eurGiven = createdBills * cur.value;
+            remaining = remaining - eurGiven;
+            totalItems = totalItems + createdBills;
+        }
+
+        // Remainder = fractional cents + any integer overflow from cap
+        float totalRemainder = fractional + remaining;
+
+        if (totalItems >= LFPG_BTC_MAX_CHANGE_ITEMS && remaining > 0)
+        {
+            string capMsg = "[BTC] Change item cap reached. Remaining: ";
+            capMsg = capMsg + remaining.ToString();
+            capMsg = capMsg + " EUR to machine remainder";
+            LFPG_Util.Warn(capMsg);
+            string clientCapMsg = "Transaction too large for cash. Some EUR stored as credit.";
+            LFPG_SendClientMsg(this, clientCapMsg);
+        }
+
+        return totalRemainder;
+    }
+
+    // =========================================================
+    // BTC ATM: Common server validation (returns ATM or null)
+    // =========================================================
+    protected LFPG_BTCAtmBase LFPG_BTCResolveAndValidate(ParamsReadContext ctx, string tag)
+    {
+        int netLow = 0;
+        int netHigh = 0;
+        if (!ctx.Read(netLow))
+            return null;
+        if (!ctx.Read(netHigh))
+            return null;
+
+        // Resolve entity
+        Object rawObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        EntityAI devEnt = EntityAI.Cast(rawObj);
+        if (!devEnt)
+        {
+            string errEnt = tag;
+            errEnt = errEnt + " entity not found";
+            LFPG_Util.Warn(errEnt);
+            return null;
+        }
+
+        LFPG_BTCAtmBase atm = LFPG_BTCAtmBase.Cast(devEnt);
+        if (!atm)
+        {
+            string errCast = tag;
+            errCast = errCast + " entity is not BTCAtm";
+            LFPG_Util.Warn(errCast);
+            return null;
+        }
+
+        // Distance check
+        float dist = vector.Distance(GetPosition(), devEnt.GetPosition());
+        if (dist > LFPG_INTERACT_DIST_M)
+        {
+            string errDist = tag;
+            errDist = errDist + " player too far";
+            LFPG_Util.Warn(errDist);
+            return null;
+        }
+
+        // Ruined check
+        if (atm.IsRuined())
+        {
+            string errRuined = tag;
+            errRuined = errRuined + " ATM is ruined";
+            LFPG_Util.Warn(errRuined);
+            return null;
+        }
+
+        return atm;
+    }
+
+    // =========================================================
+    // BTC ATM: Server Handlers (Sprint BTC-3)
+    // =========================================================
+
+    // ---- OPEN REQUEST: player interacted with ATM ----
+    protected void HandleLFPG_BTCOpenRequest(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCOpenRequest]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        // Powered check
+        if (!atm.LFPG_IsATMPowered())
+        {
+            string errPower = "ATM has no power.";
+            LFPG_SendClientMsg(this, errPower);
+            return;
+        }
+
+        // Check price
+        bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
+        if (!priceOk)
+        {
+            ScriptRPC rpcNA = new ScriptRPC();
+            int subNA = LFPG_RPC_SubId.BTC_PRICE_UNAVAILABLE;
+            rpcNA.Write(subNA);
+            rpcNA.Send(this, LFPG_RPC_CHANNEL, true, null);
+            return;
+        }
+
+        float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
+
+        // Read player balance (LBMaster)
+        LB_ATM_Playerbase atmPlayer = new LB_ATM_Playerbase(this);
+        int balance = atmPlayer.GetMoney();
+
+        // ATM state
+        int stock = atm.LFPG_GetBtcStock();
+        bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
+
+        // Send response
+        ScriptRPC rpc = new ScriptRPC();
+        int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
+        rpc.Write(subResp);
+        rpc.Write(price);
+        rpc.Write(stock);
+        rpc.Write(balance);
+        rpc.Write(withdrawOnly);
+        rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
+
+        string logOpen = "[BTCOpenRequest] price=";
+        logOpen = logOpen + price.ToString();
+        logOpen = logOpen + " stock=";
+        logOpen = logOpen + stock.ToString();
+        logOpen = logOpen + " bal=";
+        logOpen = logOpen + balance.ToString();
+        LFPG_Util.Info(logOpen);
+    }
+
+    // ---- BUY: player pays EUR (LBMaster), gets BTC items from pool ----
+    protected void HandleLFPG_BTCBuy(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCBuy]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int btcAmount = 0;
+        if (!ctx.Read(btcAmount))
+            return;
+
+        if (btcAmount <= 0)
+            return;
+
+        // Read balance early for error responses
+        LB_ATM_Playerbase atmEarly = new LB_ATM_Playerbase(this);
+        int earlyBal = atmEarly.GetMoney();
+
+        // Powered
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+            return;
+        }
+
+        // Price
+        bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
+        if (!priceOk)
+        {
+            int errPrice = LFPG_BTC_ERR_NO_PRICE;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errPrice, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+            return;
+        }
+        float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
+
+        // Stock check
+        int currentStock = atm.LFPG_GetBtcStock();
+        if (btcAmount > currentStock)
+        {
+            int errStock = LFPG_BTC_ERR_NO_STOCK;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errStock, currentStock, earlyBal, 0, 0.0);
+            return;
+        }
+
+        // Cost calculation (ceiling = player pays more on fractions)
+        float costFloat = btcAmount * price;
+        int costInt = (int)costFloat;
+        float costDiff = costFloat - costInt;
+        if (costDiff > 0.001)
+        {
+            costInt = costInt + 1;
+        }
+
+        // Balance check (LBMaster)
+        int playerBalance = earlyBal;
+        if (playerBalance < costInt)
+        {
+            int errFunds = LFPG_BTC_ERR_NO_FUNDS;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errFunds, currentStock, playerBalance, 0, costFloat);
+            return;
+        }
+
+        // Execute transaction: create items first, then adjust stock+money by actual count
+        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+        int created = LFPG_BTCCreateItemsForPlayer(btcClassname, btcAmount);
+
+        // Adjust cost to what was actually delivered
+        float actualCostFloat = created * price;
+        int actualCostInt = (int)actualCostFloat;
+        float actualCostDiff = actualCostFloat - actualCostInt;
+        if (actualCostDiff > 0.001)
+        {
+            actualCostInt = actualCostInt + 1;
+        }
+
+        int removed = atmEarly.RemoveMoney(actualCostInt);
+        atm.LFPG_RemoveBtcStock(created);
+
+        // Read updated state
+        int newBalance = atmEarly.GetMoney();
+        int newStock = atm.LFPG_GetBtcStock();
+
+        // Success result
+        int okCode = LFPG_BTC_OK;
+        float eurSpent = actualCostInt;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCode, newStock, newBalance, created, eurSpent);
+
+        string logBuy = "[BTCBuy] player bought ";
+        logBuy = logBuy + created.ToString();
+        logBuy = logBuy + " BTC for ";
+        logBuy = logBuy + actualCostInt.ToString();
+        logBuy = logBuy + " EUR";
+        LFPG_Util.Info(logBuy);
+    }
+
+    // ---- SELL: player gives BTC items, gets EUR (cash or account) ----
+    protected void HandleLFPG_BTCSell(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCSell]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int btcAmount = 0;
+        if (!ctx.Read(btcAmount))
+            return;
+
+        bool toAccount = false;
+        if (!ctx.Read(toAccount))
+            return;
+
+        if (btcAmount <= 0)
+            return;
+
+        // Read balance early for error responses
+        LB_ATM_Playerbase atmEarlyS = new LB_ATM_Playerbase(this);
+        int earlyBalS = atmEarlyS.GetMoney();
+
+        // Powered
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, errPow, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0);
+            return;
+        }
+
+        // Price
+        bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
+        if (!priceOk)
+        {
+            int errPrice = LFPG_BTC_ERR_NO_PRICE;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, errPrice, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0);
+            return;
+        }
+        float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
+
+        // Check player has enough BTC items
+        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+        int playerBtc = LFPG_BTCCountPlayerItems(btcClassname);
+        if (playerBtc < btcAmount)
+        {
+            int errItems = LFPG_BTC_ERR_NO_ITEMS;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, errItems, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0);
+            return;
+        }
+
+        // Check ATM has room
+        int maxStock = LFPG_BTCConfig.GetMaxBtcPerMachine();
+        int currentStock = atm.LFPG_GetBtcStock();
+        int newStockTest = currentStock + btcAmount;
+        if (newStockTest > maxStock)
+        {
+            int errFull = LFPG_BTC_ERR_STOCK_FULL;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, errFull, currentStock, earlyBalS, 0, 0.0);
+            return;
+        }
+
+        // Enforce WithdrawOnly: if true, always cash
+        bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
+        if (withdrawOnly)
+        {
+            toAccount = false;
+        }
+
+        // Execute: destroy BTC items first
+        int destroyed = LFPG_BTCDestroyPlayerItems(btcClassname, btcAmount);
+
+        // Calculate EUR revenue based on actual destroyed count
+        float eurTotal = destroyed * price;
+
+        // Add BTC to ATM stock (only what was actually destroyed)
+        atm.LFPG_AddBtcStock(destroyed);
+
+        // Pay player
+        if (toAccount)
+        {
+            // Integer amount to account, fractional lost
+            int eurInt = (int)eurTotal;
+            atmEarlyS.AddMoney(eurInt);
+        }
+        else
+        {
+            // Cash: greedy change, remainder to ATM
+            float remainder = LFPG_BTCGreedyChange(eurTotal);
+            if (remainder > 0.001)
+            {
+                float curRemainder = atm.LFPG_GetDecimalRemainder();
+                float newRemainder = curRemainder + remainder;
+                atm.LFPG_SetDecimalRemainder(newRemainder);
+            }
+        }
+
+        // Read updated state
+        int newBalance = atmEarlyS.GetMoney();
+        int newStock = atm.LFPG_GetBtcStock();
+
+        int okCode = LFPG_BTC_OK;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, okCode, newStock, newBalance, destroyed, eurTotal);
+
+        string logSell = "[BTCSell] player sold ";
+        logSell = logSell + destroyed.ToString();
+        logSell = logSell + " BTC for ";
+        logSell = logSell + eurTotal.ToString();
+        logSell = logSell + " EUR toAccount=";
+        logSell = logSell + toAccount.ToString();
+        LFPG_Util.Info(logSell);
+    }
+
+    // ---- WITHDRAW: player takes BTC items from pool (no money) ----
+    protected void HandleLFPG_BTCWithdraw(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCWithdraw]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int btcAmount = 0;
+        if (!ctx.Read(btcAmount))
+            return;
+
+        if (btcAmount <= 0)
+            return;
+
+        // Read balance early for error responses
+        LB_ATM_Playerbase atmEarlyW = new LB_ATM_Playerbase(this);
+        int earlyBalW = atmEarlyW.GetMoney();
+
+        // Powered
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW, errPow, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0);
+            return;
+        }
+
+        // Stock check
+        int currentStock = atm.LFPG_GetBtcStock();
+        if (btcAmount > currentStock)
+        {
+            int errStock = LFPG_BTC_ERR_NO_STOCK;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW, errStock, currentStock, earlyBalW, 0, 0.0);
+            return;
+        }
+
+        // Execute
+        bool stockOk = atm.LFPG_RemoveBtcStock(btcAmount);
+        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+        int created = LFPG_BTCCreateItemsForPlayer(btcClassname, btcAmount);
+
+        // Updated state
+        int newStock = atm.LFPG_GetBtcStock();
+        int newBalance = earlyBalW;
+
+        int okCode = LFPG_BTC_OK;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW, okCode, newStock, newBalance, created, 0.0);
+
+        string logW = "[BTCWithdraw] player withdrew ";
+        logW = logW + created.ToString();
+        logW = logW + " BTC from pool";
+        LFPG_Util.Info(logW);
+    }
+
+    // ---- DEPOSIT: player puts BTC items into pool (no money) ----
+    protected void HandleLFPG_BTCDeposit(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCDeposit]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int btcAmount = 0;
+        if (!ctx.Read(btcAmount))
+            return;
+
+        if (btcAmount <= 0)
+            return;
+
+        // Read balance early for error responses
+        LB_ATM_Playerbase atmEarlyD = new LB_ATM_Playerbase(this);
+        int earlyBalD = atmEarlyD.GetMoney();
+
+        // Powered
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT, errPow, atm.LFPG_GetBtcStock(), earlyBalD, 0, 0.0);
+            return;
+        }
+
+        // Player has items?
+        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+        int playerBtc = LFPG_BTCCountPlayerItems(btcClassname);
+        if (playerBtc < btcAmount)
+        {
+            int errItems = LFPG_BTC_ERR_NO_ITEMS;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT, errItems, atm.LFPG_GetBtcStock(), earlyBalD, 0, 0.0);
+            return;
+        }
+
+        // ATM has room?
+        int maxStock = LFPG_BTCConfig.GetMaxBtcPerMachine();
+        int currentStock = atm.LFPG_GetBtcStock();
+        int newStockTest = currentStock + btcAmount;
+        if (newStockTest > maxStock)
+        {
+            int errFull = LFPG_BTC_ERR_STOCK_FULL;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT, errFull, currentStock, earlyBalD, 0, 0.0);
+            return;
+        }
+
+        // Execute
+        int destroyed = LFPG_BTCDestroyPlayerItems(btcClassname, btcAmount);
+        atm.LFPG_AddBtcStock(destroyed);
+
+        // Updated state
+        int newStock = atm.LFPG_GetBtcStock();
+        int newBalance = earlyBalD;
+
+        int okCode = LFPG_BTC_OK;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT, okCode, newStock, newBalance, destroyed, 0.0);
+
+        string logD = "[BTCDeposit] player deposited ";
+        logD = logD + destroyed.ToString();
+        logD = logD + " BTC into pool";
+        LFPG_Util.Info(logD);
+    }
+
+    // =========================================================
+    // BTC ATM: Client Handlers (Sprint BTC-3)
+    // =========================================================
+
+    // ---- OPEN RESPONSE: server sent ATM data ----
+    protected void HandleLFPG_BTCOpenResponse(ParamsReadContext ctx)
+    {
+        float price = 0.0;
+        int stock = 0;
+        int balance = 0;
+        bool withdrawOnly = false;
+
+        if (!ctx.Read(price))
+            return;
+        if (!ctx.Read(stock))
+            return;
+        if (!ctx.Read(balance))
+            return;
+        if (!ctx.Read(withdrawOnly))
+            return;
+
+        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, withdrawOnly);
+
+        string logResp = "[BTCOpenResponse] price=";
+        logResp = logResp + price.ToString();
+        logResp = logResp + " stock=";
+        logResp = logResp + stock.ToString();
+        logResp = logResp + " bal=";
+        logResp = logResp + balance.ToString();
+        logResp = logResp + " wo=";
+        logResp = logResp + withdrawOnly.ToString();
+        LFPG_Util.Info(logResp);
+
+        // Sprint BTC-4: open UI here
+        // LFPG_BTCAtmView.Open();
+    }
+
+    // ---- TX RESULT: server sent transaction outcome ----
+    protected void HandleLFPG_BTCTxResult(ParamsReadContext ctx)
+    {
+        int txType = 0;
+        int errCode = 0;
+        int newStock = 0;
+        int newBalance = 0;
+        int btcMoved = 0;
+        float eurAmount = 0.0;
+
+        if (!ctx.Read(txType))
+            return;
+        if (!ctx.Read(errCode))
+            return;
+        if (!ctx.Read(newStock))
+            return;
+        if (!ctx.Read(newBalance))
+            return;
+        if (!ctx.Read(btcMoved))
+            return;
+        if (!ctx.Read(eurAmount))
+            return;
+
+        LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount);
+
+        string logTx = "[BTCTxResult] type=";
+        logTx = logTx + txType.ToString();
+        logTx = logTx + " err=";
+        logTx = logTx + errCode.ToString();
+        logTx = logTx + " stock=";
+        logTx = logTx + newStock.ToString();
+        logTx = logTx + " bal=";
+        logTx = logTx + newBalance.ToString();
+        logTx = logTx + " btc=";
+        logTx = logTx + btcMoved.ToString();
+        LFPG_Util.Info(logTx);
+
+        // Sprint BTC-4: update UI here
+        // LFPG_BTCAtmView.OnTxResult();
+    }
+
+    // ---- PRICE UNAVAILABLE: no BTC price from API ----
+    protected void HandleLFPG_BTCPriceUnavailable()
+    {
+        LFPG_BTCAtmClientData.OnPriceUnavailable();
+
+        string logNA = "[BTCPriceUnavailable] price not available from API";
+        LFPG_Util.Info(logNA);
+
+        // Sprint BTC-4: show error in UI
+        // LFPG_BTCAtmView.OnPriceUnavailable();
     }
 };
