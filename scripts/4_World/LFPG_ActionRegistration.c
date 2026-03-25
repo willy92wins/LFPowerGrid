@@ -93,7 +93,13 @@ modded class ActionConstructor
         // --- Fridge ---
         actions.Insert(LFPG_ActionToggleFridgeDoor);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (46)");
+        // --- Electric Stove ---
+        actions.Insert(LFPG_ActionToggleBurner0);
+        actions.Insert(LFPG_ActionToggleBurner1);
+        actions.Insert(LFPG_ActionToggleBurner2);
+        actions.Insert(LFPG_ActionToggleBurner3);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (50)");
     }
 };
 

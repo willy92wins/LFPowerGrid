@@ -28,6 +28,13 @@ class CfgSlots
         displayName = "Nails";
         ghostIcon = "missing";
     };
+    // v1.0.0: Electric Stove 4th DirectCooking slot (vanilla only has A/B/C)
+    class Slot_DirectCookingD
+    {
+        name = "DirectCookingD";
+        displayName = "Cooking Slot";
+        ghostIcon = "set:dayz_inventory image:directcooking";
+    };
 };
 
 // =========================================================
@@ -143,10 +150,10 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter"};
+        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove"};
         weapons[] = {};
         requiredVersion = 0.1;
-        requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio"};
+        requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio", "DZ_Gear_Cooking"};
     };
 };
 
@@ -2042,6 +2049,134 @@ class CfgVehicles
                 };
             };
         };
+    };
+
+    // =========================================================
+    // v1.0.0: ELECTRIC STOVE (CONSUMER, 4 independent burners)
+    //   input_0 = power input (0-40 u/s depending on active burners)
+    //   4 DirectCooking slots for Pot/FryingPan/Cauldron
+    //   PortableGasStove cooking pattern (no FireplaceBase)
+    // =========================================================
+
+    // ---- Electric Stove Kit (holdable, deployable, same-model, heavy) ----
+    class LFPG_ElectricStove_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_ElectricStoveKit";
+        descriptionShort = "$STR_LFPG_ElectricStoveKit_Desc";
+        model = "\LFPowerGrid\data\electric_stove\electric_stove.p3d";
+        weight = 25000;
+        itemSize[] = {6, 4};
+        itemBehaviour = 2;
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+        hiddenSelections[] = {};
+    };
+
+    // ---- Electric Stove (placed device, CONSUMER 0-40 u/s) ----
+    class LFPG_ElectricStove : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_ElectricStove";
+        descriptionShort = "$STR_LFPG_ElectricStove_Desc";
+        model = "\LFPowerGrid\data\electric_stove\electric_stove.p3d";
+        weight = 30000;
+        itemSize[] = {0, 0};
+        itemBehaviour = 0;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+
+        // 4 DirectCooking slots for cookware (Pot, FryingPan, Cauldron)
+        attachments[] = {"DirectCookingA", "DirectCookingB", "DirectCookingC", "DirectCookingD"};
+
+        class GUIInventoryAttachmentsProps
+        {
+            class Burners
+            {
+                name = "Burners";
+                description = "";
+                icon = "missing";
+                attachmentSlots[] = {"DirectCookingA", "DirectCookingB", "DirectCookingC", "DirectCookingD"};
+            };
+        };
+
+        // hiddenSelections: [0]=stove_1, [1]=stove_2, [2]=stove_3, [3]=stove_4
+        // Used for rvmat swap (burner on/off glow)
+        hiddenSelections[] = {"stove_1", "stove_2", "stove_3", "stove_4"};
+        hiddenSelectionsTextures[] = {"", "", "", ""};
+        hiddenSelectionsMaterials[] =
+        {
+            "\LFPowerGrid\data\electric_stove\electric_stove.rvmat",
+            "\LFPowerGrid\data\electric_stove\electric_stove.rvmat",
+            "\LFPowerGrid\data\electric_stove\electric_stove.rvmat",
+            "\LFPowerGrid\data\electric_stove\electric_stove.rvmat"
+        };
+
+        class AnimationSources
+        {
+            class button_1
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+            class button_2 : button_1 {};
+            class button_3 : button_1 {};
+            class button_4 : button_1 {};
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 200;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}}};
+                };
+            };
+            class DamageZones
+            {
+                class GlobalHealth
+                {
+                    class Health
+                    {
+                        hitpoints = 200;
+                    };
+                    fatalInjuryCoef = -1;
+                    componentNames[] = {};
+                    transferToZonesNames[] = {};
+                    transferToZonesCoefs[] = {};
+                };
+            };
+        };
+    };
+
+    // =========================================================
+    // v1.0.0: Vanilla cookware override — add DirectCookingD slot
+    // Allows Pot/FryingPan/Cauldron to attach to the 4th burner.
+    // =========================================================
+    class Pot;
+    class Pot : Pot
+    {
+        inventorySlot[] += {"DirectCookingD"};
+    };
+
+    class FryingPan;
+    class FryingPan : FryingPan
+    {
+        inventorySlot[] += {"DirectCookingD"};
+    };
+
+    class Cauldron;
+    class Cauldron : Cauldron
+    {
+        inventorySlot[] += {"DirectCookingD"};
     };
 };
 

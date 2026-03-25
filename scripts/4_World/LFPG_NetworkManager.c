@@ -149,6 +149,9 @@ class LFPG_NetworkManager
     // v4.0: Fridge centralized cooling timer registry
     protected ref array<LFPG_Fridge> m_RegisteredFridges;
 
+    // v1.0.0: Electric Stove centralized cooking timer registry
+    protected ref array<LFPG_ElectricStove> m_RegisteredStoves;
+
     // v4.0: DoorController centralized poll timer registry
     protected ref array<LFPG_DoorController> m_RegisteredDoorControllers;
 
@@ -261,6 +264,7 @@ class LFPG_NetworkManager
         m_RegisteredIntercoms = new array<LFPG_Intercom>;
         m_RegisteredFurnaces = new array<LFPG_Furnace>;
         m_RegisteredFridges = new array<LFPG_Fridge>;
+        m_RegisteredStoves = new array<LFPG_ElectricStove>;
         m_RegisteredDoorControllers = new array<LFPG_DoorController>;
         m_RegisteredSolars = new array<LFPG_SolarPanel>;
         m_RegisteredT1Pumps = new array<LFPG_WaterPump>;
@@ -4601,6 +4605,32 @@ class LFPG_NetworkManager
     }
 
     // ===========================
+    // v1.0.0: Electric Stove Registration
+    // ===========================
+    // Tick absorbed into LFPG_TickSimpleDevices (offset 0, every 3rd tick = ~3s).
+
+    void RegisterStove(LFPG_ElectricStove stove)
+    {
+        if (!stove)
+            return;
+        if (m_RegisteredStoves.Find(stove) < 0)
+        {
+            m_RegisteredStoves.Insert(stove);
+        }
+    }
+
+    void UnregisterStove(LFPG_ElectricStove stove)
+    {
+        if (!stove)
+            return;
+        int idx = m_RegisteredStoves.Find(stove);
+        if (idx >= 0)
+        {
+            m_RegisteredStoves.Remove(idx);
+        }
+    }
+
+    // ===========================
     // v4.0: DoorController Registration
     // ===========================
     // Tick absorbed into LFPG_TickSimpleDevices (offset 1, ~2s effective).
@@ -4629,13 +4659,14 @@ class LFPG_NetworkManager
     // ===========================
     // v4.1: Consolidated Simple Devices Tick
     // ===========================
-    // Single 1,000ms timer drives 5 device subsystems via staggered sub-counters.
+    // Single 1,000ms timer drives 6 device subsystems via staggered sub-counters.
     // Cycle 1→10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
     //   - Intercoms:       every tick       (1,000ms)  — ticks 1,2,3,4,5,6,7,8,9,10
     //   - DoorControllers: counter % 2 == 1 (2,000ms)  — ticks 1,3,5,7,9
     //   - Furnaces:        counter % 5 == 2 (5,000ms)  — ticks 2,7
     //   - Batteries:       counter % 5 == 4 (5,000ms)  — ticks 4,9
     //   - Fridges:         counter % 10 == 6 (10,000ms) — tick 6
+    //   - ElectricStoves:  counter % 3 == 0 (3,000ms)  — ticks 0,3,6,9
     // OPT-2: Early-out when all registries empty.
     protected void LFPG_TickSimpleDevices()
     {
@@ -4645,7 +4676,8 @@ class LFPG_NetworkManager
         int totalFur = m_RegisteredFurnaces.Count();
         int totalBat = m_RegisteredBatteries.Count();
         int totalFri = m_RegisteredFridges.Count();
-        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri;
+        int totalStv = m_RegisteredStoves.Count();
+        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv;
         if (totalSimple == 0)
             return;
 
@@ -4737,6 +4769,27 @@ class LFPG_NetworkManager
                     continue;
 
                 fridge.LFPG_OnCoolTick();
+            }
+        }
+
+        // --- Electric Stoves: every 3rd tick, offset 0 (ticks 0,3,6,9) = ~3s ---
+        int stoveMod = m_SimpleTickCounter % 3;
+        if (stoveMod == 0 && totalStv > 0)
+        {
+            int si;
+            LFPG_ElectricStove stove;
+            float stoveDelta = 3.0;
+
+            for (si = 0; si < totalStv; si = si + 1)
+            {
+                if (si >= m_RegisteredStoves.Count())
+                    break;
+
+                stove = m_RegisteredStoves[si];
+                if (!stove)
+                    continue;
+
+                stove.LFPG_TickCooking(stoveDelta);
             }
         }
         #endif
