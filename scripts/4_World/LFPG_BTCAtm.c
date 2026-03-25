@@ -1,9 +1,11 @@
 // =========================================================
-// LF_PowerGrid - BTC ATM Devices (Sprint BTC-2)
+// LF_PowerGrid - BTC ATM Devices (Sprint BTC-5)
 //
 // LFPG_BTCAtmBase:   Abstract base (LFPG_DeviceBase), all BTC logic.
 // LF_BTCAtm:         CONSUMER 30u/s, 1 IN, deployable by players.
+//                    Visual: screen + LED swap on power change.
 // LF_BTCAtmAdmin:    No power, no ports, placed by admins.
+//                    Visual: always green (config.cpp defaults).
 //
 // Both share:
 //   - m_BtcStock:          BTC units stored in this machine (SyncVar)
@@ -21,6 +23,12 @@
 //
 // ⚠ SAVE WIPE required (new entity type).
 // =========================================================
+
+// ---- BTC ATM rvmat paths (static const, no per-call alloc) ----
+static const string LFPG_BTC_RVMAT_SCREEN_ON  = "\\LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_green.rvmat";
+static const string LFPG_BTC_RVMAT_SCREEN_OFF = "\\LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_screen_off.rvmat";
+static const string LFPG_BTC_RVMAT_LED_ON     = "\\LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_green.rvmat";
+static const string LFPG_BTC_RVMAT_LED_OFF    = "\\LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_red.rvmat";
 
 
 // =========================================================
@@ -344,8 +352,21 @@ class LF_BTCAtm : LFPG_BTCAtmBase
     // ============================================
     override void LFPG_OnVarSync()
     {
-        // Future: swap rvmat or screen texture based on m_PoweredNet
-        // Sprint 5 will add visual feedback (screen on/off)
+        #ifndef SERVER
+        int idxScreen = 0;
+        int idxLed    = 1;
+
+        if (m_PoweredNet)
+        {
+            SetObjectMaterial(idxScreen, LFPG_BTC_RVMAT_SCREEN_ON);
+            SetObjectMaterial(idxLed, LFPG_BTC_RVMAT_LED_ON);
+        }
+        else
+        {
+            SetObjectMaterial(idxScreen, LFPG_BTC_RVMAT_SCREEN_OFF);
+            SetObjectMaterial(idxLed, LFPG_BTC_RVMAT_LED_OFF);
+        }
+        #endif
     }
 
     // ============================================
@@ -381,6 +402,8 @@ class LF_BTCAtm : LFPG_BTCAtmBase
 class LF_BTCAtmAdmin : LFPG_BTCAtmBase
 {
     // No extra SyncVars needed.
+    // Visual: always green via config.cpp hiddenSelectionsMaterials default.
+    // No LFPG_OnVarSync needed (state never changes).
 
     // ============================================
     // Constructor: no ports

@@ -2221,7 +2221,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"screen"};
+        hiddenSelections[] = {"screen", "light_led_0"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_screen_off.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat"};
     };
 
     // ---- BTC ATM Admin Kit (deployable, different-model) ----
@@ -2256,7 +2257,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"screen"};
+        hiddenSelections[] = {"screen", "light_led_0"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat"};
     };
 };
 

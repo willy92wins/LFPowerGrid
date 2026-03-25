@@ -81,7 +81,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "BTC ATM"
+							text "#STR_LFPG_BTC_ATM"
 							font "gui/fonts/Metron"
 							"text halign" left
 							"text valign" center
@@ -179,7 +179,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "PRECIO BTC"
+					text "#STR_LFPG_BTC_CARD_PRICE"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -223,7 +223,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "STOCK ATM"
+					text "#STR_LFPG_BTC_CARD_STOCK"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -267,7 +267,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "TU SALDO"
+					text "#STR_LFPG_BTC_CARD_BALANCE"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -311,7 +311,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "EFECTIVO"
+					text "#STR_LFPG_BTC_CARD_CASH"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -355,7 +355,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "Cantidad"
+					text "#STR_LFPG_BTC_AMOUNT_LABEL"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -507,7 +507,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "Ingresar a cuenta (sin efectivo)"
+					text "#STR_LFPG_BTC_CHK_TO_ACCOUNT"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
@@ -545,7 +545,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "Comprar"
+							text "#STR_LFPG_BTC_BTN_BUY"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
@@ -599,7 +599,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "Vender"
+							text "#STR_LFPG_BTC_BTN_SELL"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
@@ -653,7 +653,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "Retirar"
+							text "#STR_LFPG_BTC_BTN_WITHDRAW"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
@@ -668,7 +668,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "ATM > mochila"
+							text "#STR_LFPG_BTC_HINT_WITHDRAW"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -707,7 +707,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "Ingresar"
+							text "#STR_LFPG_BTC_BTN_DEPOSIT"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
@@ -722,7 +722,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "mochila > ATM"
+							text "#STR_LFPG_BTC_HINT_DEPOSIT"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -794,7 +794,7 @@ FrameWidgetClass BTCAtmRoot {
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
-					text "ESC para cerrar"
+					text "#STR_LFPG_BTC_ESC_HINT"
 					font "gui/fonts/MetronBook"
 					"text halign" left
 					"text valign" center
