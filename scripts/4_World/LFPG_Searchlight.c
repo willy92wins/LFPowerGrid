@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Searchlight device (v4.0 Refactor)
+// LF_PowerGrid - Searchlight device (v4.1 Model Flip + Light Boost)
 //
 // LFPG_Searchlight_Kit:  Holdable, deployable (same-model pattern).
 // LFPG_Searchlight:      CONSUMER, 1 IN (input_0), 25 u/s, no wire store.
@@ -361,7 +361,11 @@ class LFPG_Searchlight : LFPG_DeviceBase
 
         float totalYaw = m_BaseOriYaw + m_AimYaw;
 
-        vector entOri = Vector(totalYaw, 0, 0);
+        // Model forward is 180° opposite to beam direction in p3d.
+        // Add 180° to entity orientation so cannon faces beam direction.
+        // Beam direction calc below still uses totalYaw (unchanged).
+        float modelYaw = totalYaw + 180.0;
+        vector entOri = Vector(modelYaw, 0, 0);
         SetOrientation(entOri);
 
         float pitchPhase = 0.5 - (m_AimPitch / 180.0);
@@ -470,7 +474,9 @@ class LFPG_Searchlight : LFPG_DeviceBase
 
         float totalYaw = m_BaseOriYaw + yaw;
 
-        vector entOri = Vector(totalYaw, 0, 0);
+        // Model forward is 180° opposite to beam direction in p3d.
+        float modelYaw = totalYaw + 180.0;
+        vector entOri = Vector(modelYaw, 0, 0);
         SetOrientation(entOri);
 
         float pitchPhase = 0.5 - (pitch / 180.0);
