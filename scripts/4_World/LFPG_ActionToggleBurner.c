@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Actions: Toggle Electric Stove Burners (v1.0.0)
+// LF_PowerGrid - Actions: Toggle Electric Stove Burners (v1.0.1)
 //
 // Base class + 4 subclasses (one per burner index 0..3).
 // CCTCursor + manual DistSq (same pattern as Furnace toggle).
@@ -85,12 +85,18 @@ class LFPG_ActionToggleBurnerBase : ActionInteractBase
 
     protected string LFPG_GetPositionLabel()
     {
+        // v1.0.1: Labels corrected to match physical button positions
+        // in electric_stove.p3d (verified via py3d Memory LOD coords).
+        // button_1: X-neg Z-neg = Left-Front  = Bottom-Left
+        // button_2: X-neg Z-pos = Left-Back   = Top-Left
+        // button_3: X-pos Z-pos = Right-Back  = Top-Right
+        // button_4: X-pos Z-neg = Right-Front = Bottom-Right
         if (m_BurnerIndex == 0)
-            return "Top-Left";
-        if (m_BurnerIndex == 1)
-            return "Top-Right";
-        if (m_BurnerIndex == 2)
             return "Bottom-Left";
+        if (m_BurnerIndex == 1)
+            return "Top-Left";
+        if (m_BurnerIndex == 2)
+            return "Top-Right";
         if (m_BurnerIndex == 3)
             return "Bottom-Right";
         return "Burner";
