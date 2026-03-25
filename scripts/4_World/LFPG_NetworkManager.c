@@ -4607,7 +4607,7 @@ class LFPG_NetworkManager
     // ===========================
     // v1.0.0: Electric Stove Registration
     // ===========================
-    // Tick absorbed into LFPG_TickSimpleDevices (offset 0, every 3rd tick = ~3s).
+    // Tick absorbed into LFPG_TickSimpleDevices (offset 1, every 3rd tick = ~3s).
 
     void RegisterStove(LFPG_ElectricStove stove)
     {
@@ -4666,7 +4666,7 @@ class LFPG_NetworkManager
     //   - Furnaces:        counter % 5 == 2 (5,000ms)  — ticks 2,7
     //   - Batteries:       counter % 5 == 4 (5,000ms)  — ticks 4,9
     //   - Fridges:         counter % 10 == 6 (10,000ms) — tick 6
-    //   - ElectricStoves:  counter % 3 == 0 (3,000ms)  — ticks 0,3,6,9
+    //   - ElectricStoves:  counter % 3 == 1 (3,000ms)  — ticks 1,4,7
     // OPT-2: Early-out when all registries empty.
     protected void LFPG_TickSimpleDevices()
     {
@@ -4772,9 +4772,10 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- Electric Stoves: every 3rd tick, offset 0 (ticks 0,3,6,9) = ~3s ---
+        // --- Electric Stoves: every 3rd tick, offset 1 (ticks 1,4,7) = ~3s ---
+        // NOTE: offset 0 is avoided because counter wraps 9→0 creating a 1s gap.
         int stoveMod = m_SimpleTickCounter % 3;
-        if (stoveMod == 0 && totalStv > 0)
+        if (stoveMod == 1 && totalStv > 0)
         {
             int si;
             LFPG_ElectricStove stove;

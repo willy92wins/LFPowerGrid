@@ -613,23 +613,9 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         AddAction(LFPG_ActionToggleBurner3);
     }
 
-    // ============================================
-    // Heavy object overrides
-    // ============================================
-    override bool CanPutInCargo(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool CanPutIntoHands(EntityAI parent)
-    {
-        return false;
-    }
-
-    override bool IsHeavyBehaviour()
-    {
-        return true;
-    }
+    // NOTE: CanPutInCargo, CanPutIntoHands, IsHeavyBehaviour
+    // already handled by LFPG_DeviceBase (all return false).
+    // The KIT gets heavy behavior from itemBehaviour=2 in config.
 
     // Prevent CE temperature system from messing with our device
     override bool IsSelfAdjustingTemperature()
