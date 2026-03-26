@@ -1,11 +1,20 @@
 // =========================================================
-// LF_PowerGrid - Intercom / RF Broadcaster (v4.0 Refactor)
+// LF_PowerGrid - Intercom / RF Broadcaster (v4.1 PAS)
 //
 // LFPG_Intercom_Kit: Holdable, deployable (same-model pattern).
 // LFPG_Intercom:     CONSUMER, 2 IN ports (input_1 + input_toggle).
 //                   No output, no wire store.
 //                   T1: 10 u/s, gate toggle on/off, RF toggle.
-//                   T2: 20 u/s, ghost radio bidirectional VOIP.
+//                   T2: 20 u/s, ghost radio bidirectional VOIP
+//                       + ghost PAS broadcaster (megaphone).
+//
+// v4.1: Added GhostPASBroadcaster alongside GhostRadio.
+//   When T2 broadcast is ON, both ghosts spawn simultaneously:
+//   - GhostRadio: VOIP by frequency (PersonalRadio system)
+//   - GhostPASBroadcaster: megaphone to all PASReceivers
+//   Same conditions: m_RadioInstalled && m_PoweredNet &&
+//                    m_SwitchOn && m_BroadcastEnabled.
+//   No persistence change — ghosts re-created at runtime.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 //   All boilerplate (SyncVars DeviceId, lifecycle, persistence,
@@ -81,6 +90,9 @@ class LFPG_Intercom : LFPG_DeviceBase
 
     // ---- Ghost radio (T2 bidirectional VOIP) ----
     protected LFPG_GhostRadio m_GhostRadio;
+
+    // ---- Ghost PAS broadcaster (T2 megaphone) ----
+    protected LFPG_GhostPASBroadcaster m_GhostPAS;
 
     // ============================================
     // Constructor — ports + SyncVars
@@ -225,6 +237,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         }
 
         LFPG_UpdateGhostRadio();
+        LFPG_UpdateGhostPAS();
 
         string pwrMsg = "[LFPG_Intercom] SetPowered(";
         pwrMsg = pwrMsg + powered.ToString();
@@ -275,6 +288,7 @@ class LFPG_Intercom : LFPG_DeviceBase
     override void LFPG_OnKilled()
     {
         LFPG_DestroyGhostRadio();
+        LFPG_DestroyGhostPAS();
 
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterIntercom(this);
@@ -300,6 +314,7 @@ class LFPG_Intercom : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         LFPG_DestroyGhostRadio();
+        LFPG_DestroyGhostPAS();
 
         LFPG_NetworkManager.Get().UnregisterIntercom(this);
     }
@@ -322,6 +337,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         {
             SetSynchDirty();
             LFPG_UpdateGhostRadio();
+            LFPG_UpdateGhostPAS();
         }
         #endif
     }
@@ -505,6 +521,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_Util.Info(togMsg);
 
         LFPG_UpdateGhostRadio();
+        LFPG_UpdateGhostPAS();
 
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
@@ -724,6 +741,77 @@ class LFPG_Intercom : LFPG_DeviceBase
     }
 
     // ============================================
+    // T2: Ghost PAS Broadcaster Lifecycle
+    // ============================================
+    protected void LFPG_SpawnGhostPAS()
+    {
+        #ifdef SERVER
+        if (m_GhostPAS)
+            return;
+
+        vector pasPos = GetPosition();
+        string pasClass = "LFPG_GhostPASBroadcaster";
+        Object pasObj = GetGame().CreateObjectEx(pasClass, pasPos, ECE_CREATEPHYSICS);
+        m_GhostPAS = LFPG_GhostPASBroadcaster.Cast(pasObj);
+        if (!m_GhostPAS)
+        {
+            string errPas = "[LFPG_Intercom] Failed to spawn GhostPASBroadcaster at ";
+            errPas = errPas + pasPos.ToString();
+            LFPG_Util.Error(errPas);
+            return;
+        }
+
+        ComponentEnergyManager pasCEM = m_GhostPAS.GetCompEM();
+        if (pasCEM)
+        {
+            pasCEM.SetEnergy(9999);
+            pasCEM.SwitchOn();
+        }
+
+        string pasSpawnMsg = "[LFPG_Intercom] GhostPASBroadcaster spawned at ";
+        pasSpawnMsg = pasSpawnMsg + pasPos.ToString();
+        pasSpawnMsg = pasSpawnMsg + " id=";
+        pasSpawnMsg = pasSpawnMsg + m_DeviceId;
+        LFPG_Util.Info(pasSpawnMsg);
+        #endif
+    }
+
+    protected void LFPG_DestroyGhostPAS()
+    {
+        #ifdef SERVER
+        if (m_GhostPAS)
+        {
+            GetGame().ObjectDelete(m_GhostPAS);
+            m_GhostPAS = null;
+
+            string pasDestroyMsg = "[LFPG_Intercom] GhostPASBroadcaster destroyed, id=";
+            pasDestroyMsg = pasDestroyMsg + m_DeviceId;
+            LFPG_Util.Info(pasDestroyMsg);
+        }
+        #endif
+    }
+
+    protected void LFPG_UpdateGhostPAS()
+    {
+        #ifdef SERVER
+        bool pasShouldExist = false;
+        if (m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled)
+        {
+            pasShouldExist = true;
+        }
+
+        if (pasShouldExist && !m_GhostPAS)
+        {
+            LFPG_SpawnGhostPAS();
+        }
+        else if (!pasShouldExist && m_GhostPAS)
+        {
+            LFPG_DestroyGhostPAS();
+        }
+        #endif
+    }
+
+    // ============================================
     // T2: Install Radio
     // ============================================
     void LFPG_InstallRadio()
@@ -734,6 +822,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         SetSynchDirty();
 
         LFPG_UpdateGhostRadio();
+        LFPG_UpdateGhostPAS();
 
         string installMsg = "[LFPG_Intercom] Radio installed, id=";
         installMsg = installMsg + m_DeviceId;
@@ -758,6 +847,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         SetSynchDirty();
 
         LFPG_UpdateGhostRadio();
+        LFPG_UpdateGhostPAS();
 
         string bcMsg = "[LFPG_Intercom] Broadcast ";
         if (m_BroadcastEnabled)
