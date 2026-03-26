@@ -1,7 +1,9 @@
 // =========================================================
-// LF_PowerGrid — BTC ATM UI (Sprint BTC-4)
-// Floating window panel 420×380px, no Relay_Command.
+// LF_PowerGrid — BTC ATM UI (Sprint BTC-5: 6 Buttons)
+// Floating window panel 420×424px, no Relay_Command.
 // All button dispatch via LFPG_BTCAtmView.OnClick (Sorter pattern).
+// 2 tabs (Cash/Account) + 3 rows of 2 buttons each.
+// Separator between Buy/Sell and EUR/BTC rows.
 // =========================================================
 FrameWidgetClass BTCAtmRoot {
 	size 1 1
@@ -16,17 +18,16 @@ FrameWidgetClass BTCAtmRoot {
 			halign left_ref
 			valign top_ref
 			position 0 0
-			size 420 380
+			size 420 424
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
 			clipchildren 1
 			{
-				// ── Panel background ──
 				ImageWidgetClass PanelBg {
 					position 0 0
-					size 420 380
+					size 420 424
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -36,8 +37,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── Header (drag area) y=0 h=36 ──
 				FrameWidgetClass HeaderFrame {
 					position 0 0
 					size 420 36
@@ -142,8 +141,6 @@ FrameWidgetClass BTCAtmRoot {
 						}
 					}
 				}
-
-				// ── Accent line y=36 h=2 ──
 				ImageWidgetClass AccentLine {
 					position 0 36
 					size 420 2
@@ -156,9 +153,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── Info cards row y=46 ──
-				// Card 1: Precio BTC (x=12)
 				ImageWidgetClass CardPriceBg {
 					position 12 46
 					size 93 48
@@ -201,8 +195,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// Card 2: Stock ATM (x=113)
 				ImageWidgetClass CardStockBg {
 					position 113 46
 					size 93 48
@@ -245,8 +237,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// Card 3: Tu saldo (x=214)
 				ImageWidgetClass CardBalanceBg {
 					position 214 46
 					size 93 48
@@ -289,8 +279,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// Card 4: Efectivo (x=315)
 				ImageWidgetClass CardCashBg {
 					position 315 46
 					size 93 48
@@ -348,8 +336,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── 24h price change indicator y=95 (gap between cards and amount) ──
 				TextWidgetClass PriceChangeText {
 					position 18 95
 					size 180 10
@@ -365,8 +351,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── Amount section y=102 h=82 ──
 				ImageWidgetClass AmountBg {
 					position 12 102
 					size 396 82
@@ -394,8 +378,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// BTC input column
 				TextWidgetClass BtcLabel {
 					position 22 126
 					size 50 14
@@ -448,8 +430,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// Arrow
 				TextWidgetClass ArrowLabel {
 					position 196 148
 					size 24 20
@@ -465,8 +445,6 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// EUR input column
 				TextWidgetClass EurLabel {
 					position 226 126
 					size 60 14
@@ -519,45 +497,205 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── Checkbox row y=192 ──
-				CheckBoxWidgetClass ChkToAccount {
+				ButtonWidgetClass TabCash {
 					position 12 192
-					size 16 16
+					size 196 20
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
+						ImageWidgetClass TabCashBg {
+							position 0 0
+							size 196 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass TabCashText {
+							position 0 0
+							size 196 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_TAB_CASH"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
 					}
 				}
-				TextWidgetClass ChkToAccountLabel {
-					position 34 192
-					size 340 16
+				ButtonWidgetClass TabAccount {
+					position 214 192
+					size 196 20
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
+					{
+						ImageWidgetClass TabAccountBg {
+							position 0 0
+							size 196 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass TabAccountText {
+							position 0 0
+							size 196 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_TAB_ACCOUNT"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+				ButtonWidgetClass BtnBuyBtc {
+					position 12 214
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnBuyBtcBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnBuyBtcText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_BTN_BUY_BTC"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnBuyBtcHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_HINT_BUY_CASH"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+				ButtonWidgetClass BtnSellBtc {
+					position 216 214
+					size 192 38
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					{
+						ImageWidgetClass BtnSellBtcBg {
+							position 0 0
+							size 192 38
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							stretch 1
+							ignorepointer 1
+							{
+							}
+						}
+						TextWidgetClass BtnSellBtcText {
+							position 0 2
+							size 192 20
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_BTN_SELL_BTC"
+							font "gui/fonts/Metron"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+						TextWidgetClass BtnSellBtcHint {
+							position 0 22
+							size 192 14
+							hexactpos 1
+							vexactpos 1
+							hexactsize 1
+							vexactsize 1
+							ignorepointer 1
+							text "#STR_LFPG_BTC_HINT_SELL_CASH"
+							font "gui/fonts/MetronBook"
+							"text halign" center
+							"text valign" center
+							{
+							}
+						}
+					}
+				}
+				ImageWidgetClass SepBuySell {
+					position 12 256
+					size 396 1
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					stretch 1
 					ignorepointer 1
-					text "#STR_LFPG_BTC_CHK_TO_ACCOUNT"
-					font "gui/fonts/MetronBook"
-					"text halign" left
-					"text valign" center
 					{
 					}
 				}
-
-				// ── Button grid y=218 ──
-				// Buy (green)
-				ButtonWidgetClass BtnBuy {
-					position 12 218
+				ButtonWidgetClass BtnWithdrawEur {
+					position 12 262
 					size 192 38
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
-						ImageWidgetClass BtnBuyBg {
+						ImageWidgetClass BtnWithdrawEurBg {
 							position 0 0
 							size 192 38
 							hexactpos 1
@@ -569,7 +707,7 @@ FrameWidgetClass BTCAtmRoot {
 							{
 							}
 						}
-						TextWidgetClass BtnBuyText {
+						TextWidgetClass BtnWithdrawEurText {
 							position 0 2
 							size 192 20
 							hexactpos 1
@@ -577,14 +715,14 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_BTN_BUY"
+							text "#STR_LFPG_BTC_BTN_WITHDRAW_EUR"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
 							{
 							}
 						}
-						TextWidgetClass BtnBuyHint {
+						TextWidgetClass BtnWithdrawEurHint {
 							position 0 22
 							size 192 14
 							hexactpos 1
@@ -592,7 +730,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_HINT_BUY"
+							text "#STR_LFPG_BTC_HINT_WITHDRAW_CASH"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -601,17 +739,15 @@ FrameWidgetClass BTCAtmRoot {
 						}
 					}
 				}
-
-				// Sell (red)
-				ButtonWidgetClass BtnSell {
-					position 216 218
+				ButtonWidgetClass BtnDepositEur {
+					position 216 262
 					size 192 38
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
-						ImageWidgetClass BtnSellBg {
+						ImageWidgetClass BtnDepositEurBg {
 							position 0 0
 							size 192 38
 							hexactpos 1
@@ -623,7 +759,7 @@ FrameWidgetClass BTCAtmRoot {
 							{
 							}
 						}
-						TextWidgetClass BtnSellText {
+						TextWidgetClass BtnDepositEurText {
 							position 0 2
 							size 192 20
 							hexactpos 1
@@ -631,14 +767,14 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_BTN_SELL"
+							text "#STR_LFPG_BTC_BTN_DEPOSIT_EUR"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
 							{
 							}
 						}
-						TextWidgetClass BtnSellHint {
+						TextWidgetClass BtnDepositEurHint {
 							position 0 22
 							size 192 14
 							hexactpos 1
@@ -646,7 +782,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_HINT_SELL"
+							text "#STR_LFPG_BTC_HINT_DEPOSIT_CASH"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -655,17 +791,15 @@ FrameWidgetClass BTCAtmRoot {
 						}
 					}
 				}
-
-				// Withdraw (blue)
-				ButtonWidgetClass BtnWithdraw {
-					position 12 264
+				ButtonWidgetClass BtnWithdrawBtc {
+					position 12 308
 					size 192 38
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
-						ImageWidgetClass BtnWithdrawBg {
+						ImageWidgetClass BtnWithdrawBtcBg {
 							position 0 0
 							size 192 38
 							hexactpos 1
@@ -677,7 +811,7 @@ FrameWidgetClass BTCAtmRoot {
 							{
 							}
 						}
-						TextWidgetClass BtnWithdrawText {
+						TextWidgetClass BtnWithdrawBtcText {
 							position 0 2
 							size 192 20
 							hexactpos 1
@@ -685,14 +819,14 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_BTN_WITHDRAW"
+							text "#STR_LFPG_BTC_BTN_WITHDRAW_BTC"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
 							{
 							}
 						}
-						TextWidgetClass BtnWithdrawHint {
+						TextWidgetClass BtnWithdrawBtcHint {
 							position 0 22
 							size 192 14
 							hexactpos 1
@@ -709,17 +843,15 @@ FrameWidgetClass BTCAtmRoot {
 						}
 					}
 				}
-
-				// Deposit (neutral)
-				ButtonWidgetClass BtnDeposit {
-					position 216 264
+				ButtonWidgetClass BtnDepositBtc {
+					position 216 308
 					size 192 38
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					{
-						ImageWidgetClass BtnDepositBg {
+						ImageWidgetClass BtnDepositBtcBg {
 							position 0 0
 							size 192 38
 							hexactpos 1
@@ -731,7 +863,7 @@ FrameWidgetClass BTCAtmRoot {
 							{
 							}
 						}
-						TextWidgetClass BtnDepositText {
+						TextWidgetClass BtnDepositBtcText {
 							position 0 2
 							size 192 20
 							hexactpos 1
@@ -739,14 +871,14 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "#STR_LFPG_BTC_BTN_DEPOSIT"
+							text "#STR_LFPG_BTC_BTN_DEPOSIT_BTC"
 							font "gui/fonts/Metron"
 							"text halign" center
 							"text valign" center
 							{
 							}
 						}
-						TextWidgetClass BtnDepositHint {
+						TextWidgetClass BtnDepositBtcHint {
 							position 0 22
 							size 192 14
 							hexactpos 1
@@ -763,10 +895,8 @@ FrameWidgetClass BTCAtmRoot {
 						}
 					}
 				}
-
-				// ── Status row y=310 h=30 ──
 				ImageWidgetClass StatusBg {
-					position 12 310
+					position 12 354
 					size 396 30
 					hexactpos 1
 					vexactpos 1
@@ -778,7 +908,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass StatusText {
-					position 24 310
+					position 24 354
 					size 372 30
 					hexactpos 1
 					vexactpos 1
@@ -792,10 +922,8 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-
-				// ── Footer y=348 ──
 				ImageWidgetClass FooterSep {
-					position 0 348
+					position 0 392
 					size 420 1
 					hexactpos 1
 					vexactpos 1
@@ -807,7 +935,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass FooterBg {
-					position 0 349
+					position 0 393
 					size 420 31
 					hexactpos 1
 					vexactpos 1
@@ -819,7 +947,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass FooterEscHint {
-					position 208 349
+					position 208 393
 					size 200 31
 					hexactpos 1
 					vexactpos 1
@@ -834,7 +962,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass FooterBrand {
-					position 300 349
+					position 300 393
 					size 108 31
 					hexactpos 1
 					vexactpos 1

@@ -1,18 +1,16 @@
 // =========================================================
-// LF_PowerGrid — BTC ATM Controller (Sprint BTC-4, Dabs MVC)
+// LF_PowerGrid — BTC ATM Controller (Sprint BTC-5: 6 Buttons)
 //
 // Handles: info card display, dual EditBox auto-conversion,
-// 4 button RPCs, status feedback timer.
+// 6 button RPCs, tab toggle, WithdrawOnly dimming, status feedback.
 // No Relay_Command — View dispatches OnClick by UserID.
 //
-// Audit fixes (v2):
-//   F1: String literals assigned to local before ShowStatus
-//   F2: BindButtonChildren removed → inline in View.EnsureViewBindings
-//   F3: s_LastTxType reset on open → no stale feedback
-//   F4: WithdrawOnly restores label when false
-//   F5: Client-side price guard on Buy/Sell
-//   F6: Removed unused 'unused' param from SendBTCRpc
-//   F7: Explicit int cast on Math.Floor/Math.Round
+// BTC-5 changes:
+//   - Checkbox replaced by m_AccountMode bool + OnTabClick
+//   - 4 click handlers → 6 (Buy, Sell, WithdrawEur, DepositEur, WithdrawBtc, DepositBtc)
+//   - UpdateButtonHints → UpdateBuySellHints (only 2 hints dynamic)
+//   - DimButton with normalBgColor restore parameter
+//   - m_View back-ref for SetTabColors
 // =========================================================
 
 class LFPG_BTCAtmController extends ViewController
@@ -26,15 +24,29 @@ class LFPG_BTCAtmController extends ViewController
     protected TextWidget m_CashBtcText;
     protected EditBoxWidget m_EditBtc;
     protected EditBoxWidget m_EditEur;
-    protected CheckBoxWidget m_ChkToAccount;
-    protected TextWidget m_ChkToAccountLabel;
     protected ImageWidget m_StatusBg;
     protected TextWidget m_StatusText;
-    // B3: Hint refs for dynamic update
-    protected TextWidget m_BtnBuyHint;
-    protected TextWidget m_BtnSellHint;
-    protected TextWidget m_BtnWithdrawHint;
-    protected TextWidget m_BtnDepositHint;
+
+    // Buy/Sell hint refs (dynamic, changes with tab)
+    protected TextWidget m_BtnBuyBtcHint;
+    protected TextWidget m_BtnSellBtcHint;
+
+    // WithdrawOnly dimming refs
+    protected ImageWidget m_BtnSellBtcBg;
+    protected TextWidget m_BtnSellBtcText;
+    protected TextWidget m_BtnSellBtcHintDim;
+    protected ImageWidget m_BtnDepositEurBg;
+    protected TextWidget m_BtnDepositEurText;
+    protected TextWidget m_BtnDepositEurHint;
+    protected ImageWidget m_BtnDepositBtcBg;
+    protected TextWidget m_BtnDepositBtcText;
+    protected TextWidget m_BtnDepositBtcHint;
+
+    // ── View back-ref (for SetTabColors) ──
+    protected LFPG_BTCAtmView m_View;
+
+    // ── Tab state ──
+    protected bool m_AccountMode;
 
     // ── Conversion re-entry guard ──
     protected bool m_UpdatingBtc;
@@ -43,19 +55,26 @@ class LFPG_BTCAtmController extends ViewController
     // ── Status feedback timer ──
     protected float m_StatusTimer;
 
-    // ── Palette refs (for status) ──
+    // ── Palette refs (for status + dimming) ──
     static const int COL_GREEN      = 0xFF34D399;
     static const int COL_RED        = 0xFFF87171;
     static const int COL_AMBER      = 0xFFFBBF24;
+    static const int COL_TEXT       = 0xFFF1F5F9;
     static const int COL_TEXT_MID   = 0xFFB0BEC5;
+    static const int COL_TEXT_DIM   = 0xFF7A8A9B;
     static const int COL_STATUS_OK  = 0x1734D399;
     static const int COL_STATUS_ERR = 0x17F87171;
+    static const int COL_BTN        = 0xFF374B6F;
+    static const int COL_RED_BTN    = 0xFFC72323;
+    static const int COL_DIM_BG     = 0x40374B6F;
 
     void LFPG_BTCAtmController()
     {
+        m_AccountMode = false;
         m_UpdatingBtc = false;
         m_UpdatingEur = false;
         m_StatusTimer = 0.0;
+        m_View = null;
     }
 
     // Called from View.DoOpen after EnsureViewBindings
@@ -63,6 +82,8 @@ class LFPG_BTCAtmController extends ViewController
     {
         if (!view)
             return;
+
+        m_View = view;
 
         m_PriceText = view.PriceText;
         m_PriceChangeText = view.PriceChangeText;
@@ -72,15 +93,26 @@ class LFPG_BTCAtmController extends ViewController
         m_CashBtcText = view.CashBtcText;
         m_EditBtc = view.EditBtcAmount;
         m_EditEur = view.EditEurAmount;
-        m_ChkToAccount = view.ChkToAccount;
-        m_ChkToAccountLabel = view.ChkToAccountLabel;
         m_StatusBg = view.StatusBg;
         m_StatusText = view.StatusText;
-        // B3: Hint refs
-        m_BtnBuyHint = view.BtnBuyHint;
-        m_BtnSellHint = view.BtnSellHint;
-        m_BtnWithdrawHint = view.BtnWithdrawHint;
-        m_BtnDepositHint = view.BtnDepositHint;
+
+        // Buy/Sell hints (dynamic)
+        m_BtnBuyBtcHint = view.BtnBuyBtcHint;
+        m_BtnSellBtcHint = view.BtnSellBtcHint;
+
+        // WithdrawOnly dimming refs
+        m_BtnSellBtcBg = view.BtnSellBtcBg;
+        m_BtnSellBtcText = view.BtnSellBtcText;
+        m_BtnSellBtcHintDim = view.BtnSellBtcHint;
+        m_BtnDepositEurBg = view.BtnDepositEurBg;
+        m_BtnDepositEurText = view.BtnDepositEurText;
+        m_BtnDepositEurHint = view.BtnDepositEurHint;
+        m_BtnDepositBtcBg = view.BtnDepositBtcBg;
+        m_BtnDepositBtcText = view.BtnDepositBtcText;
+        m_BtnDepositBtcHint = view.BtnDepositBtcHint;
+
+        // Reset tab to default
+        m_AccountMode = false;
     }
 
     // =========================================================
@@ -93,7 +125,6 @@ class LFPG_BTCAtmController extends ViewController
         int balance = LFPG_BTCAtmClientData.s_Balance;
         int cash = LFPG_BTCAtmClientData.s_CashOnInventory;
         bool priceNA = LFPG_BTCAtmClientData.s_PriceUnavailable;
-        bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
 
         // Price card
         if (m_PriceText)
@@ -129,7 +160,6 @@ class LFPG_BTCAtmController extends ViewController
                     absChange = -change24h;
                 }
 
-                // Format: "(+2.34%▲)" or "(-1.50%▼)"
                 int intPart = (int)absChange;
                 float decFloat = absChange - intPart;
                 int decPart = (int)(decFloat * 100.0);
@@ -183,7 +213,7 @@ class LFPG_BTCAtmController extends ViewController
             m_BalanceText.SetText(balStr);
         }
 
-        // Cash card — A3: split EUR/BTC
+        // Cash card — split EUR/BTC
         if (m_CashEurText)
         {
             string cashStr = FormatEurInt(cash);
@@ -198,39 +228,17 @@ class LFPG_BTCAtmController extends ViewController
             m_CashBtcText.SetText(btcStr);
         }
 
-        // F4: WithdrawOnly — always set label + checkbox state (both branches)
-        if (wo)
+        // Update Buy/Sell hints for current tab
+        UpdateBuySellHints(m_AccountMode);
+
+        // Update tab visuals
+        if (m_View)
         {
-            if (m_ChkToAccount)
-            {
-                m_ChkToAccount.SetChecked(false);
-            }
-            if (m_ChkToAccountLabel)
-            {
-                string woKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
-                string woLabel = Widget.TranslateString(woKey);
-                m_ChkToAccountLabel.SetText(woLabel);
-                m_ChkToAccountLabel.SetColor(COL_RED);
-            }
-        }
-        else
-        {
-            if (m_ChkToAccountLabel)
-            {
-                string normalKey = "#STR_LFPG_BTC_CHK_TO_ACCOUNT";
-                string normalLabel = Widget.TranslateString(normalKey);
-                m_ChkToAccountLabel.SetText(normalLabel);
-                m_ChkToAccountLabel.SetColor(COL_TEXT_MID);
-            }
+            m_View.SetTabColors(m_AccountMode);
         }
 
-        // B3: Update button hints based on checkbox state
-        bool accountMode = false;
-        if (m_ChkToAccount)
-        {
-            accountMode = m_ChkToAccount.IsChecked();
-        }
-        UpdateButtonHints(accountMode);
+        // WithdrawOnly dimming
+        UpdateWithdrawOnly(m_AccountMode);
 
         // Show tx result if we have one
         int errCode = LFPG_BTCAtmClientData.s_LastErrCode;
@@ -241,7 +249,7 @@ class LFPG_BTCAtmController extends ViewController
         }
     }
 
-    // F3: Reset stale tx data on open — prevents showing old result
+    // F3: Reset stale tx data on open
     void ResetTxState()
     {
         LFPG_BTCAtmClientData.s_LastTxType = 0;
@@ -283,7 +291,6 @@ class LFPG_BTCAtmController extends ViewController
         }
 
         float eurFloat = btcVal * price;
-        // F7: explicit float → int via intermediate
         float eurFloor = Math.Floor(eurFloat);
         int eurInt = eurFloor;
         string eurStr = eurInt.ToString();
@@ -328,7 +335,6 @@ class LFPG_BTCAtmController extends ViewController
         }
 
         float btcFloat = eurVal / price;
-        // F7: explicit cast
         float btcFloor = Math.Floor(btcFloat);
         int btcInt = btcFloor;
         string btcStr = btcInt.ToString();
@@ -342,7 +348,99 @@ class LFPG_BTCAtmController extends ViewController
     }
 
     // =========================================================
-    // Button handlers: send RPCs (B3: toggle Cuenta/Efectivo)
+    // Tab toggle
+    // =========================================================
+    void OnTabClick(bool accountMode)
+    {
+        m_AccountMode = accountMode;
+
+        UpdateBuySellHints(accountMode);
+
+        if (m_View)
+        {
+            m_View.SetTabColors(accountMode);
+        }
+
+        UpdateWithdrawOnly(accountMode);
+    }
+
+    // =========================================================
+    // Buy/Sell hint update (only these 2 are dynamic)
+    // =========================================================
+    protected void UpdateBuySellHints(bool accountMode)
+    {
+        if (accountMode)
+        {
+            if (m_BtnBuyBtcHint)
+            {
+                string hBuy = "#STR_LFPG_BTC_HINT_BUY";
+                string hBuyT = Widget.TranslateString(hBuy);
+                m_BtnBuyBtcHint.SetText(hBuyT);
+            }
+            if (m_BtnSellBtcHint)
+            {
+                string hSell = "#STR_LFPG_BTC_HINT_SELL";
+                string hSellT = Widget.TranslateString(hSell);
+                m_BtnSellBtcHint.SetText(hSellT);
+            }
+        }
+        else
+        {
+            if (m_BtnBuyBtcHint)
+            {
+                string hBuyC = "#STR_LFPG_BTC_HINT_BUY_CASH";
+                string hBuyCT = Widget.TranslateString(hBuyC);
+                m_BtnBuyBtcHint.SetText(hBuyCT);
+            }
+            if (m_BtnSellBtcHint)
+            {
+                string hSellC = "#STR_LFPG_BTC_HINT_SELL_CASH";
+                string hSellCT = Widget.TranslateString(hSellC);
+                m_BtnSellBtcHint.SetText(hSellCT);
+            }
+        }
+    }
+
+    // =========================================================
+    // WithdrawOnly dimming
+    // =========================================================
+    protected void UpdateWithdrawOnly(bool accountMode)
+    {
+        bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
+
+        // Sell BTC: dimmed only if wo AND accountMode
+        bool sellDimmed = false;
+        if (wo && accountMode)
+        {
+            sellDimmed = true;
+        }
+        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHintDim, sellDimmed, COL_RED_BTN);
+
+        // Deposit EUR: dimmed if wo (always, regardless of tab)
+        DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, COL_BTN);
+
+        // Deposit BTC: dimmed if wo (always, regardless of tab)
+        DimButton(m_BtnDepositBtcBg, m_BtnDepositBtcText, m_BtnDepositBtcHint, wo, COL_BTN);
+    }
+
+    protected void DimButton(ImageWidget bg, TextWidget txt, TextWidget hint, bool dimmed, int normalBgColor)
+    {
+        if (dimmed)
+        {
+            if (bg) { bg.SetColor(COL_DIM_BG); }
+            if (txt) { txt.SetColor(COL_TEXT_DIM); }
+            if (hint) { hint.SetColor(COL_TEXT_DIM); }
+        }
+        else
+        {
+            if (bg) { bg.SetColor(normalBgColor); }
+            if (txt) { txt.SetColor(COL_TEXT); }
+            if (hint) { hint.SetColor(COL_TEXT_MID); }
+        }
+    }
+
+    // =========================================================
+    // Button handlers: 6 explicit operations
     // =========================================================
     void OnBuyClick()
     {
@@ -365,11 +463,7 @@ class LFPG_BTCAtmController extends ViewController
             return;
         }
 
-        bool useAccount = false;
-        if (m_ChkToAccount)
-        {
-            useAccount = m_ChkToAccount.IsChecked();
-        }
+        bool useAccount = m_AccountMode;
 
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
@@ -398,17 +492,16 @@ class LFPG_BTCAtmController extends ViewController
             return;
         }
 
-        bool useAccount = false;
-        if (m_ChkToAccount)
-        {
-            useAccount = m_ChkToAccount.IsChecked();
-        }
+        bool useAccount = m_AccountMode;
 
-        // WithdrawOnly forces cash (useAccount = false)
+        // WithdrawOnly: block account sell
         bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
-        if (wo)
+        if (wo && useAccount)
         {
-            useAccount = false;
+            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
+            string errWo = Widget.TranslateString(errWoKey);
+            ShowStatus(errWo, true);
+            return;
         }
 
         int subId = LFPG_RPC_SubId.BTC_SELL;
@@ -418,90 +511,90 @@ class LFPG_BTCAtmController extends ViewController
         SendBTCSellRpc(subId, netLow, netHigh, btcAmount, useAccount);
     }
 
-    void OnWithdrawClick()
+    void OnWithdrawEurClick()
     {
-        bool useAccount = false;
-        if (m_ChkToAccount)
+        int eurAmount = GetEurInput();
+        if (eurAmount <= 0)
         {
-            useAccount = m_ChkToAccount.IsChecked();
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmpty = Widget.TranslateString(errEmptyKey);
+            ShowStatus(errEmpty, true);
+            return;
         }
-
+        int subId = LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-
-        if (useAccount)
-        {
-            // Account mode: withdraw BTC from ATM stock (original)
-            int btcAmount = GetBtcInput();
-            if (btcAmount <= 0)
-            {
-                string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-                string errEmpty = Widget.TranslateString(errEmptyKey);
-                ShowStatus(errEmpty, true);
-                return;
-            }
-            int subId = LFPG_RPC_SubId.BTC_WITHDRAW;
-            SendBTCRpc(subId, netLow, netHigh, btcAmount);
-        }
-        else
-        {
-            // Cash mode: withdraw EUR from LBMaster → bills
-            int eurAmount = GetEurInput();
-            if (eurAmount <= 0)
-            {
-                string errEmptyKey2 = "#STR_LFPG_BTC_ERR_EMPTY";
-                string errEmpty2 = Widget.TranslateString(errEmptyKey2);
-                ShowStatus(errEmpty2, true);
-                return;
-            }
-            int subIdCash = LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
-            SendBTCCashRpc(subIdCash, netLow, netHigh, eurAmount);
-        }
+        SendBTCCashRpc(subId, netLow, netHigh, eurAmount);
     }
 
-    void OnDepositClick()
+    void OnDepositEurClick()
     {
-        bool useAccount = false;
-        if (m_ChkToAccount)
+        // WithdrawOnly guard
+        bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
+        if (wo)
         {
-            useAccount = m_ChkToAccount.IsChecked();
+            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
+            string errWo = Widget.TranslateString(errWoKey);
+            ShowStatus(errWo, true);
+            return;
         }
-
+        int eurAmount = GetEurInput();
+        if (eurAmount <= 0)
+        {
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmpty = Widget.TranslateString(errEmptyKey);
+            ShowStatus(errEmpty, true);
+            return;
+        }
+        int subId = LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
+        SendBTCCashRpc(subId, netLow, netHigh, eurAmount);
+    }
 
-        if (useAccount)
+    void OnWithdrawBtcClick()
+    {
+        int btcAmount = GetBtcInput();
+        if (btcAmount <= 0)
         {
-            // Account mode: deposit BTC items into ATM stock (original)
-            int btcAmount = GetBtcInput();
-            if (btcAmount <= 0)
-            {
-                string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-                string errEmpty = Widget.TranslateString(errEmptyKey);
-                ShowStatus(errEmpty, true);
-                return;
-            }
-            int subId = LFPG_RPC_SubId.BTC_DEPOSIT;
-            SendBTCRpc(subId, netLow, netHigh, btcAmount);
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmpty = Widget.TranslateString(errEmptyKey);
+            ShowStatus(errEmpty, true);
+            return;
         }
-        else
+        int subId = LFPG_RPC_SubId.BTC_WITHDRAW;
+        int netLow = LFPG_BTCAtmClientData.s_NetLow;
+        int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
+        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+    }
+
+    void OnDepositBtcClick()
+    {
+        // WithdrawOnly guard
+        bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
+        if (wo)
         {
-            // Cash mode: deposit EUR bills → LBMaster
-            int eurAmount = GetEurInput();
-            if (eurAmount <= 0)
-            {
-                string errEmptyKey2 = "#STR_LFPG_BTC_ERR_EMPTY";
-                string errEmpty2 = Widget.TranslateString(errEmptyKey2);
-                ShowStatus(errEmpty2, true);
-                return;
-            }
-            int subIdCash = LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
-            SendBTCCashRpc(subIdCash, netLow, netHigh, eurAmount);
+            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
+            string errWo = Widget.TranslateString(errWoKey);
+            ShowStatus(errWo, true);
+            return;
         }
+        int btcAmount = GetBtcInput();
+        if (btcAmount <= 0)
+        {
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmpty = Widget.TranslateString(errEmptyKey);
+            ShowStatus(errEmpty, true);
+            return;
+        }
+        int subId = LFPG_RPC_SubId.BTC_DEPOSIT;
+        int netLow = LFPG_BTCAtmClientData.s_NetLow;
+        int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
+        SendBTCRpc(subId, netLow, netHigh, btcAmount);
     }
 
     // =========================================================
-    // RPC senders (client → server)
+    // RPC senders (client → server) — UNCHANGED
     // =========================================================
     protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
     {
@@ -522,7 +615,6 @@ class LFPG_BTCAtmController extends ViewController
         #endif
     }
 
-    // Sell has extra bool (useAccount)
     protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
         #ifndef SERVER
@@ -543,7 +635,6 @@ class LFPG_BTCAtmController extends ViewController
         #endif
     }
 
-    // B3: Buy has extra bool (useAccount)
     protected void SendBTCBuyRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
         #ifndef SERVER
@@ -564,7 +655,6 @@ class LFPG_BTCAtmController extends ViewController
         #endif
     }
 
-    // B3: Cash-mode RPCs (Withdraw/Deposit EUR)
     protected void SendBTCCashRpc(int subId, int netLow, int netHigh, int eurAmount)
     {
         #ifndef SERVER
@@ -604,7 +694,6 @@ class LFPG_BTCAtmController extends ViewController
         return val;
     }
 
-    // B3: Read EUR amount from EditBox
     protected int GetEurInput()
     {
         if (!m_EditEur)
@@ -620,72 +709,6 @@ class LFPG_BTCAtmController extends ViewController
             val = 0;
         }
         return val;
-    }
-
-    // =========================================================
-    // B3: Toggle callback + dynamic button hints
-    // =========================================================
-    void OnAccountModeChanged(bool accountMode)
-    {
-        UpdateButtonHints(accountMode);
-    }
-
-    protected void UpdateButtonHints(bool accountMode)
-    {
-        if (accountMode)
-        {
-            if (m_BtnBuyHint)
-            {
-                string hBuyAcc = "#STR_LFPG_BTC_HINT_BUY";
-                string hBuyAccT = Widget.TranslateString(hBuyAcc);
-                m_BtnBuyHint.SetText(hBuyAccT);
-            }
-            if (m_BtnSellHint)
-            {
-                string hSellAcc = "#STR_LFPG_BTC_HINT_SELL";
-                string hSellAccT = Widget.TranslateString(hSellAcc);
-                m_BtnSellHint.SetText(hSellAccT);
-            }
-            if (m_BtnWithdrawHint)
-            {
-                string hWdAcc = "#STR_LFPG_BTC_HINT_WITHDRAW";
-                string hWdAccT = Widget.TranslateString(hWdAcc);
-                m_BtnWithdrawHint.SetText(hWdAccT);
-            }
-            if (m_BtnDepositHint)
-            {
-                string hDepAcc = "#STR_LFPG_BTC_HINT_DEPOSIT";
-                string hDepAccT = Widget.TranslateString(hDepAcc);
-                m_BtnDepositHint.SetText(hDepAccT);
-            }
-        }
-        else
-        {
-            if (m_BtnBuyHint)
-            {
-                string hBuyCash = "#STR_LFPG_BTC_HINT_BUY_CASH";
-                string hBuyCashT = Widget.TranslateString(hBuyCash);
-                m_BtnBuyHint.SetText(hBuyCashT);
-            }
-            if (m_BtnSellHint)
-            {
-                string hSellCash = "#STR_LFPG_BTC_HINT_SELL_CASH";
-                string hSellCashT = Widget.TranslateString(hSellCash);
-                m_BtnSellHint.SetText(hSellCashT);
-            }
-            if (m_BtnWithdrawHint)
-            {
-                string hWdCash = "#STR_LFPG_BTC_HINT_WITHDRAW_CASH";
-                string hWdCashT = Widget.TranslateString(hWdCash);
-                m_BtnWithdrawHint.SetText(hWdCashT);
-            }
-            if (m_BtnDepositHint)
-            {
-                string hDepCash = "#STR_LFPG_BTC_HINT_DEPOSIT_CASH";
-                string hDepCashT = Widget.TranslateString(hDepCash);
-                m_BtnDepositHint.SetText(hDepCashT);
-            }
-        }
     }
 
     // =========================================================
@@ -791,7 +814,6 @@ class LFPG_BTCAtmController extends ViewController
                 depOk = depOk + " BTC";
                 return depOk;
             }
-            // B3: Cash-mode TX types (EUR amounts)
             if (txType == LFPG_BTC_TX_WITHDRAW_CASH)
             {
                 string wdcOkKey = "#STR_LFPG_BTC_TX_WITHDRAW_CASH_OK";
@@ -866,7 +888,6 @@ class LFPG_BTCAtmController extends ViewController
             string e8 = Widget.TranslateString(e8Key);
             return e8;
         }
-        // B3: No cash on player
         if (errCode == LFPG_BTC_ERR_NO_CASH)
         {
             string e10Key = "#STR_LFPG_BTC_ERR_NO_CASH";
@@ -883,7 +904,6 @@ class LFPG_BTCAtmController extends ViewController
     // =========================================================
     protected string FormatEur(float val)
     {
-        // F7: explicit float → int via intermediate
         float rounded = Math.Round(val);
         int roundedInt = rounded;
         string result = roundedInt.ToString();

@@ -1,10 +1,17 @@
 // =========================================================
-// LF_PowerGrid — BTC ATM View (Sprint BTC-4, Dabs MVC)
+// LF_PowerGrid — BTC ATM View (Sprint BTC-5: 6 Buttons)
 //
 // ScriptView floating window. Sorter pattern simplified.
 // Singleton: Init() pre-creates hidden, Open()/Close() toggle.
 // Drag header, fade-in, hover feedback, cursor lock.
 // All button dispatch via OnClick → Controller methods.
+//
+// BTC-5 changes:
+//   - Checkbox replaced by 2 tabs (Cash/Account)
+//   - 4 buttons → 6 (BuyBtc, SellBtc, WithdrawEur, DepositEur, WithdrawBtc, DepositBtc)
+//   - Separator between Buy/Sell and EUR/BTC rows
+//   - Tab hover feedback (same pattern as buttons)
+//   - Consistent naming: layout names = view field names
 // =========================================================
 
 class LFPG_BTCAtmView extends ScriptView
@@ -67,23 +74,38 @@ class LFPG_BTCAtmView extends ScriptView
     ImageWidget EditEurBg;
     EditBoxWidget EditEurAmount;
 
-    // Checkbox
-    CheckBoxWidget ChkToAccount;
-    TextWidget ChkToAccountLabel;
+    // Mode tabs (BTC-5: replaces checkbox)
+    ImageWidget TabCashBg;
+    TextWidget TabCashText;
+    ImageWidget TabAccountBg;
+    TextWidget TabAccountText;
 
-    // Buttons (bg refs for coloring)
-    ImageWidget BtnBuyBg;
-    TextWidget BtnBuyText;
-    TextWidget BtnBuyHint;
-    ImageWidget BtnSellBg;
-    TextWidget BtnSellText;
-    TextWidget BtnSellHint;
-    ImageWidget BtnWithdrawBg;
-    TextWidget BtnWithdrawText;
-    TextWidget BtnWithdrawHint;
-    ImageWidget BtnDepositBg;
-    TextWidget BtnDepositText;
-    TextWidget BtnDepositHint;
+    // Separator
+    ImageWidget SepBuySell;
+
+    // Row 1: Buy/Sell BTC (bg refs for coloring + hover)
+    ImageWidget BtnBuyBtcBg;
+    TextWidget BtnBuyBtcText;
+    TextWidget BtnBuyBtcHint;
+    ImageWidget BtnSellBtcBg;
+    TextWidget BtnSellBtcText;
+    TextWidget BtnSellBtcHint;
+
+    // Row 2: Withdraw/Deposit EUR
+    ImageWidget BtnWithdrawEurBg;
+    TextWidget BtnWithdrawEurText;
+    TextWidget BtnWithdrawEurHint;
+    ImageWidget BtnDepositEurBg;
+    TextWidget BtnDepositEurText;
+    TextWidget BtnDepositEurHint;
+
+    // Row 3: Withdraw/Deposit BTC
+    ImageWidget BtnWithdrawBtcBg;
+    TextWidget BtnWithdrawBtcText;
+    TextWidget BtnWithdrawBtcHint;
+    ImageWidget BtnDepositBtcBg;
+    TextWidget BtnDepositBtcText;
+    TextWidget BtnDepositBtcHint;
 
     // Status
     ImageWidget StatusBg;
@@ -114,20 +136,25 @@ class LFPG_BTCAtmView extends ScriptView
     static const int COL_GREEN_BTN    = 0xFF087C5B;
     static const int COL_RED_BTN      = 0xFFC72323;
     static const int COL_BLUE_BTN     = 0xFF274B7C;
+    static const int COL_AMBER_BTN    = 0xFFB8880F;
     static const int COL_STATUS_OK_BG = 0x1734D399;
     static const int COL_STATUS_ERR_BG = 0x17F87171;
 
-    // ── Button UserID constants ──
-    static const int UID_BUY      = 100;
-    static const int UID_SELL     = 101;
-    static const int UID_WITHDRAW = 102;
-    static const int UID_DEPOSIT  = 103;
-    static const int UID_CLOSE_X  = 110;
+    // ── Button UserID constants (BTC-5: consistent naming) ──
+    static const int UID_TAB_CASH      = 120;
+    static const int UID_TAB_ACCOUNT   = 121;
+    static const int UID_BUY_BTC       = 100;
+    static const int UID_SELL_BTC      = 101;
+    static const int UID_WITHDRAW_EUR  = 102;
+    static const int UID_DEPOSIT_EUR   = 103;
+    static const int UID_WITHDRAW_BTC  = 104;
+    static const int UID_DEPOSIT_BTC   = 105;
+    static const int UID_CLOSE_X       = 110;
 
     protected bool m_ColorsInitialized;
     protected bool m_ButtonIDsAssigned;
 
-    // A7: ESC timestamp guard (prevents engine pause menu on release)
+    // A7: ESC timestamp guard
     protected static float s_EscCloseTime = 0.0;
 
     override string GetLayoutFile()
@@ -336,124 +363,25 @@ class LFPG_BTCAtmView extends ScriptView
         wn = "EditEurAmount";
         if (!EditEurAmount) { EditEurAmount = EditBoxWidget.Cast(root.FindAnyWidget(wn)); }
 
-        // Checkbox
-        wn = "ChkToAccount";
-        if (!ChkToAccount) { ChkToAccount = CheckBoxWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ChkToAccountLabel";
-        if (!ChkToAccountLabel) { ChkToAccountLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        // Separator
+        wn = "SepBuySell";
+        if (!SepBuySell) { SepBuySell = ImageWidget.Cast(root.FindAnyWidget(wn)); }
 
-        // Buttons — inline child-walk (F2: out params risky in Enforce Script)
-        // BtnBuy
-        wn = "BtnBuy";
-        Widget btnBuy = root.FindAnyWidget(wn);
-        if (btnBuy)
-        {
-            Widget buyChild = btnBuy.GetChildren();
-            bool buyTxtFound = false;
-            while (buyChild)
-            {
-                if (!BtnBuyBg)
-                {
-                    ImageWidget buyImg = ImageWidget.Cast(buyChild);
-                    if (buyImg) { BtnBuyBg = buyImg; }
-                }
-                if (!buyTxtFound)
-                {
-                    TextWidget buyTxt = TextWidget.Cast(buyChild);
-                    if (buyTxt) { BtnBuyText = buyTxt; buyTxtFound = true; buyChild = buyChild.GetSibling(); continue; }
-                }
-                else if (!BtnBuyHint)
-                {
-                    TextWidget buyHint = TextWidget.Cast(buyChild);
-                    if (buyHint) { BtnBuyHint = buyHint; }
-                }
-                buyChild = buyChild.GetSibling();
-            }
-        }
+        // Tabs — child-walk (ButtonWidget children)
+        BindTabChildren(root, "TabCash");
+        BindTabChildren(root, "TabAccount");
 
-        // BtnSell
-        wn = "BtnSell";
-        Widget btnSell = root.FindAnyWidget(wn);
-        if (btnSell)
-        {
-            Widget sellChild = btnSell.GetChildren();
-            bool sellTxtFound = false;
-            while (sellChild)
-            {
-                if (!BtnSellBg)
-                {
-                    ImageWidget sellImg = ImageWidget.Cast(sellChild);
-                    if (sellImg) { BtnSellBg = sellImg; }
-                }
-                if (!sellTxtFound)
-                {
-                    TextWidget sellTxt = TextWidget.Cast(sellChild);
-                    if (sellTxt) { BtnSellText = sellTxt; sellTxtFound = true; sellChild = sellChild.GetSibling(); continue; }
-                }
-                else if (!BtnSellHint)
-                {
-                    TextWidget sellHintW = TextWidget.Cast(sellChild);
-                    if (sellHintW) { BtnSellHint = sellHintW; }
-                }
-                sellChild = sellChild.GetSibling();
-            }
-        }
+        // Row 1: Buy/Sell BTC — child-walk
+        BindButtonChildren3(root, "BtnBuyBtc");
+        BindButtonChildren3(root, "BtnSellBtc");
 
-        // BtnWithdraw
-        wn = "BtnWithdraw";
-        Widget btnWd = root.FindAnyWidget(wn);
-        if (btnWd)
-        {
-            Widget wdChild = btnWd.GetChildren();
-            bool wdTxtFound = false;
-            while (wdChild)
-            {
-                if (!BtnWithdrawBg)
-                {
-                    ImageWidget wdImg = ImageWidget.Cast(wdChild);
-                    if (wdImg) { BtnWithdrawBg = wdImg; }
-                }
-                if (!wdTxtFound)
-                {
-                    TextWidget wdTxt = TextWidget.Cast(wdChild);
-                    if (wdTxt) { BtnWithdrawText = wdTxt; wdTxtFound = true; wdChild = wdChild.GetSibling(); continue; }
-                }
-                else if (!BtnWithdrawHint)
-                {
-                    TextWidget wdHintW = TextWidget.Cast(wdChild);
-                    if (wdHintW) { BtnWithdrawHint = wdHintW; }
-                }
-                wdChild = wdChild.GetSibling();
-            }
-        }
+        // Row 2: Withdraw/Deposit EUR — child-walk
+        BindButtonChildren3(root, "BtnWithdrawEur");
+        BindButtonChildren3(root, "BtnDepositEur");
 
-        // BtnDeposit
-        wn = "BtnDeposit";
-        Widget btnDep = root.FindAnyWidget(wn);
-        if (btnDep)
-        {
-            Widget depChild = btnDep.GetChildren();
-            bool depTxtFound = false;
-            while (depChild)
-            {
-                if (!BtnDepositBg)
-                {
-                    ImageWidget depImg = ImageWidget.Cast(depChild);
-                    if (depImg) { BtnDepositBg = depImg; }
-                }
-                if (!depTxtFound)
-                {
-                    TextWidget depTxt = TextWidget.Cast(depChild);
-                    if (depTxt) { BtnDepositText = depTxt; depTxtFound = true; depChild = depChild.GetSibling(); continue; }
-                }
-                else if (!BtnDepositHint)
-                {
-                    TextWidget depHintW = TextWidget.Cast(depChild);
-                    if (depHintW) { BtnDepositHint = depHintW; }
-                }
-                depChild = depChild.GetSibling();
-            }
-        }
+        // Row 3: Withdraw/Deposit BTC — child-walk
+        BindButtonChildren3(root, "BtnWithdrawBtc");
+        BindButtonChildren3(root, "BtnDepositBtc");
 
         // Status
         wn = "StatusBg";
@@ -472,6 +400,118 @@ class LFPG_BTCAtmView extends ScriptView
         if (!FooterBrand) { FooterBrand = TextWidget.Cast(root.FindAnyWidget(wn)); }
     }
 
+    // ── Tab child-walk helper (Bg + Text) ──
+    protected void BindTabChildren(Widget root, string tabName)
+    {
+        Widget tabW = root.FindAnyWidget(tabName);
+        if (!tabW)
+            return;
+        Widget child = tabW.GetChildren();
+        ImageWidget foundBg = null;
+        TextWidget foundTxt = null;
+        while (child)
+        {
+            if (!foundBg)
+            {
+                foundBg = ImageWidget.Cast(child);
+            }
+            if (!foundTxt)
+            {
+                foundTxt = TextWidget.Cast(child);
+            }
+            child = child.GetSibling();
+        }
+
+        string cashName = "TabCash";
+        string accName = "TabAccount";
+        if (tabName == cashName)
+        {
+            TabCashBg = foundBg;
+            TabCashText = foundTxt;
+        }
+        if (tabName == accName)
+        {
+            TabAccountBg = foundBg;
+            TabAccountText = foundTxt;
+        }
+    }
+
+    // ── Button child-walk helper (Bg + Text + Hint) ──
+    protected void BindButtonChildren3(Widget root, string btnName)
+    {
+        Widget btnW = root.FindAnyWidget(btnName);
+        if (!btnW)
+            return;
+        Widget child = btnW.GetChildren();
+        ImageWidget foundBg = null;
+        TextWidget foundTxt = null;
+        TextWidget foundHint = null;
+        bool txtFound = false;
+        while (child)
+        {
+            if (!foundBg)
+            {
+                ImageWidget imgC = ImageWidget.Cast(child);
+                if (imgC) { foundBg = imgC; }
+            }
+            if (!txtFound)
+            {
+                TextWidget txtC = TextWidget.Cast(child);
+                if (txtC) { foundTxt = txtC; txtFound = true; child = child.GetSibling(); continue; }
+            }
+            else if (!foundHint)
+            {
+                TextWidget hintC = TextWidget.Cast(child);
+                if (hintC) { foundHint = hintC; }
+            }
+            child = child.GetSibling();
+        }
+
+        // Assign to the correct field by name
+        string n1 = "BtnBuyBtc";
+        string n2 = "BtnSellBtc";
+        string n3 = "BtnWithdrawEur";
+        string n4 = "BtnDepositEur";
+        string n5 = "BtnWithdrawBtc";
+        string n6 = "BtnDepositBtc";
+        if (btnName == n1)
+        {
+            BtnBuyBtcBg = foundBg;
+            BtnBuyBtcText = foundTxt;
+            BtnBuyBtcHint = foundHint;
+        }
+        if (btnName == n2)
+        {
+            BtnSellBtcBg = foundBg;
+            BtnSellBtcText = foundTxt;
+            BtnSellBtcHint = foundHint;
+        }
+        if (btnName == n3)
+        {
+            BtnWithdrawEurBg = foundBg;
+            BtnWithdrawEurText = foundTxt;
+            BtnWithdrawEurHint = foundHint;
+        }
+        if (btnName == n4)
+        {
+            BtnDepositEurBg = foundBg;
+            BtnDepositEurText = foundTxt;
+            BtnDepositEurHint = foundHint;
+        }
+        if (btnName == n5)
+        {
+            BtnWithdrawBtcBg = foundBg;
+            BtnWithdrawBtcText = foundTxt;
+            BtnWithdrawBtcHint = foundHint;
+        }
+        if (btnName == n6)
+        {
+            BtnDepositBtcBg = foundBg;
+            BtnDepositBtcText = foundTxt;
+            BtnDepositBtcHint = foundHint;
+        }
+    }
+
     // =========================================================
     // Assign button UserIDs
     // =========================================================
@@ -485,21 +525,37 @@ class LFPG_BTCAtmView extends ScriptView
         string wn = "";
         Widget btn = null;
 
-        wn = "BtnBuy";
+        wn = "TabCash";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_BUY); }
+        if (btn) { btn.SetUserID(UID_TAB_CASH); }
 
-        wn = "BtnSell";
+        wn = "TabAccount";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_SELL); }
+        if (btn) { btn.SetUserID(UID_TAB_ACCOUNT); }
 
-        wn = "BtnWithdraw";
+        wn = "BtnBuyBtc";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_WITHDRAW); }
+        if (btn) { btn.SetUserID(UID_BUY_BTC); }
 
-        wn = "BtnDeposit";
+        wn = "BtnSellBtc";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_DEPOSIT); }
+        if (btn) { btn.SetUserID(UID_SELL_BTC); }
+
+        wn = "BtnWithdrawEur";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_WITHDRAW_EUR); }
+
+        wn = "BtnDepositEur";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_DEPOSIT_EUR); }
+
+        wn = "BtnWithdrawBtc";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_WITHDRAW_BTC); }
+
+        wn = "BtnDepositBtc";
+        btn = root.FindAnyWidget(wn);
+        if (btn) { btn.SetUserID(UID_DEPOSIT_BTC); }
 
         wn = "BtnCloseX";
         btn = root.FindAnyWidget(wn);
@@ -531,11 +587,9 @@ class LFPG_BTCAtmView extends ScriptView
         if (CardStockLabel) { CardStockLabel.SetColor(COL_TEXT_DIM); }
         if (CardBalanceLabel) { CardBalanceLabel.SetColor(COL_TEXT_DIM); }
         if (CardCashLabel) { CardCashLabel.SetColor(COL_TEXT_DIM); }
-        // A2: PriceText → amber, BalanceText → green
         if (PriceText) { PriceText.SetColor(COL_AMBER); }
         if (StockText) { StockText.SetColor(COL_BLUE); }
         if (BalanceText) { BalanceText.SetColor(COL_GREEN); }
-        // A3: Split cash widgets — EUR green, BTC amber
         if (CashEurText) { CashEurText.SetColor(COL_GREEN); }
         if (CashBtcText) { CashBtcText.SetColor(COL_AMBER); }
 
@@ -552,22 +606,35 @@ class LFPG_BTCAtmView extends ScriptView
         Tint(EditEurBg, COL_BG_INPUT);
         if (EditEurAmount) { EditEurAmount.SetColor(COL_TEXT); }
 
-        // Checkbox
-        if (ChkToAccountLabel) { ChkToAccountLabel.SetColor(COL_TEXT_MID); }
+        // Tabs — default: Cash active (green), Account dimmed
+        SetTabColors(false);
 
-        // Buttons
-        Tint(BtnBuyBg, COL_GREEN_BTN);
-        Tint(BtnSellBg, COL_RED_BTN);
-        Tint(BtnWithdrawBg, COL_BLUE_BTN);
-        Tint(BtnDepositBg, COL_BTN);
-        if (BtnBuyText) { BtnBuyText.SetColor(COL_TEXT); }
-        if (BtnSellText) { BtnSellText.SetColor(COL_TEXT); }
-        if (BtnWithdrawText) { BtnWithdrawText.SetColor(COL_TEXT); }
-        if (BtnDepositText) { BtnDepositText.SetColor(COL_TEXT); }
-        if (BtnBuyHint) { BtnBuyHint.SetColor(COL_TEXT_MID); }
-        if (BtnSellHint) { BtnSellHint.SetColor(COL_TEXT_MID); }
-        if (BtnWithdrawHint) { BtnWithdrawHint.SetColor(COL_TEXT_MID); }
-        if (BtnDepositHint) { BtnDepositHint.SetColor(COL_TEXT_MID); }
+        // Separator
+        Tint(SepBuySell, COL_SEPARATOR);
+
+        // Row 1: Buy/Sell BTC
+        Tint(BtnBuyBtcBg, COL_GREEN_BTN);
+        Tint(BtnSellBtcBg, COL_RED_BTN);
+        if (BtnBuyBtcText) { BtnBuyBtcText.SetColor(COL_TEXT); }
+        if (BtnSellBtcText) { BtnSellBtcText.SetColor(COL_TEXT); }
+        if (BtnBuyBtcHint) { BtnBuyBtcHint.SetColor(COL_TEXT_MID); }
+        if (BtnSellBtcHint) { BtnSellBtcHint.SetColor(COL_TEXT_MID); }
+
+        // Row 2: Withdraw/Deposit EUR
+        Tint(BtnWithdrawEurBg, COL_BLUE_BTN);
+        Tint(BtnDepositEurBg, COL_BTN);
+        if (BtnWithdrawEurText) { BtnWithdrawEurText.SetColor(COL_TEXT); }
+        if (BtnDepositEurText) { BtnDepositEurText.SetColor(COL_TEXT); }
+        if (BtnWithdrawEurHint) { BtnWithdrawEurHint.SetColor(COL_TEXT_MID); }
+        if (BtnDepositEurHint) { BtnDepositEurHint.SetColor(COL_TEXT_MID); }
+
+        // Row 3: Withdraw/Deposit BTC
+        Tint(BtnWithdrawBtcBg, COL_BLUE_BTN);
+        Tint(BtnDepositBtcBg, COL_BTN);
+        if (BtnWithdrawBtcText) { BtnWithdrawBtcText.SetColor(COL_TEXT); }
+        if (BtnDepositBtcText) { BtnDepositBtcText.SetColor(COL_TEXT); }
+        if (BtnWithdrawBtcHint) { BtnWithdrawBtcHint.SetColor(COL_TEXT_MID); }
+        if (BtnDepositBtcHint) { BtnDepositBtcHint.SetColor(COL_TEXT_MID); }
 
         // Status (initially hidden)
         Tint(StatusBg, COL_STATUS_OK_BG);
@@ -579,12 +646,31 @@ class LFPG_BTCAtmView extends ScriptView
         if (FooterEscHint) { FooterEscHint.SetColor(COL_TEXT_DIM); }
         if (FooterBrand) { FooterBrand.SetColor(COL_TEXT_DIM); }
 
-        // A4: Hide "drag" label (header still drags via HeaderFrame)
+        // A4: Hide "drag" label
         if (DragHandle) { DragHandle.Show(false); }
         // A5: Hide "PowerGrid" brand
         if (FooterBrand) { FooterBrand.Show(false); }
 
         m_ColorsInitialized = true;
+    }
+
+    // ── Tab colors (called from Controller via m_View ref) ──
+    void SetTabColors(bool accountMode)
+    {
+        if (accountMode)
+        {
+            Tint(TabAccountBg, COL_AMBER_BTN);
+            if (TabAccountText) { TabAccountText.SetColor(COL_TEXT); }
+            Tint(TabCashBg, COL_BTN);
+            if (TabCashText) { TabCashText.SetColor(COL_TEXT_DIM); }
+        }
+        else
+        {
+            Tint(TabCashBg, COL_GREEN_BTN);
+            if (TabCashText) { TabCashText.SetColor(COL_TEXT); }
+            Tint(TabAccountBg, COL_BTN);
+            if (TabAccountText) { TabAccountText.SetColor(COL_TEXT_DIM); }
+        }
     }
 
     protected void Tint(ImageWidget img, int color)
@@ -601,7 +687,6 @@ class LFPG_BTCAtmView extends ScriptView
 
     // =========================================================
     // Hover color cache (O(1) per-widget via SetUserData)
-    // Reuses LFPG_ColorData from SorterView (same class).
     // =========================================================
     protected void CacheColorLocal(Widget w, int color)
     {
@@ -675,17 +760,21 @@ class LFPG_BTCAtmView extends ScriptView
 
         int uid = btn.GetUserID();
 
-        if (uid == UID_BUY)      { ctrl.OnBuyClick();      return true; }
-        if (uid == UID_SELL)     { ctrl.OnSellClick();     return true; }
-        if (uid == UID_WITHDRAW) { ctrl.OnWithdrawClick(); return true; }
-        if (uid == UID_DEPOSIT)  { ctrl.OnDepositClick();  return true; }
-        if (uid == UID_CLOSE_X)  { DoClose();              return true; }
+        if (uid == UID_TAB_CASH)      { ctrl.OnTabClick(false);         return true; }
+        if (uid == UID_TAB_ACCOUNT)   { ctrl.OnTabClick(true);          return true; }
+        if (uid == UID_BUY_BTC)       { ctrl.OnBuyClick();              return true; }
+        if (uid == UID_SELL_BTC)      { ctrl.OnSellClick();             return true; }
+        if (uid == UID_WITHDRAW_EUR)  { ctrl.OnWithdrawEurClick();      return true; }
+        if (uid == UID_DEPOSIT_EUR)   { ctrl.OnDepositEurClick();       return true; }
+        if (uid == UID_WITHDRAW_BTC)  { ctrl.OnWithdrawBtcClick();      return true; }
+        if (uid == UID_DEPOSIT_BTC)   { ctrl.OnDepositBtcClick();       return true; }
+        if (uid == UID_CLOSE_X)       { DoClose();                      return true; }
 
         return super.OnClick(w, x, y, button);
     }
 
     // =========================================================
-    // OnChange: EditBox auto-conversion
+    // OnChange: EditBox auto-conversion (no more checkbox)
     // =========================================================
     override bool OnChange(Widget w, int x, int y, bool finished)
     {
@@ -704,17 +793,6 @@ class LFPG_BTCAtmView extends ScriptView
         if (w == EditEurAmount)
         {
             ctrl.OnEurAmountChanged();
-            return false;
-        }
-        // B3: Checkbox toggle → update button hints
-        if (w == ChkToAccount)
-        {
-            bool accountMode = false;
-            if (ChkToAccount)
-            {
-                accountMode = ChkToAccount.IsChecked();
-            }
-            ctrl.OnAccountModeChanged(accountMode);
             return false;
         }
         return false;
@@ -777,7 +855,7 @@ class LFPG_BTCAtmView extends ScriptView
     }
 
     // =========================================================
-    // Hover feedback
+    // Hover feedback (buttons + tabs)
     // =========================================================
     override bool OnMouseEnter(Widget w, int x, int y)
     {
@@ -864,7 +942,6 @@ class LFPG_BTCAtmView extends ScriptView
         Widget check = w;
         ButtonWidget btnCast = null;
         EditBoxWidget editCast = null;
-        CheckBoxWidget chkCast = null;
         while (check)
         {
             btnCast = ButtonWidget.Cast(check);
@@ -874,11 +951,6 @@ class LFPG_BTCAtmView extends ScriptView
             }
             editCast = EditBoxWidget.Cast(check);
             if (editCast)
-            {
-                return true;
-            }
-            chkCast = CheckBoxWidget.Cast(check);
-            if (chkCast)
             {
                 return true;
             }
@@ -1083,7 +1155,6 @@ class LFPG_BTCAtmView extends ScriptView
         if (!s_Instance.m_IsOpen)
             return false;
 
-        // If EditBox focused, unfocus first (double-ESC pattern)
         Widget focused = GetFocus();
         if (focused)
         {
@@ -1094,7 +1165,6 @@ class LFPG_BTCAtmView extends ScriptView
                 return true;
             }
         }
-        // A7: Record timestamp before close (prevents ESC release opening pause menu)
         if (GetGame())
         {
             s_EscCloseTime = GetGame().GetTickTime();
@@ -1103,7 +1173,6 @@ class LFPG_BTCAtmView extends ScriptView
         return true;
     }
 
-    // A7: ESC cooldown check — true if UI was closed < 200ms ago
     static bool IsEscCooldown()
     {
         if (s_EscCloseTime <= 0.0)
@@ -1128,7 +1197,6 @@ class LFPG_BTCAtmView extends ScriptView
         s_Instance = null;
     }
 
-    // Called from PlayerRPC client handlers
     static void OnTxResult()
     {
         if (!s_Instance)
@@ -1176,7 +1244,6 @@ class LFPG_BTCAtmView extends ScriptView
 
         CenterPanel();
 
-        // Fade-in
         m_FadeAlpha = 0.0;
         m_FadingIn = true;
         if (BTCAtmPanel)
@@ -1205,12 +1272,10 @@ class LFPG_BTCAtmView extends ScriptView
         AssignButtonIDs();
         ApplyColors();
 
-        // Populate from LFPG_BTCAtmClientData
         LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(GetController());
         if (ctrl)
         {
             ctrl.InitWidgetRefs(this);
-            // F3: Reset stale tx so old result doesn't flash
             ctrl.ResetTxState();
             ctrl.RefreshFromClientData();
         }
