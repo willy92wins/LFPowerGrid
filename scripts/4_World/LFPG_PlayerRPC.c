@@ -2819,15 +2819,24 @@ modded class PlayerBase
         int netLow = 0;
         int netHigh = 0;
         int selectedOutput = 0;
+        string clientJSON = "";
         if (!ctx.Read(netLow))
             return;
         if (!ctx.Read(netHigh))
             return;
         if (!ctx.Read(selectedOutput))
             return;
+        // v4.1: Client sends current UI config for live preview
+        if (!ctx.Read(clientJSON))
+            return;
 
         // Validate output index
         if (selectedOutput < 0 || selectedOutput >= 6)
+            return;
+
+        // v4.1: Validate client JSON length (prevent oversized payloads)
+        int clientJSONLen = clientJSON.Length();
+        if (clientJSONLen > LFPG_SORT_MAX_JSON_BYTES)
             return;
 
         // From this point, always send a response (even if empty).
@@ -2858,10 +2867,16 @@ modded class PlayerBase
 
         if (canProceed)
         {
-            // Parse filter config from sorter
-            string filterJSON = sorter.LFPG_GetFilterJSON();
+            // v4.1: Parse filter config from CLIENT payload (live UI rules)
+            // instead of sorter.LFPG_GetFilterJSON() (persisted, requires SAVE).
+            // If parse fails, config stays empty → hasRules=false → 0 items sent.
             LFPG_SortConfig config = new LFPG_SortConfig();
-            config.FromJSON(filterJSON);
+            bool parseOk = config.FromJSON(clientJSON);
+            if (!parseOk)
+            {
+                string wParse = "[SorterPreviewRequest] client JSON parse failed";
+                LFPG_Util.Warn(wParse);
+            }
             LFPG_SortOutputConfig outCfg = config.GetOutput(selectedOutput);
 
             bool isCatchAll = false;

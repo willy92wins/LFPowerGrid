@@ -8,8 +8,8 @@
 //       OnRemoveTag reads rule type before delete for precision.
 //
 // v2.6 changes (Tag Pool — Phase 5):
-//   - m_TagPool: reuse TagViews via pool (eliminates new/delete
-//     per RefreshTagsList call). Max 9 = 8 rules + 1 catch-all.
+//   - m_TagPool: REMOVED in v4.1 (pool reuse broke Dabs re-parenting).
+//     Fresh TagViews created each RefreshTagsList call.
 //   - ClearCollections: pool cleared on DoClose to break refs.
 //
 // v2.3 changes (P3 Performance & Polish):
@@ -53,8 +53,6 @@ class LFPG_SorterController extends ViewController
     ref ObservableCollection<ref LFPG_SorterTagView> TagsList;
     ref ObservableCollection<ref LFPG_SorterPreviewRow> PreviewItems;
 
-    // ── Tag pool (v2.6 — reuse TagViews across RefreshTagsList calls) ──
-    ref array<ref LFPG_SorterTagView> m_TagPool;
     // ── Preview pool (reuse PreviewRows across PopulatePreview calls) ──
     ref array<ref LFPG_SorterPreviewRow> m_PreviewPool;
 
@@ -144,7 +142,6 @@ class LFPG_SorterController extends ViewController
     {
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
-        m_TagPool = new array<ref LFPG_SorterTagView>;
         m_PreviewPool = new array<ref LFPG_SorterPreviewRow>;
         m_Config = new LFPG_SortConfig();
         // v3.2: Tab widget arrays (6 outputs)
@@ -1497,48 +1494,47 @@ class LFPG_SorterController extends ViewController
         }
 
         int ruleCount = outCfg.GetRuleCount();
-        int needed = ruleCount;
-        if (outCfg.m_IsCatchAll)
-        {
-            needed = needed + 1;
-        }
 
-        // Grow pool if needed (tags persist across tab switches)
-        int poolSize = m_TagPool.Count();
-        int pi;
-        for (pi = poolSize; pi < needed; pi = pi + 1)
-        {
-            LFPG_SorterTagView newTag = new LFPG_SorterTagView();
-            m_TagPool.Insert(newTag);
-        }
-
-        // Populate from rules
+        // v4.1: Create fresh TagViews each refresh (no pool reuse).
+        // Pool reuse with ObservableCollection causes Dabs MVC to not
+        // re-parent recycled ScriptView layout roots to the WrapSpacer
+        // after Clear()+Insert(), leaving tags invisible.
         int ri;
-        int tagIdx = 0;
         LFPG_SorterTagView tag = null;
         LFPG_SortFilterRule rule = null;
         string label = "";
         int color = 0;
+        int inserted = 0;
         for (ri = 0; ri < ruleCount; ri = ri + 1)
         {
             rule = outCfg.m_Rules[ri];
             if (!rule) continue;
             label = rule.GetDisplayLabel();
             color = GetRuleColor(rule.m_Type);
-            tag = m_TagPool[tagIdx];
+            tag = new LFPG_SorterTagView();
             tag.SetData(label, color, ri, m_SelectedOutput, this);
             TagsList.Insert(tag);
-            tagIdx = tagIdx + 1;
+            inserted = inserted + 1;
         }
 
         // Catch-all tag (always last)
         if (outCfg.m_IsCatchAll)
         {
             string caLabel = "* CATCH-ALL";
-            tag = m_TagPool[tagIdx];
+            tag = new LFPG_SorterTagView();
             tag.SetData(caLabel, LFPG_SorterView.COL_AMBER, -1, m_SelectedOutput, this);
             TagsList.Insert(tag);
+            inserted = inserted + 1;
         }
+
+        // v4.1 DIAG: Log tag creation summary (Debug — fires per click)
+        string diagTags = "[SorterCtrl] RefreshTagsList output=";
+        diagTags = diagTags + m_SelectedOutput.ToString();
+        diagTags = diagTags + " rules=";
+        diagTags = diagTags + ruleCount.ToString();
+        diagTags = diagTags + " inserted=";
+        diagTags = diagTags + inserted.ToString();
+        LFPG_Util.Debug(diagTags);
 
         bool isEmpty = (ruleCount == 0 && !outCfg.m_IsCatchAll);
         if (TagsEmpty) { TagsEmpty.Show(isEmpty); }
@@ -1688,6 +1684,10 @@ class LFPG_SorterController extends ViewController
             rpc.Write(m_SorterNetLow);
             rpc.Write(m_SorterNetHigh);
             rpc.Write(m_SelectedOutput);
+            // v4.1: Send current UI config so preview evaluates live rules
+            // (not the persisted m_FilterJSON which requires SAVE first)
+            string previewJSON = m_Config.ToJSON();
+            rpc.Write(previewJSON);
             rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
         }
         #endif
@@ -1806,10 +1806,6 @@ class LFPG_SorterController extends ViewController
         if (TagsList)
         {
             TagsList.Clear();
-        }
-        if (m_TagPool)
-        {
-            m_TagPool.Clear();
         }
         if (PreviewItems)
         {

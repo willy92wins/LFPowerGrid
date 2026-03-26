@@ -1147,6 +1147,18 @@ class LFPG_SorterLogic
         // (Phase 5a→5b) that produces many rapid sequential moves.
         container.SetSynchDirty();
 
+        // v4.1 DIAG: Log total inventory operations for desync investigation.
+        // 2×N ops (ground + reposition) is the suspected cause of client desync.
+        string bpDiag = "[BinPackCargo] items=";
+        bpDiag = bpDiag + n.ToString();
+        bpDiag = bpDiag + " repositioned=";
+        bpDiag = bpDiag + repositioned.ToString();
+        bpDiag = bpDiag + " grid=";
+        bpDiag = bpDiag + gridW.ToString();
+        bpDiag = bpDiag + "x";
+        bpDiag = bpDiag + gridH.ToString();
+        LFPG_Util.Info(bpDiag);
+
         return repositioned;
         #else
         return 0;
