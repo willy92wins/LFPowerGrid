@@ -261,7 +261,7 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        string slotName = "LFPG_PumpFilter";
+        string slotName = "GasMaskFilter";
         EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;
@@ -617,7 +617,7 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     void LFPG_DegradeFilter()
     {
         #ifdef SERVER
-        string slotName = "LFPG_PumpFilter";
+        string slotName = "GasMaskFilter";
         EntityAI filter = FindAttachmentBySlotName(slotName);
         if (!filter)
             return;

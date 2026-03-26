@@ -48,13 +48,14 @@ class LFPG_PumpHelper
         return LIQUID_RIVERWATER;
     }
 
-    // Check if a device has an active NBC filter (GasMask_Filter with qty > 0)
+    // Check if a device has an active NBC filter (GasMaskFilter slot with qty > 0)
     static bool HasActiveFilter(EntityAI device)
     {
         if (!device)
             return false;
 
-        EntityAI filter = device.FindAttachmentBySlotName("LFPG_PumpFilter");
+        string slotName = "GasMaskFilter";
+        EntityAI filter = device.FindAttachmentBySlotName(slotName);
         if (!filter)
             return false;
 

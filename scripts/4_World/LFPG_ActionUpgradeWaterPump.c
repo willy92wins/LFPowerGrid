@@ -148,7 +148,8 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
 
         // ---- Capture filter state before deletion ----
         int filterQty = 0;
-        EntityAI filterItem = pump.FindAttachmentBySlotName("LFPG_PumpFilter");
+        string filterSlot = "GasMaskFilter";
+        EntityAI filterItem = pump.FindAttachmentBySlotName(filterSlot);
         if (filterItem)
         {
             filterQty = filterItem.GetQuantity();

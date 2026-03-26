@@ -829,9 +829,9 @@ class CfgVehicles
 	
 	
     // v1.1.0: GasMask_Filter — NO override needed.
-    // Vanilla defines inventorySlot = "GasMask_Filter" (scalar).
-    // WaterPump uses the vanilla slot directly via attachments[]={"GasMask_Filter"}.
-    // Overriding scalar to array crashes the config (engine bug T148506).
+    // Vanilla defines inventorySlot = "GasMaskFilter" (slot name, no underscore).
+    // WaterPump uses the vanilla slot directly via attachments[]={"GasMaskFilter"}.
+    // Class name is "GasMask_Filter" (with underscore) — do NOT use in attachments[].
 
     // v3.1.0: PersonalRadio — NO override needed.
     // Vanilla inventorySlot="WalkieTalkie". Intercom uses attachments[]={"WalkieTalkie"}
@@ -872,7 +872,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"GasMask_Filter", "LFPG_PumpPlate", "LFPG_PumpNails"};
+        attachments[] = {"GasMaskFilter", "LFPG_PumpPlate", "LFPG_PumpNails"};
         hiddenSelections[] = {"pump_led"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
@@ -882,7 +882,7 @@ class CfgVehicles
             {
                 name = "Water Filter";
                 description = "";
-                attachmentSlots[] = {"GasMask_Filter"};
+                attachmentSlots[] = {"GasMaskFilter"};
                 icon = "missing";
             };
             class UpgradeMaterials
@@ -908,7 +908,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        attachments[] = {"GasMask_Filter"};
+        attachments[] = {"GasMaskFilter"};
         hiddenSelections[] = {"pump_led"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat"};
@@ -918,7 +918,7 @@ class CfgVehicles
             {
                 name = "Water Filter";
                 description = "";
-                attachmentSlots[] = {"GasMask_Filter"};
+                attachmentSlots[] = {"GasMaskFilter"};
                 icon = "missing";
             };
         };
