@@ -34,7 +34,6 @@ class LFPG_BTCAtmController extends ViewController
     // WithdrawOnly dimming refs
     protected ImageWidget m_BtnSellBtcBg;
     protected TextWidget m_BtnSellBtcText;
-    protected TextWidget m_BtnSellBtcHintDim;
     protected ImageWidget m_BtnDepositEurBg;
     protected TextWidget m_BtnDepositEurText;
     protected TextWidget m_BtnDepositEurHint;
@@ -103,7 +102,6 @@ class LFPG_BTCAtmController extends ViewController
         // WithdrawOnly dimming refs
         m_BtnSellBtcBg = view.BtnSellBtcBg;
         m_BtnSellBtcText = view.BtnSellBtcText;
-        m_BtnSellBtcHintDim = view.BtnSellBtcHint;
         m_BtnDepositEurBg = view.BtnDepositEurBg;
         m_BtnDepositEurText = view.BtnDepositEurText;
         m_BtnDepositEurHint = view.BtnDepositEurHint;
@@ -414,7 +412,7 @@ class LFPG_BTCAtmController extends ViewController
         {
             sellDimmed = true;
         }
-        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHintDim, sellDimmed, COL_RED_BTN);
+        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHint, sellDimmed, COL_RED_BTN);
 
         // Deposit EUR: dimmed if wo (always, regardless of tab)
         DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, COL_BTN);
@@ -427,13 +425,20 @@ class LFPG_BTCAtmController extends ViewController
     {
         if (dimmed)
         {
-            if (bg) { bg.SetColor(COL_DIM_BG); }
+            // Use m_View.Tint to update hover cache alongside color
+            if (m_View && bg)
+            {
+                m_View.Tint(bg, COL_DIM_BG);
+            }
             if (txt) { txt.SetColor(COL_TEXT_DIM); }
             if (hint) { hint.SetColor(COL_TEXT_DIM); }
         }
         else
         {
-            if (bg) { bg.SetColor(normalBgColor); }
+            if (m_View && bg)
+            {
+                m_View.Tint(bg, normalBgColor);
+            }
             if (txt) { txt.SetColor(COL_TEXT); }
             if (hint) { hint.SetColor(COL_TEXT_MID); }
         }
@@ -516,7 +521,7 @@ class LFPG_BTCAtmController extends ViewController
         int eurAmount = GetEurInput();
         if (eurAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY_EUR";
             string errEmpty = Widget.TranslateString(errEmptyKey);
             ShowStatus(errEmpty, true);
             return;
@@ -541,7 +546,7 @@ class LFPG_BTCAtmController extends ViewController
         int eurAmount = GetEurInput();
         if (eurAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY_EUR";
             string errEmpty = Widget.TranslateString(errEmptyKey);
             ShowStatus(errEmpty, true);
             return;

@@ -244,3 +244,4 @@
 "STR_LFPG_BTC_BTN_DEPOSIT_EUR","Deposit EUR","Deposit EUR","Ingresar EUR","Deposit EUR","Deposit EUR"
 "STR_LFPG_BTC_BTN_WITHDRAW_BTC","Withdraw BTC","Withdraw BTC","Retirar BTC","Withdraw BTC","Withdraw BTC"
 "STR_LFPG_BTC_BTN_DEPOSIT_BTC","Deposit BTC","Deposit BTC","Ingresar BTC","Deposit BTC","Ingresar BTC"
+"STR_LFPG_BTC_ERR_EMPTY_EUR","Enter EUR amount","Enter EUR amount","Introduce cantidad de EUR","Enter EUR amount","Enter EUR amount"

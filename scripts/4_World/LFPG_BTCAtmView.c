@@ -368,20 +368,28 @@ class LFPG_BTCAtmView extends ScriptView
         if (!SepBuySell) { SepBuySell = ImageWidget.Cast(root.FindAnyWidget(wn)); }
 
         // Tabs — child-walk (ButtonWidget children)
-        BindTabChildren(root, "TabCash");
-        BindTabChildren(root, "TabAccount");
+        string tabCashName = "TabCash";
+        BindTabChildren(root, tabCashName);
+        string tabAccName = "TabAccount";
+        BindTabChildren(root, tabAccName);
 
         // Row 1: Buy/Sell BTC — child-walk
-        BindButtonChildren3(root, "BtnBuyBtc");
-        BindButtonChildren3(root, "BtnSellBtc");
+        string btnBuyName = "BtnBuyBtc";
+        BindButtonChildren3(root, btnBuyName);
+        string btnSellName = "BtnSellBtc";
+        BindButtonChildren3(root, btnSellName);
 
         // Row 2: Withdraw/Deposit EUR — child-walk
-        BindButtonChildren3(root, "BtnWithdrawEur");
-        BindButtonChildren3(root, "BtnDepositEur");
+        string btnWdEurName = "BtnWithdrawEur";
+        BindButtonChildren3(root, btnWdEurName);
+        string btnDepEurName = "BtnDepositEur";
+        BindButtonChildren3(root, btnDepEurName);
 
         // Row 3: Withdraw/Deposit BTC — child-walk
-        BindButtonChildren3(root, "BtnWithdrawBtc");
-        BindButtonChildren3(root, "BtnDepositBtc");
+        string btnWdBtcName = "BtnWithdrawBtc";
+        BindButtonChildren3(root, btnWdBtcName);
+        string btnDepBtcName = "BtnDepositBtc";
+        BindButtonChildren3(root, btnDepBtcName);
 
         // Status
         wn = "StatusBg";
@@ -673,7 +681,7 @@ class LFPG_BTCAtmView extends ScriptView
         }
     }
 
-    protected void Tint(ImageWidget img, int color)
+    void Tint(ImageWidget img, int color)
     {
         if (!img)
             return;
