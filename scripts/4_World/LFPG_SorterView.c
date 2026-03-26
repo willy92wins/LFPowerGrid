@@ -53,6 +53,8 @@ class LFPG_ColorData extends Managed
 class LFPG_SorterView extends ScriptView
 {
     protected static ref LFPG_SorterView s_Instance;
+    // A7: ESC timestamp guard (prevents engine pause menu on release)
+    protected static float s_EscCloseTime = 0.0;
     protected bool m_IsOpen;
     protected bool m_FocusLocked;
 
@@ -1236,8 +1238,27 @@ class LFPG_SorterView extends ScriptView
                 return true;
             }
         }
+        // A7: Record timestamp before close
+        if (GetGame())
+        {
+            s_EscCloseTime = GetGame().GetTickTime();
+        }
         s_Instance.DoClose();
         return true;
+    }
+
+    // A7: ESC cooldown check — true if UI was closed < 200ms ago
+    static bool IsEscCooldown()
+    {
+        if (s_EscCloseTime <= 0.0)
+            return false;
+        if (!GetGame())
+            return false;
+        float now = GetGame().GetTickTime();
+        float elapsed = now - s_EscCloseTime;
+        if (elapsed < 0.2)
+            return true;
+        return false;
     }
 
     // S2 fix: Cleanup deletes instance properly (prevents leak).

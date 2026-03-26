@@ -50,7 +50,8 @@ class LFPG_BTCAtmView extends ScriptView
     TextWidget BalanceText;
     ImageWidget CardCashBg;
     TextWidget CardCashLabel;
-    TextWidget CashText;
+    TextWidget CashEurText;
+    TextWidget CashBtcText;
 
     // Amount section
     ImageWidget AmountBg;
@@ -124,6 +125,9 @@ class LFPG_BTCAtmView extends ScriptView
 
     protected bool m_ColorsInitialized;
     protected bool m_ButtonIDsAssigned;
+
+    // A7: ESC timestamp guard (prevents engine pause menu on release)
+    protected static float s_EscCloseTime = 0.0;
 
     override string GetLayoutFile()
     {
@@ -300,8 +304,10 @@ class LFPG_BTCAtmView extends ScriptView
         if (!CardCashBg) { CardCashBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "CardCashLabel";
         if (!CardCashLabel) { CardCashLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CashText";
-        if (!CashText) { CashText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "CashEurText";
+        if (!CashEurText) { CashEurText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "CashBtcText";
+        if (!CashBtcText) { CashBtcText = TextWidget.Cast(root.FindAnyWidget(wn)); }
 
         // Amount section
         wn = "AmountBg";
@@ -522,10 +528,13 @@ class LFPG_BTCAtmView extends ScriptView
         if (CardStockLabel) { CardStockLabel.SetColor(COL_TEXT_DIM); }
         if (CardBalanceLabel) { CardBalanceLabel.SetColor(COL_TEXT_DIM); }
         if (CardCashLabel) { CardCashLabel.SetColor(COL_TEXT_DIM); }
-        if (PriceText) { PriceText.SetColor(COL_GREEN); }
+        // A2: PriceText → amber, BalanceText → green
+        if (PriceText) { PriceText.SetColor(COL_AMBER); }
         if (StockText) { StockText.SetColor(COL_BLUE); }
-        if (BalanceText) { BalanceText.SetColor(COL_TEXT); }
-        if (CashText) { CashText.SetColor(COL_AMBER); }
+        if (BalanceText) { BalanceText.SetColor(COL_GREEN); }
+        // A3: Split cash widgets — EUR green, BTC amber
+        if (CashEurText) { CashEurText.SetColor(COL_GREEN); }
+        if (CashBtcText) { CashBtcText.SetColor(COL_AMBER); }
 
         // Amount section
         Tint(AmountBg, COL_BG_ELEVATED);
@@ -566,6 +575,11 @@ class LFPG_BTCAtmView extends ScriptView
         Tint(FooterBg, COL_HEADER);
         if (FooterEscHint) { FooterEscHint.SetColor(COL_TEXT_DIM); }
         if (FooterBrand) { FooterBrand.SetColor(COL_TEXT_DIM); }
+
+        // A4: Hide "drag" label (header still drags via HeaderFrame)
+        if (DragHandle) { DragHandle.Show(false); }
+        // A5: Hide "PowerGrid" brand
+        if (FooterBrand) { FooterBrand.Show(false); }
 
         m_ColorsInitialized = true;
     }
@@ -687,6 +701,17 @@ class LFPG_BTCAtmView extends ScriptView
         if (w == EditEurAmount)
         {
             ctrl.OnEurAmountChanged();
+            return false;
+        }
+        // B3: Checkbox toggle → update button hints
+        if (w == ChkToAccount)
+        {
+            bool accountMode = false;
+            if (ChkToAccount)
+            {
+                accountMode = ChkToAccount.IsChecked();
+            }
+            ctrl.OnAccountModeChanged(accountMode);
             return false;
         }
         return false;
@@ -1066,8 +1091,27 @@ class LFPG_BTCAtmView extends ScriptView
                 return true;
             }
         }
+        // A7: Record timestamp before close (prevents ESC release opening pause menu)
+        if (GetGame())
+        {
+            s_EscCloseTime = GetGame().GetTickTime();
+        }
         s_Instance.DoClose();
         return true;
+    }
+
+    // A7: ESC cooldown check — true if UI was closed < 200ms ago
+    static bool IsEscCooldown()
+    {
+        if (s_EscCloseTime <= 0.0)
+            return false;
+        if (!GetGame())
+            return false;
+        float now = GetGame().GetTickTime();
+        float elapsed = now - s_EscCloseTime;
+        if (elapsed < 0.2)
+            return true;
+        return false;
     }
 
     static void Cleanup()

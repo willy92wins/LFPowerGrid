@@ -287,7 +287,9 @@ enum LFPG_RPC_SubId
     BTC_WITHDRAW           = 44,
     BTC_DEPOSIT            = 45,
     BTC_TX_RESULT          = 46,
-    BTC_PRICE_UNAVAILABLE  = 47
+    BTC_PRICE_UNAVAILABLE  = 47,
+    BTC_WITHDRAW_CASH      = 48,
+    BTC_DEPOSIT_CASH       = 49
 };
 
 // ---- Sorter tick constants (Sprint S3) ----

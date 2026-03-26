@@ -21,13 +21,19 @@ class LFPG_BTCAtmController extends ViewController
     protected TextWidget m_PriceText;
     protected TextWidget m_StockText;
     protected TextWidget m_BalanceText;
-    protected TextWidget m_CashText;
+    protected TextWidget m_CashEurText;
+    protected TextWidget m_CashBtcText;
     protected EditBoxWidget m_EditBtc;
     protected EditBoxWidget m_EditEur;
     protected CheckBoxWidget m_ChkToAccount;
     protected TextWidget m_ChkToAccountLabel;
     protected ImageWidget m_StatusBg;
     protected TextWidget m_StatusText;
+    // B3: Hint refs for dynamic update
+    protected TextWidget m_BtnBuyHint;
+    protected TextWidget m_BtnSellHint;
+    protected TextWidget m_BtnWithdrawHint;
+    protected TextWidget m_BtnDepositHint;
 
     // ── Conversion re-entry guard ──
     protected bool m_UpdatingBtc;
@@ -59,13 +65,19 @@ class LFPG_BTCAtmController extends ViewController
         m_PriceText = view.PriceText;
         m_StockText = view.StockText;
         m_BalanceText = view.BalanceText;
-        m_CashText = view.CashText;
+        m_CashEurText = view.CashEurText;
+        m_CashBtcText = view.CashBtcText;
         m_EditBtc = view.EditBtcAmount;
         m_EditEur = view.EditEurAmount;
         m_ChkToAccount = view.ChkToAccount;
         m_ChkToAccountLabel = view.ChkToAccountLabel;
         m_StatusBg = view.StatusBg;
         m_StatusText = view.StatusText;
+        // B3: Hint refs
+        m_BtnBuyHint = view.BtnBuyHint;
+        m_BtnSellHint = view.BtnSellHint;
+        m_BtnWithdrawHint = view.BtnWithdrawHint;
+        m_BtnDepositHint = view.BtnDepositHint;
     }
 
     // =========================================================
@@ -111,11 +123,19 @@ class LFPG_BTCAtmController extends ViewController
             m_BalanceText.SetText(balStr);
         }
 
-        // Cash card
-        if (m_CashText)
+        // Cash card — A3: split EUR/BTC
+        if (m_CashEurText)
         {
             string cashStr = FormatEurInt(cash);
-            m_CashText.SetText(cashStr);
+            m_CashEurText.SetText(cashStr);
+        }
+        if (m_CashBtcText)
+        {
+            int btcInv = LFPG_BTCAtmClientData.s_BtcOnInventory;
+            string btcStr = "/ ";
+            btcStr = btcStr + btcInv.ToString();
+            btcStr = btcStr + " B";
+            m_CashBtcText.SetText(btcStr);
         }
 
         // F4: WithdrawOnly — always set label + checkbox state (both branches)
@@ -143,6 +163,14 @@ class LFPG_BTCAtmController extends ViewController
                 m_ChkToAccountLabel.SetColor(COL_TEXT_MID);
             }
         }
+
+        // B3: Update button hints based on checkbox state
+        bool accountMode = false;
+        if (m_ChkToAccount)
+        {
+            accountMode = m_ChkToAccount.IsChecked();
+        }
+        UpdateButtonHints(accountMode);
 
         // Show tx result if we have one
         int errCode = LFPG_BTCAtmClientData.s_LastErrCode;
@@ -254,7 +282,7 @@ class LFPG_BTCAtmController extends ViewController
     }
 
     // =========================================================
-    // Button handlers: send RPCs
+    // Button handlers: send RPCs (B3: toggle Cuenta/Efectivo)
     // =========================================================
     void OnBuyClick()
     {
@@ -271,23 +299,27 @@ class LFPG_BTCAtmController extends ViewController
         int btcAmount = GetBtcInput();
         if (btcAmount <= 0)
         {
-            // F1: string literal to local
             string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
             string errEmpty = Widget.TranslateString(errEmptyKey);
             ShowStatus(errEmpty, true);
             return;
         }
 
-        int subId = LFPG_RPC_SubId.BTC_BUY;
+        bool useAccount = false;
+        if (m_ChkToAccount)
+        {
+            useAccount = m_ChkToAccount.IsChecked();
+        }
+
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
+        int subId = LFPG_RPC_SubId.BTC_BUY;
 
-        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        SendBTCBuyRpc(subId, netLow, netHigh, btcAmount, useAccount);
     }
 
     void OnSellClick()
     {
-        // F5: client-side price guard
         bool priceNA = LFPG_BTCAtmClientData.s_PriceUnavailable;
         if (priceNA)
         {
@@ -306,65 +338,110 @@ class LFPG_BTCAtmController extends ViewController
             return;
         }
 
-        bool toAccount = false;
+        bool useAccount = false;
         if (m_ChkToAccount)
         {
-            toAccount = m_ChkToAccount.IsChecked();
+            useAccount = m_ChkToAccount.IsChecked();
         }
 
-        // WithdrawOnly forces cash (toAccount = false)
+        // WithdrawOnly forces cash (useAccount = false)
         bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
         if (wo)
         {
-            toAccount = false;
+            useAccount = false;
         }
 
         int subId = LFPG_RPC_SubId.BTC_SELL;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
 
-        SendBTCSellRpc(subId, netLow, netHigh, btcAmount, toAccount);
+        SendBTCSellRpc(subId, netLow, netHigh, btcAmount, useAccount);
     }
 
     void OnWithdrawClick()
     {
-        int btcAmount = GetBtcInput();
-        if (btcAmount <= 0)
+        bool useAccount = false;
+        if (m_ChkToAccount)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
-            return;
+            useAccount = m_ChkToAccount.IsChecked();
         }
 
-        int subId = LFPG_RPC_SubId.BTC_WITHDRAW;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
 
-        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        if (useAccount)
+        {
+            // Account mode: withdraw BTC from ATM stock (original)
+            int btcAmount = GetBtcInput();
+            if (btcAmount <= 0)
+            {
+                string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+                string errEmpty = Widget.TranslateString(errEmptyKey);
+                ShowStatus(errEmpty, true);
+                return;
+            }
+            int subId = LFPG_RPC_SubId.BTC_WITHDRAW;
+            SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        }
+        else
+        {
+            // Cash mode: withdraw EUR from LBMaster → bills
+            int eurAmount = GetEurInput();
+            if (eurAmount <= 0)
+            {
+                string errEmptyKey2 = "#STR_LFPG_BTC_ERR_EMPTY";
+                string errEmpty2 = Widget.TranslateString(errEmptyKey2);
+                ShowStatus(errEmpty2, true);
+                return;
+            }
+            int subIdCash = LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
+            SendBTCCashRpc(subIdCash, netLow, netHigh, eurAmount);
+        }
     }
 
     void OnDepositClick()
     {
-        int btcAmount = GetBtcInput();
-        if (btcAmount <= 0)
+        bool useAccount = false;
+        if (m_ChkToAccount)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
-            return;
+            useAccount = m_ChkToAccount.IsChecked();
         }
 
-        int subId = LFPG_RPC_SubId.BTC_DEPOSIT;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
 
-        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        if (useAccount)
+        {
+            // Account mode: deposit BTC items into ATM stock (original)
+            int btcAmount = GetBtcInput();
+            if (btcAmount <= 0)
+            {
+                string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
+                string errEmpty = Widget.TranslateString(errEmptyKey);
+                ShowStatus(errEmpty, true);
+                return;
+            }
+            int subId = LFPG_RPC_SubId.BTC_DEPOSIT;
+            SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        }
+        else
+        {
+            // Cash mode: deposit EUR bills → LBMaster
+            int eurAmount = GetEurInput();
+            if (eurAmount <= 0)
+            {
+                string errEmptyKey2 = "#STR_LFPG_BTC_ERR_EMPTY";
+                string errEmpty2 = Widget.TranslateString(errEmptyKey2);
+                ShowStatus(errEmpty2, true);
+                return;
+            }
+            int subIdCash = LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
+            SendBTCCashRpc(subIdCash, netLow, netHigh, eurAmount);
+        }
     }
 
     // =========================================================
     // RPC senders (client → server)
-    // F6: removed unused param
     // =========================================================
     protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
     {
@@ -385,8 +462,8 @@ class LFPG_BTCAtmController extends ViewController
         #endif
     }
 
-    // Sell has extra bool (toAccount)
-    protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool toAccount)
+    // Sell has extra bool (useAccount)
+    protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
         #ifndef SERVER
         if (!GetGame())
@@ -401,7 +478,48 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(netLow);
         rpc.Write(netHigh);
         rpc.Write(btcAmount);
-        rpc.Write(toAccount);
+        rpc.Write(useAccount);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        #endif
+    }
+
+    // B3: Buy has extra bool (useAccount)
+    protected void SendBTCBuyRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
+    {
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
+            return;
+
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write(subId);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
+        rpc.Write(btcAmount);
+        rpc.Write(useAccount);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        #endif
+    }
+
+    // B3: Cash-mode RPCs (Withdraw/Deposit EUR)
+    protected void SendBTCCashRpc(int subId, int netLow, int netHigh, int eurAmount)
+    {
+        #ifndef SERVER
+        if (!GetGame())
+            return;
+
+        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        if (!player)
+            return;
+
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write(subId);
+        rpc.Write(netLow);
+        rpc.Write(netHigh);
+        rpc.Write(eurAmount);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
         #endif
     }
@@ -424,6 +542,90 @@ class LFPG_BTCAtmController extends ViewController
             val = 0;
         }
         return val;
+    }
+
+    // B3: Read EUR amount from EditBox
+    protected int GetEurInput()
+    {
+        if (!m_EditEur)
+            return 0;
+
+        string text = m_EditEur.GetText();
+        if (text == "")
+            return 0;
+
+        int val = text.ToInt();
+        if (val < 0)
+        {
+            val = 0;
+        }
+        return val;
+    }
+
+    // =========================================================
+    // B3: Toggle callback + dynamic button hints
+    // =========================================================
+    void OnAccountModeChanged(bool accountMode)
+    {
+        UpdateButtonHints(accountMode);
+    }
+
+    protected void UpdateButtonHints(bool accountMode)
+    {
+        if (accountMode)
+        {
+            if (m_BtnBuyHint)
+            {
+                string hBuyAcc = "#STR_LFPG_BTC_HINT_BUY";
+                string hBuyAccT = Widget.TranslateString(hBuyAcc);
+                m_BtnBuyHint.SetText(hBuyAccT);
+            }
+            if (m_BtnSellHint)
+            {
+                string hSellAcc = "#STR_LFPG_BTC_HINT_SELL";
+                string hSellAccT = Widget.TranslateString(hSellAcc);
+                m_BtnSellHint.SetText(hSellAccT);
+            }
+            if (m_BtnWithdrawHint)
+            {
+                string hWdAcc = "#STR_LFPG_BTC_HINT_WITHDRAW";
+                string hWdAccT = Widget.TranslateString(hWdAcc);
+                m_BtnWithdrawHint.SetText(hWdAccT);
+            }
+            if (m_BtnDepositHint)
+            {
+                string hDepAcc = "#STR_LFPG_BTC_HINT_DEPOSIT";
+                string hDepAccT = Widget.TranslateString(hDepAcc);
+                m_BtnDepositHint.SetText(hDepAccT);
+            }
+        }
+        else
+        {
+            if (m_BtnBuyHint)
+            {
+                string hBuyCash = "#STR_LFPG_BTC_HINT_BUY_CASH";
+                string hBuyCashT = Widget.TranslateString(hBuyCash);
+                m_BtnBuyHint.SetText(hBuyCashT);
+            }
+            if (m_BtnSellHint)
+            {
+                string hSellCash = "#STR_LFPG_BTC_HINT_SELL_CASH";
+                string hSellCashT = Widget.TranslateString(hSellCash);
+                m_BtnSellHint.SetText(hSellCashT);
+            }
+            if (m_BtnWithdrawHint)
+            {
+                string hWdCash = "#STR_LFPG_BTC_HINT_WITHDRAW_CASH";
+                string hWdCashT = Widget.TranslateString(hWdCash);
+                m_BtnWithdrawHint.SetText(hWdCashT);
+            }
+            if (m_BtnDepositHint)
+            {
+                string hDepCash = "#STR_LFPG_BTC_HINT_DEPOSIT_CASH";
+                string hDepCashT = Widget.TranslateString(hDepCash);
+                m_BtnDepositHint.SetText(hDepCashT);
+            }
+        }
     }
 
     // =========================================================
@@ -529,6 +731,27 @@ class LFPG_BTCAtmController extends ViewController
                 depOk = depOk + " BTC";
                 return depOk;
             }
+            // B3: Cash-mode TX types (EUR amounts)
+            if (txType == LFPG_BTC_TX_WITHDRAW_CASH)
+            {
+                string wdcOkKey = "#STR_LFPG_BTC_TX_WITHDRAW_CASH_OK";
+                string wdcOk = Widget.TranslateString(wdcOkKey);
+                float wdcEurRound = Math.Round(eur);
+                int wdcEurInt = wdcEurRound;
+                wdcOk = wdcOk + wdcEurInt.ToString();
+                wdcOk = wdcOk + " E";
+                return wdcOk;
+            }
+            if (txType == LFPG_BTC_TX_DEPOSIT_CASH)
+            {
+                string dpcOkKey = "#STR_LFPG_BTC_TX_DEPOSIT_CASH_OK";
+                string dpcOk = Widget.TranslateString(dpcOkKey);
+                float dpcEurRound = Math.Round(eur);
+                int dpcEurInt = dpcEurRound;
+                dpcOk = dpcOk + dpcEurInt.ToString();
+                dpcOk = dpcOk + " E";
+                return dpcOk;
+            }
             string genericOkKey = "#STR_LFPG_BTC_TX_OK_GENERIC";
             string genericOk = Widget.TranslateString(genericOkKey);
             return genericOk;
@@ -583,6 +806,13 @@ class LFPG_BTCAtmController extends ViewController
             string e8 = Widget.TranslateString(e8Key);
             return e8;
         }
+        // B3: No cash on player
+        if (errCode == LFPG_BTC_ERR_NO_CASH)
+        {
+            string e10Key = "#STR_LFPG_BTC_ERR_NO_CASH";
+            string e10 = Widget.TranslateString(e10Key);
+            return e10;
+        }
         string e9Key = "#STR_LFPG_BTC_ERR_UNKNOWN";
         string e9 = Widget.TranslateString(e9Key);
         return e9;
@@ -597,16 +827,16 @@ class LFPG_BTCAtmController extends ViewController
         float rounded = Math.Round(val);
         int roundedInt = rounded;
         string result = roundedInt.ToString();
-        string prefix = "E ";
-        result = prefix + result;
+        string suffix = " E";
+        result = result + suffix;
         return result;
     }
 
     protected string FormatEurInt(int val)
     {
         string result = val.ToString();
-        string prefix = "E ";
-        result = prefix + result;
+        string suffix = " E";
+        result = result + suffix;
         return result;
     }
 };

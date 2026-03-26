@@ -113,6 +113,21 @@ modded class MissionGameplay
         if (vp && vp.IsActive())
         {
             vp.HandleKeyUp(key);
+            return;
+        }
+
+        // A7: Consume ESC release when BTC ATM or Sorter was just closed
+        // to prevent engine from opening pause menu
+        if (key == 1)
+        {
+            if (LFPG_BTCAtmView.IsOpen())
+                return;
+            if (LFPG_BTCAtmView.IsEscCooldown())
+                return;
+            if (LFPG_SorterView.IsOpen())
+                return;
+            if (LFPG_SorterView.IsEscCooldown())
+                return;
         }
 
         super.OnKeyRelease(key);

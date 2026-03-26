@@ -318,9 +318,24 @@ FrameWidgetClass BTCAtmRoot {
 					{
 					}
 				}
-				TextWidgetClass CashText {
+				TextWidgetClass CashEurText {
 					position 321 68
-					size 81 20
+					size 42 20
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text "---"
+					font "gui/fonts/Metron"
+					"text halign" right
+					"text valign" center
+					{
+					}
+				}
+				TextWidgetClass CashBtcText {
+					position 364 68
+					size 38 20
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -560,7 +575,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "EUR > BTC"
+							text "#STR_LFPG_BTC_HINT_BUY"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -614,7 +629,7 @@ FrameWidgetClass BTCAtmRoot {
 							hexactsize 1
 							vexactsize 1
 							ignorepointer 1
-							text "BTC > EUR"
+							text "#STR_LFPG_BTC_HINT_SELL"
 							font "gui/fonts/MetronBook"
 							"text halign" center
 							"text valign" center
@@ -787,7 +802,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass FooterEscHint {
-					position 12 349
+					position 208 349
 					size 200 31
 					hexactpos 1
 					vexactpos 1
@@ -796,7 +811,7 @@ FrameWidgetClass BTCAtmRoot {
 					ignorepointer 1
 					text "#STR_LFPG_BTC_ESC_HINT"
 					font "gui/fonts/MetronBook"
-					"text halign" left
+					"text halign" right
 					"text valign" center
 					{
 					}

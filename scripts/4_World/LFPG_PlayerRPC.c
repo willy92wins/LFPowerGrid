@@ -162,6 +162,14 @@ modded class PlayerBase
         {
             HandleLFPG_BTCDeposit(sender, ctx);
         }
+        else if (subId == LFPG_RPC_SubId.BTC_WITHDRAW_CASH)
+        {
+            HandleLFPG_BTCWithdrawCash(sender, ctx);
+        }
+        else if (subId == LFPG_RPC_SubId.BTC_DEPOSIT_CASH)
+        {
+            HandleLFPG_BTCDepositCash(sender, ctx);
+        }
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -3068,6 +3076,8 @@ modded class PlayerBase
     protected void LFPG_SendBTCTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount)
     {
         int cashOnInv = LFPG_BTCCountPlayerCash();
+        string btcCls = LFPG_BTCConfig.GetBtcItemClassname();
+        int btcOnInv = LFPG_BTCCountPlayerItems(btcCls);
         ScriptRPC rpc = new ScriptRPC();
         int subId = LFPG_RPC_SubId.BTC_TX_RESULT;
         rpc.Write(subId);
@@ -3078,6 +3088,7 @@ modded class PlayerBase
         rpc.Write(btcMoved);
         rpc.Write(eurAmount);
         rpc.Write(cashOnInv);
+        rpc.Write(btcOnInv);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
     }
 
@@ -3500,6 +3511,10 @@ modded class PlayerBase
         // Player cash on person
         int cashOnInv = LFPG_BTCCountPlayerCash();
 
+        // A3: Player BTC items on person
+        string btcClsOpen = LFPG_BTCConfig.GetBtcItemClassname();
+        int btcOnInv = LFPG_BTCCountPlayerItems(btcClsOpen);
+
         // Send response (always — client handles price=-1.0 as N/A)
         ScriptRPC rpc = new ScriptRPC();
         int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
@@ -3509,6 +3524,7 @@ modded class PlayerBase
         rpc.Write(balance);
         rpc.Write(cashOnInv);
         rpc.Write(withdrawOnly);
+        rpc.Write(btcOnInv);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
 
         string logOpen = "[BTCOpenRequest] price=";
@@ -3520,7 +3536,7 @@ modded class PlayerBase
         LFPG_Util.Info(logOpen);
     }
 
-    // ---- BUY: player pays EUR (LBMaster), gets BTC items from pool ----
+    // ---- BUY: B1 no stock check + B3 useAccount toggle ----
     protected void HandleLFPG_BTCBuy(PlayerIdentity sender, ParamsReadContext ctx)
     {
         if (!sender)
@@ -3544,6 +3560,10 @@ modded class PlayerBase
         int btcAmount = 0;
         if (!ctx.Read(btcAmount))
             return;
+
+        // B3: optional useAccount (retrocompat default=true = account)
+        bool useAccount = true;
+        ctx.Read(useAccount);
 
         if (btcAmount <= 0)
             return;
@@ -3570,14 +3590,7 @@ modded class PlayerBase
         }
         float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
 
-        // Stock check
-        int currentStock = atm.LFPG_GetBtcStock();
-        if (btcAmount > currentStock)
-        {
-            int errStock = LFPG_BTC_ERR_NO_STOCK;
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errStock, currentStock, earlyBal, 0, 0.0);
-            return;
-        }
+        // B1: Stock check REMOVED — Buy spawns unlimited BTC
 
         // Cost calculation (ceiling = player pays more on fractions)
         float costFloat = btcAmount * price;
@@ -3588,113 +3601,144 @@ modded class PlayerBase
             costInt = costInt + 1;
         }
 
-        // Balance check (LBMaster)
-        int playerBalance = earlyBal;
-        if (playerBalance < costInt)
+        if (useAccount)
         {
-            int errFunds = LFPG_BTC_ERR_NO_FUNDS;
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errFunds, currentStock, playerBalance, 0, costFloat);
-            return;
-        }
-
-        // Execute transaction: remove money FIRST, then create items by what was actually charged
-        // Step 1: charge the player
-        int removed = atmEarly.RemoveATMMoney(costInt);
-        if (removed <= 0)
-        {
-            int errRemove = LFPG_BTC_ERR_NO_FUNDS;
-            int curStockR = atm.LFPG_GetBtcStock();
-            int curBalR = atmEarly.GetATMMoney();
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errRemove, curStockR, curBalR, 0, 0.0);
-            return;
-        }
-
-        // Step 2: if removed < costInt, recalculate how many BTC the player can afford
-        int affordableBtc = btcAmount;
-        if (removed < costInt)
-        {
-            // floor: player gets fewer BTC, no fraction
-            float affordFloat = removed / price;
-            affordableBtc = (int)affordFloat;
-            if (affordableBtc <= 0)
+            // ── Account mode: charge from LBMaster (original flow) ──
+            int playerBalance = earlyBal;
+            if (playerBalance < costInt)
             {
-                // Can't afford even 1 BTC — refund everything
-                atmEarly.AddATMMoney(removed);
-                int errPartial = LFPG_BTC_ERR_NO_FUNDS;
-                int curStockP = atm.LFPG_GetBtcStock();
-                int curBalP = atmEarly.GetATMMoney();
-                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errPartial, curStockP, curBalP, 0, 0.0);
+                int errFunds = LFPG_BTC_ERR_NO_FUNDS;
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errFunds, atm.LFPG_GetBtcStock(), playerBalance, 0, costFloat);
                 return;
             }
-            if (affordableBtc > btcAmount)
+
+            int removed = atmEarly.RemoveATMMoney(costInt);
+            if (removed <= 0)
             {
-                affordableBtc = btcAmount;
+                int errRemove = LFPG_BTC_ERR_NO_FUNDS;
+                int curBalR = atmEarly.GetATMMoney();
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errRemove, atm.LFPG_GetBtcStock(), curBalR, 0, 0.0);
+                return;
             }
+
+            int affordableBtc = btcAmount;
+            if (removed < costInt)
+            {
+                float affordFloat = removed / price;
+                affordableBtc = (int)affordFloat;
+                if (affordableBtc <= 0)
+                {
+                    atmEarly.AddATMMoney(removed);
+                    int errPartial = LFPG_BTC_ERR_NO_FUNDS;
+                    int curBalP = atmEarly.GetATMMoney();
+                    LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errPartial, atm.LFPG_GetBtcStock(), curBalP, 0, 0.0);
+                    return;
+                }
+                if (affordableBtc > btcAmount)
+                {
+                    affordableBtc = btcAmount;
+                }
+            }
+
+            string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+            int created = LFPG_BTCCreateItemsForPlayer(btcClassname, affordableBtc);
+
+            if (created <= 0)
+            {
+                atmEarly.AddATMMoney(removed);
+                int errInv = LFPG_BTC_ERR_INVENTORY_FULL;
+                int curBalI = atmEarly.GetATMMoney();
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errInv, atm.LFPG_GetBtcStock(), curBalI, 0, 0.0);
+                return;
+            }
+
+            float actualCostFloat = created * price;
+            int actualCostInt = (int)actualCostFloat;
+            float actualCostDiff = actualCostFloat - actualCostInt;
+            if (actualCostDiff > 0.001)
+            {
+                actualCostInt = actualCostInt + 1;
+            }
+            if (actualCostInt > removed)
+            {
+                actualCostInt = removed;
+            }
+
+            int refundAmount = removed - actualCostInt;
+            if (refundAmount > 0)
+            {
+                atmEarly.AddATMMoney(refundAmount);
+            }
+
+            // B1: No stock decrement
+            int newBalance = atmEarly.GetATMMoney();
+            int newStock = atm.LFPG_GetBtcStock();
+            int okCode = LFPG_BTC_OK;
+            float eurSpent = actualCostInt;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCode, newStock, newBalance, created, eurSpent);
+
+            string logBuyA = "[BTCBuy] account: ";
+            logBuyA = logBuyA + created.ToString();
+            logBuyA = logBuyA + " BTC for ";
+            logBuyA = logBuyA + actualCostInt.ToString();
+            logBuyA = logBuyA + " EUR";
+            LFPG_Util.Info(logBuyA);
         }
-
-        // Step 3: create BTC items (may be less if inventory full)
-        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
-        int created = LFPG_BTCCreateItemsForPlayer(btcClassname, affordableBtc);
-
-        // Guard: if nothing was created (inventory full), refund everything
-        if (created <= 0)
+        else
         {
-            atmEarly.AddATMMoney(removed);
-            int errInv = LFPG_BTC_ERR_INVENTORY_FULL;
-            int curStockI = atm.LFPG_GetBtcStock();
-            int curBalI = atmEarly.GetATMMoney();
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errInv, curStockI, curBalI, 0, 0.0);
-            string logInv = "[BTCBuy] inventory full, refunded ";
-            logInv = logInv + removed.ToString();
-            logInv = logInv + " EUR";
-            LFPG_Util.Warn(logInv);
-            return;
+            // ── Cash mode: charge from physical EUR bills ──
+            int destroyed = LFPG_BTCDestroyPlayerCash(costInt);
+            if (destroyed <= 0)
+            {
+                int errNoCash = LFPG_BTC_ERR_NO_CASH;
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errNoCash, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+                return;
+            }
+
+            // Guard: if destroyed < costInt, player didn't have enough
+            if (destroyed < costInt)
+            {
+                // Refund what was destroyed
+                LFPG_BTCGreedyChange(destroyed);
+                int errNoCash2 = LFPG_BTC_ERR_NO_CASH;
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errNoCash2, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+                return;
+            }
+
+            // Return change if destroyed > costInt
+            int excess = destroyed - costInt;
+            if (excess > 0)
+            {
+                LFPG_BTCGreedyChange(excess);
+            }
+
+            // Spawn BTC items
+            string btcClsCash = LFPG_BTCConfig.GetBtcItemClassname();
+            int createdCash = LFPG_BTCCreateItemsForPlayer(btcClsCash, btcAmount);
+
+            if (createdCash <= 0)
+            {
+                // Refund NET amount (costInt, not destroyed — excess already returned)
+                LFPG_BTCGreedyChange(costInt);
+                int errInvC = LFPG_BTC_ERR_INVENTORY_FULL;
+                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errInvC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+                return;
+            }
+
+            int newStockC = atm.LFPG_GetBtcStock();
+            LB_ATM_Playerbase atmFinalC = new LB_ATM_Playerbase(this);
+            int newBalC = atmFinalC.GetATMMoney();
+            int okCodeC = LFPG_BTC_OK;
+            float eurSpentC = costInt;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCodeC, newStockC, newBalC, createdCash, eurSpentC);
+
+            string logBuyC = "[BTCBuy] cash: ";
+            logBuyC = logBuyC + createdCash.ToString();
+            logBuyC = logBuyC + " BTC for ";
+            logBuyC = logBuyC + costInt.ToString();
+            logBuyC = logBuyC + " EUR bills";
+            LFPG_Util.Info(logBuyC);
         }
-
-        // Step 4: calculate actual cost for items delivered (ceiling)
-        float actualCostFloat = created * price;
-        int actualCostInt = (int)actualCostFloat;
-        float actualCostDiff = actualCostFloat - actualCostInt;
-        if (actualCostDiff > 0.001)
-        {
-            actualCostInt = actualCostInt + 1;
-        }
-
-        // Clamp: never charge more than what was removed (float ceiling safety)
-        if (actualCostInt > removed)
-        {
-            actualCostInt = removed;
-        }
-
-        // Step 5: refund excess if we charged more than actual cost
-        int refundAmount = removed - actualCostInt;
-        if (refundAmount > 0)
-        {
-            atmEarly.AddATMMoney(refundAmount);
-        }
-
-        // Step 6: adjust ATM stock
-        atm.LFPG_RemoveBtcStock(created);
-
-        // Read updated state
-        int newBalance = atmEarly.GetATMMoney();
-        int newStock = atm.LFPG_GetBtcStock();
-
-        // Success result
-        int okCode = LFPG_BTC_OK;
-        float eurSpent = actualCostInt;
-        LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCode, newStock, newBalance, created, eurSpent);
-
-        string logBuy = "[BTCBuy] player bought ";
-        logBuy = logBuy + created.ToString();
-        logBuy = logBuy + " BTC for ";
-        logBuy = logBuy + actualCostInt.ToString();
-        logBuy = logBuy + " EUR (charged ";
-        logBuy = logBuy + removed.ToString();
-        logBuy = logBuy + ", refund ";
-        logBuy = logBuy + refundAmount.ToString();
-        logBuy = logBuy + ")";
-        LFPG_Util.Info(logBuy);
     }
 
     // ---- SELL: player gives BTC items, gets EUR (cash or account) ----
@@ -4024,6 +4068,220 @@ modded class PlayerBase
     }
 
     // =========================================================
+    // B3: LFPG_BTCDestroyPlayerCash — greedy descending destroy
+    // Returns total EUR value actually destroyed (may exceed eurAmount)
+    // Caller must handle excess via GreedyChange.
+    // =========================================================
+    protected int LFPG_BTCDestroyPlayerCash(int eurAmount)
+    {
+        int remaining = eurAmount;
+        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        int ci = 0;
+        int cCount = currencies.Count();
+        while (ci < cCount)
+        {
+            LFPG_BTCCurrency cur = currencies[ci];
+            string cls = cur.classname;
+            int denomination = cur.value;
+
+            int playerHas = LFPG_BTCCountPlayerItems(cls);
+            if (playerHas <= 0)
+            {
+                ci = ci + 1;
+                continue;
+            }
+
+            int needed = remaining / denomination;
+            if (needed <= 0)
+            {
+                // Check if one bill of this denomination covers what's left
+                if (denomination >= remaining)
+                {
+                    needed = 1;
+                }
+                else
+                {
+                    ci = ci + 1;
+                    continue;
+                }
+            }
+
+            if (needed > playerHas)
+            {
+                needed = playerHas;
+            }
+
+            int destroyed = LFPG_BTCDestroyPlayerItems(cls, needed);
+            int valueDestroyed = destroyed * denomination;
+            remaining = remaining - valueDestroyed;
+
+            if (remaining <= 0)
+            {
+                break;
+            }
+
+            ci = ci + 1;
+        }
+
+        int totalDestroyed = eurAmount - remaining;
+        return totalDestroyed;
+    }
+
+    // =========================================================
+    // B3: WITHDRAW CASH — LBMaster → EUR bills to player
+    // =========================================================
+    protected void HandleLFPG_BTCWithdrawCash(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        #ifdef SERVER
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCWithdrawCash]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int eurAmount = 0;
+        if (!ctx.Read(eurAmount))
+            return;
+
+        if (eurAmount <= 0)
+            return;
+
+        LB_ATM_Playerbase atmPb = new LB_ATM_Playerbase(this);
+        int currentBal = atmPb.GetATMMoney();
+
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW_CASH, errPow, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0);
+            return;
+        }
+
+        if (currentBal < eurAmount)
+        {
+            int errFunds = LFPG_BTC_ERR_NO_FUNDS;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW_CASH, errFunds, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0);
+            return;
+        }
+
+        int removed = atmPb.RemoveATMMoney(eurAmount);
+        if (removed <= 0)
+        {
+            int errFunds2 = LFPG_BTC_ERR_NO_FUNDS;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW_CASH, errFunds2, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0);
+            return;
+        }
+
+        // Spawn EUR bills
+        LFPG_BTCGreedyChange(removed);
+
+        int newBal = atmPb.GetATMMoney();
+        float eurAmt = removed;
+        int okCode = LFPG_BTC_OK;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_WITHDRAW_CASH, okCode, atm.LFPG_GetBtcStock(), newBal, 0, eurAmt);
+
+        string logWC = "[BTCWithdrawCash] ";
+        logWC = logWC + removed.ToString();
+        logWC = logWC + " EUR withdrawn as bills";
+        LFPG_Util.Info(logWC);
+        #endif
+    }
+
+    // =========================================================
+    // B3: DEPOSIT CASH — EUR bills from player → LBMaster
+    // =========================================================
+    protected void HandleLFPG_BTCDepositCash(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        #ifdef SERVER
+        if (!sender)
+            return;
+
+        if (!LFPG_BTCConfig.IsEnabled())
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+        {
+            string rlMsg = "Too fast! Wait a moment.";
+            LFPG_SendClientMsg(this, rlMsg);
+            return;
+        }
+
+        string tag = "[BTCDepositCash]";
+        LFPG_BTCAtmBase atm = LFPG_BTCResolveAndValidate(ctx, tag);
+        if (!atm)
+            return;
+
+        int eurAmount = 0;
+        if (!ctx.Read(eurAmount))
+            return;
+
+        if (eurAmount <= 0)
+            return;
+
+        LB_ATM_Playerbase atmE = new LB_ATM_Playerbase(this);
+        int earlyBal = atmE.GetATMMoney();
+
+        if (!atm.LFPG_IsATMPowered())
+        {
+            int errPow = LFPG_BTC_ERR_NOT_POWERED;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT_CASH, errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+            return;
+        }
+
+        // Destroy EUR bills from player
+        int destroyed = LFPG_BTCDestroyPlayerCash(eurAmount);
+        if (destroyed <= 0)
+        {
+            int errNoCash = LFPG_BTC_ERR_NO_CASH;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT_CASH, errNoCash, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+            return;
+        }
+
+        // Guard: if destroyed < eurAmount, player didn't have enough
+        if (destroyed < eurAmount)
+        {
+            // Refund what was destroyed
+            LFPG_BTCGreedyChange(destroyed);
+            int errNoCash2 = LFPG_BTC_ERR_NO_CASH;
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT_CASH, errNoCash2, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0);
+            return;
+        }
+
+        // Return change if destroyed > eurAmount
+        int excess = destroyed - eurAmount;
+        if (excess > 0)
+        {
+            LFPG_BTCGreedyChange(excess);
+        }
+
+        // Credit to LBMaster (exactly eurAmount — excess already returned)
+        LB_ATM_Playerbase atmPb = new LB_ATM_Playerbase(this);
+        atmPb.AddATMMoney(eurAmount);
+
+        int newBal = atmPb.GetATMMoney();
+        float eurAmt = eurAmount;
+        int okCode = LFPG_BTC_OK;
+        LFPG_SendBTCTxResult(LFPG_BTC_TX_DEPOSIT_CASH, okCode, atm.LFPG_GetBtcStock(), newBal, 0, eurAmt);
+
+        string logDC = "[BTCDepositCash] ";
+        logDC = logDC + eurAmount.ToString();
+        logDC = logDC + " EUR deposited from bills";
+        LFPG_Util.Info(logDC);
+        #endif
+    }
+
+    // =========================================================
     // BTC ATM: Client Handlers (Sprint BTC-3)
     // =========================================================
 
@@ -4047,7 +4305,11 @@ modded class PlayerBase
         if (!ctx.Read(withdrawOnly))
             return;
 
-        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly);
+        // A3: btcOnInv — optional read (retrocompatible)
+        int btcOnInv = 0;
+        ctx.Read(btcOnInv);
+
+        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly, btcOnInv);
 
         string logResp = "[BTCOpenResponse] price=";
         logResp = logResp + price.ToString();
@@ -4090,7 +4352,11 @@ modded class PlayerBase
         if (!ctx.Read(cashOnInv))
             return;
 
-        LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv);
+        // A3: btcOnInv — optional read (retrocompatible)
+        int btcOnInv = 0;
+        ctx.Read(btcOnInv);
+
+        LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv);
 
         string logTx = "[BTCTxResult] type=";
         logTx = logTx + txType.ToString();
