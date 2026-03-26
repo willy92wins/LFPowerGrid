@@ -101,8 +101,12 @@ modded class ActionConstructor
 		
 		// --- BTC ATM :) ---
 		actions.Insert(LFPG_ActionOpenBTCAtm);
+
+        // --- Speaker ---
+        actions.Insert(LFPG_ActionSpeakerOn);
+        actions.Insert(LFPG_ActionSpeakerOff);
 		
-        LFPG_Util.Debug("[Actions] LFPG actions registered (50)");
+        LFPG_Util.Debug("[Actions] LFPG actions registered (52)");
     }
 };
 
