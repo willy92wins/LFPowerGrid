@@ -340,7 +340,8 @@ class LFPG_BTCPriceFetcher
     protected float ParsePriceFromJSON(string data)
     {
         // ---- Attempt 1: Binance ticker/price key "price" ----
-        float result = TryExtractKey(data, "price");
+        string priceKey = "price";
+        float result = TryExtractKey(data, priceKey);
         if (result > 0.0)
             return result;
 
@@ -356,8 +357,9 @@ class LFPG_BTCPriceFetcher
         if (result > 0.0)
             return result;
 
-        // ---- Attempt 3: Blockchain.info key "last" ----
-        result = TryExtractKey(data, "last");
+        // ---- Attempt 4: Blockchain.info key "last" ----
+        string lastKey = "last";
+        result = TryExtractKey(data, lastKey);
         if (result > 0.0)
             return result;
 

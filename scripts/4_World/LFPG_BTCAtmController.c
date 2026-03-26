@@ -154,15 +154,7 @@ class LFPG_BTCAtmController extends ViewController
                     changeStr = changeStr + "0";
                 }
                 changeStr = changeStr + decPart.ToString();
-                changeStr = changeStr + "%";
-                if (isNeg)
-                {
-                    changeStr = changeStr + " 24h)";
-                }
-                else
-                {
-                    changeStr = changeStr + " 24h)";
-                }
+                changeStr = changeStr + "% 24h)";
                 m_PriceChangeText.SetText(changeStr);
 
                 if (isNeg)
