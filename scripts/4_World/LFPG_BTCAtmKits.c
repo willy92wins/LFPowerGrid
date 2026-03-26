@@ -4,26 +4,26 @@
 // Both kits use the different-model pattern (KitBaseDeployable):
 //   Box model (kit) → deploys ATM model (device).
 //
-// LF_BTCAtm_Kit:      Player kit → spawns LF_BTCAtm (CONSUMER)
-// LF_BTCAtmAdmin_Kit: Admin kit  → spawns LF_BTCAtmAdmin (no power)
+// LFPG_BTCAtm_Kit:      Player kit → spawns LFPG_BTCAtm (CONSUMER)
+// LFPG_BTCAtmAdmin_Kit: Admin kit  → spawns LFPG_BTCAtmAdmin (no power)
 //
 // Model paths are placeholders — Sprint 5 provides real assets.
 // =========================================================
 
 // ---- Player ATM Kit ----
-class LF_BTCAtm_Kit : LFPG_KitBaseDeployable
+class LFPG_BTCAtm_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_BTCAtm";
+        return "LFPG_BTCAtm";
     }
 };
 
 // ---- Admin ATM Kit ----
-class LF_BTCAtmAdmin_Kit : LFPG_KitBaseDeployable
+class LFPG_BTCAtmAdmin_Kit : LFPG_KitBaseDeployable
 {
     override string LFPG_GetSpawnClassname()
     {
-        return "LF_BTCAtmAdmin";
+        return "LFPG_BTCAtmAdmin";
     }
 };

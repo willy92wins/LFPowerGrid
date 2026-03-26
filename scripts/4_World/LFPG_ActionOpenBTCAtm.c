@@ -4,7 +4,7 @@
 // Opens the BTC ATM interface by sending a BTC_OPEN_REQUEST
 // RPC to the server. Server responds with price + stock + balance.
 //
-// Works on BOTH LF_BTCAtm and LF_BTCAtmAdmin (via base class check).
+// Works on BOTH LFPG_BTCAtm and LFPG_BTCAtmAdmin (via base class check).
 //
 // Conditions:
 //   - No item in hand (CCINone)
@@ -50,7 +50,7 @@ class LFPG_ActionOpenBTCAtm : ActionInteractBase
         if (!targetObj)
             return false;
 
-        // Check for base class (covers both LF_BTCAtm and LF_BTCAtmAdmin)
+        // Check for base class (covers both LFPG_BTCAtm and LFPG_BTCAtmAdmin)
         LFPG_BTCAtmBase atm = LFPG_BTCAtmBase.Cast(targetObj);
         if (!atm)
             return false;

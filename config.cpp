@@ -150,7 +150,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LF_BTCAtm_Kit", "LF_BTCAtm", "LF_BTCAtmAdmin_Kit", "LF_BTCAtmAdmin"};
+        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio", "DZ_Gear_Cooking"};
@@ -2190,7 +2190,7 @@ class CfgVehicles
     // =========================================================
 
     // ---- BTC ATM Player Kit (deployable, different-model) ----
-    class LF_BTCAtm_Kit : Inventory_Base
+    class LFPG_BTCAtm_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_KIT";
@@ -2208,7 +2208,7 @@ class CfgVehicles
     };
 
     // ---- BTC ATM Player (placed device, CONSUMER 1 IN) ----
-    class LF_BTCAtm : Inventory_Base
+    class LFPG_BTCAtm : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM";
@@ -2226,7 +2226,7 @@ class CfgVehicles
     };
 
     // ---- BTC ATM Admin Kit (deployable, different-model) ----
-    class LF_BTCAtmAdmin_Kit : Inventory_Base
+    class LFPG_BTCAtmAdmin_Kit : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_ADMIN_KIT";
@@ -2244,7 +2244,7 @@ class CfgVehicles
     };
 
     // ---- BTC ATM Admin (placed device, NO power) ----
-    class LF_BTCAtmAdmin : Inventory_Base
+    class LFPG_BTCAtmAdmin : Inventory_Base
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_ADMIN";

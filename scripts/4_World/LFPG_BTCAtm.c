@@ -2,9 +2,9 @@
 // LF_PowerGrid - BTC ATM Devices (Sprint BTC-5)
 //
 // LFPG_BTCAtmBase:   Abstract base (LFPG_DeviceBase), all BTC logic.
-// LF_BTCAtm:         CONSUMER 30u/s, 1 IN, deployable by players.
+// LFPG_BTCAtm:       CONSUMER 30u/s, 1 IN, deployable by players.
 //                    Visual: screen + LED swap on power change.
-// LF_BTCAtmAdmin:    No power, no ports, placed by admins.
+// LFPG_BTCAtmAdmin:  No power, no ports, placed by admins.
 //                    Visual: always green (config.cpp defaults).
 //
 // Both share:
@@ -218,7 +218,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         ctx.Write(m_DecimalRemainder);
     }
 
-    override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int deviceVer)
+    override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver)
     {
         if (!ctx.Read(m_BtcStock))
         {
@@ -299,7 +299,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
 // =========================================================
 // PLAYER ATM: CONSUMER 30u/s, 1 IN, deployable
 // =========================================================
-class LF_BTCAtm : LFPG_BTCAtmBase
+class LFPG_BTCAtm : LFPG_BTCAtmBase
 {
     // ---- Device-specific SyncVar ----
     protected bool m_PoweredNet = false;
@@ -307,7 +307,7 @@ class LF_BTCAtm : LFPG_BTCAtmBase
     // ============================================
     // Constructor: port + SyncVar
     // ============================================
-    void LF_BTCAtm()
+    void LFPG_BTCAtm()
     {
         string varPowered = "m_PoweredNet";
         RegisterNetSyncVariableBool(varPowered);
@@ -399,7 +399,7 @@ class LF_BTCAtm : LFPG_BTCAtmBase
 // =========================================================
 // ADMIN ATM: No power, no ports, always active
 // =========================================================
-class LF_BTCAtmAdmin : LFPG_BTCAtmBase
+class LFPG_BTCAtmAdmin : LFPG_BTCAtmBase
 {
     // No extra SyncVars needed.
     // Visual: always green via config.cpp hiddenSelectionsMaterials default.
@@ -408,7 +408,7 @@ class LF_BTCAtmAdmin : LFPG_BTCAtmBase
     // ============================================
     // Constructor: no ports
     // ============================================
-    void LF_BTCAtmAdmin()
+    void LFPG_BTCAtmAdmin()
     {
         // No ports — admin ATM has no electrical connections
     }

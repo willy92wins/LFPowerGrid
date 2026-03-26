@@ -4100,6 +4100,8 @@ modded class PlayerBase
     }
 
     // ---- PRICE UNAVAILABLE: no BTC price from API ----
+    // Open the UI anyway so the player sees "N/A". Buy/Sell are
+    // client-guarded (F5) and will show an error if clicked.
     protected void HandleLFPG_BTCPriceUnavailable()
     {
         LFPG_BTCAtmClientData.OnPriceUnavailable();
@@ -4107,6 +4109,8 @@ modded class PlayerBase
         string logNA = "[BTCPriceUnavailable] price not available from API";
         LFPG_Util.Info(logNA);
 
+        // Open UI first (if not already open), then refresh display
+        LFPG_BTCAtmView.Open();
         LFPG_BTCAtmView.OnPriceUnavailable();
     }
 };

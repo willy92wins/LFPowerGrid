@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Sprinkler device (v5.2 Watering)
+// LF_PowerGrid - Sprinkler device (v5.3 Player Wetting)
 //
 // LFPG_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
 // LFPG_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
@@ -7,10 +7,16 @@
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
 // v4.1: RegisterSprinkler/UnregisterSprinkler in NM.
 // v5.2: Watering logic (GardenBase + SetWet).
+// v5.3: Phase C — player wetting (rain parity). Wets clothing
+//        attachments + cargo inside each attachment + item in hands.
+//        Vanilla Environment detects wet clothing and updates
+//        GetStatWet() / hypothermia on its own tick — no manual
+//        stat manipulation needed.
 //
 // Watering: LFPG_TickWatering() called by NM every ~15s.
-//   - Finds GardenBase within LFPG_SPRINKLER_RADIUS → waters all slots
-//   - Finds ItemBase within LFPG_SPRINKLER_RADIUS → increases wetness
+//   - Phase A: GardenBase within radius → LFPG_WaterFromSprinkler()
+//   - Phase B: ItemBase within radius → SetWet() increment
+//   - Phase C: PlayerBase within radius → wet attachments + cargo
 //   - Uses pre-allocated m_ arrays (no alloc in tick)
 //
 // Particle: PENDING — needs custom sprinkler_spray.ptc.
@@ -260,13 +266,15 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     }
 
     // =========================================================
-    // LFPG_TickWatering — SERVER: water nearby gardens + wet items
+    // LFPG_TickWatering — SERVER: water gardens + wet items + wet players
     //
     // Called by NM every LFPG_SPRINKLER_WATER_TICK_COUNT ticks (~15s).
     // Only called when m_SprinklerActive == true (NM pre-filters).
     //
     // Phase A: Find GardenBase within radius → LFPG_WaterFromSprinkler()
     // Phase B: Find ItemBase within radius → SetWet() increment
+    // Phase C: Find PlayerBase within radius → wet attachments + cargo
+    //          (rain parity — vanilla Environment handles GetStatWet)
     // =========================================================
     void LFPG_TickWatering()
     {
@@ -296,6 +304,22 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         float newWet;
         int gardensWatered = 0;
         int itemsWetted = 0;
+
+        // Phase C hoisted variables (player wetting)
+        PlayerBase player;
+        GameInventory playerInv;
+        int attCount;
+        int attIdx;
+        EntityAI att;
+        ItemBase attItem;
+        GameInventory attInv;
+        CargoBase attCargo;
+        int cargoCount;
+        int cargoIdx;
+        EntityAI cargoEnt;
+        ItemBase cargoItem;
+        ItemBase handsItem;
+        int playersWetted = 0;
 
         for (i = 0; i < objCount; i = i + 1)
         {
@@ -347,16 +371,112 @@ class LFPG_Sprinkler : LFPG_DeviceBase
                 }
                 item.SetWet(newWet);
                 itemsWetted = itemsWetted + 1;
+                continue;
+            }
+
+            // Phase C: PlayerBase wetting (rain parity)
+            // PlayerBase inherits ManBase → DayZCreature → EntityAI (NOT ItemBase).
+            // Vanilla Environment.ProcessWetnessByRain iterates clothing
+            // attachments and applies soaking. We replicate the same effect:
+            //   1) Wet each clothing attachment
+            //   2) Wet cargo items inside each attachment
+            //   3) Wet item in hands
+            // Vanilla Environment will detect wet clothing on its next tick
+            // and update GetStatWet() / hypothermia automatically.
+            player = PlayerBase.Cast(ent);
+            if (player)
+            {
+                playerInv = player.GetInventory();
+                if (!playerInv)
+                    continue;
+
+                // ---- Wet clothing attachments + their cargo ----
+                attCount = playerInv.AttachmentCount();
+                for (attIdx = 0; attIdx < attCount; attIdx = attIdx + 1)
+                {
+                    att = playerInv.GetAttachmentFromIndex(attIdx);
+                    if (!att)
+                        continue;
+
+                    attItem = ItemBase.Cast(att);
+                    if (!attItem)
+                        continue;
+
+                    // Wet the clothing piece itself
+                    curWet = attItem.GetWet();
+                    if (curWet < 1.0)
+                    {
+                        newWet = curWet + LFPG_SPRINKLER_WET_AMOUNT;
+                        if (newWet > 1.0)
+                        {
+                            newWet = 1.0;
+                        }
+                        attItem.SetWet(newWet);
+                    }
+
+                    // Wet cargo items inside this attachment (rain parity)
+                    attInv = att.GetInventory();
+                    if (!attInv)
+                        continue;
+
+                    attCargo = attInv.GetCargo();
+                    if (!attCargo)
+                        continue;
+
+                    cargoCount = attCargo.GetItemCount();
+                    for (cargoIdx = 0; cargoIdx < cargoCount; cargoIdx = cargoIdx + 1)
+                    {
+                        cargoEnt = attCargo.GetItem(cargoIdx);
+                        if (!cargoEnt)
+                            continue;
+
+                        cargoItem = ItemBase.Cast(cargoEnt);
+                        if (!cargoItem)
+                            continue;
+
+                        curWet = cargoItem.GetWet();
+                        if (curWet >= 1.0)
+                            continue;
+
+                        newWet = curWet + LFPG_SPRINKLER_WET_AMOUNT;
+                        if (newWet > 1.0)
+                        {
+                            newWet = 1.0;
+                        }
+                        cargoItem.SetWet(newWet);
+                    }
+                }
+
+                // ---- Wet item in hands ----
+                handsItem = player.GetItemInHands();
+                if (handsItem)
+                {
+                    curWet = handsItem.GetWet();
+                    if (curWet < 1.0)
+                    {
+                        newWet = curWet + LFPG_SPRINKLER_WET_AMOUNT;
+                        if (newWet > 1.0)
+                        {
+                            newWet = 1.0;
+                        }
+                        handsItem.SetWet(newWet);
+                    }
+                }
+
+                playersWetted = playersWetted + 1;
+                continue;
             }
         }
 
         // Debug log OUTSIDE loop (1 string per tick, not per object)
-        if (gardensWatered > 0 || itemsWetted > 0)
+        if (gardensWatered > 0 || itemsWetted > 0 || playersWetted > 0)
         {
             string tickLog = "[Sprinkler] Watered gardens=";
             tickLog = tickLog + gardensWatered.ToString();
             tickLog = tickLog + " items=";
             tickLog = tickLog + itemsWetted.ToString();
+            tickLog = tickLog + " players=";
+            tickLog = tickLog + playersWetted.ToString();
             LFPG_Util.Debug(tickLog);
         }
         #endif
