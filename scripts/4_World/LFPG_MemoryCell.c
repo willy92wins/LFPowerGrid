@@ -23,6 +23,12 @@ class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_MemoryCell";
     }
+
+    override string LFPG_GetSymbolTexturePath()
+    {
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
+        return path;
+    }
 };
 
 // ---------------------------------------------------------
@@ -233,6 +239,12 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         // Force correct symbol texture on client at spawn.
         // Same shared-p3d cache bug as LogicGateBase.
         LFPG_UpdateVisuals();
+
+        #ifndef SERVER
+        int texDelay = 100;
+        bool texRepeat = false;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, texDelay, texRepeat);
+        #endif
     }
 
     // ---- Lifecycle hooks ----
@@ -301,6 +313,15 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
         SetObjectMaterial(3, LFPG_MCELL_RVMAT_OFF);
+        #endif
+    }
+
+    protected void LFPG_DeferredSymbolTexture()
+    {
+        #ifndef SERVER
+        string tex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
+        int idx = 0;
+        SetObjectTexture(idx, tex);
         #endif
     }
 

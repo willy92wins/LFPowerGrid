@@ -43,6 +43,32 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
     {
         return 180.0;
     }
+
+    // ---- Virtual: symbol texture for shared p3d cache fix ----
+    string LFPG_GetSymbolTexturePath()
+    {
+        string empty = "";
+        return empty;
+    }
+
+    // ---- Deferred texture fix: engine caches first texture for shared p3d ----
+    override void EEInit()
+    {
+        super.EEInit();
+        int delay = 100;
+        bool repeat = false;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, delay, repeat);
+    }
+
+    protected void LFPG_DeferredSymbolTexture()
+    {
+        string tex = LFPG_GetSymbolTexturePath();
+        if (tex != "")
+        {
+            int idx = 0;
+            SetObjectTexture(idx, tex);
+        }
+    }
 };
 
 class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit
@@ -51,6 +77,12 @@ class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_AND_Gate";
     }
+
+    override string LFPG_GetSymbolTexturePath()
+    {
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa";
+        return path;
+    }
 };
 class LFPG_OR_Gate_Kit : LFPG_LogicGate_Kit
 {
@@ -58,12 +90,24 @@ class LFPG_OR_Gate_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_OR_Gate";
     }
+
+    override string LFPG_GetSymbolTexturePath()
+    {
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa";
+        return path;
+    }
 };
 class LFPG_XOR_Gate_Kit : LFPG_LogicGate_Kit
 {
     override string LFPG_GetSpawnClassname()
     {
         return "LFPG_XOR_Gate";
+    }
+
+    override string LFPG_GetSymbolTexturePath()
+    {
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa";
+        return path;
     }
 };
 
@@ -217,7 +261,15 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         // unless we explicitly SetObjectTexture on init.
         // OnVariablesSynchronized only fires on SyncVar CHANGE,
         // which never happens on fresh spawn (all defaults = false).
+        // Immediate call may be too early (engine overwrites),
+        // so also schedule a deferred call after model is loaded.
         LFPG_UpdateVisuals();
+
+        #ifndef SERVER
+        int delay = 100;
+        bool repeat = false;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, delay, repeat);
+        #endif
     }
 
     override void LFPG_OnKilled()
@@ -302,6 +354,18 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         else
         {
             SetObjectMaterial(3, LFPG_GATE_RVMAT_OFF);
+        }
+        #endif
+    }
+
+    protected void LFPG_DeferredSymbolTexture()
+    {
+        #ifndef SERVER
+        string tex = LFPG_GetSymbolTexturePath();
+        if (tex != "")
+        {
+            int idx = 0;
+            SetObjectTexture(idx, tex);
         }
         #endif
     }
