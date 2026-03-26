@@ -9,8 +9,8 @@
 //   Persists m_IsOpen via LFPG_OnStoreSaveExtra hook.
 // =========================================================
 
-static const string LFPG_FRIDGE_RVMAT_ON   = "\\LFPowerGrid\\data\\fridge\\fridge_green.rvmat";
-static const string LFPG_FRIDGE_RVMAT_OFF  = "\\LFPowerGrid\\data\\fridge\\led_off.rvmat";
+static const string LFPG_FRIDGE_RVMAT_ON   = "\LFPowerGrid\data\fridge\fridge_green.rvmat";
+static const string LFPG_FRIDGE_RVMAT_OFF  = "\LFPowerGrid\data\fridge\led_off.rvmat";
 static const float  LFPG_FRIDGE_TEMP       = 5.0;
 static const float  LFPG_FRIDGE_CONSUMPTION = 20.0;
 

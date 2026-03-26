@@ -634,8 +634,8 @@ static const int   LFPG_PUMP_UPGRADE_NAILS           = 50;        // Nails requi
 
 // ---- Water Pump LED (visual indicator) ----
 static const int    LFPG_PUMP_LED_SELECTION_IDX      = 0;         // hiddenSelections index for pump_led
-static const string LFPG_PUMP_LED_RVMAT_ON           = "\\LFPowerGrid\\data\\waterpump\\lf_pump_led_on.rvmat";
-static const string LFPG_PUMP_LED_RVMAT_OFF          = "\\LFPowerGrid\\data\\waterpump\\lf_pump_led_off.rvmat";
+static const string LFPG_PUMP_LED_RVMAT_ON           = "\LFPowerGrid\data\waterpump\lf_pump_led_on.rvmat";
+static const string LFPG_PUMP_LED_RVMAT_OFF          = "\LFPowerGrid\data\waterpump\lf_pump_led_off.rvmat";
 
 // ---- Water Pump Tank HUD (client-side, Sprint W3) ----
 static const int    LFPG_TANK_HUD_COLOR_CLEAN        = 0xFF3399FF;  // blue (clean water)

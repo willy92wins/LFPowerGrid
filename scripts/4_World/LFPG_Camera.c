@@ -10,8 +10,8 @@
 //   Camera only declares: ports, m_PoweredNet, consumption, visuals.
 // =========================================================
 
-static const string LFPG_CAMERA_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_off.rvmat";
-static const string LFPG_CAMERA_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_camera_led_on.rvmat";
+static const string LFPG_CAMERA_RVMAT_OFF = "\LFPowerGrid\data\cctv\lf_camera_led_off.rvmat";
+static const string LFPG_CAMERA_RVMAT_ON  = "\LFPowerGrid\data\cctv\lf_camera_led_on.rvmat";
 
 class LFPG_Camera_Kit : LFPG_KitBase
 {

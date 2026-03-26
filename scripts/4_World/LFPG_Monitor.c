@@ -9,8 +9,8 @@
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 // =========================================================
 
-static const string LFPG_MONITOR_RVMAT_OFF = "\\LFPowerGrid\\data\\cctv\\lf_monitor_off.rvmat";
-static const string LFPG_MONITOR_RVMAT_ON  = "\\LFPowerGrid\\data\\cctv\\lf_monitor_on.rvmat";
+static const string LFPG_MONITOR_RVMAT_OFF = "\LFPowerGrid\data\cctv\lf_monitor_off.rvmat";
+static const string LFPG_MONITOR_RVMAT_ON  = "\LFPowerGrid\data\cctv\lf_monitor_on.rvmat";
 
 class LFPG_Monitor_Kit : LFPG_KitBase
 {

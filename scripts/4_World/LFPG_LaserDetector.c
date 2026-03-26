@@ -15,8 +15,8 @@
 // Persistence: [base: DeviceId + ver + wireJSON] — no extras
 // =========================================================
 
-static const string LFPG_LASER_RVMAT_OFF = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
-static const string LFPG_LASER_RVMAT_RED = "\\LFPowerGrid\\data\\laser_detector\\laser_detector_red.rvmat";
+static const string LFPG_LASER_RVMAT_OFF = "\LFPowerGrid\data\button\materials\led_off.rvmat";
+static const string LFPG_LASER_RVMAT_RED = "\LFPowerGrid\data\laser_detector\laser_detector_red.rvmat";
 
 class LFPG_LaserDetector_Kit : LFPG_KitBase
 {

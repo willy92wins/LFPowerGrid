@@ -5319,6 +5319,52 @@ class LFPG_NetworkManager
             // is already clamped by charge/discharge rates and storage bounds,
             // so it always reflects what actually happened to the battery.
             float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
+
+            // v4.3 DIAG: Log when chargeRateDisplay exceeds physical limits.
+            // Remove after bug is identified.
+            float absDisplay = chargeRateDisplay;
+            if (absDisplay < 0.0)
+            {
+                absDisplay = -absDisplay;
+            }
+            if (absDisplay > maxDischarge)
+            {
+                string diagMsg = "[Battery DIAG] rate=";
+                diagMsg = diagMsg + chargeRateDisplay.ToString();
+                diagMsg = diagMsg + " newStored=";
+                diagMsg = diagMsg + newStored.ToString();
+                diagMsg = diagMsg + " oldStored=";
+                diagMsg = diagMsg + storedEnergy.ToString();
+                diagMsg = diagMsg + " delta=";
+                string diagMsg2 = diagMsg;
+                float energyDeltaDbg = newStored - storedEnergy;
+                diagMsg2 = diagMsg2 + energyDeltaDbg.ToString();
+                diagMsg2 = diagMsg2 + " deltaSec=";
+                diagMsg2 = diagMsg2 + deltaSec.ToString();
+                diagMsg2 = diagMsg2 + " netFlow=";
+                diagMsg2 = diagMsg2 + netFlow.ToString();
+                diagMsg2 = diagMsg2 + " in=";
+                diagMsg2 = diagMsg2 + inputReceived.ToString();
+                diagMsg2 = diagMsg2 + " out=";
+                diagMsg2 = diagMsg2 + outputDelivered.ToString();
+                diagMsg2 = diagMsg2 + " maxDis=";
+                diagMsg2 = diagMsg2 + maxDischarge.ToString();
+                diagMsg2 = diagMsg2 + " effMax=";
+                diagMsg2 = diagMsg2 + effectiveMax.ToString();
+                LFPG_Util.Warning(diagMsg2);
+            }
+
+            // v4.3: Defensive clamp — UI should never show beyond physical limits.
+            if (chargeRateDisplay > maxCharge)
+            {
+                chargeRateDisplay = maxCharge;
+            }
+            float negMaxDis = -maxDischarge;
+            if (chargeRateDisplay < negMaxDis)
+            {
+                chargeRateDisplay = negMaxDis;
+            }
+
             m_ReusableParamFloat.param1 = chargeRateDisplay;
             GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, m_ReusableParamFloat);
 

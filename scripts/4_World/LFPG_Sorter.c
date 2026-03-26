@@ -17,8 +17,8 @@
 
 static const float LFPG_SORTER_LINK_RADIUS = 3.0;
 
-static const string LFPG_SORTER_RVMAT_OFF = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_off.rvmat";
-static const string LFPG_SORTER_RVMAT_ON  = "\\LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_on.rvmat";
+static const string LFPG_SORTER_RVMAT_OFF = "\LFPowerGrid\data\sorter\materials\lf_sorter_led_off.rvmat";
+static const string LFPG_SORTER_RVMAT_ON  = "\LFPowerGrid\data\sorter\materials\lf_sorter_led_on.rvmat";
 
 class LFPG_Sorter_Kit : LFPG_KitBase
 {

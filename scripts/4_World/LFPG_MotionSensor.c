@@ -23,9 +23,9 @@ static const int LFPG_SENSOR_MODE_TEAM  = 1;
 static const int LFPG_SENSOR_MODE_ENEMY = 2;
 static const int LFPG_SENSOR_MODE_COUNT = 3;
 
-static const string LFPG_SENSOR_RVMAT_OFF    = "\\LFPowerGrid\\data\\sensor\\motion_sensor_off.rvmat";
-static const string LFPG_SENSOR_RVMAT_GREEN  = "\\LFPowerGrid\\data\\sensor\\motion_sensor_green.rvmat";
-static const string LFPG_SENSOR_RVMAT_RED    = "\\LFPowerGrid\\data\\sensor\\motion_sensor_red.rvmat";
+static const string LFPG_SENSOR_RVMAT_OFF    = "\LFPowerGrid\data\sensor\motion_sensor_off.rvmat";
+static const string LFPG_SENSOR_RVMAT_GREEN  = "\LFPowerGrid\data\sensor\motion_sensor_green.rvmat";
+static const string LFPG_SENSOR_RVMAT_RED    = "\LFPowerGrid\data\sensor\motion_sensor_red.rvmat";
 
 class LFPG_MotionSensor_Kit : LFPG_KitBase
 {

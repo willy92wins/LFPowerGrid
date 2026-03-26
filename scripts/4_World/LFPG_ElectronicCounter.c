@@ -9,9 +9,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] + m_CounterValue
 // =========================================================
 
-static const string LFPG_COUNTER_RVMAT_OFF  = "\\LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
-static const string LFPG_COUNTER_RVMAT_RED  = "\\LFPowerGrid\\data\\electronic_counter\\electronic_counter_red.rvmat";
-static const string LFPG_COUNTER_RVMAT_BASE = "\\LFPowerGrid\\data\\electronic_counter\\electronic_counter.rvmat";
+static const string LFPG_COUNTER_RVMAT_OFF  = "\LFPowerGrid\data\button\materials\led_off.rvmat";
+static const string LFPG_COUNTER_RVMAT_RED  = "\LFPowerGrid\data\electronic_counter\electronic_counter_red.rvmat";
+static const string LFPG_COUNTER_RVMAT_BASE = "\LFPowerGrid\data\electronic_counter\electronic_counter.rvmat";
 static const int    LFPG_COUNTER_PULSE_MS   = 2000;
 static const int    LFPG_COUNTER_DEBOUNCE_MS = 200;
 static const float  LFPG_COUNTER_CAPACITY    = 20.0;

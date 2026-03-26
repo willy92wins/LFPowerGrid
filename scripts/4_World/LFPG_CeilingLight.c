@@ -8,8 +8,8 @@
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 // =========================================================
 
-static const string LFPG_CEILING_RVMAT_OFF = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light.rvmat";
-static const string LFPG_CEILING_RVMAT_ON  = "\\LFPowerGrid\\data\\ceiling_light\\lf_ceiling_light_on.rvmat";
+static const string LFPG_CEILING_RVMAT_OFF = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light.rvmat";
+static const string LFPG_CEILING_RVMAT_ON  = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light_on.rvmat";
 
 class LFPG_CeilingLight_Kit : LFPG_KitBase
 {

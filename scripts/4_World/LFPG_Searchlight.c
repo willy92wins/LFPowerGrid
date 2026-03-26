@@ -21,8 +21,8 @@
 //   PITCH: SetAnimationPhase("light_main", phase) — head tilts
 // =========================================================
 
-static const string LFPG_SL_RVMAT_OFF = "\\LFPowerGrid\\data\\searchlight\\lf_searchlight_lens_off.rvmat";
-static const string LFPG_SL_RVMAT_ON  = "\\LFPowerGrid\\data\\searchlight\\lf_searchlight_lens_on.rvmat";
+static const string LFPG_SL_RVMAT_OFF = "\LFPowerGrid\data\searchlight\lf_searchlight_lens_off.rvmat";
+static const string LFPG_SL_RVMAT_ON  = "\LFPowerGrid\data\searchlight\lf_searchlight_lens_on.rvmat";
 
 static const float LFPG_SL_SPLASH_Y_OFFSET = 0.05;
 

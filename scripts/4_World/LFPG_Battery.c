@@ -485,8 +485,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
 // TIER 2: Medium (base standard) — UPS model with 7 LEDs
 // =========================================================
 
-static const string LFPG_BAT_MED_LED_GREEN = "\\LFPowerGrid\\data\\battery_medium\\ups_led_green.rvmat";
-static const string LFPG_BAT_MED_LED_OFF   = "\\LFPowerGrid\\data\\battery_medium\\ups_led_off.rvmat";
+static const string LFPG_BAT_MED_LED_GREEN = "\LFPowerGrid\data\battery_medium\ups_led_green.rvmat";
+static const string LFPG_BAT_MED_LED_OFF   = "\LFPowerGrid\data\battery_medium\ups_led_off.rvmat";
 static const int    LFPG_BAT_MED_LED_COUNT  = 7;
 
 class LFPG_BatteryMedium : LFPG_BatteryBase
@@ -586,8 +586,8 @@ class LFPG_BatteryMedium : LFPG_BatteryBase
 // TIER 3: Large (industrial grid bank) — transformer model with 7 LEDs
 // =========================================================
 
-static const string LFPG_BAT_LRG_LED_GREEN = "\\LFPowerGrid\\data\\battery_large\\substation_transformer_led_green.rvmat";
-static const string LFPG_BAT_LRG_LED_OFF   = "\\LFPowerGrid\\data\\battery_large\\substation_transformer_led_off.rvmat";
+static const string LFPG_BAT_LRG_LED_GREEN = "\LFPowerGrid\data\battery_large\substation_transformer_led_green.rvmat";
+static const string LFPG_BAT_LRG_LED_OFF   = "\LFPowerGrid\data\battery_large\substation_transformer_led_off.rvmat";
 static const int    LFPG_BAT_LRG_LED_COUNT  = 7;
 
 class LFPG_BatteryLarge : LFPG_BatteryBase

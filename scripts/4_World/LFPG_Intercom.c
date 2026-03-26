@@ -24,13 +24,13 @@
 // ---------------------------------------------------------
 // RVMAT paths for LED states
 // ---------------------------------------------------------
-static const string LFPG_INTERCOM_RVMAT_OFF    = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\led_off.rvmat";
-static const string LFPG_INTERCOM_RVMAT_GREEN  = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\rf_broadcaster_green.rvmat";
-static const string LFPG_INTERCOM_RVMAT_RED    = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\rf_broadcaster_red.rvmat";
-static const string LFPG_INTERCOM_RVMAT_BLUE   = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\rf_broadcaster_blue.rvmat";
+static const string LFPG_INTERCOM_RVMAT_OFF    = "\LFPowerGrid\data\rf_broadcaster\data\led_off.rvmat";
+static const string LFPG_INTERCOM_RVMAT_GREEN  = "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_green.rvmat";
+static const string LFPG_INTERCOM_RVMAT_RED    = "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_red.rvmat";
+static const string LFPG_INTERCOM_RVMAT_BLUE   = "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_blue.rvmat";
 
-static const string LFPG_INTERCOM_MIC_TEX      = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\rf_broadcaster_microphone_co.paa";
-static const string LFPG_INTERCOM_MIC_RVMAT    = "\\LFPowerGrid\\data\\rf_broadcaster\\data\\rf_broadcaster.rvmat";
+static const string LFPG_INTERCOM_MIC_TEX      = "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster_microphone_co.paa";
+static const string LFPG_INTERCOM_MIC_RVMAT    = "\LFPowerGrid\data\rf_broadcaster\data\rf_broadcaster.rvmat";
 
 // ---------------------------------------------------------
 // Constants
