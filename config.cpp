@@ -810,17 +810,17 @@ class CfgVehicles
     // engine may create a NEW class (scope=0) instead of extending
     // the vanilla class, causing the item to disappear from spawn.
     // =========================================================
-    class Pot
+    class Pot : Bottle_Base
     {
         inventorySlot[] += {"DirectCookingD"};
     };
 
-    class FryingPan
+    class FryingPan : Inventory_Base
     {
         inventorySlot[] += {"DirectCookingD"};
     };
 
-    class Cauldron
+    class Cauldron : Bottle_Base
     {
         inventorySlot[] += {"DirectCookingD"};
     };

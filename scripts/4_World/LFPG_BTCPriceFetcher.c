@@ -77,7 +77,7 @@ class LFPG_BTCPriceFetcher
     protected static ref LFPG_BTCPriceFetcher s_Instance;
 
     // RestApi state
-    protected ref RestApi m_RestApi;
+    protected RestApi m_RestApi;
     protected RestContext m_RestCtx;
     protected ref LFPG_BTCPriceCallback m_Callback;
     protected bool m_Initialized;
@@ -166,11 +166,6 @@ class LFPG_BTCPriceFetcher
             string keyMsg = "[LFPG_BTCPrice] API key configured";
             LFPG_Util.Info(keyMsg);
         }
-
-        // Set timeout (30 seconds)
-        int timeoutOption = ERESTOPTION_READOPERATION;
-        int timeoutValue = 30;
-        m_RestApi.SetOption(timeoutOption, timeoutValue);
 
         m_Initialized = true;
 
@@ -365,13 +360,12 @@ class LFPG_BTCPriceFetcher
         // Skip leading whitespace
         int start = 0;
         int sLen = s.Length();
-        int ch;
+        string ch;
 
         while (start < sLen)
         {
             ch = s.Get(start);
-            // space=32, tab=9, newline=10, cr=13
-            if (ch == 32 || ch == 9 || ch == 10 || ch == 13)
+            if (ch == " " || ch == "\t" || ch == "\n" || ch == "\r")
             {
                 start = start + 1;
             }
@@ -391,14 +385,18 @@ class LFPG_BTCPriceFetcher
         while (endPos < sLen)
         {
             ch = s.Get(endPos);
-            // '0'=48 .. '9'=57, '.'=46, '-'=45
             bool isNumChar = false;
-            if (ch >= 48 && ch <= 57)
+            if (ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4")
             {
                 isNumChar = true;
                 hasDigit = true;
             }
-            if (ch == 46 || ch == 45)
+            if (ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9")
+            {
+                isNumChar = true;
+                hasDigit = true;
+            }
+            if (ch == "." || ch == "-")
             {
                 isNumChar = true;
             }
