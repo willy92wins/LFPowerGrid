@@ -3466,18 +3466,13 @@ modded class PlayerBase
             return;
         }
 
-        // Check price
+        // Price: use -1.0 sentinel if unavailable (client detects this)
+        float price = -1.0;
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
-        if (!priceOk)
+        if (priceOk)
         {
-            ScriptRPC rpcNA = new ScriptRPC();
-            int subNA = LFPG_RPC_SubId.BTC_PRICE_UNAVAILABLE;
-            rpcNA.Write(subNA);
-            rpcNA.Send(this, LFPG_RPC_CHANNEL, true, null);
-            return;
+            price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
         }
-
-        float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
 
         // Read player balance (LBMaster)
         LB_ATM_Playerbase atmPlayer = new LB_ATM_Playerbase(this);
@@ -3490,7 +3485,7 @@ modded class PlayerBase
         // Player cash on person
         int cashOnInv = LFPG_BTCCountPlayerCash();
 
-        // Send response
+        // Send response (always — client handles price=-1.0 as N/A)
         ScriptRPC rpc = new ScriptRPC();
         int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
         rpc.Write(subResp);
@@ -4100,8 +4095,10 @@ modded class PlayerBase
     }
 
     // ---- PRICE UNAVAILABLE: no BTC price from API ----
-    // Open the UI anyway so the player sees "N/A". Buy/Sell are
-    // client-guarded (F5) and will show an error if clicked.
+    // Price unavailable: safety net only. Open flow now always uses
+    // OPEN_RESPONSE with sentinel price=-1.0 (server sends stock/balance/cash).
+    // This handler only fires if BTC_PRICE_UNAVAILABLE is ever sent for
+    // a non-open context in the future.
     protected void HandleLFPG_BTCPriceUnavailable()
     {
         LFPG_BTCAtmClientData.OnPriceUnavailable();
@@ -4109,8 +4106,6 @@ modded class PlayerBase
         string logNA = "[BTCPriceUnavailable] price not available from API";
         LFPG_Util.Info(logNA);
 
-        // Open UI first (if not already open), then refresh display
-        LFPG_BTCAtmView.Open();
         LFPG_BTCAtmView.OnPriceUnavailable();
     }
 };

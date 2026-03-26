@@ -425,9 +425,4 @@ class LFPG_BTCAtmAdmin : LFPG_BTCAtmBase
     {
         return true;
     }
-
-    override float LFPG_GetConsumption()
-    {
-        return 0.0;
-    }
 };

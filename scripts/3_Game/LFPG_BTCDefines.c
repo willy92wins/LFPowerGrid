@@ -82,12 +82,22 @@ class LFPG_BTCAtmClientData
 
     static void OnOpenResponse(float price, int stock, int balance, int cashOnInv, bool wo)
     {
-        s_Price = price;
         s_Stock = stock;
         s_Balance = balance;
         s_CashOnInventory = cashOnInv;
         s_WithdrawOnly = wo;
-        s_PriceUnavailable = false;
+
+        // Sentinel: price <= 0 means server has no price
+        if (price <= 0.0)
+        {
+            s_Price = -1.0;
+            s_PriceUnavailable = true;
+        }
+        else
+        {
+            s_Price = price;
+            s_PriceUnavailable = false;
+        }
     }
 
     static void OnTxResult(int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount, int cashOnInv)
