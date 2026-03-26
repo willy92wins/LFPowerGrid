@@ -3438,6 +3438,15 @@ class LFPG_NetworkManager
         return false;
     }
 
+    float LFPG_GetBTC24hChange()
+    {
+        if (m_BTCPriceFetcher)
+        {
+            return m_BTCPriceFetcher.Get24hChangePercent();
+        }
+        return 0.0;
+    }
+
     // Read world time once, update cached sun state.
     // Called by constructor (seed) and by LFPG_TickSolarPanels (periodic).
     protected void LFPG_ComputeSunState()

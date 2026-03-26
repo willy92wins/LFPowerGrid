@@ -203,7 +203,7 @@
 "STR_LFPG_BTC_CARD_BALANCE","YOUR BALANCE","YOUR BALANCE","TU SALDO","YOUR BALANCE","YOUR BALANCE"
 "STR_LFPG_BTC_CARD_CASH","CASH","CASH","EFECTIVO","CASH","CASH"
 "STR_LFPG_BTC_AMOUNT_LABEL","Amount","Amount","Cantidad","Amount","Amount"
-"STR_LFPG_BTC_CHK_TO_ACCOUNT","Use ATM account (no cash/bitcoin)","Use ATM account (no cash/bitcoin)","Operar con cuenta (sin efectivo/bitcoin)","Use ATM account (no cash/bitcoin)","Use ATM account (no cash/bitcoin)"
+"STR_LFPG_BTC_CHK_TO_ACCOUNT","ATM Account (no cash/bitcoin)","ATM Account (no cash/bitcoin)","Cuenta ATM (sin efectivo/bitcoin)","ATM Account (no cash/bitcoin)","ATM Account (no cash/bitcoin)"
 "STR_LFPG_BTC_BTN_BUY","Buy","Buy","Comprar","Buy","Buy"
 "STR_LFPG_BTC_BTN_SELL","Sell","Sell","Vender","Sell","Sell"
 "STR_LFPG_BTC_BTN_WITHDRAW","Withdraw","Withdraw","Retirar","Withdraw","Withdraw"

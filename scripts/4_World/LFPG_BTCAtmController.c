@@ -19,6 +19,7 @@ class LFPG_BTCAtmController extends ViewController
 {
     // ── Widget refs (set from View) ──
     protected TextWidget m_PriceText;
+    protected TextWidget m_PriceChangeText;
     protected TextWidget m_StockText;
     protected TextWidget m_BalanceText;
     protected TextWidget m_CashEurText;
@@ -45,6 +46,7 @@ class LFPG_BTCAtmController extends ViewController
     // ── Palette refs (for status) ──
     static const int COL_GREEN      = 0xFF34D399;
     static const int COL_RED        = 0xFFF87171;
+    static const int COL_AMBER      = 0xFFFBBF24;
     static const int COL_TEXT_MID   = 0xFFB0BEC5;
     static const int COL_STATUS_OK  = 0x1734D399;
     static const int COL_STATUS_ERR = 0x17F87171;
@@ -63,6 +65,7 @@ class LFPG_BTCAtmController extends ViewController
             return;
 
         m_PriceText = view.PriceText;
+        m_PriceChangeText = view.PriceChangeText;
         m_StockText = view.StockText;
         m_BalanceText = view.BalanceText;
         m_CashEurText = view.CashEurText;
@@ -99,12 +102,77 @@ class LFPG_BTCAtmController extends ViewController
             {
                 string naStr = "N/A";
                 m_PriceText.SetText(naStr);
-                // N/A is universal — no i18n needed
             }
             else
             {
                 string priceStr = FormatEur(price);
                 m_PriceText.SetText(priceStr);
+            }
+        }
+
+        // 24h price change indicator
+        if (m_PriceChangeText)
+        {
+            float change24h = LFPG_BTCAtmClientData.s_PriceChange24h;
+            if (priceNA)
+            {
+                string emptyChange = "";
+                m_PriceChangeText.SetText(emptyChange);
+            }
+            else
+            {
+                bool isNeg = false;
+                float absChange = change24h;
+                if (change24h < 0.0)
+                {
+                    isNeg = true;
+                    absChange = -change24h;
+                }
+
+                // Format: "(+2.34%▲)" or "(-1.50%▼)"
+                int intPart = (int)absChange;
+                float decFloat = absChange - intPart;
+                int decPart = (int)(decFloat * 100.0);
+                if (decPart < 0)
+                {
+                    decPart = -decPart;
+                }
+
+                string changeStr = "(";
+                if (isNeg)
+                {
+                    changeStr = changeStr + "-";
+                }
+                else
+                {
+                    changeStr = changeStr + "+";
+                }
+                changeStr = changeStr + intPart.ToString();
+                changeStr = changeStr + ".";
+                if (decPart < 10)
+                {
+                    changeStr = changeStr + "0";
+                }
+                changeStr = changeStr + decPart.ToString();
+                changeStr = changeStr + "%";
+                if (isNeg)
+                {
+                    changeStr = changeStr + " 24h)";
+                }
+                else
+                {
+                    changeStr = changeStr + " 24h)";
+                }
+                m_PriceChangeText.SetText(changeStr);
+
+                if (isNeg)
+                {
+                    m_PriceChangeText.SetColor(COL_RED);
+                }
+                else
+                {
+                    m_PriceChangeText.SetColor(COL_GREEN);
+                }
             }
         }
 

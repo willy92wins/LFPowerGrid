@@ -3515,6 +3515,9 @@ modded class PlayerBase
         string btcClsOpen = LFPG_BTCConfig.GetBtcItemClassname();
         int btcOnInv = LFPG_BTCCountPlayerItems(btcClsOpen);
 
+        // 24h price change percent
+        float priceChange24h = LFPG_NetworkManager.Get().LFPG_GetBTC24hChange();
+
         // Send response (always — client handles price=-1.0 as N/A)
         ScriptRPC rpc = new ScriptRPC();
         int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
@@ -3525,6 +3528,7 @@ modded class PlayerBase
         rpc.Write(cashOnInv);
         rpc.Write(withdrawOnly);
         rpc.Write(btcOnInv);
+        rpc.Write(priceChange24h);
         rpc.Send(this, LFPG_RPC_CHANNEL, true, null);
 
         string logOpen = "[BTCOpenRequest] price=";
@@ -3603,7 +3607,7 @@ modded class PlayerBase
 
         if (useAccount)
         {
-            // ── Account mode: charge from LBMaster (original flow) ──
+            // ── Account mode: LBMaster −EUR → ATM stock +BTC (virtual, no spawn) ──
             int playerBalance = earlyBal;
             if (playerBalance < costInt)
             {
@@ -3621,6 +3625,7 @@ modded class PlayerBase
                 return;
             }
 
+            // Recalculate affordable BTC if removed < costInt
             int affordableBtc = btcAmount;
             if (removed < costInt)
             {
@@ -3640,19 +3645,11 @@ modded class PlayerBase
                 }
             }
 
-            string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
-            int created = LFPG_BTCCreateItemsForPlayer(btcClassname, affordableBtc);
+            // Add BTC to ATM stock (virtual — player uses Withdraw to get physical items)
+            atm.LFPG_AddBtcStock(affordableBtc);
 
-            if (created <= 0)
-            {
-                atmEarly.AddATMMoney(removed);
-                int errInv = LFPG_BTC_ERR_INVENTORY_FULL;
-                int curBalI = atmEarly.GetATMMoney();
-                LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, errInv, atm.LFPG_GetBtcStock(), curBalI, 0, 0.0);
-                return;
-            }
-
-            float actualCostFloat = created * price;
+            // Calculate actual cost for BTC delivered
+            float actualCostFloat = affordableBtc * price;
             int actualCostInt = (int)actualCostFloat;
             float actualCostDiff = actualCostFloat - actualCostInt;
             if (actualCostDiff > 0.001)
@@ -3664,21 +3661,21 @@ modded class PlayerBase
                 actualCostInt = removed;
             }
 
+            // Refund excess
             int refundAmount = removed - actualCostInt;
             if (refundAmount > 0)
             {
                 atmEarly.AddATMMoney(refundAmount);
             }
 
-            // B1: No stock decrement
             int newBalance = atmEarly.GetATMMoney();
             int newStock = atm.LFPG_GetBtcStock();
             int okCode = LFPG_BTC_OK;
             float eurSpent = actualCostInt;
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCode, newStock, newBalance, created, eurSpent);
+            LFPG_SendBTCTxResult(LFPG_BTC_TX_BUY, okCode, newStock, newBalance, affordableBtc, eurSpent);
 
-            string logBuyA = "[BTCBuy] account: ";
-            logBuyA = logBuyA + created.ToString();
+            string logBuyA = "[BTCBuy] account→stock: ";
+            logBuyA = logBuyA + affordableBtc.ToString();
             logBuyA = logBuyA + " BTC for ";
             logBuyA = logBuyA + actualCostInt.ToString();
             logBuyA = logBuyA + " EUR";
@@ -3805,16 +3802,8 @@ modded class PlayerBase
             return;
         }
 
-        // Check ATM has room
-        int maxStock = LFPG_BTCConfig.GetMaxBtcPerMachine();
-        int currentStock = atm.LFPG_GetBtcStock();
-        int newStockTest = currentStock + btcAmount;
-        if (newStockTest > maxStock)
-        {
-            int errFull = LFPG_BTC_ERR_STOCK_FULL;
-            LFPG_SendBTCTxResult(LFPG_BTC_TX_SELL, errFull, currentStock, earlyBalS, 0, 0.0);
-            return;
-        }
+        // Sell: BTC items are destroyed, no stock room check needed
+        // (sold BTC disappear from the game)
 
         // Enforce WithdrawOnly: if true, always cash
         bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
@@ -3841,8 +3830,7 @@ modded class PlayerBase
         // Calculate EUR revenue based on actual destroyed count
         float eurTotal = destroyed * price;
 
-        // Add BTC to ATM stock (only what was actually destroyed)
-        atm.LFPG_AddBtcStock(destroyed);
+        // Sold BTC disappear from the game (no stock add)
 
         // Pay player
         if (toAccount)
@@ -4309,7 +4297,11 @@ modded class PlayerBase
         int btcOnInv = 0;
         ctx.Read(btcOnInv);
 
-        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly, btcOnInv);
+        // 24h price change — optional read (retrocompatible)
+        float priceChange24h = 0.0;
+        ctx.Read(priceChange24h);
+
+        LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly, btcOnInv, priceChange24h);
 
         string logResp = "[BTCOpenResponse] price=";
         logResp = logResp + price.ToString();

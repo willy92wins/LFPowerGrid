@@ -349,6 +349,23 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 
+				// ── 24h price change indicator y=95 (gap between cards and amount) ──
+				TextWidgetClass PriceChangeText {
+					position 18 95
+					size 180 10
+					hexactpos 1
+					vexactpos 1
+					hexactsize 1
+					vexactsize 1
+					ignorepointer 1
+					text ""
+					font "gui/fonts/MetronBook"
+					"text halign" left
+					"text valign" center
+					{
+					}
+				}
+
 				// ── Amount section y=102 h=82 ──
 				ImageWidgetClass AmountBg {
 					position 12 102

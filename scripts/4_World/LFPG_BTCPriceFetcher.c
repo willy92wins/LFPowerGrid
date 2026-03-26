@@ -86,6 +86,7 @@ class LFPG_BTCPriceFetcher
 
     // Cached price state
     protected float m_CachedPrice;          // Price per BTC in fiat (or LFPG_BTC_PRICE_UNAVAILABLE)
+    protected float m_Cached24hChange;      // 24h change percent (e.g. 2.34 or -1.5, 0.0 if unavailable)
     protected float m_LastFetchTimeMs;       // GetGame().GetTickTime() of last successful fetch
     protected int m_ConsecutiveErrors;       // Error counter for backoff
     protected bool m_FetchInProgress;        // Guard against overlapping requests
@@ -94,6 +95,7 @@ class LFPG_BTCPriceFetcher
     void LFPG_BTCPriceFetcher()
     {
         m_CachedPrice = LFPG_BTC_PRICE_UNAVAILABLE;
+        m_Cached24hChange = 0.0;
         m_LastFetchTimeMs = 0.0;
         m_ConsecutiveErrors = 0;
         m_FetchInProgress = false;
@@ -262,6 +264,21 @@ class LFPG_BTCPriceFetcher
         m_CachedPrice = parsedPrice;
         m_ConsecutiveErrors = 0;
 
+        // Parse 24h change percent (Binance 24hr endpoint: "priceChangePercent":"2.340")
+        // Returns 0.0 if key not found (graceful for older ticker/price endpoint)
+        string pctSearch = "\"priceChangePercent\":";
+        int pctPos = data.IndexOf(pctSearch);
+        if (pctPos >= 0)
+        {
+            string pctKey = "priceChangePercent";
+            float parsedChange = TryExtractKey(data, pctKey);
+            m_Cached24hChange = parsedChange;
+        }
+        else
+        {
+            m_Cached24hChange = 0.0;
+        }
+
         // Log the update
         string priceStr = FormatPrice(parsedPrice);
         string vsCurLog = LFPG_BTCConfig.GetVsCurrency();
@@ -322,12 +339,18 @@ class LFPG_BTCPriceFetcher
     // Returns the float price, or -1.0 on parse failure.
     protected float ParsePriceFromJSON(string data)
     {
-        // ---- Attempt 1: Binance key "price" ----
+        // ---- Attempt 1: Binance ticker/price key "price" ----
         float result = TryExtractKey(data, "price");
         if (result > 0.0)
             return result;
 
-        // ---- Attempt 2: CoinGecko key from vsCurrency (e.g. "eur") ----
+        // ---- Attempt 2: Binance ticker/24hr key "lastPrice" ----
+        string lastPriceKey = "lastPrice";
+        result = TryExtractKey(data, lastPriceKey);
+        if (result > 0.0)
+            return result;
+
+        // ---- Attempt 3: CoinGecko key from vsCurrency (e.g. "eur") ----
         string vsCur = LFPG_BTCConfig.GetVsCurrency();
         result = TryExtractKey(data, vsCur);
         if (result > 0.0)
@@ -495,5 +518,11 @@ class LFPG_BTCPriceFetcher
     bool IsInitialized()
     {
         return m_Initialized;
+    }
+
+    // Returns cached 24h price change percent (0.0 if unavailable).
+    float Get24hChangePercent()
+    {
+        return m_Cached24hChange;
     }
 };

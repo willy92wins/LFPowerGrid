@@ -71,6 +71,7 @@ class LFPG_BTCAtmClientData
     static int    s_BtcOnInventory  = 0;
     static bool   s_WithdrawOnly   = false;
     static bool   s_PriceUnavailable = false;
+    static float  s_PriceChange24h   = 0.0;
 
     // ATM network ID (set by action before RPC, used by controller)
     static int    s_NetLow         = 0;
@@ -84,13 +85,14 @@ class LFPG_BTCAtmClientData
     static int    s_LastBtcMoved   = 0;
     static float  s_LastEurAmount  = 0.0;
 
-    static void OnOpenResponse(float price, int stock, int balance, int cashOnInv, bool wo, int btcOnInv)
+    static void OnOpenResponse(float price, int stock, int balance, int cashOnInv, bool wo, int btcOnInv, float priceChange24h)
     {
         s_Stock = stock;
         s_Balance = balance;
         s_CashOnInventory = cashOnInv;
         s_BtcOnInventory = btcOnInv;
         s_WithdrawOnly = wo;
+        s_PriceChange24h = priceChange24h;
 
         // Sentinel: price <= 0 means server has no price
         if (price <= 0.0)

@@ -56,7 +56,7 @@ class LFPG_BTCSettingsData
         ver = 1;
         enabled = true;
         apiUrl = "https://api.binance.com";
-        apiPath = "/api/v3/ticker/price?symbol=BTCEUR";
+        apiPath = "/api/v3/ticker/24hr?symbol=BTCEUR";
         apiKey = "";
         vsCurrency = "eur";
         refreshSeconds = 60;
@@ -220,7 +220,7 @@ class LFPG_BTCConfig
         // apiPath: must not be empty
         if (s_Data.apiPath == "")
         {
-            s_Data.apiPath = "/api/v3/ticker/price?symbol=BTCEUR";
+            s_Data.apiPath = "/api/v3/ticker/24hr?symbol=BTCEUR";
             string warnPath = "[LFPG_BTCConfig] apiPath empty, reset to default";
             LFPG_Util.Warn(warnPath);
         }

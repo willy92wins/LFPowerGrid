@@ -42,6 +42,7 @@ class LFPG_BTCAtmView extends ScriptView
     ImageWidget CardPriceBg;
     TextWidget CardPriceLabel;
     TextWidget PriceText;
+    TextWidget PriceChangeText;
     ImageWidget CardStockBg;
     TextWidget CardStockLabel;
     TextWidget StockText;
@@ -288,6 +289,8 @@ class LFPG_BTCAtmView extends ScriptView
         if (!CardPriceLabel) { CardPriceLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "PriceText";
         if (!PriceText) { PriceText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        wn = "PriceChangeText";
+        if (!PriceChangeText) { PriceChangeText = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "CardStockBg";
         if (!CardStockBg) { CardStockBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "CardStockLabel";
