@@ -2,7 +2,7 @@
 // LF_PowerGrid - BTC Price Fetcher (Sprint BTC-1)
 //
 // Server-only singleton that periodically fetches the BTC
-// price from CoinGecko (or configured API) using DayZ's
+// price from Binance (or configured API) using DayZ's
 // native RestApi. Caches the result for UI queries.
 //
 // Architecture:
@@ -25,10 +25,12 @@
 //   - Timeout limits: 3-120 seconds (engine-enforced)
 //
 // JSON parsing:
-//   CoinGecko /simple/price response is predictable:
+//   Binance /api/v3/ticker/price response:
+//   {"symbol":"BTCEUR","price":"67187.33000000"}
+//   CoinGecko /simple/price response:
 //   {"bitcoin":{"eur":60900}}
-//   We extract the float value after the configured currency
-//   key (e.g. "eur":) manually.
+//   We extract the float value using a multi-key strategy:
+//   try "price" (Binance), then vsCurrency (CoinGecko), then "last".
 //   No generic JSON parser available in Enforce Script.
 // =========================================================
 
@@ -153,12 +155,11 @@ class LFPG_BTCPriceFetcher
         }
 
         // Set headers if API key is configured
+        // Binance public API needs no key (default).
+        // CoinGecko Demo/Pro: set apiKey in JSON config.
         string apiKey = LFPG_BTCConfig.GetApiKey();
         if (apiKey != "")
         {
-            // CoinGecko Pro uses x-cg-pro-api-key header
-            // CoinGecko Demo uses x-cg-demo-api-key header
-            // We support both — user configures the appropriate one
             string header = "x-cg-demo-api-key: ";
             header = header + apiKey;
             m_RestCtx.SetHeader(header);
@@ -243,7 +244,8 @@ class LFPG_BTCPriceFetcher
         }
 
         // Parse price from JSON response
-        // Expected format: {"bitcoin":{"eur":60900}}
+        // Binance:   {"symbol":"BTCEUR","price":"67187.33"}
+        // CoinGecko: {"bitcoin":{"eur":67187.33}}
         float parsedPrice = ParsePriceFromJSON(data);
 
         if (parsedPrice <= 0.0)
@@ -310,37 +312,51 @@ class LFPG_BTCPriceFetcher
     }
 
     // ---- JSON price parser ----
-    // Parses CoinGecko response format: {"bitcoin":{"eur":NUMBER}}
-    // The currency key (e.g. "eur") is read from config.
+    // Supports multiple API response formats:
+    //   Binance:        {"symbol":"BTCEUR","price":"67187.33"}
+    //   CoinGecko:      {"bitcoin":{"eur":67187.33}}
+    //   Blockchain.info: {"EUR":{"last":67187.33,...}}
+    //
+    // Strategy: try "price": first (Binance), then "<vsCurrency>":
+    // (CoinGecko), then "last": (Blockchain.info).
     // Returns the float price, or -1.0 on parse failure.
     protected float ParsePriceFromJSON(string data)
     {
-        // Build search key from configured currency: "eur" → "\"eur\":"
+        // ---- Attempt 1: Binance key "price" ----
+        float result = TryExtractKey(data, "price");
+        if (result > 0.0)
+            return result;
+
+        // ---- Attempt 2: CoinGecko key from vsCurrency (e.g. "eur") ----
         string vsCur = LFPG_BTCConfig.GetVsCurrency();
+        result = TryExtractKey(data, vsCur);
+        if (result > 0.0)
+            return result;
+
+        // ---- Attempt 3: Blockchain.info key "last" ----
+        result = TryExtractKey(data, "last");
+        if (result > 0.0)
+            return result;
+
+        return -1.0;
+    }
+
+    // Try to find "key": in the JSON data and extract the float value.
+    // Handles both quoted ("67187.33") and unquoted (67187.33) values.
+    protected float TryExtractKey(string data, string key)
+    {
+        // Build: "key":
         string searchKey = "\"";
-        searchKey = searchKey + vsCur;
+        searchKey = searchKey + key;
         searchKey = searchKey + "\":";
 
         int keyPos = data.IndexOf(searchKey);
         if (keyPos < 0)
-        {
-            // Try without quotes (some formatters)
-            string altKey = vsCur;
-            altKey = altKey + ":";
-            keyPos = data.IndexOf(altKey);
-            if (keyPos < 0)
-                return -1.0;
-
-            int altKeyLen = altKey.Length();
-            int altStart = keyPos + altKeyLen;
-            string altRemainder = data.Substring(altStart, data.Length() - altStart);
-            return ExtractFloatFromStart(altRemainder);
-        }
+            return -1.0;
 
         int keyLen = searchKey.Length();
         int valueStart = keyPos + keyLen;
 
-        // Get the substring after the currency key
         int remainLen = data.Length() - valueStart;
         if (remainLen <= 0)
             return -1.0;
@@ -350,14 +366,14 @@ class LFPG_BTCPriceFetcher
     }
 
     // Extract a float from the beginning of a string.
-    // Reads digits and one decimal point, stops at any non-numeric char.
-    // e.g. "67187.33}}" → 67187.33
+    // Skips leading whitespace and quotes (Binance: "67187.33").
+    // Reads digits and decimal point, stops at non-numeric char.
     protected float ExtractFloatFromStart(string s)
     {
         if (!s || s == "")
             return -1.0;
 
-        // Skip leading whitespace
+        // Skip leading whitespace and opening quote
         int start = 0;
         int sLen = s.Length();
         string ch;
@@ -365,7 +381,7 @@ class LFPG_BTCPriceFetcher
         while (start < sLen)
         {
             ch = s.Get(start);
-            if (ch == " " || ch == "\t" || ch == "\n" || ch == "\r")
+            if (ch == " " || ch == "\t" || ch == "\n" || ch == "\r" || ch == "\"")
             {
                 start = start + 1;
             }

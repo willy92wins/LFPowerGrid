@@ -3,6 +3,8 @@
 //
 // JSON-serializable settings for the Bitcoin ATM system.
 // Loaded from $profile:LF_PowerGrid/LF_BTCAtm.json.
+// Default API: Binance (no key required).
+// Also compatible with CoinGecko, Blockchain.info, etc.
 // Follows LFPG_Settings.c / LFPG_ServerSettings pattern.
 //
 // Currency entries define physical money items and their
@@ -53,8 +55,8 @@ class LFPG_BTCSettingsData
     {
         ver = 1;
         enabled = true;
-        apiUrl = "https://api.coingecko.com";
-        apiPath = "/api/v3/simple/price?ids=bitcoin&vs_currencies=eur";
+        apiUrl = "https://api.binance.com";
+        apiPath = "/api/v3/ticker/price?symbol=BTCEUR";
         apiKey = "";
         vsCurrency = "eur";
         refreshSeconds = 60;
@@ -210,7 +212,7 @@ class LFPG_BTCConfig
         // apiUrl: must not be empty
         if (s_Data.apiUrl == "")
         {
-            s_Data.apiUrl = "https://api.coingecko.com";
+            s_Data.apiUrl = "https://api.binance.com";
             string warnUrl = "[LFPG_BTCConfig] apiUrl empty, reset to default";
             LFPG_Util.Warn(warnUrl);
         }
@@ -218,7 +220,7 @@ class LFPG_BTCConfig
         // apiPath: must not be empty
         if (s_Data.apiPath == "")
         {
-            s_Data.apiPath = "/api/v3/simple/price?ids=bitcoin&vs_currencies=eur";
+            s_Data.apiPath = "/api/v3/ticker/price?symbol=BTCEUR";
             string warnPath = "[LFPG_BTCConfig] apiPath empty, reset to default";
             LFPG_Util.Warn(warnPath);
         }

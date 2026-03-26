@@ -386,6 +386,10 @@ class LFPG_Sprinkler : LFPG_DeviceBase
             player = PlayerBase.Cast(ent);
             if (player)
             {
+                // Skip dead players (corpses still return as PlayerBase)
+                if (!player.IsAlive())
+                    continue;
+
                 playerInv = player.GetInventory();
                 if (!playerInv)
                     continue;
