@@ -53,8 +53,7 @@ class LFPG_SorterController extends ViewController
     ref ObservableCollection<ref LFPG_SorterTagView> TagsList;
     ref ObservableCollection<ref LFPG_SorterPreviewRow> PreviewItems;
 
-    // ── Preview pool (reuse PreviewRows across PopulatePreview calls) ──
-    ref array<ref LFPG_SorterPreviewRow> m_PreviewPool;
+    // ── (v4.2: m_PreviewPool REMOVED — same Dabs re-parenting issue as tags) ──
 
     // ── Internal state ──
     protected ref LFPG_SortConfig m_Config;
@@ -142,7 +141,6 @@ class LFPG_SorterController extends ViewController
     {
         TagsList = new ObservableCollection<ref LFPG_SorterTagView>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow>(this);
-        m_PreviewPool = new array<ref LFPG_SorterPreviewRow>;
         m_Config = new LFPG_SortConfig();
         // v3.2: Tab widget arrays (6 outputs)
         m_TabBgs = new array<ImageWidget>;
@@ -1555,7 +1553,15 @@ class LFPG_SorterController extends ViewController
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         int count = 0;
-        if (outCfg) { count = outCfg.GetRuleCount(); }
+        if (outCfg)
+        {
+            count = outCfg.GetRuleCount();
+            // v4.2: Count catch-all as a rule (consistent with RefreshMatchCount)
+            if (outCfg.m_IsCatchAll)
+            {
+                count = count + 1;
+            }
+        }
         string suffix = "/8";
         RuleCount = count.ToString();
         RuleCount = RuleCount + suffix;
@@ -1704,15 +1710,10 @@ class LFPG_SorterController extends ViewController
 
         int sentCount = names.Count();
 
-        // P2: Grow pool if needed (rows persist across preview refreshes)
-        int poolSize = m_PreviewPool.Count();
-        int pi = 0;
-        for (pi = poolSize; pi < sentCount; pi = pi + 1)
-        {
-            LFPG_SorterPreviewRow newRow = new LFPG_SorterPreviewRow();
-            m_PreviewPool.Insert(newRow);
-        }
-
+        // v4.2: Fresh rows each call (no pool — same fix as tags v4.1).
+        // Pool reuse with ObservableCollection causes Dabs MVC to not
+        // re-parent recycled ScriptView layout roots to the GridSpacer
+        // after Clear()+Insert(), leaving rows invisible.
         int si = 0;
         string itemName = "";
         string itemCat = "";
@@ -1723,7 +1724,7 @@ class LFPG_SorterController extends ViewController
             itemName = names[si];
             itemCat = cats[si];
             itemSlot = slots[si];
-            row = m_PreviewPool[si];
+            row = new LFPG_SorterPreviewRow();
             row.SetData(itemName, itemCat, itemSlot);
             PreviewItems.Insert(row);
         }
@@ -1799,8 +1800,7 @@ class LFPG_SorterController extends ViewController
     // FIX 2: Release tag/preview views on close to break circular refs.
     // Called from View.DoClose. Safe: destructor of TagView already
     // nulls m_OwnerController, so Clear triggers clean teardown.
-    // v2.6: Pool must be cleared AFTER TagsList.Clear() so destructors
-    // fire when refcount drops to 0 (pool held the last strong ref).
+    // v4.2: m_PreviewPool removed (same Dabs re-parenting fix as tags).
     void ClearCollections()
     {
         if (TagsList)
@@ -1810,10 +1810,6 @@ class LFPG_SorterController extends ViewController
         if (PreviewItems)
         {
             PreviewItems.Clear();
-        }
-        if (m_PreviewPool)
-        {
-            m_PreviewPool.Clear();
         }
     }
 };

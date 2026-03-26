@@ -47,6 +47,11 @@ FrameWidgetClass PreviewRowRoot {
 			"text valign" center
 			ignorepointer 1
 			{
+				ScriptParamsClass {
+					Binding_Name "CatIcon"
+					{
+					}
+				}
 			}
 		}
 		TextWidgetClass ItemName {
@@ -61,6 +66,11 @@ FrameWidgetClass PreviewRowRoot {
 			"text valign" center
 			ignorepointer 1
 			{
+				ScriptParamsClass {
+					Binding_Name "ItemName"
+					{
+					}
+				}
 			}
 		}
 		ImageWidgetClass SlotBadgeBg {
@@ -88,6 +98,11 @@ FrameWidgetClass PreviewRowRoot {
 			"text valign" center
 			ignorepointer 1
 			{
+				ScriptParamsClass {
+					Binding_Name "SlotText"
+					{
+					}
+				}
 			}
 		}
 	}

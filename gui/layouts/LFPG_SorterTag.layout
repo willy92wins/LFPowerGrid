@@ -40,6 +40,11 @@ FrameWidgetClass TagRoot {
 			"text valign" center
 			ignorepointer 1
 			{
+				ScriptParamsClass {
+					Binding_Name "TagLabel"
+					{
+					}
+				}
 			}
 		}
 		ButtonWidgetClass BtnRemove {

@@ -21,12 +21,15 @@ class LFPG_SorterTagController extends ViewController
     // Direct ref instead of parent traversal
     LFPG_SorterController m_OwnerController;
 
-    void BtnRemove()
+    // v4.2: Signature must match Dabs Pattern 1 (bool + ButtonCommandArgs).
+    // void BtnRemove() was silently ignored by g_Script.CallFunction.
+    bool BtnRemove(ButtonCommandArgs args)
     {
         if (m_OwnerController)
         {
             m_OwnerController.OnRemoveTag(m_OutputIndex, m_RuleIndex);
         }
+        return true;
     }
 };
 

@@ -55,9 +55,11 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
     override void EEInit()
     {
         super.EEInit();
+        #ifndef SERVER
         int delay = 100;
         bool repeat = false;
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, delay, repeat);
+        #endif
     }
 
     protected void LFPG_DeferredSymbolTexture()
@@ -163,7 +165,8 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     // ---- Virtual symbol texture (subclass overrides) ----
     string LFPG_GetSymbolTexturePath()
     {
-        return "";
+        string empty = "";
+        return empty;
     }
 
     // ---- Gate state: latched in SetPowered, read by ElecGraph ----
@@ -389,7 +392,8 @@ class LFPG_AND_Gate : LFPG_LogicGateBase
 
     override string LFPG_GetSymbolTexturePath()
     {
-        return "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa";
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa";
+        return path;
     }
 };
 
@@ -409,7 +413,8 @@ class LFPG_OR_Gate : LFPG_LogicGateBase
 
     override string LFPG_GetSymbolTexturePath()
     {
-        return "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa";
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa";
+        return path;
     }
 };
 
@@ -433,6 +438,7 @@ class LFPG_XOR_Gate : LFPG_LogicGateBase
 
     override string LFPG_GetSymbolTexturePath()
     {
-        return "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa";
+        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa";
+        return path;
     }
 };

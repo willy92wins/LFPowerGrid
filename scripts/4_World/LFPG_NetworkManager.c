@@ -4432,11 +4432,7 @@ class LFPG_NetworkManager
         {
             string d2 = "[Sorter] REQUEST_SORT: no wired outputs";
             LFPG_Util.Debug(d2);
-            // Still do BinPack even without outputs
-            int bpOnly = LFPG_SorterLogic.BinPackCargo(container);
-            string bpLog = "[Sorter] BinPack only (no wires): ";
-            bpLog = bpLog + bpOnly.ToString();
-            LFPG_Util.Info(bpLog);
+            // v4.2: BinPackCargo removed (2×N ground round-trip caused desync)
             return 0;
         }
 
@@ -4515,7 +4511,12 @@ class LFPG_NetworkManager
             dirtiedDests[di].SetSynchDirty();
         }
 
-        // Source container is dirtied by BinPackCargo below (Phase 5d).
+        // v4.2: Dirty source container so client refreshes cargo view.
+        // BinPackCargo removed — 2×N ground round-trip caused client desync.
+        if (moved > 0)
+        {
+            container.SetSynchDirty();
+        }
 
         string sortLog = "[Sorter] REQUEST_SORT: evaluated=";
         sortLog = sortLog + evaluated.ToString();
@@ -4523,11 +4524,6 @@ class LFPG_NetworkManager
         sortLog = sortLog + moved.ToString();
         LFPG_Util.Info(sortLog);
 
-        // Bin-pack remaining items in source container
-        int packed = LFPG_SorterLogic.BinPackCargo(container);
-        string packLog = "[Sorter] BinPack after sort: repositioned=";
-        packLog = packLog + packed.ToString();
-        LFPG_Util.Info(packLog);
         return moved;
         #endif
         return -1;
