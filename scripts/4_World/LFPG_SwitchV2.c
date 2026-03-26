@@ -19,9 +19,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] + m_SwitchOn
 // =========================================================
 
-static const string LFPG_SWITCHV2_RVMAT_OFF    = "\LFPowerGrid\data\switch_v2\data\led_off.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_GREEN   = "\LFPowerGrid\data\switch_v2\data\led_green.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_RED     = "\LFPowerGrid\data\switch_v2\data\led_red.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_OFF    = "\\LFPowerGrid\\data\\switch_v2\\data\\led_off.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_GREEN   = "\\LFPowerGrid\\data\\switch_v2\\data\\led_green.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_RED     = "\\LFPowerGrid\\data\\switch_v2\\data\\led_red.rvmat";
 
 class LFPG_SwitchV2_Kit : LFPG_KitBase
 {
@@ -42,12 +42,12 @@ class LFPG_SwitchV2_Kit : LFPG_KitBase
 
     override float LFPG_GetWallPitchOffset()
     {
-        return 0.0;
+        return 90.0;
     }
 
     override float LFPG_GetWallYawOffset()
     {
-        return 0.0;
+        return 180.0;
     }
 };
 
