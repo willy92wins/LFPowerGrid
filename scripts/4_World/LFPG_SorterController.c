@@ -1700,7 +1700,8 @@ class LFPG_SorterController extends ViewController
     }
 
     // Called from View.OnPreviewData (static delegate from PlayerRPC)
-    void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
+    // v4.3: slots changed from array<int> to array<string> (formatted "WxH" / "WxH xQ")
+    void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<string> infos)
     {
         // Guard: if user switched output tab while RPC was in flight, ignore
         if (outputIdx != m_SelectedOutput)
@@ -1710,6 +1711,43 @@ class LFPG_SorterController extends ViewController
 
         int sentCount = names.Count();
 
+        // v4.3: Sort parallel arrays alphabetically by name.
+        // Bubble sort on index array (max 50 items = PREVIEW_CAP).
+        ref array<int> sortIdx = new array<int>;
+        int ii = 0;
+        for (ii = 0; ii < sentCount; ii = ii + 1)
+        {
+            sortIdx.Insert(ii);
+        }
+        bool swapped = true;
+        int limit = sentCount - 1;
+        string nameA = "";
+        string nameB = "";
+        int tmpIdx = 0;
+        int jj = 0;
+        int nextJ = 0;
+        bool aAfterB = false;
+        while (swapped)
+        {
+            swapped = false;
+            for (jj = 0; jj < limit; jj = jj + 1)
+            {
+                nextJ = jj + 1;
+                nameA = names[sortIdx[jj]];
+                nameB = names[sortIdx[nextJ]];
+                // Enforce Script: string > string does lexicographic comparison
+                aAfterB = (nameA > nameB);
+                if (aAfterB)
+                {
+                    tmpIdx = sortIdx[jj];
+                    sortIdx[jj] = sortIdx[nextJ];
+                    sortIdx[nextJ] = tmpIdx;
+                    swapped = true;
+                }
+            }
+            limit = limit - 1;
+        }
+
         // v4.2: Fresh rows each call (no pool — same fix as tags v4.1).
         // Pool reuse with ObservableCollection causes Dabs MVC to not
         // re-parent recycled ScriptView layout roots to the GridSpacer
@@ -1717,15 +1755,17 @@ class LFPG_SorterController extends ViewController
         int si = 0;
         string itemName = "";
         string itemCat = "";
-        int itemSlot = 0;
+        string itemInfo = "";
+        int sIdx = 0;
         LFPG_SorterPreviewRow row = null;
         for (si = 0; si < sentCount; si = si + 1)
         {
-            itemName = names[si];
-            itemCat = cats[si];
-            itemSlot = slots[si];
+            sIdx = sortIdx[si];
+            itemName = names[sIdx];
+            itemCat = cats[sIdx];
+            itemInfo = infos[sIdx];
             row = new LFPG_SorterPreviewRow();
-            row.SetData(itemName, itemCat, itemSlot);
+            row.SetData(itemName, itemCat, itemInfo);
             PreviewItems.Insert(row);
         }
 

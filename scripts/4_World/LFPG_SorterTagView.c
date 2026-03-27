@@ -20,17 +20,6 @@ class LFPG_SorterTagController extends ViewController
 
     // Direct ref instead of parent traversal
     LFPG_SorterController m_OwnerController;
-
-    // v4.2: Signature must match Dabs Pattern 1 (bool + ButtonCommandArgs).
-    // void BtnRemove() was silently ignored by g_Script.CallFunction.
-    bool BtnRemove(ButtonCommandArgs args)
-    {
-        if (m_OwnerController)
-        {
-            m_OwnerController.OnRemoveTag(m_OutputIndex, m_RuleIndex);
-        }
-        return true;
-    }
 };
 
 class LFPG_SorterTagView extends ScriptView
@@ -89,18 +78,50 @@ class LFPG_SorterTagView extends ScriptView
             int bgColor = (color & 0x00FFFFFF) | 0x26000000;
             TagBg.SetColor(bgColor);
         }
+        // v4.3: Tag text uses COL_TEXT (light) for readability.
+        // Was same color as bg tint → invisible. Color rule-type
+        // is already communicated by the bg tint.
         if (TagLabel)
         {
-            TagLabel.SetColor(color);
+            TagLabel.SetColor(LFPG_SorterView.COL_TEXT);
+        }
+
+        // v4.3: Set BtnRemove X text to grey + encode UID for
+        // SorterView.OnClick dispatch (Plan B — Relay_Command
+        // never reached TagController because SorterView.OnClick
+        // intercepted the event first).
+        // UID encoding: 600 + outputIdx * 10 + (ruleIdx + 1)
+        // Decode: encoded = uid - 600; outIdx = encoded / 10; rIdx = (encoded % 10) - 1
+        Widget tagRoot = GetLayoutRoot();
+        if (tagRoot)
+        {
+            string btnName = "BtnRemove";
+            ButtonWidget btnRemove = ButtonWidget.Cast(tagRoot.FindAnyWidget(btnName));
+            if (btnRemove)
+            {
+                int encoded = outputIndex * 10;
+                int rOffset = ruleIndex + 1;
+                encoded = encoded + rOffset;
+                int btnUid = 600 + encoded;
+                btnRemove.SetUserID(btnUid);
+            }
+            string btnTxtName = "BtnRemoveText";
+            TextWidget btnTxt = TextWidget.Cast(tagRoot.FindAnyWidget(btnTxtName));
+            if (btnTxt)
+            {
+                btnTxt.SetColor(LFPG_SorterView.COL_TEXT_MID);
+            }
         }
 
         // v2.6: Scale only on first use. Pool reuse calls SetData again
         // but ScaleWidget multiplies current values — double-call corrupts.
         if (!m_Scaled)
         {
-            Widget tagRoot = GetLayoutRoot();
             float tagScale = LFPG_UIScaler.ComputeScale();
-            LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
+            if (tagRoot)
+            {
+                LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
+            }
             m_Scaled = true;
         }
     }

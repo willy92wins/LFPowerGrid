@@ -198,6 +198,8 @@ class LFPG_SorterView extends ScriptView
     static const int UID_CLOSE         = 505;
     static const int UID_CLOSE_X       = 506;
     static const int UID_SORT_HEADER   = 507;
+    // v4.3: Tag BtnRemove — UID = 600 + outIdx*10 + (ruleIdx+1)
+    static const int UID_TAG_REMOVE_BASE = 600;
 
     override string GetLayoutFile()
     {
@@ -923,8 +925,20 @@ class LFPG_SorterView extends ScriptView
         if (uid == UID_CLOSE_X)      { ctrl.BtnCloseX();      return true; }
         if (uid == UID_SORT_HEADER)  { ctrl.BtnSortHeader();  return true; }
 
+        // v4.3: Tag BtnRemove dispatch (Plan B — Relay_Command never
+        // reached TagController because SorterView.OnClick intercepted).
+        // UID encoding: 600 + outputIdx*10 + (ruleIdx+1)
+        if (uid >= UID_TAG_REMOVE_BASE && uid < UID_TAG_REMOVE_BASE + 60)
+        {
+            int encoded = uid - UID_TAG_REMOVE_BASE;
+            int outIdx = encoded / 10;
+            int remainder = encoded - (outIdx * 10);
+            int rIdx = remainder - 1;
+            ctrl.OnRemoveTag(outIdx, rIdx);
+            return true;
+        }
+
         // Unrecognized button — delegate to ScriptView base class
-        // so Relay_Command still works for any future buttons
         bool baseFallback = super.OnClick(w, x, y, button);
         return baseFallback;
     }
@@ -1078,7 +1092,8 @@ class LFPG_SorterView extends ScriptView
 
         if (paired)
         {
-            Tint(PairingBadgeBg, COL_PAIRING_OK);
+            // v4.3: Badge uses header blue instead of green for visual consistency
+            Tint(PairingBadgeBg, COL_HEADER);
             if (PairingBadgeText)
             {
                 // v3.1: Show container name instead of generic "PAIRED"
@@ -1086,7 +1101,6 @@ class LFPG_SorterView extends ScriptView
                 string pairedLabel = badgePrefix;
                 pairedLabel = pairedLabel + containerDisplayName;
                 PairingBadgeText.SetText(pairedLabel);
-                // v3.2: Was COL_GREEN — unreadable on COL_PAIRING_OK green bg
                 PairingBadgeText.SetColor(COL_TEXT);
             }
         }
@@ -1308,7 +1322,8 @@ class LFPG_SorterView extends ScriptView
     }
 
     // v2.6: Server preview response → delegate to Controller
-    static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<int> slots)
+    // v4.3: slots changed from array<int> to array<string> (formatted info)
+    static void OnPreviewData(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<string> infos)
     {
         if (!s_Instance)
             return;
@@ -1317,7 +1332,7 @@ class LFPG_SorterView extends ScriptView
         LFPG_SorterController ctrl = LFPG_SorterController.Cast(s_Instance.GetController());
         if (ctrl)
         {
-            ctrl.PopulatePreview(outputIdx, totalMatched, names, cats, slots);
+            ctrl.PopulatePreview(outputIdx, totalMatched, names, cats, infos);
         }
     }
 

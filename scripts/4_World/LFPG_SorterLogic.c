@@ -1170,7 +1170,8 @@ class LFPG_SorterLogic
     // of size w×h. Returns true if found, sets placedRow/Col.
     // Scan order: row-major (top-left to bottom-right).
     // ---------------------------------------------------------
-    protected static bool TryPlaceOnGrid(array<bool> grid, int gridW, int gridH, int itemW, int itemH, array<int> placedRow, array<int> placedCol, int idx)
+    // v4.3: Changed from protected to public for BinPackSpread in NetworkManager
+    static bool TryPlaceOnGrid(array<bool> grid, int gridW, int gridH, int itemW, int itemH, array<int> placedRow, array<int> placedCol, int idx)
     {
         if (itemW > gridW || itemH > gridH)
             return false;
@@ -1221,7 +1222,8 @@ class LFPG_SorterLogic
     // ---------------------------------------------------------
     // MarkGridOccupied: marks a rect in the virtual grid.
     // ---------------------------------------------------------
-    protected static void MarkGridOccupied(array<bool> grid, int gridW, int row, int col, int itemW, int itemH)
+    // v4.3: Changed from protected to public for BinPackSpread in NetworkManager
+    static void MarkGridOccupied(array<bool> grid, int gridW, int row, int col, int itemW, int itemH)
     {
         int dr;
         int dc;

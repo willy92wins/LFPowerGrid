@@ -2853,7 +2853,9 @@ modded class PlayerBase
         int sentCount = 0;
         array<string> matchNames = new array<string>;
         array<string> matchCats = new array<string>;
-        array<int> matchSlots = new array<int>;
+        // v4.3: Changed from array<int> slotSize to array<string> formatted info
+        // Format: "WxH" for qty<=1, "WxH xQ" for qty>1
+        array<string> matchInfo = new array<string>;
 
         // Resolve sorter
         EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
@@ -2913,7 +2915,11 @@ modded class PlayerBase
                         bool matched = false;
                         string typeName = "";
                         string cat = "";
-                        int slotSize = 0;
+                        // v4.3: Preview sends formatted info string instead of int slotSize
+                        int infoW = 0;
+                        int infoH = 0;
+                        int infoQty = 0;
+                        string infoStr = "";
 
                         for (ci = 0; ci < cargoCount; ci = ci + 1)
                         {
@@ -2941,10 +2947,26 @@ modded class PlayerBase
                             {
                                 typeName = cItem.GetType();
                                 cat = LFPG_SorterLogic.ResolveCategory(cItem);
-                                slotSize = LFPG_SorterLogic.GetItemSlotSize(cItem);
+                                // v4.3: Compute dimensions + quantity
+                                LFPG_SorterLogic.GetItemSlotDimensions(cItem, infoW, infoH);
+                                float fQty = cItem.GetQuantity();
+                                infoQty = fQty;
+                                if (infoQty < 1)
+                                {
+                                    infoQty = 1;
+                                }
+                                // Format: "WxH" or "WxH xQ"
+                                infoStr = infoW.ToString();
+                                infoStr = infoStr + "x";
+                                infoStr = infoStr + infoH.ToString();
+                                if (infoQty > 1)
+                                {
+                                    infoStr = infoStr + " x";
+                                    infoStr = infoStr + infoQty.ToString();
+                                }
                                 matchNames.Insert(typeName);
                                 matchCats.Insert(cat);
-                                matchSlots.Insert(slotSize);
+                                matchInfo.Insert(infoStr);
                             }
                         }
                     }
@@ -2966,7 +2988,7 @@ modded class PlayerBase
         {
             rpc.Write(matchNames[si]);
             rpc.Write(matchCats[si]);
-            rpc.Write(matchSlots[si]);
+            rpc.Write(matchInfo[si]);
         }
 
         bool bRpcGuaranteed = true;
@@ -3019,12 +3041,13 @@ modded class PlayerBase
 
         array<string> names = new array<string>;
         array<string> cats = new array<string>;
-        array<int> slots = new array<int>;
+        // v4.3: Changed from array<int> to string (formatted "WxH" / "WxH xQ")
+        array<string> infos = new array<string>;
 
         int si = 0;
         string itemName = "";
         string itemCat = "";
-        int itemSlot = 0;
+        string itemInfo = "";
         bool readOk = true;
 
         for (si = 0; si < sentCount; si = si + 1)
@@ -3039,14 +3062,14 @@ modded class PlayerBase
                 readOk = false;
                 break;
             }
-            if (!ctx.Read(itemSlot))
+            if (!ctx.Read(itemInfo))
             {
                 readOk = false;
                 break;
             }
             names.Insert(itemName);
             cats.Insert(itemCat);
-            slots.Insert(itemSlot);
+            infos.Insert(itemInfo);
         }
 
         if (!readOk)
@@ -3057,7 +3080,7 @@ modded class PlayerBase
             return;
         }
 
-        LFPG_SorterView.OnPreviewData(outputIdx, totalMatched, names, cats, slots);
+        LFPG_SorterView.OnPreviewData(outputIdx, totalMatched, names, cats, infos);
 
         string logMsg = "[SorterPreviewResponse] output=";
         logMsg = logMsg + outputIdx.ToString();

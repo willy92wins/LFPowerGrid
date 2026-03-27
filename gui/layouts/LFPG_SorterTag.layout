@@ -70,11 +70,6 @@ FrameWidgetClass TagRoot {
 					{
 					}
 				}
-				ScriptParamsClass {
-					Relay_Command "BtnRemove"
-					{
-					}
-				}
 			}
 		}
 	}

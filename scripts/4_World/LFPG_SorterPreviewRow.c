@@ -46,7 +46,8 @@ class LFPG_SorterPreviewRow extends ScriptView
         return false;
     }
 
-    void SetData(string itemName, string catKey, int slotCount)
+    // v4.3: slotCount replaced by infoStr (pre-formatted "WxH" or "WxH xQ")
+    void SetData(string itemName, string catKey, string infoStr)
     {
         LFPG_SorterPreviewRowController ctrl = LFPG_SorterPreviewRowController.Cast(GetController());
         if (!ctrl)
@@ -54,10 +55,7 @@ class LFPG_SorterPreviewRow extends ScriptView
 
         ctrl.ItemName = itemName;
         ctrl.CatIcon = GetCatIcon(catKey);
-        string slotSuffix = "s";
-        string slotVal = slotCount.ToString();
-        slotVal = slotVal + slotSuffix;
-        ctrl.SlotText = slotVal;
+        ctrl.SlotText = infoStr;
         string propIN = "ItemName";
         ctrl.NotifyPropertyChanged(propIN);
         string propCI = "CatIcon";

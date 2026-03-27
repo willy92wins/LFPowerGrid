@@ -57,7 +57,7 @@ FrameWidgetClass PreviewRowRoot {
 		TextWidgetClass ItemName {
 			scriptclass "ViewBinding"
 			position 40 0
-			size 210 30
+			size 195 30
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -74,8 +74,8 @@ FrameWidgetClass PreviewRowRoot {
 			}
 		}
 		ImageWidgetClass SlotBadgeBg {
-			position 258 6
-			size 40 18
+			position 243 6
+			size 55 18
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -87,8 +87,8 @@ FrameWidgetClass PreviewRowRoot {
 		}
 		TextWidgetClass SlotText {
 			scriptclass "ViewBinding"
-			position 258 6
-			size 40 18
+			position 243 6
+			size 55 18
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
