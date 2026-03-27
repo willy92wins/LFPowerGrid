@@ -5541,6 +5541,7 @@ class LFPG_NetworkManager
             // but architecturally correct for future self-consuming battery variants.
             float selfCons = node.m_Consumption;
             float netFlow = inputReceived - outputDelivered - selfCons;
+            float rawNetFlow = netFlow;
 
             // v2.4 (Battery oscillation fix): Clamp netFlow to physical limits.
             // Defensive cap: even if graph has transient desync between epochs,
@@ -5664,6 +5665,50 @@ class LFPG_NetworkManager
             float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
             m_ReusableParamFloat.param1 = chargeRateDisplay;
             GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, m_ReusableParamFloat);
+
+            // ============================================================
+            // DIAG: Battery tick full snapshot (TEMPORAL — remover tras confirmar bug -220)
+            // Logs every battery every tick (~5s). Remove after diagnosis.
+            // ============================================================
+            string dg = "[BAT-DIAG] id=";
+            dg = dg + batId;
+            dg = dg + " inRecv=";
+            dg = dg + inputReceived.ToString();
+            dg = dg + " outDeliv=";
+            dg = dg + outputDelivered.ToString();
+            dg = dg + " selfCons=";
+            dg = dg + selfCons.ToString();
+            dg = dg + " rawNet=";
+            dg = dg + rawNetFlow.ToString();
+            dg = dg + " clampNet=";
+            dg = dg + netFlow.ToString();
+            dg = dg + " eDelta=";
+            dg = dg + energyDelta.ToString();
+            dg = dg + " stored=";
+            dg = dg + storedEnergy.ToString();
+            dg = dg + " newStored=";
+            dg = dg + newStored.ToString();
+            dg = dg + " dispRate=";
+            dg = dg + chargeRateDisplay.ToString();
+            dg = dg + " dt=";
+            dg = dg + deltaSec.ToString();
+            dg = dg + " maxChg=";
+            dg = dg + maxCharge.ToString();
+            dg = dg + " maxDis=";
+            dg = dg + maxDischarge.ToString();
+            dg = dg + " eff=";
+            dg = dg + efficiency.ToString();
+            dg = dg + " vGen=";
+            dg = dg + node.m_VirtualGeneration.ToString();
+            dg = dg + " sDem=";
+            dg = dg + node.m_SoftDemand.ToString();
+            dg = dg + " lastStable=";
+            dg = dg + node.m_LastStableOutput.ToString();
+            dg = dg + " inPow=";
+            dg = dg + node.m_InputPower.ToString();
+            dg = dg + " health=";
+            dg = dg + healthRatio.ToString();
+            LFPG_Util.Warn(dg);
 
             // --- Update graph node + mark dirty if changed ---
             float vgDelta = newVirtualGen - node.m_VirtualGeneration;
