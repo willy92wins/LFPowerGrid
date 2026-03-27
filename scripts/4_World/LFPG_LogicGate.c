@@ -67,8 +67,10 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
         string tex = LFPG_GetSymbolTexturePath();
         if (tex != "")
         {
-            int idx = 0;
-            SetObjectTexture(idx, tex);
+            int idxCamo = 0;
+            int idxSymbol = 1;
+            SetObjectTexture(idxCamo, tex);
+            SetObjectTexture(idxSymbol, tex);
         }
     }
 };
@@ -308,13 +310,16 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // hiddenSelections: 0=symbol, 1=led_input0, 2=led_input1, 3=led_output0
+        // hiddenSelections: 0=camo, 1=led_input0, 2=led_input1, 3=led_output0, 4=camosymbol
 
-        // Force correct symbol texture (MLOD cache bug)
+        // Force correct symbol texture (MLOD cache bug + proxy lid)
         string symTex = LFPG_GetSymbolTexturePath();
         if (symTex != "")
         {
-            SetObjectTexture(0, symTex);
+            int idxCamo = 0;
+            int idxSymbol = 4;
+            SetObjectTexture(idxCamo, symTex);
+            SetObjectTexture(idxSymbol, symTex);
         }
 
         // Input 0 LED
@@ -367,8 +372,10 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         string tex = LFPG_GetSymbolTexturePath();
         if (tex != "")
         {
-            int idx = 0;
-            SetObjectTexture(idx, tex);
+            int idxCamo = 0;
+            int idxSymbol = 4;
+            SetObjectTexture(idxCamo, tex);
+            SetObjectTexture(idxSymbol, tex);
         }
         #endif
     }

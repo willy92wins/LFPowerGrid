@@ -150,7 +150,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin", "LFPG_GhostPASBroadcaster", "LFPG_GhostPASReceiver", "LFPG_Speaker_Kit", "LFPG_Speaker"};
+        units[] = { "LFPG_CableReel", "LF_TestGenerator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio", "DZ_Gear_Cooking"};
@@ -1199,8 +1199,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
+        hiddenSelections[] = {"camo", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
     };
 
     // ---- OR Gate Kit ----
@@ -1218,8 +1218,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
+        hiddenSelections[] = {"camo", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
     };
 
     // ---- XOR Gate Kit ----
@@ -1237,8 +1237,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
+        hiddenSelections[] = {"camo", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
     };
 
     // ---- AND Gate (placed device) ----
@@ -1254,9 +1254,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa", "", "", ""};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
+        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // ---- OR Gate (placed device) ----
@@ -1272,9 +1272,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa", "", "", ""};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
+        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // ---- XOR Gate (placed device) ----
@@ -1290,9 +1290,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "", "", ""};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
+        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // =========================================================
@@ -1316,8 +1316,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
+        hiddenSelections[] = {"camo", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
     };
 
     // ---- Memory Cell (placed device) ----
@@ -1333,9 +1333,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "", "", ""};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat"};
+        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
+        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // =========================================================
@@ -1898,117 +1898,6 @@ class CfgVehicles
         model = "\dz\gear\consumables\Stone.p3d";
         weight = 0;
         itemSize[] = {0, 0};
-    };
-
-    // =========================================================
-    // v4.1: GHOST PAS BROADCASTER (invisible, for Intercom T2 megaphone)
-    // Captures voice from nearby players, routes to all PASReceivers.
-    // =========================================================
-    class Land_Radio_PanelPAS;
-    class LFPG_GhostPASBroadcaster : Land_Radio_PanelPAS
-    {
-        scope = 1;
-        displayName = "";
-        descriptionShort = "";
-        model = "\dz\gear\consumables\Stone.p3d";
-        weight = 0;
-        itemSize[] = {0, 0};
-    };
-
-    // =========================================================
-    // v4.1: GHOST PAS RECEIVER (invisible, for Speaker)
-    // Engine plays PAS audio at this entity's position.
-    // =========================================================
-    class PASReceiver;
-    class LFPG_GhostPASReceiver : PASReceiver
-    {
-        scope = 1;
-        displayName = "";
-        descriptionShort = "";
-        model = "\dz\gear\consumables\Stone.p3d";
-        weight = 0;
-        itemSize[] = {0, 0};
-    };
-
-    // =========================================================
-    // v4.1: SPEAKER (CONSUMER, PAS receiver, 5 u/s)
-    // =========================================================
-
-    // ---- Speaker Kit (holdable, same-model deploy, floor+wall) ----
-    class LFPG_Speaker_Kit : Inventory_Base
-    {
-        scope = 2;
-        displayName = "$STR_LFPG_SPEAKER_KIT";
-        descriptionShort = "$STR_LFPG_SPEAKER_KIT_DESC";
-        model = "\LFPowerGrid\data\speaker\speaker.p3d";
-        weight = 1500;
-        itemSize[] = {2, 2};
-        rotationFlags = 17;
-        isDeployable = 1;
-        carveNavmesh = 1;
-        physLayer = "item_large";
-        slopeTolerance = 0.0;
-        yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"knob", "light_led"};
-        hiddenSelectionsTextures[] = {"", ""};
-        hiddenSelectionsMaterials[] = {"", ""};
-    };
-
-    // ---- Speaker (placed device, CONSUMER 1 IN, 5 u/s) ----
-    class LFPG_Speaker : Inventory_Base
-    {
-        scope = 2;
-        displayName = "$STR_LFPG_SPEAKER";
-        descriptionShort = "$STR_LFPG_SPEAKER_DESC";
-        model = "\LFPowerGrid\data\speaker\speaker.p3d";
-        weight = 1500;
-        itemSize[] = {0, 0};
-        itemBehaviour = 0;
-        carveNavmesh = 1;
-        physLayer = "item_large";
-        isDeployable = 0;
-
-        hiddenSelections[] = {"knob", "light_led"};
-        hiddenSelectionsTextures[] = {"", ""};
-        hiddenSelectionsMaterials[] =
-        {
-            "",
-            "\LFPowerGrid\data\speaker\data\speaker_led_off.rvmat"
-        };
-
-        class AnimationSources
-        {
-            class knob
-            {
-                source = "user";
-                initPhase = 0;
-                animPeriod = 0.3;
-            };
-        };
-
-        class DamageSystem
-        {
-            class DamageZones
-            {
-                class Zone_Housing
-                {
-                    class Health
-                    {
-                        hitpoints = 150;
-                        healthLevels[] =
-                        {
-                            {1.0, {}},
-                            {0.7, {}},
-                            {0.5, {}},
-                            {0.3, {}},
-                            {0.0, {}}
-                        };
-                    };
-                    componentNames[] = {"Component01"};
-                    fatalInjuryCoef = -1;
-                };
-            };
-        };
     };
 
     // =========================================================

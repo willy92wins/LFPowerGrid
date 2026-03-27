@@ -278,7 +278,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     {
         #ifndef SERVER
         string symTex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        SetObjectTexture(0, symTex);
+        int idxCamo = 0;
+        int idxSymbol = 4;
+        SetObjectTexture(idxCamo, symTex);
+        SetObjectTexture(idxSymbol, symTex);
 
         int desiredState = 0;
         if (m_PoweredNet)
@@ -320,8 +323,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     {
         #ifndef SERVER
         string tex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        int idx = 0;
-        SetObjectTexture(idx, tex);
+        int idxCamo = 0;
+        int idxSymbol = 4;
+        SetObjectTexture(idxCamo, tex);
+        SetObjectTexture(idxSymbol, tex);
         #endif
     }
 
