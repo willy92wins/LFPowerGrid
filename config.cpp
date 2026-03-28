@@ -2261,6 +2261,72 @@ class CfgVehicles
         hiddenSelections[] = {"screen", "light_led_0"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat"};
     };
+
+    // =========================================================
+    // v4.2: REMOTE CONTROLLER (handheld, autonomous, RF pair+toggle)
+    // NOT a grid device. Pairs with RF-capable switches.
+    // Activate toggles all paired switches within range.
+    // =========================================================
+    class LFPG_RemoteController : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_REMOTE_CONTROLLER";
+        descriptionShort = "$STR_LFPG_REMOTE_CONTROLLER_DESC";
+        model = "\LFPowerGrid\data\remote_controller\remote_control.p3d";
+        weight = 300;
+        itemSize[] = {1, 2};
+        rotationFlags = 17;
+        animClass = "Pistol";
+        itemBehaviour = 0;
+        canBeDigged = 0;
+        carveNavmesh = 0;
+        physLayer = "item_small";
+
+        hiddenSelections[] = {"button_1_led", "button_2_led"};
+        hiddenSelectionsTextures[] = {"", ""};
+        hiddenSelectionsMaterials[] =
+        {
+            "\LFPowerGrid\data\remote_controller\data\led_off.rvmat",
+            "\LFPowerGrid\data\remote_controller\data\led_off.rvmat"
+        };
+
+        class AnimationSources
+        {
+            class activate_button_1
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+            class activate_button_2
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 100;
+                    healthLevels[] =
+                    {
+                        {1.0, {}},
+                        {0.7, {}},
+                        {0.5, {}},
+                        {0.3, {}},
+                        {0.0, {}}
+                    };
+                };
+                componentNames[] = {"Component01"};
+                fatalInjuryCoef = -1;
+            };
+        };
+    };
 };
 
 // =========================================================
@@ -2275,5 +2341,12 @@ class CfgNonAIVehicles
         scope = 2;
         inventorySlot[] = {"CarBattery", "TruckBattery"};
         model = "\LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
+    };
+
+    class Proxy_battery_adapter
+    {
+        model = "LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
+        simulation = "interiortarget";
+        autocenter = 0;
     };
 };

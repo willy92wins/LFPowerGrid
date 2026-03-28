@@ -105,8 +105,12 @@ modded class ActionConstructor
         // --- Speaker ---
         actions.Insert(LFPG_ActionSpeakerOn);
         actions.Insert(LFPG_ActionSpeakerOff);
-		
-        LFPG_Util.Debug("[Actions] LFPG actions registered (52)");
+
+        // --- Remote Controller ---
+        actions.Insert(LFPG_ActionPairRemote);
+        actions.Insert(LFPG_ActionActivateRemote);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (54)");
     }
 };
 

@@ -252,3 +252,8 @@
 "STR_LFPG_ACTION_SPEAKER_ON","Turn ON Speaker","Turn ON Speaker","Encender Altavoz","Lautsprecher einschalten","Включить динамик"
 "STR_LFPG_ACTION_SPEAKER_OFF","Turn OFF Speaker","Turn OFF Speaker","Apagar Altavoz","Lautsprecher ausschalten","Выключить динамик"
 "STR_LFPG_ACTION_PLACE_SPEAKER","Place Speaker","Place Speaker","Colocar Altavoz","Lautsprecher platzieren","Установить динамик"
+"STR_LFPG_REMOTE_CONTROLLER","Remote Controller","Remote Controller","Mando a Distancia","Fernbedienung","Пульт управления"
+"STR_LFPG_REMOTE_CONTROLLER_DESC","Pair with RF switches, then activate to toggle them remotely. Range: 200m.","Pair with RF switches, then activate to toggle them remotely. Range: 200m.","Empareja con interruptores RF y actívalos a distancia. Alcance: 200m.","Mit RF-Schaltern koppeln und ferngesteuert umschalten. Reichweite: 200m.","Сопрягите с RF-переключателями, затем переключайте их дистанционно. Дальность: 200м."
+"STR_LFPG_ACTION_PAIR_REMOTE","Pair Remote","Pair Remote","Emparejar Mando","Fernbedienung koppeln","Сопрячь пульт"
+"STR_LFPG_ACTION_UNPAIR_REMOTE","Unpair Remote","Unpair Remote","Desemparejar Mando","Fernbedienung entkoppeln","Отвязать пульт"
+"STR_LFPG_ACTION_ACTIVATE_REMOTE","Activate Remote","Activate Remote","Activar Mando","Fernbedienung aktivieren","Активировать пульт"
