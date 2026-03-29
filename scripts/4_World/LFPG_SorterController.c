@@ -68,6 +68,8 @@ class LFPG_SorterController extends ViewController
     // P3: Track first TintBg pass (LoadImageFile only needed once)
     protected bool m_BgInitialized;
     protected string m_ContainerDisplayName;
+    // F3-B: Last matched item count from preview RPC (-1 = not fetched)
+    protected int m_LastMatchedItems;
 
     // ── RPC identity ──
     protected int m_SorterNetLow;
@@ -178,6 +180,7 @@ class LFPG_SorterController extends ViewController
         m_SorterNetHigh = 0;
         m_IsPaired = false;
         m_ContainerDisplayName = "";
+        m_LastMatchedItems = -1;
 
         // M1: Category labels + values (data-driven)
         m_CatLabels = new array<string>;
@@ -478,6 +481,8 @@ class LFPG_SorterController extends ViewController
         m_ShowRules = true;
         m_ResetConfirmActive = false;
         m_FeedbackTimer = 0.0;
+        // F3-B: Fresh open — no preview data yet
+        m_LastMatchedItems = -1;
         m_Dests.Set(0, d0); m_Dests.Set(1, d1); m_Dests.Set(2, d2);
         m_Dests.Set(3, d3); m_Dests.Set(4, d4); m_Dests.Set(5, d5);
 
@@ -826,6 +831,8 @@ class LFPG_SorterController extends ViewController
             return;
         m_SelectedOutput = idx;
         m_ResetConfirmActive = false;
+        // F3-B: Preview is stale for new output
+        m_LastMatchedItems = -1;
         RefreshAll();
     }
 
@@ -1192,6 +1199,8 @@ class LFPG_SorterController extends ViewController
     // =========================================================
     protected void RefreshRulesDisplay()
     {
+        // F3-B: Rules changed — preview count is stale until server responds
+        m_LastMatchedItems = -1;
         RefreshTagsList();
         RefreshRuleCount();
         RefreshMatchCount();
@@ -1556,11 +1565,9 @@ class LFPG_SorterController extends ViewController
         if (outCfg)
         {
             count = outCfg.GetRuleCount();
-            // v4.2: Count catch-all as a rule (consistent with RefreshMatchCount)
-            if (outCfg.m_IsCatchAll)
-            {
-                count = count + 1;
-            }
+            // F3-A: Do NOT count catch-all in numerator.
+            // Catch-all is a flag, not a user-added rule.
+            // With 8 rules + catch-all, display should be "8/8" not "9/8".
         }
         string suffix = "/8";
         RuleCount = count.ToString();
@@ -1600,24 +1607,23 @@ class LFPG_SorterController extends ViewController
     }
 
     // =========================================================
-    // BUG #1 fix: MatchCount was never updated — show rule total
-    // for current output so the RulesPanel footer is not blank.
+    // F3-B: MatchCount shows real matched items from preview.
+    // m_LastMatchedItems = -1 means preview not yet fetched.
+    // Updated by PopulatePreview when server responds.
     // =========================================================
     protected void RefreshMatchCount()
     {
-        LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
-        int total = 0;
-        if (outCfg)
+        if (m_LastMatchedItems < 0)
         {
-            total = outCfg.GetRuleCount();
-            if (outCfg.m_IsCatchAll)
-            {
-                total = total + 1;
-            }
+            string dash = "--";
+            MatchCount = dash;
         }
-        string suffix = " rules";
-        MatchCount = total.ToString();
-        MatchCount = MatchCount + suffix;
+        else
+        {
+            MatchCount = m_LastMatchedItems.ToString();
+            string suffix = " items";
+            MatchCount = MatchCount + suffix;
+        }
         string propMC = "MatchCount";
         NotifyPropertyChanged(propMC, false);
     }
@@ -1787,6 +1793,10 @@ class LFPG_SorterController extends ViewController
         PreviewCount = countStr;
         string propPC = "PreviewCount";
         NotifyPropertyChanged(propPC, false);
+
+        // F3-B: Store real matched count for MatchCount display
+        m_LastMatchedItems = totalMatched;
+        RefreshMatchCount();
 
         // Empty states
         if (PreviewEmpty)

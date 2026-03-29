@@ -564,6 +564,11 @@ class LFPG_SorterView extends ScriptView
 
     protected void ApplyColors()
     {
+        // F1-A: Clear stale strong refs from previous Open cycle.
+        // SetUserData does NOT hold strong ref — m_ColorDataRefs keeps
+        // objects alive. Without Clear(), each Open accumulates ~130 objects.
+        m_ColorDataRefs.Clear();
+
         // Bug #1: ModalOverlay removed
         Tint(PanelBg, COL_BG_PANEL);
         Tint(AccentLine, COL_GREEN);
@@ -927,12 +932,12 @@ class LFPG_SorterView extends ScriptView
 
         // v4.3: Tag BtnRemove dispatch (Plan B — Relay_Command never
         // reached TagController because SorterView.OnClick intercepted).
-        // UID encoding: 600 + outputIdx*10 + (ruleIdx+1)
-        if (uid >= UID_TAG_REMOVE_BASE && uid < UID_TAG_REMOVE_BASE + 60)
+        // F3-C: UID encoding: 600 + outputIdx*16 + (ruleIdx+1)
+        if (uid >= UID_TAG_REMOVE_BASE && uid < UID_TAG_REMOVE_BASE + 96)
         {
             int encoded = uid - UID_TAG_REMOVE_BASE;
-            int outIdx = encoded / 10;
-            int remainder = encoded - (outIdx * 10);
+            int outIdx = encoded / 16;
+            int remainder = encoded - (outIdx * 16);
             int rIdx = remainder - 1;
             ctrl.OnRemoveTag(outIdx, rIdx);
             return true;

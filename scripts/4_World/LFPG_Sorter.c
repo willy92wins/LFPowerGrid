@@ -403,8 +403,26 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             if (s_ContainerMap.Contains(candKey))
             {
                 EntityAI claimant = s_ContainerMap.Get(candKey);
-                if (claimant && claimant != this)
+                // F1-B: Defensive validation — claimant may be stale
+                // if its destructor/OnKilled failed to UnregisterContainer.
+                bool claimantValid = false;
+                if (claimant)
+                {
+                    LFPG_Sorter claimSorter = LFPG_Sorter.Cast(claimant);
+                    if (claimSorter && !claimSorter.IsRuined())
+                    {
+                        claimantValid = true;
+                    }
+                }
+                if (claimantValid && claimant != this)
+                {
                     continue;
+                }
+                // Stale or self-claim — remove before potential re-claim
+                if (!claimantValid)
+                {
+                    s_ContainerMap.Remove(candKey);
+                }
             }
 
             float distSq = LFPG_WorldUtil.DistSq(searchPos, candidate.GetPosition());

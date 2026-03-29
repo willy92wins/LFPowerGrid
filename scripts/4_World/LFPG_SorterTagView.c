@@ -90,8 +90,9 @@ class LFPG_SorterTagView extends ScriptView
         // SorterView.OnClick dispatch (Plan B — Relay_Command
         // never reached TagController because SorterView.OnClick
         // intercepted the event first).
-        // UID encoding: 600 + outputIdx * 10 + (ruleIdx + 1)
-        // Decode: encoded = uid - 600; outIdx = encoded / 10; rIdx = (encoded % 10) - 1
+        // F3-C: UID encoding: 600 + outputIdx * 16 + (ruleIdx + 1)
+        // Decode: encoded = uid - 600; outIdx = encoded / 16; rIdx = (encoded % 16) - 1
+        // Changed from *10 to *16 to prevent collision if MAX_RULES >= 10.
         Widget tagRoot = GetLayoutRoot();
         if (tagRoot)
         {
@@ -99,7 +100,7 @@ class LFPG_SorterTagView extends ScriptView
             ButtonWidget btnRemove = ButtonWidget.Cast(tagRoot.FindAnyWidget(btnName));
             if (btnRemove)
             {
-                int encoded = outputIndex * 10;
+                int encoded = outputIndex * 16;
                 int rOffset = ruleIndex + 1;
                 encoded = encoded + rOffset;
                 int btnUid = 600 + encoded;

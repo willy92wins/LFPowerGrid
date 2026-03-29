@@ -6,9 +6,8 @@
 // BUTTON DISPATCH: Ningún ButtonWidgetClass tiene Relay_Command.
 // Esto es INTENCIONAL (v2.7 fix): Relay_Command combinado con
 // OnClick override causaba double-fire. Todo el dispatch se hace
-// manualmente en LFPG_SorterView.OnClick() por nombre de botón.
-// El único Relay_Command está en LFPG_SorterTag.layout (BtnRemove),
-// que funciona porque TagView tiene ScriptView propio.
+// manualmente en LFPG_SorterView.OnClick() por UserID (v4.3).
+// Tags usan el mismo patrón: UID encoding en SetData, dispatch en OnClick.
 // =========================================================
 FrameWidgetClass SorterRoot {
 	size 1 1
