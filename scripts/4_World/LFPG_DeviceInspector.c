@@ -52,6 +52,44 @@ class LFPG_DeviceInspector
     // ---- Singleton ----
     protected static ref LFPG_DeviceInspector s_Instance;
 
+    // ---- Color palette (F2-B: extracted from inline ARGB) ----
+    // Panel chrome
+    static const int COL_PANEL_BG     = 0xEB090E17;
+    static const int COL_HEADER_BG    = 0xF20D131F;
+    static const int COL_ACCENT       = 0xD92E8CBF;
+    static const int COL_SEP          = 0x99334059;
+    // Text
+    static const int COL_TEXT_WHITE   = 0xFFF2F2F2;
+    static const int COL_TEXT_LIGHT   = 0xFFB4B4B4;
+    // Grays (status)
+    static const int COL_GRAY         = 0xFF8C8C8C;
+    static const int COL_GRAY_DIM     = 0xFF787878;
+    static const int COL_GRAY_MID     = 0xFFA0A0A0;
+    // Greens
+    static const int COL_GREEN_OK     = 0xFF2E9B59;
+    static const int COL_EMERALD      = 0xFF34D399;
+    static const int COL_GREEN_WIRE   = 0xFF64B464;
+    // Reds
+    static const int COL_RED_ERROR    = 0xFFDC3232;
+    static const int COL_RED_DARK     = 0xFFC83C3C;
+    static const int COL_RED_SOFT     = 0xFFF87171;
+    // Blues / Cyan
+    static const int COL_CYAN         = 0xFF32C8DC;
+    static const int COL_BLUE         = 0xFF64B4DC;
+    static const int COL_BLUE_BRIGHT  = 0xFF3399FF;
+    static const int COL_BLUE_WIRE    = 0xFF64A0D2;
+    // Orange / Amber / Yellow
+    static const int COL_ORANGE       = 0xFFE67E22;
+    static const int COL_AMBER_SOURCE = 0xFFE6B432;
+    static const int COL_AMBER_FUEL   = 0xFFE6A032;
+    static const int COL_AMBER_WARN   = 0xFFE6C832;
+    static const int COL_YELLOW       = 0xFFFFC832;
+    static const int COL_OLIVE        = 0xFFB4B432;
+    // Other
+    static const int COL_PURPLE       = 0xFFA078DC;
+    static const int COL_OLIVE_GREEN  = 0xFF88AA44;
+    static const int COL_RED_ORANGE   = 0xFFDC5032;
+
     // ---- Widget references ----
     protected Widget m_Root;
     protected Widget m_Panel;
@@ -223,7 +261,7 @@ class LFPG_DeviceInspector
             imgBg.SetPos(0, 0);
             imgBg.SetSize(LFPG_INSPECT_PANEL_W, maxH);
             imgBg.LoadImageFile(0, procTex);
-            imgBg.SetColor(ARGB(235, 9, 14, 23));
+            imgBg.SetColor(COL_PANEL_BG);
         }
 
         ImageWidget imgHeader = ImageWidget.Cast(m_Root.FindAnyWidget("HeaderBar"));
@@ -232,7 +270,7 @@ class LFPG_DeviceInspector
             imgHeader.SetPos(0, 0);
             imgHeader.SetSize(LFPG_INSPECT_PANEL_W, LFPG_INSPECT_HEADER_H);
             imgHeader.LoadImageFile(0, procTex);
-            imgHeader.SetColor(ARGB(242, 13, 19, 31));
+            imgHeader.SetColor(COL_HEADER_BG);
         }
 
         ImageWidget imgAccent = ImageWidget.Cast(m_Root.FindAnyWidget("AccentBar"));
@@ -242,7 +280,7 @@ class LFPG_DeviceInspector
             imgAccent.SetPos(0, 0);
             imgAccent.SetSize(LFPG_INSPECT_ACCENT_W, maxH);
             imgAccent.LoadImageFile(0, procTex);
-            imgAccent.SetColor(ARGB(217, 46, 140, 191));
+            imgAccent.SetColor(COL_ACCENT);
         }
 
         ImageWidget imgSep = ImageWidget.Cast(m_Root.FindAnyWidget("Separator"));
@@ -252,7 +290,7 @@ class LFPG_DeviceInspector
             imgSep.SetPos(12, 93);
             imgSep.SetSize(276, 1);
             imgSep.LoadImageFile(0, procTex);
-            imgSep.SetColor(ARGB(153, 51, 64, 89));
+            imgSep.SetColor(COL_SEP);
         }
 
         // Text widgets: position + size + color
@@ -260,7 +298,7 @@ class LFPG_DeviceInspector
         {
             m_wDeviceName.SetPos(14, 7);
             m_wDeviceName.SetSize(274, 22);
-            m_wDeviceName.SetColor(ARGB(255, 242, 242, 242));
+            m_wDeviceName.SetColor(COL_TEXT_WHITE);
         }
         if (m_wDeviceType)
         {
@@ -276,13 +314,13 @@ class LFPG_DeviceInspector
         {
             m_wCapLine.SetPos(14, 74);
             m_wCapLine.SetSize(274, 16);
-            m_wCapLine.SetColor(ARGB(255, 140, 140, 140));
+            m_wCapLine.SetColor(COL_GRAY);
         }
         if (m_wTankLine)
         {
             m_wTankLine.SetPos(14, 94);
             m_wTankLine.SetSize(274, 16);
-            m_wTankLine.SetColor(ARGB(255, 51, 153, 255));
+            m_wTankLine.SetColor(COL_BLUE_BRIGHT);
             m_wTankLine.Show(false);
         }
         m_TankLineOffset = 0.0;
@@ -291,7 +329,7 @@ class LFPG_DeviceInspector
         {
             m_wFuelLine.SetPos(14, 94);
             m_wFuelLine.SetSize(274, 16);
-            m_wFuelLine.SetColor(ARGB(255, 230, 126, 34));
+            m_wFuelLine.SetColor(COL_ORANGE);
             m_wFuelLine.Show(false);
         }
         m_FuelLineOffset = 0.0;
@@ -300,7 +338,7 @@ class LFPG_DeviceInspector
         {
             m_wReserveLine.SetPos(14, 114);
             m_wReserveLine.SetSize(274, 16);
-            m_wReserveLine.SetColor(ARGB(255, 230, 126, 34));
+            m_wReserveLine.SetColor(COL_ORANGE);
             m_wReserveLine.Show(false);
         }
         m_ReserveLineOffset = 0.0;
@@ -309,7 +347,7 @@ class LFPG_DeviceInspector
         {
             m_wLinkLine.SetPos(14, 94);
             m_wLinkLine.SetSize(274, 16);
-            m_wLinkLine.SetColor(ARGB(255, 52, 211, 153));
+            m_wLinkLine.SetColor(COL_EMERALD);
             m_wLinkLine.Show(false);
         }
         m_LinkLineOffset = 0.0;
@@ -318,7 +356,7 @@ class LFPG_DeviceInspector
         {
             m_wBatteryLine.SetPos(14, 94);
             m_wBatteryLine.SetSize(360, 18);
-            m_wBatteryLine.SetColor(ARGB(255, 255, 200, 50));
+            m_wBatteryLine.SetColor(COL_YELLOW);
             m_wBatteryLine.Show(false);
         }
         m_BatteryLineOffset = 0.0;
@@ -326,7 +364,7 @@ class LFPG_DeviceInspector
         {
             m_wWiresHeader.SetPos(14, 99);
             m_wWiresHeader.SetSize(274, 16);
-            m_wWiresHeader.SetColor(ARGB(255, 180, 180, 180));
+            m_wWiresHeader.SetColor(COL_TEXT_LIGHT);
         }
 
         // Wire slot widgets: position + size
@@ -522,27 +560,27 @@ class LFPG_DeviceInspector
         // ---- Device type badge ----
         int devType = LFPG_DeviceAPI.GetDeviceType(device);
         string typeStr = Loc("#STR_LFPG_INSPECT_UNKNOWN");
-        int typeColor = ARGB(255, 140, 140, 140);
+        int typeColor = COL_GRAY;
 
         if (devType == LFPG_DeviceType.SOURCE)
         {
             typeStr = Loc("#STR_LFPG_INSPECT_SOURCE");
-            typeColor = ARGB(255, 230, 180, 50);
+            typeColor = COL_AMBER_SOURCE;
         }
         else if (devType == LFPG_DeviceType.CONSUMER)
         {
             typeStr = Loc("#STR_LFPG_INSPECT_CONSUMER");
-            typeColor = ARGB(255, 100, 180, 220);
+            typeColor = COL_BLUE;
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
             typeStr = Loc("#STR_LFPG_INSPECT_PASSTHROUGH");
-            typeColor = ARGB(255, 160, 120, 220);
+            typeColor = COL_PURPLE;
         }
         else if (devType == LFPG_DeviceType.CAMERA)
         {
             typeStr = Loc("#STR_LFPG_INSPECT_CAMERA");
-            typeColor = ARGB(255, 100, 180, 220);
+            typeColor = COL_BLUE;
         }
 
         m_wDeviceType.SetText(typeStr);
@@ -550,7 +588,7 @@ class LFPG_DeviceInspector
 
         // ---- Power status ----
         string statusText = "";
-        int statusColor = ARGB(255, 140, 140, 140);
+        int statusColor = COL_GRAY;
 
         if (devType == LFPG_DeviceType.SOURCE)
         {
@@ -564,13 +602,13 @@ class LFPG_DeviceInspector
                 {
                     statusText = Loc("#STR_LFPG_INSPECT_OVERLOAD");
                     statusText = statusText + "  ";
-                    statusColor = ARGB(255, 220, 50, 50);
+                    statusColor = COL_RED_ERROR;
                 }
                 else
                 {
                     statusText = Loc("#STR_LFPG_INSPECT_ACTIVE");
                     statusText = statusText + "  ";
-                    statusColor = ARGB(255, 46, 155, 89);
+                    statusColor = COL_GREEN_OK;
                 }
 
                 string barStr = BuildLoadBar(loadRatio);
@@ -582,7 +620,7 @@ class LFPG_DeviceInspector
             else
             {
                 statusText = Loc("#STR_LFPG_INSPECT_INACTIVE");
-                statusColor = ARGB(255, 120, 120, 120);
+                statusColor = COL_GRAY_DIM;
             }
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
@@ -592,12 +630,12 @@ class LFPG_DeviceInspector
             if (ptPowered)
             {
                 statusText = Loc("#STR_LFPG_INSPECT_TRANSMITTING");
-                statusColor = ARGB(255, 46, 155, 89);
+                statusColor = COL_GREEN_OK;
             }
             else
             {
                 statusText = Loc("#STR_LFPG_INSPECT_NOT_TRANSMITTING");
-                statusColor = ARGB(255, 120, 120, 120);
+                statusColor = COL_GRAY_DIM;
             }
         }
         else
@@ -606,12 +644,12 @@ class LFPG_DeviceInspector
             if (powered)
             {
                 statusText = Loc("#STR_LFPG_INSPECT_POWERED");
-                statusColor = ARGB(255, 46, 155, 89);
+                statusColor = COL_GREEN_OK;
             }
             else
             {
                 statusText = Loc("#STR_LFPG_INSPECT_UNPOWERED");
-                statusColor = ARGB(255, 120, 120, 120);
+                statusColor = COL_GRAY_DIM;
             }
         }
 
@@ -738,23 +776,23 @@ class LFPG_DeviceInspector
                 // Color: filling=cyan, full=green, offline=yellow, empty=grey
                 if (tankPow && !isFull)
                 {
-                    m_wTankLine.SetColor(ARGB(255, 50, 200, 220));
+                    m_wTankLine.SetColor(COL_CYAN);
                 }
                 else if (tankPow && isFull)
                 {
-                    m_wTankLine.SetColor(ARGB(255, 46, 155, 89));
+                    m_wTankLine.SetColor(COL_GREEN_OK);
                 }
                 else if (tankLvl < 0.01)
                 {
-                    m_wTankLine.SetColor(ARGB(255, 120, 120, 120));
+                    m_wTankLine.SetColor(COL_GRAY_DIM);
                 }
                 else if (tankLiq == LIQUID_CLEANWATER)
                 {
-                    m_wTankLine.SetColor(ARGB(255, 51, 153, 255));
+                    m_wTankLine.SetColor(COL_BLUE_BRIGHT);
                 }
                 else
                 {
-                    m_wTankLine.SetColor(ARGB(255, 136, 170, 68));
+                    m_wTankLine.SetColor(COL_OLIVE_GREEN);
                 }
 
                 m_wTankLine.Show(true);
@@ -809,20 +847,20 @@ class LFPG_DeviceInspector
                 int cargoCount = furnaceDevice.LFPG_GetCargoItemCount();
 
                 // Status color (shared with reserve line below)
-                int fuelLineColor = ARGB(255, 120, 120, 120);
+                int fuelLineColor = COL_GRAY_DIM;
                 if (fuelOn)
                 {
-                    fuelLineColor = ARGB(255, 50, 200, 220);
+                    fuelLineColor = COL_CYAN;
                 }
                 else if (fuelCur > 0)
                 {
                     fuelText = fuelText + " [OFF]";
-                    fuelLineColor = ARGB(255, 230, 200, 50);
+                    fuelLineColor = COL_AMBER_WARN;
                 }
                 else if (cargoCount > 0)
                 {
                     fuelText = fuelText + " [OFF]";
-                    fuelLineColor = ARGB(255, 230, 160, 50);
+                    fuelLineColor = COL_AMBER_FUEL;
                 }
                 else
                 {
@@ -889,13 +927,13 @@ class LFPG_DeviceInspector
                     string linkText = "Linked: ";
                     linkText = linkText + linkedEnt.GetDisplayName();
                     m_wLinkLine.SetText(linkText);
-                    m_wLinkLine.SetColor(ARGB(255, 52, 211, 153));
+                    m_wLinkLine.SetColor(COL_EMERALD);
                 }
                 else
                 {
                     string noLinkText = "Not linked";
                     m_wLinkLine.SetText(noLinkText);
-                    m_wLinkLine.SetColor(ARGB(255, 248, 113, 113));
+                    m_wLinkLine.SetColor(COL_RED_SOFT);
                 }
                 m_wLinkLine.Show(true);
                 m_LinkLineOffset = 20.0;
@@ -943,13 +981,13 @@ class LFPG_DeviceInspector
                 batText = batText + "%)";
 
                 // Status suffix + color
-                int batColor = ARGB(255, 120, 120, 120);
+                int batColor = COL_GRAY_DIM;
 
                 if (!batOutEnabled)
                 {
                     // Output disabled (switch off)
                     batText = batText + "  [OFF]";
-                    batColor = ARGB(255, 180, 180, 50);
+                    batColor = COL_OLIVE;
                 }
                 else if (batRate > 0.5)
                 {
@@ -958,7 +996,7 @@ class LFPG_DeviceInspector
                     batText = batText + "  >> CHG +";
                     batText = batText + chgRate.ToString();
                     batText = batText + " u/s";
-                    batColor = ARGB(255, 50, 200, 220);
+                    batColor = COL_CYAN;
                 }
                 else if (batRate < -0.5)
                 {
@@ -968,25 +1006,25 @@ class LFPG_DeviceInspector
                     batText = batText + "  << DIS -";
                     batText = batText + disRate.ToString();
                     batText = batText + " u/s";
-                    batColor = ARGB(255, 230, 126, 34);
+                    batColor = COL_ORANGE;
                 }
                 else if (batPct >= 100)
                 {
                     // Full and idle
                     batText = batText + "  FULL";
-                    batColor = ARGB(255, 46, 155, 89);
+                    batColor = COL_GREEN_OK;
                 }
                 else if (batPct < 1)
                 {
                     // Empty
                     batText = batText + "  EMPTY";
-                    batColor = ARGB(255, 200, 60, 60);
+                    batColor = COL_RED_DARK;
                 }
                 else
                 {
                     // Idle (connected but not charging/discharging)
                     batText = batText + "  IDLE";
-                    batColor = ARGB(255, 160, 160, 160);
+                    batColor = COL_GRAY_MID;
                 }
 
                 float batY = 94.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset;
@@ -1181,15 +1219,15 @@ class LFPG_DeviceInspector
             slot.SetText(line);
 
             // v0.7.47: Color based on edge state (overrides direction color)
-            int wireColor = ARGB(255, 100, 160, 210);
+            int wireColor = COL_BLUE_WIRE;
             if (entry.m_EdgeState == 2)
             {
                 // BROWNOUT: orange-red
-                wireColor = ARGB(255, 220, 80, 50);
+                wireColor = COL_RED_ORANGE;
             }
             else if (entry.m_Direction == LFPG_PortDir.OUT)
             {
-                wireColor = ARGB(255, 100, 180, 100);
+                wireColor = COL_GREEN_WIRE;
             }
             slot.SetColor(wireColor);
             slot.Show(true);

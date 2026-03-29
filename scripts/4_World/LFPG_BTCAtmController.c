@@ -54,17 +54,11 @@ class LFPG_BTCAtmController extends ViewController
     // ── Status feedback timer ──
     protected float m_StatusTimer;
 
-    // ── Palette refs (for status + dimming) ──
-    static const int COL_GREEN      = 0xFF34D399;
-    static const int COL_RED        = 0xFFF87171;
-    static const int COL_AMBER      = 0xFFFBBF24;
-    static const int COL_TEXT       = 0xFFF1F5F9;
-    static const int COL_TEXT_MID   = 0xFFB0BEC5;
-    static const int COL_TEXT_DIM   = 0xFF7A8A9B;
+    // ── Palette (dedup F2-B) ──
+    // Shared colors: use LFPG_SorterView.COL_*
+    // ATM-specific only:
     static const int COL_STATUS_OK  = 0x1734D399;
     static const int COL_STATUS_ERR = 0x17F87171;
-    static const int COL_BTN        = 0xFF374B6F;
-    static const int COL_RED_BTN    = 0xFFC72323;
     static const int COL_DIM_BG     = 0x40374B6F;
 
     void LFPG_BTCAtmController()
@@ -187,11 +181,11 @@ class LFPG_BTCAtmController extends ViewController
 
                 if (isNeg)
                 {
-                    m_PriceChangeText.SetColor(COL_RED);
+                    m_PriceChangeText.SetColor(LFPG_SorterView.COL_RED);
                 }
                 else
                 {
-                    m_PriceChangeText.SetColor(COL_GREEN);
+                    m_PriceChangeText.SetColor(LFPG_SorterView.COL_GREEN);
                 }
             }
         }
@@ -412,13 +406,13 @@ class LFPG_BTCAtmController extends ViewController
         {
             sellDimmed = true;
         }
-        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHint, sellDimmed, COL_RED_BTN);
+        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHint, sellDimmed, LFPG_SorterView.COL_RED_BTN);
 
         // Deposit EUR: dimmed if wo (always, regardless of tab)
-        DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, COL_BTN);
+        DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, LFPG_SorterView.COL_BTN);
 
         // Deposit BTC: dimmed if wo (always, regardless of tab)
-        DimButton(m_BtnDepositBtcBg, m_BtnDepositBtcText, m_BtnDepositBtcHint, wo, COL_BTN);
+        DimButton(m_BtnDepositBtcBg, m_BtnDepositBtcText, m_BtnDepositBtcHint, wo, LFPG_SorterView.COL_BTN);
     }
 
     protected void DimButton(ImageWidget bg, TextWidget txt, TextWidget hint, bool dimmed, int normalBgColor)
@@ -430,8 +424,8 @@ class LFPG_BTCAtmController extends ViewController
             {
                 m_View.Tint(bg, COL_DIM_BG);
             }
-            if (txt) { txt.SetColor(COL_TEXT_DIM); }
-            if (hint) { hint.SetColor(COL_TEXT_DIM); }
+            if (txt) { txt.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+            if (hint) { hint.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
         }
         else
         {
@@ -439,8 +433,8 @@ class LFPG_BTCAtmController extends ViewController
             {
                 m_View.Tint(bg, normalBgColor);
             }
-            if (txt) { txt.SetColor(COL_TEXT); }
-            if (hint) { hint.SetColor(COL_TEXT_MID); }
+            if (txt) { txt.SetColor(LFPG_SorterView.COL_TEXT); }
+            if (hint) { hint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
         }
     }
 
@@ -733,11 +727,11 @@ class LFPG_BTCAtmController extends ViewController
             m_StatusText.SetText(msg);
             if (isError)
             {
-                m_StatusText.SetColor(COL_RED);
+                m_StatusText.SetColor(LFPG_SorterView.COL_RED);
             }
             else
             {
-                m_StatusText.SetColor(COL_GREEN);
+                m_StatusText.SetColor(LFPG_SorterView.COL_GREEN);
             }
         }
 

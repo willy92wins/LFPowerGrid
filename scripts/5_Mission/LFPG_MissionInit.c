@@ -48,6 +48,12 @@ modded class MissionGameplay
     override void OnInit()
     {
         super.OnInit();
+
+        // F2-A: Normalize widget brightness — DayZ engine applies negative LV by default,
+        // darkening grays/pastels 30-50%. Static call affects all widgets globally.
+        Widget.SetLV(0);
+        Widget.SetTextLV(0);
+
         Print(LFPG_LOG_PREFIX + "MissionGameplay OnInit (v" + LFPG_VERSION_STR + ")");
 
         Print(LFPG_LOG_PREFIX + "Resetting client singletons...");
