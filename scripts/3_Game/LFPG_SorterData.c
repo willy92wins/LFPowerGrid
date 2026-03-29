@@ -258,22 +258,7 @@ class LFPG_SortConfig
 
     // ---- JSON serialization (compact format) ----
     // Format: {"o":[{"r":[{"t":0,"v":"WEAPON"}],"ca":false}, ...]}
-
-    // Helper: IndexOf starting from a position (Enforce lacks this)
-    static int IndexOfFrom(string haystack, int startPos, string needle)
-    {
-        int hLen = haystack.Length();
-        if (startPos < 0)
-            return -1;
-        if (startPos >= hLen)
-            return -1;
-        int subLen = hLen - startPos;
-        string sub = haystack.Substring(startPos, subLen);
-        int idx = sub.IndexOf(needle);
-        if (idx < 0)
-            return -1;
-        return startPos + idx;
-    }
+    // F4-E: Custom IndexOfFrom removed — native string.IndexOfFrom(startPos, needle) used instead.
 
     string ToJSON()
     {
@@ -363,12 +348,12 @@ class LFPG_SortConfig
         while (pos < jsonLen && outIdx < LFPG_SORT_MAX_OUTPUTS)
         {
             // Find next output object start {
-            int objStart = IndexOfFrom(json, pos, kOpenBrace);
+            int objStart = json.IndexOfFrom(pos, kOpenBrace);
             if (objStart < 0)
                 break;
 
             // Find the rules array "r":[
-            int rArrStart = IndexOfFrom(json, objStart, kRArr);
+            int rArrStart = json.IndexOfFrom(objStart, kRArr);
             if (rArrStart < 0)
                 break;
 
@@ -378,23 +363,23 @@ class LFPG_SortConfig
             while (rPos < jsonLen)
             {
                 // Find next rule object {
-                int ruleStart = IndexOfFrom(json, rPos, kOpenBrace);
+                int ruleStart = json.IndexOfFrom(rPos, kOpenBrace);
                 if (ruleStart < 0)
                     break;
 
                 // Check if we hit ] before { (end of rules array)
-                int rArrEnd = IndexOfFrom(json, rPos, kCloseBracket);
+                int rArrEnd = json.IndexOfFrom(rPos, kCloseBracket);
                 if (rArrEnd >= 0 && rArrEnd < ruleStart)
                     break;
 
                 // Parse "t":N (supports multi-digit types)
-                int tStart = IndexOfFrom(json, ruleStart, kTypeKey);
+                int tStart = json.IndexOfFrom(ruleStart, kTypeKey);
                 if (tStart < 0)
                     break;
                 int tValStart = tStart + 4;
                 if (tValStart >= jsonLen)
                     break;
-                int tEnd = IndexOfFrom(json, tValStart, kComma);
+                int tEnd = json.IndexOfFrom(tValStart, kComma);
                 if (tEnd < 0)
                     break;
                 int tLen = tEnd - tValStart;
@@ -404,13 +389,13 @@ class LFPG_SortConfig
                 int ruleType = tStr.ToInt();
 
                 // Parse "v":"..."
-                int vStart = IndexOfFrom(json, tValStart, kValKey);
+                int vStart = json.IndexOfFrom(tValStart, kValKey);
                 if (vStart < 0)
                     break;
                 int vValStart = vStart + 5;
                 if (vValStart >= jsonLen)
                     break;
-                int vEnd = IndexOfFrom(json, vValStart, kQuote);
+                int vEnd = json.IndexOfFrom(vValStart, kQuote);
                 if (vEnd < 0)
                     break;
 
@@ -429,14 +414,14 @@ class LFPG_SortConfig
                 }
 
                 // Skip past this rule's closing }
-                int ruleEnd = IndexOfFrom(json, vEnd, kCloseBrace);
+                int ruleEnd = json.IndexOfFrom(vEnd, kCloseBrace);
                 if (ruleEnd < 0)
                     break;
                 rPos = ruleEnd + 1;
             }
 
             // Parse catch-all: "ca":true/false
-            int caStart = IndexOfFrom(json, rArrStart, kCaKey);
+            int caStart = json.IndexOfFrom(rArrStart, kCaKey);
             if (caStart >= 0)
             {
                 int caValStart = caStart + 5;
@@ -463,7 +448,7 @@ class LFPG_SortConfig
             {
                 searchFrom = caStart;
             }
-            int objEnd = IndexOfFrom(json, searchFrom, kCloseBrace);
+            int objEnd = json.IndexOfFrom(searchFrom, kCloseBrace);
             if (objEnd < 0)
                 break;
 

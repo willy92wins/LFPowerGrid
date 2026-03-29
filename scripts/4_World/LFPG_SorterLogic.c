@@ -1149,6 +1149,7 @@ class LFPG_SorterLogic
 
         // v4.1 DIAG: Log total inventory operations for desync investigation.
         // 2×N ops (ground + reposition) is the suspected cause of client desync.
+        #ifdef LFPG_DEBUG
         string bpDiag = "[BinPackCargo] items=";
         bpDiag = bpDiag + n.ToString();
         bpDiag = bpDiag + " repositioned=";
@@ -1158,6 +1159,7 @@ class LFPG_SorterLogic
         bpDiag = bpDiag + "x";
         bpDiag = bpDiag + gridH.ToString();
         LFPG_Util.Info(bpDiag);
+        #endif
 
         return repositioned;
         #else

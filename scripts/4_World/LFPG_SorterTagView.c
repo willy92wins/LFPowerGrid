@@ -28,6 +28,7 @@ class LFPG_SorterTagView extends ScriptView
     TextWidget TagLabel;
     protected int m_TagColor;
     protected bool m_Scaled;
+    protected bool m_BgLoaded;
 
     override string GetLayoutFile()
     {
@@ -73,7 +74,12 @@ class LFPG_SorterTagView extends ScriptView
 
         if (TagBg)
         {
-            TagBg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+            // F4-A: LoadImageFile only on first SetData (1× per instance)
+            if (!m_BgLoaded)
+            {
+                TagBg.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                m_BgLoaded = true;
+            }
             // Bug #10 fix: alpha 0x12→0x26 for visibility
             int bgColor = (color & 0x00FFFFFF) | 0x26000000;
             TagBg.SetColor(bgColor);

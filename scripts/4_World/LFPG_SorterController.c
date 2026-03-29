@@ -67,6 +67,12 @@ class LFPG_SorterController extends ViewController
     protected bool m_IsPaired;
     // P3: Track first TintBg pass (LoadImageFile only needed once)
     protected bool m_BgInitialized;
+    // F4-A: Track first StatusDot/TabDot/ViewTabIndicator LoadImageFile
+    protected bool m_StatusDotLoaded;
+    protected bool m_TabDotsLoaded;
+    protected bool m_ViewTabIndLoaded;
+    // F4-B: Track first EnsureBindings array resolution
+    protected bool m_ArraysResolved;
     protected string m_ContainerDisplayName;
     // F3-B: Last matched item count from preview RPC (-1 = not fetched)
     protected int m_LastMatchedItems;
@@ -104,6 +110,8 @@ class LFPG_SorterController extends ViewController
     // Slot — arrays prevent Dabs auto-bind corruption
     protected ref array<ImageWidget> m_SlotBgs;
     protected ref array<TextWidget> m_SlotTexts;
+    // F4-D: Reusable sort index array (avoids new array per PopulatePreview)
+    protected ref array<int> m_SortIdx;
     // m_LayoutRoot — inherited from ViewController (ScriptedWidgetEventHandler)
     // Catch-all
     ImageWidget BtnCatchAllBg; TextWidget BtnCatchAllText;
@@ -171,6 +179,8 @@ class LFPG_SorterController extends ViewController
             m_SlotBgs.Insert(null);
             m_SlotTexts.Insert(null);
         }
+        // F4-D: Reusable sort index array
+        m_SortIdx = new array<int>;
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
@@ -240,46 +250,66 @@ class LFPG_SorterController extends ViewController
         m_LayoutRoot = layoutRoot;
         string bn = "";
 
-        // ── Output tabs (child-walk → store in arrays, safe from Dabs rebind) ──
-        string tabName = "";
-        int tabIdx = 0;
-        for (tabIdx = 0; tabIdx < 6; tabIdx = tabIdx + 1)
+        // F4-B: Array loops only on first open — arrays are stable across Dabs rebind.
+        // Named fields below MUST re-resolve each open (Dabs may rebind them).
+        if (!m_ArraysResolved)
         {
-            tabName = "TabOut";
-            tabName = tabName + tabIdx.ToString();
-            m_TabBgs.Set(tabIdx, FindBtnChildBg(layoutRoot, tabName));
-            m_TabTexts.Set(tabIdx, FindBtnChildText(layoutRoot, tabName));
+            // ── Output tabs (child-walk → store in arrays, safe from Dabs rebind) ──
+            string tabName = "";
+            int tabIdx = 0;
+            for (tabIdx = 0; tabIdx < 6; tabIdx = tabIdx + 1)
+            {
+                tabName = "TabOut";
+                tabName = tabName + tabIdx.ToString();
+                m_TabBgs.Set(tabIdx, FindBtnChildBg(layoutRoot, tabName));
+                m_TabTexts.Set(tabIdx, FindBtnChildText(layoutRoot, tabName));
+            }
+
+            // ── Category buttons (arrays — safe from Dabs rebind) ──
+            string catName = "";
+            int catIdx = 0;
+            for (catIdx = 0; catIdx < 8; catIdx = catIdx + 1)
+            {
+                catName = "CatBtn";
+                catName = catName + catIdx.ToString();
+                m_CatBgs.Set(catIdx, FindBtnChildBg(layoutRoot, catName));
+                m_CatTexts.Set(catIdx, FindBtnChildText(layoutRoot, catName));
+            }
+
+            // ── Slot presets (arrays — safe from Dabs rebind) ──
+            string slotName = "";
+            int slotIdx = 0;
+            for (slotIdx = 0; slotIdx < 4; slotIdx = slotIdx + 1)
+            {
+                slotName = "SlotPre";
+                slotName = slotName + slotIdx.ToString();
+                m_SlotBgs.Set(slotIdx, FindBtnChildBg(layoutRoot, slotName));
+                m_SlotTexts.Set(slotIdx, FindBtnChildText(layoutRoot, slotName));
+            }
+
+            // ── Tab dots (also array — same stability) ──
+            string dotPrefix = "TabDot";
+            int dotIdx = 0;
+            for (dotIdx = 0; dotIdx < 6; dotIdx = dotIdx + 1)
+            {
+                if (!m_TabDots.Get(dotIdx))
+                {
+                    string wdot = dotPrefix;
+                    wdot = wdot + dotIdx.ToString();
+                    m_TabDots.Set(dotIdx, ImageWidget.Cast(layoutRoot.FindAnyWidget(wdot)));
+                }
+            }
+
+            m_ArraysResolved = true;
         }
 
-        // ── View tabs ──
+        // ── View tabs (re-resolve each open — Dabs may rebind) ──
         bn = "TabRules";
         TabRulesBg = FindBtnChildBg(layoutRoot, bn);
         TabRulesText = FindBtnChildText(layoutRoot, bn);
         bn = "TabPreview";
         TabPreviewBg = FindBtnChildBg(layoutRoot, bn);
         TabPreviewText = FindBtnChildText(layoutRoot, bn);
-
-        // ── Category buttons (arrays — safe from Dabs rebind) ──
-        string catName = "";
-        int catIdx = 0;
-        for (catIdx = 0; catIdx < 8; catIdx = catIdx + 1)
-        {
-            catName = "CatBtn";
-            catName = catName + catIdx.ToString();
-            m_CatBgs.Set(catIdx, FindBtnChildBg(layoutRoot, catName));
-            m_CatTexts.Set(catIdx, FindBtnChildText(layoutRoot, catName));
-        }
-
-        // ── Slot presets (arrays — safe from Dabs rebind) ──
-        string slotName = "";
-        int slotIdx = 0;
-        for (slotIdx = 0; slotIdx < 4; slotIdx = slotIdx + 1)
-        {
-            slotName = "SlotPre";
-            slotName = slotName + slotIdx.ToString();
-            m_SlotBgs.Set(slotIdx, FindBtnChildBg(layoutRoot, slotName));
-            m_SlotTexts.Set(slotIdx, FindBtnChildText(layoutRoot, slotName));
-        }
 
         // ── Catch-all ──
         bn = "BtnCatchAll";
@@ -358,18 +388,7 @@ class LFPG_SorterController extends ViewController
         wn = "DestIndicator";
         if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wn); }
 
-        // v3: Tab dots (M1: array-based loop)
-        int dotIdx = 0;
-        string dotPrefix = "TabDot";
-        for (dotIdx = 0; dotIdx < 6; dotIdx = dotIdx + 1)
-        {
-            if (!m_TabDots.Get(dotIdx))
-            {
-                wn = dotPrefix;
-                wn = wn + dotIdx.ToString();
-                m_TabDots.Set(dotIdx, ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)));
-            }
-        }
+        // v3: Tab dots now resolved inside m_ArraysResolved guard above.
         // v3: View tab indicator
         wn = "ViewTabIndicator";
         if (!ViewTabIndicator) { ViewTabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
@@ -498,6 +517,7 @@ class LFPG_SorterController extends ViewController
         }
 
         // DIAG: Log pairing state and key binding results
+        #ifdef LFPG_DEBUG
         string diagInit = "[SorterCtrl] InitFromRPC paired=";
         diagInit = diagInit + m_IsPaired.ToString();
         diagInit = diagInit + " container=";
@@ -519,6 +539,7 @@ class LFPG_SorterController extends ViewController
         if (m_TabTexts.Get(5)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
         LFPG_Util.Info(diagBindings);
+        #endif
 
         if (configJSON != "")
         {
@@ -739,7 +760,12 @@ class LFPG_SorterController extends ViewController
         }
         if (StatusDot)
         {
-            StatusDot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+            // F4-A: LoadImageFile only once
+            if (!m_StatusDotLoaded)
+            {
+                StatusDot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                m_StatusDotLoaded = true;
+            }
             StatusDot.SetColor(col);
         }
     }
@@ -1283,18 +1309,24 @@ class LFPG_SorterController extends ViewController
             else
             {
                 // DIAG: Log if TextWidget is null for this tab index
+                #ifdef LFPG_DEBUG
                 string diagTab = "[SorterCtrl] Tab ";
                 diagTab = diagTab + i.ToString();
                 diagTab = diagTab + " TextWidget NULL, label=";
                 diagTab = diagTab + label;
                 LFPG_Util.Warn(diagTab);
+                #endif
             }
 
             // v3: Tab dot indicator (replaces " *" suffix)
             ImageWidget dot = GetTabDot(i);
             if (dot)
             {
-                dot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                // F4-A: LoadImageFile only on first pass
+                if (!m_TabDotsLoaded)
+                {
+                    dot.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                }
                 if (tabHasContent && !isSel)
                 {
                     dot.Show(true);
@@ -1319,6 +1351,8 @@ class LFPG_SorterController extends ViewController
                 }
             }
         }
+        // F4-A: Tab dots loaded after first full pass
+        m_TabDotsLoaded = true;
 
         // Position active-tab indicator under selected tab.
         // v2.8: Read actual tab button position (UIScaler-compatible).
@@ -1380,7 +1414,12 @@ class LFPG_SorterController extends ViewController
         // v3: Position ViewTabIndicator under active view tab
         if (ViewTabIndicator)
         {
-            ViewTabIndicator.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+            // F4-A: LoadImageFile only on first pass
+            if (!m_ViewTabIndLoaded)
+            {
+                ViewTabIndicator.LoadImageFile(0, LFPG_SorterView.PROC_WHITE);
+                m_ViewTabIndLoaded = true;
+            }
             ViewTabIndicator.SetColor(LFPG_SorterView.COL_BLUE);
             ImageWidget activeViewBg = TabRulesBg;
             if (!m_ShowRules)
@@ -1535,6 +1574,7 @@ class LFPG_SorterController extends ViewController
         }
 
         // v4.1 DIAG: Log tag creation summary (Debug — fires per click)
+        #ifdef LFPG_DEBUG
         string diagTags = "[SorterCtrl] RefreshTagsList output=";
         diagTags = diagTags + m_SelectedOutput.ToString();
         diagTags = diagTags + " rules=";
@@ -1542,6 +1582,7 @@ class LFPG_SorterController extends ViewController
         diagTags = diagTags + " inserted=";
         diagTags = diagTags + inserted.ToString();
         LFPG_Util.Debug(diagTags);
+        #endif
 
         bool isEmpty = (ruleCount == 0 && !outCfg.m_IsCatchAll);
         if (TagsEmpty) { TagsEmpty.Show(isEmpty); }
@@ -1717,41 +1758,40 @@ class LFPG_SorterController extends ViewController
 
         int sentCount = names.Count();
 
-        // v4.3: Sort parallel arrays alphabetically by name.
-        // Bubble sort on index array (max 50 items = PREVIEW_CAP).
-        ref array<int> sortIdx = new array<int>;
+        // F4-D: Insertion sort on reusable index array (max 50 items = PREVIEW_CAP).
+        // m_SortIdx is member field — avoids new array<int> per call.
+        m_SortIdx.Clear();
         int ii = 0;
         for (ii = 0; ii < sentCount; ii = ii + 1)
         {
-            sortIdx.Insert(ii);
+            m_SortIdx.Insert(ii);
         }
-        bool swapped = true;
-        int limit = sentCount - 1;
-        string nameA = "";
-        string nameB = "";
-        int tmpIdx = 0;
-        int jj = 0;
-        int nextJ = 0;
-        bool aAfterB = false;
-        while (swapped)
+        // Insertion sort: O(n²) worst but fewer swaps than bubble, better cache.
+        int iSort = 1;
+        int jSort = 0;
+        int keyIdx = 0;
+        string keyName = "";
+        string cmpName = "";
+        bool cmpAfter = false;
+        while (iSort < sentCount)
         {
-            swapped = false;
-            for (jj = 0; jj < limit; jj = jj + 1)
+            keyIdx = m_SortIdx[iSort];
+            keyName = names[keyIdx];
+            jSort = iSort - 1;
+            cmpAfter = false;
+            while (jSort >= 0)
             {
-                nextJ = jj + 1;
-                nameA = names[sortIdx[jj]];
-                nameB = names[sortIdx[nextJ]];
-                // Enforce Script: string > string does lexicographic comparison
-                aAfterB = (nameA > nameB);
-                if (aAfterB)
-                {
-                    tmpIdx = sortIdx[jj];
-                    sortIdx[jj] = sortIdx[nextJ];
-                    sortIdx[nextJ] = tmpIdx;
-                    swapped = true;
-                }
+                cmpName = names[m_SortIdx[jSort]];
+                cmpAfter = (cmpName > keyName);
+                if (!cmpAfter)
+                    break;
+                int nextJ = jSort + 1;
+                m_SortIdx[nextJ] = m_SortIdx[jSort];
+                jSort = jSort - 1;
             }
-            limit = limit - 1;
+            int insertPos = jSort + 1;
+            m_SortIdx[insertPos] = keyIdx;
+            iSort = iSort + 1;
         }
 
         // v4.2: Fresh rows each call (no pool — same fix as tags v4.1).
@@ -1766,7 +1806,7 @@ class LFPG_SorterController extends ViewController
         LFPG_SorterPreviewRow row = null;
         for (si = 0; si < sentCount; si = si + 1)
         {
-            sIdx = sortIdx[si];
+            sIdx = m_SortIdx[si];
             itemName = names[sIdx];
             itemCat = cats[sIdx];
             itemInfo = infos[sIdx];

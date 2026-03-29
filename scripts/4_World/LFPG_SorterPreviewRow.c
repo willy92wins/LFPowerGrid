@@ -30,6 +30,7 @@ class LFPG_SorterPreviewRow extends ScriptView
     TextWidget ItemName;
     TextWidget SlotText;
     protected bool m_Scaled;
+    protected bool m_ImagesLoaded;
 
     override string GetLayoutFile()
     {
@@ -64,20 +65,34 @@ class LFPG_SorterPreviewRow extends ScriptView
         ctrl.NotifyPropertyChanged(propST);
 
         // Style — shared constants (Bug #14)
-        string procWhite = LFPG_SorterView.PROC_WHITE;
+        // F4-A: LoadImageFile only on first SetData (1× per instance)
+        if (!m_ImagesLoaded)
+        {
+            string procWhite = LFPG_SorterView.PROC_WHITE;
+            if (CatBadge)
+            {
+                CatBadge.LoadImageFile(0, procWhite);
+            }
+            if (SlotBadgeBg)
+            {
+                SlotBadgeBg.LoadImageFile(0, procWhite);
+            }
+            if (RowSep)
+            {
+                RowSep.LoadImageFile(0, procWhite);
+            }
+            m_ImagesLoaded = true;
+        }
         if (CatBadge)
         {
-            CatBadge.LoadImageFile(0, procWhite);
             CatBadge.SetColor(LFPG_SorterView.COL_GREEN_BORDER);
         }
         if (SlotBadgeBg)
         {
-            SlotBadgeBg.LoadImageFile(0, procWhite);
             SlotBadgeBg.SetColor(LFPG_SorterView.COL_BTN);
         }
         if (RowSep)
         {
-            RowSep.LoadImageFile(0, procWhite);
             RowSep.SetColor(LFPG_SorterView.COL_SEPARATOR);
         }
         if (CatIcon)
