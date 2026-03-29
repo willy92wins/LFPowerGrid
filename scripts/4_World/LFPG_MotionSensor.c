@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Motion Sensor (v4.0 Refactor)
+// LF_PowerGrid - Motion Sensor (v4.1 Audit Fix)
 //
 // LFPG_MotionSensor_Kit: Holdable, deployable (same-model pattern).
 // LFPG_MotionSensor:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
@@ -9,6 +9,14 @@
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   GetPortWorldPos override required: p3d uses port_input_0/port_output_0
 //   but LFPG ports are input_1/output_1.
+//
+// v4.1 (Audit Fix):
+//   - FOV cone check (120°, dome +Z in model space)
+//   - Dual-ray LOS (standing 1.0m + crouching 0.4m)
+//   - Linear LOS margin (0.3m fixed, was 3mm@15m)
+//   - Gate hold timer (5s anti-flicker)
+//   - SyncVar int range (0-2 for DetectMode)
+//   - LBmaster_Groups guard on persistence load
 //
 // Behavior:
 //   Centralized tick in NetworkManager scans nearby players.
@@ -65,6 +73,9 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     // ---- Server-only (NOT SyncVar, strings cannot be SyncVars) ----
     protected string m_PairedGroupName = "";
 
+    // ---- Server-only: gate hold timer (seconds, game time) ----
+    protected float m_GateHoldUntil = 0.0;
+
     // ---- Reusable raycast result set (avoids alloc per LOS check) ----
     protected ref set<Object> m_RayResults;
 
@@ -90,7 +101,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
         RegisterNetSyncVariableBool(varPowered);
         RegisterNetSyncVariableBool(varGateOpen);
-        RegisterNetSyncVariableInt(varDetectMode);
+        RegisterNetSyncVariableInt(varDetectMode, 0, 2);
         RegisterNetSyncVariableBool(varOverloaded);
     }
 
@@ -198,6 +209,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         if (!powered && m_GateOpen)
         {
             m_GateOpen = false;
+            m_GateHoldUntil = 0.0;
         }
 
         SetSynchDirty();
@@ -280,6 +292,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             m_GateOpen = false;
             locDirty = true;
         }
+        m_GateHoldUntil = 0.0;
         if (locDirty)
         {
             SetSynchDirty();
@@ -314,6 +327,12 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             LFPG_Util.Error(errMode);
             return false;
         }
+
+        // v4.1: If LBmaster_Groups is not compiled in, force ALL mode.
+        // Prevents stale TEAM/ENEMY mode from a previous server config.
+        #ifndef LBmaster_Groups
+        m_DetectMode = 0;
+        #endif
 
         if (!ctx.Read(m_PairedGroupName))
         {
@@ -402,7 +421,44 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     }
 
     // ============================================
+    // Dome forward direction in world space (unit vector).
+    // Glass is on the +Z face of the p3d model.
+    // After placement rotation this becomes:
+    //   Floor:   +Z (forward)
+    //   Wall:    -Y (down, via pitch -90°)
+    //   Ceiling: -Z (into room, via pitch 180°)
+    // ============================================
+    protected vector LFPG_GetDomeForward()
+    {
+        vector sPos = GetPosition();
+        vector localFwd = Vector(0, 0, 1);
+        vector worldFwd = ModelToWorld(localFwd);
+        float fx = worldFwd[0] - sPos[0];
+        float fy = worldFwd[1] - sPos[1];
+        float fz = worldFwd[2] - sPos[2];
+        float fLenSq = fx * fx + fy * fy + fz * fz;
+        if (fLenSq < 0.0001)
+        {
+            return Vector(0, 0, 1);
+        }
+        float fInv = 1.0 / Math.Sqrt(fLenSq);
+        return Vector(fx * fInv, fy * fInv, fz * fInv);
+    }
+
+    // ============================================
     // Detection evaluation (called by NM tick, server only)
+    //
+    // Pipeline per player:
+    //   1. Range sphere (15m)
+    //   2. FOV cone (120°, centered on dome +Z)
+    //   3. Group filter (ALL / TEAM / ENEMY)
+    //   4. LOS raycast (dual height: standing + crouching)
+    //
+    // Gate hold timer: once opened, stays open for
+    // LFPG_SENSOR_HOLD_SEC even if no player detected,
+    // preventing downstream power flickering.
+    //
+    // Returns true if gate state changed (needs propagate).
     // ============================================
     bool LFPG_EvaluateDetection(array<Man> players)
     {
@@ -412,6 +468,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             if (m_GateOpen)
             {
                 m_GateOpen = false;
+                m_GateHoldUntil = 0.0;
                 SetSynchDirty();
                 return true;
             }
@@ -420,35 +477,45 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
         vector sensorPos = GetPosition();
 
-        // Compute ray origin in open space (room-side)
-        vector localDomeDir = Vector(0, -1, 0);
-        vector domePt = ModelToWorld(localDomeDir);
-        float domeX = domePt[0] - sensorPos[0];
-        float domeY = domePt[1] - sensorPos[1];
-        float domeZ = domePt[2] - sensorPos[2];
+        // ---- Compute sensorEye (raycast origin in open space) ----
+        // mountProbeDir (0,-1,0) is a reference vector to determine
+        // mounting surface. NOT the dome direction (dome is +Z).
+        vector mountProbe = Vector(0, -1, 0);
+        vector probePt = ModelToWorld(mountProbe);
+        float probeX = probePt[0] - sensorPos[0];
+        float probeY = probePt[1] - sensorPos[1];
+        float probeZ = probePt[2] - sensorPos[2];
 
-        float horizLenSq = domeX * domeX + domeZ * domeZ;
+        float horizLenSq = probeX * probeX + probeZ * probeZ;
         float horizLen = Math.Sqrt(horizLenSq);
 
         vector sensorEye = sensorPos;
 
         if (horizLen > 0.1)
         {
+            // Wall mount: push eye outward from wall surface
             float hNorm = 0.4 / horizLen;
-            sensorEye[0] = sensorEye[0] + domeX * hNorm;
-            sensorEye[2] = sensorEye[2] + domeZ * hNorm;
+            sensorEye[0] = sensorEye[0] + probeX * hNorm;
+            sensorEye[2] = sensorEye[2] + probeZ * hNorm;
             sensorEye[1] = sensorEye[1] + 0.15;
         }
-        else if (domeY > 0.5)
+        else if (probeY > 0.5)
         {
+            // Ceiling mount: eye below sensor
             sensorEye[1] = sensorEye[1] - 0.5;
         }
         else
         {
+            // Floor mount: eye above sensor
             sensorEye[1] = sensorEye[1] + 0.5;
         }
 
+        // ---- Dome forward for FOV cone check ----
+        vector domeFwd = LFPG_GetDomeForward();
+
+        // ---- Scan players ----
         bool detected = false;
+        float nowSec = GetGame().GetTickTime();
 
         int i;
         int pCount = players.Count();
@@ -456,8 +523,15 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         PlayerBase pb;
         vector playerPos;
         float distSq;
+        float toX;
+        float toY;
+        float toZ;
+        float toLenSq;
+        float toInv;
+        float dot;
         bool passesFilter;
-        vector playerCenter;
+        vector targetHigh;
+        vector targetLow;
         bool hasLOS;
 
         for (i = 0; i < pCount; i = i + 1)
@@ -476,27 +550,70 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             if (!pb)
                 continue;
 
+            // 1. Range sphere
             playerPos = pb.GetPosition();
             distSq = LFPG_WorldUtil.DistSq(sensorPos, playerPos);
             if (distSq > LFPG_SENSOR_RANGE_SQ)
                 continue;
 
+            // 2. FOV cone (120° total → cos(60°) = 0.5)
+            toX = playerPos[0] - sensorPos[0];
+            toY = playerPos[1] - sensorPos[1];
+            toZ = playerPos[2] - sensorPos[2];
+            toLenSq = toX * toX + toY * toY + toZ * toZ;
+            if (toLenSq < 0.01)
+            {
+                // Player on top of sensor — always in cone, but still check group
+                passesFilter = LFPG_CheckGroupFilter(pb);
+                if (passesFilter)
+                {
+                    detected = true;
+                }
+                continue;
+            }
+            toInv = 1.0 / Math.Sqrt(toLenSq);
+            toX = toX * toInv;
+            toY = toY * toInv;
+            toZ = toZ * toInv;
+            dot = domeFwd[0] * toX + domeFwd[1] * toY + domeFwd[2] * toZ;
+            if (dot < LFPG_SENSOR_FOV_COS)
+                continue;
+
+            // 3. Group filter
             passesFilter = LFPG_CheckGroupFilter(pb);
             if (!passesFilter)
                 continue;
 
-            playerCenter = playerPos;
-            playerCenter[1] = playerCenter[1] + 1.0;
-
-            hasLOS = LFPG_CheckLineOfSight(sensorEye, playerCenter);
+            // 4. LOS dual-ray (standing torso + crouching center)
+            targetHigh = playerPos;
+            targetHigh[1] = targetHigh[1] + LFPG_SENSOR_TARGET_HIGH;
+            hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh);
+            if (!hasLOS)
+            {
+                targetLow = playerPos;
+                targetLow[1] = targetLow[1] + LFPG_SENSOR_TARGET_LOW;
+                hasLOS = LFPG_CheckLineOfSight(sensorEye, targetLow);
+            }
             if (!hasLOS)
                 continue;
 
             detected = true;
         }
 
+        // ---- Gate hold timer ----
+        if (detected)
+        {
+            m_GateHoldUntil = nowSec + LFPG_SENSOR_HOLD_SEC;
+        }
+
+        bool shouldBeOpen = detected;
+        if (!shouldBeOpen && nowSec < m_GateHoldUntil)
+        {
+            shouldBeOpen = true;
+        }
+
         bool oldGate = m_GateOpen;
-        m_GateOpen = detected;
+        m_GateOpen = shouldBeOpen;
 
         if (m_GateOpen != oldGate)
         {
@@ -575,11 +692,12 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             return true;
         }
 
-        float hitDistSq = LFPG_WorldUtil.DistSq(from, hitPos);
-        float targetDistSq = LFPG_WorldUtil.DistSq(from, to);
+        // v4.1: Linear margin (fixed 0.3m regardless of distance).
+        // Previous squared margin (0.09) gave only 3mm at 15m.
+        float hitDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, hitPos));
+        float targetDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, to));
 
-        float marginSq = 0.09;
-        if (hitDistSq >= targetDistSq - marginSq)
+        if (hitDist >= targetDist - LFPG_SENSOR_LOS_MARGIN)
         {
             return true;
         }

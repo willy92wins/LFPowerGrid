@@ -304,6 +304,11 @@ static const int LFPG_SORTER_PREVIEW_CAP    = 50;     // max items in preview RP
 static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres)
 static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
+static const float LFPG_SENSOR_FOV_COS      = 0.5;    // cos(60°) — half of 120° total FOV cone
+static const float LFPG_SENSOR_HOLD_SEC     = 5.0;    // gate hold time after last detection (seconds)
+static const float LFPG_SENSOR_LOS_MARGIN   = 0.3;    // LOS clearance margin (metres, linear)
+static const float LFPG_SENSOR_TARGET_HIGH  = 1.0;    // LOS target height: standing torso
+static const float LFPG_SENSOR_TARGET_LOW   = 0.4;    // LOS target height: crouching center
 
 // ---- Pressure Pad constants (v1.8.1) ----
 // Tick interval removed in v4.1 (absorbed into LFPG_TickPlayerDetection).
