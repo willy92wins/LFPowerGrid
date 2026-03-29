@@ -2036,7 +2036,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {};
+        hiddenSelections[] = {"body"};
 
         // Accepts vanilla CarBattery or TruckBattery as attachment.
         // Slots are defined in vanilla CfgSlots — no custom slot needed.
@@ -2343,9 +2343,9 @@ class CfgNonAIVehicles
         model = "\LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
     };
 
-    class Proxy_battery_adapter
+    class Proxy_battery_adapter : ProxyAttachment
     {
-        model = "LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
+        model = "\LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
         simulation = "interiortarget";
         autocenter = 0;
     };

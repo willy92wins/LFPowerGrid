@@ -42,10 +42,10 @@ static const int   LFPG_REMOTE_SYNC_DELAY_MS     = 2000;
 static const int   LFPG_RC_HS_LED1 = 0;
 static const int   LFPG_RC_HS_LED2 = 1;
 
-// rvmat paths
-static const string LFPG_RC_RVMAT_OFF   = "\\LFPowerGrid\\data\\remote_controller\\data\\led_off.rvmat";
-static const string LFPG_RC_RVMAT_RED   = "\\LFPowerGrid\\data\\remote_controller\\data\\remote_control_red.rvmat";
-static const string LFPG_RC_RVMAT_GREEN = "\\LFPowerGrid\\data\\remote_controller\\data\\remote_control_green.rvmat";
+// rvmat paths (single backslash — Enforce Script has NO escape sequences)
+static const string LFPG_RC_RVMAT_OFF   = "\LFPowerGrid\data\remote_controller\data\led_off.rvmat";
+static const string LFPG_RC_RVMAT_RED   = "\LFPowerGrid\data\remote_controller\data\remote_control_red.rvmat";
+static const string LFPG_RC_RVMAT_GREEN = "\LFPowerGrid\data\remote_controller\data\remote_control_green.rvmat";
 
 // RPC type for paired list sync (entity-level, not PlayerRPC)
 static const int LFPG_RPC_REMOTE_PAIR_SYNC = 0x4C465250;
@@ -309,7 +309,7 @@ class LFPG_RemoteController : Inventory_Base
 
             // Resolve device from registry
             string devId = entry.m_DeviceId;
-            EntityAI device = LFPG_DeviceRegistry.Get().Find(devId);
+            EntityAI device = LFPG_DeviceRegistry.Get().FindById(devId);
 
             if (!device)
             {

@@ -86,7 +86,10 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableBool(varOutput);
         RegisterNetSyncVariableFloat(varStored, 0.0, 100000.0, 12);
-        RegisterNetSyncVariableFloat(varChargeRate, -200.0, 200.0, 8);
+        // v4.3 (Audit fix F4): 8 bits → 10 bits. Old resolution 1.56 u/s
+        // caused CHG/IDLE oscillation near threshold (±0.5). New: ~0.39 u/s.
+        // SAVE WIPE required (SyncVar layout change).
+        RegisterNetSyncVariableFloat(varChargeRate, -200.0, 200.0, 10);
     }
 
     // ============================================

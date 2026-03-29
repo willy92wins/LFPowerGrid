@@ -66,6 +66,17 @@ class LFPG_ActionPairRemote : ActionInteractBase
         if (distSq > maxDistSq)
             return false;
 
+        // Dynamic text: Pair / Unpair based on current state
+        string devId = LFPG_DeviceAPI.GetOrCreateDeviceId(targetEnt);
+        if (rc.LFPG_IsPaired(devId))
+        {
+            m_Text = "#STR_LFPG_ACTION_UNPAIR_REMOTE";
+        }
+        else
+        {
+            m_Text = "#STR_LFPG_ACTION_PAIR_REMOTE";
+        }
+
         return true;
     }
 

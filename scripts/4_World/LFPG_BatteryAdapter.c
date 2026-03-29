@@ -89,7 +89,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         RegisterNetSyncVariableBool(varPowered);
         RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableFloat(varStored, 0.0, 10000.0, 12);
-        RegisterNetSyncVariableFloat(varChargeRate, -200.0, 200.0, 8);
+        // v4.3 (Audit fix F4): 8→10 bits (matches BatteryBase). SAVE WIPE.
+        RegisterNetSyncVariableFloat(varChargeRate, -200.0, 200.0, 10);
     }
 
     // ============================================

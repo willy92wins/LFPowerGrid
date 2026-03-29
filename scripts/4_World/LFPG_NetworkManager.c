@@ -203,8 +203,6 @@ class LFPG_NetworkManager
     protected ref array<string>   m_ReusableMovedIds;
     protected ref array<EntityAI> m_ReusableMovedDevs;
     protected ref array<string>   m_ReusableDisappearedIds;
-    protected ref Param1<float>   m_ReusableParamFloat;
-    protected ref Param1<bool>    m_ReusableParamBool;
 
     // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
@@ -306,8 +304,6 @@ class LFPG_NetworkManager
         m_ReusableMovedIds = new array<string>;
         m_ReusableMovedDevs = new array<EntityAI>;
         m_ReusableDisappearedIds = new array<string>;
-        m_ReusableParamFloat = new Param1<float>(0.0);
-        m_ReusableParamBool = new Param1<bool>(false);
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -5450,19 +5446,10 @@ class LFPG_NetworkManager
 
         float deltaSec = deltaMs / 1000.0;
 
-        // Enforce Script: hoist all string function names BEFORE the loop.
-        // Avoids 9 string allocations per battery per tick.
-        string fnGetStored = "LFPG_GetStoredEnergy";
-        string fnGetMaxStored = "LFPG_GetMaxStoredEnergy";
-        string fnGetMaxCharge = "LFPG_GetMaxChargeRate";
-        string fnGetMaxDisch = "LFPG_GetMaxDischargeRate";
-        string fnGetEfficiency = "LFPG_GetEfficiency";
-        string fnGetSelfDisch = "LFPG_GetSelfDischargeRate";
-        string fnIsDischEnabled = "LFPG_IsDischargeEnabled";
-        string fnIsOutputEnabled = "LFPG_IsOutputEnabled";
-        string fnSetStored = "LFPG_SetStoredEnergy";
-        string fnSetDisch = "LFPG_SetDischargeEnabled";
-        string fnSetChargeRate = "LFPG_SetChargeRateCurrent";
+        // v4.3 (Audit fix F5): Direct Cast replaces CallFunctionParams for reads.
+        // Eliminates 8 string-resolved dispatches per battery per tick.
+        // Both BatteryBase and BatteryAdapter expose identical API names.
+        // Writes also use direct Cast (no hoisted strings needed).
         string hpZone = "";
         string hpPart = "";
 
@@ -5485,9 +5472,8 @@ class LFPG_NetworkManager
             if (!node)
                 continue;
 
-            // --- Read battery entity state via dynamic dispatch ---
-            // Uses GameScript.CallFunctionParams directly (DeviceAPI.CallFloat is protected).
-            // String function names hoisted before loop (GC reduction).
+            // --- Read battery entity state via direct Cast (v4.3) ---
+            // Try BatteryBase first (Medium/Large — most common), then Adapter.
             float storedEnergy = 0.0;
             float maxStored = 0.0;
             float maxCharge = 0.0;
@@ -5497,14 +5483,38 @@ class LFPG_NetworkManager
             bool dischargeEnabled = true;
             bool outputEnabled = true;
 
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetStored, storedEnergy, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxStored, maxStored, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxCharge, maxCharge, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetMaxDisch, maxDischarge, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetEfficiency, efficiency, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnGetSelfDisch, selfDischargeRate, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnIsDischEnabled, dischargeEnabled, null);
-            GetGame().GameScript.CallFunctionParams(batEnt, fnIsOutputEnabled, outputEnabled, null);
+            LFPG_BatteryBase batBase = LFPG_BatteryBase.Cast(batEnt);
+            LFPG_BatteryAdapter batAdapt = null;
+            if (batBase)
+            {
+                storedEnergy = batBase.LFPG_GetStoredEnergy();
+                maxStored = batBase.LFPG_GetMaxStoredEnergy();
+                maxCharge = batBase.LFPG_GetMaxChargeRate();
+                maxDischarge = batBase.LFPG_GetMaxDischargeRate();
+                efficiency = batBase.LFPG_GetEfficiency();
+                selfDischargeRate = batBase.LFPG_GetSelfDischargeRate();
+                dischargeEnabled = batBase.LFPG_IsDischargeEnabled();
+                outputEnabled = batBase.LFPG_IsOutputEnabled();
+            }
+            else
+            {
+                batAdapt = LFPG_BatteryAdapter.Cast(batEnt);
+                if (batAdapt)
+                {
+                    storedEnergy = batAdapt.LFPG_GetStoredEnergy();
+                    maxStored = batAdapt.LFPG_GetMaxStoredEnergy();
+                    maxCharge = batAdapt.LFPG_GetMaxChargeRate();
+                    maxDischarge = batAdapt.LFPG_GetMaxDischargeRate();
+                    efficiency = batAdapt.LFPG_GetEfficiency();
+                    selfDischargeRate = batAdapt.LFPG_GetSelfDischargeRate();
+                    dischargeEnabled = batAdapt.LFPG_IsDischargeEnabled();
+                    outputEnabled = batAdapt.LFPG_IsOutputEnabled();
+                }
+                else
+                {
+                    continue;
+                }
+            }
 
             // Skip if not a real battery (maxStored = 0 means entity doesn't implement battery API).
             if (maxStored < LFPG_PROPAGATION_EPSILON)
@@ -5541,7 +5551,6 @@ class LFPG_NetworkManager
             // but architecturally correct for future self-consuming battery variants.
             float selfCons = node.m_Consumption;
             float netFlow = inputReceived - outputDelivered - selfCons;
-            float rawNetFlow = netFlow;
 
             // v2.4 (Battery oscillation fix): Clamp netFlow to physical limits.
             // Defensive cap: even if graph has transient desync between epochs,
@@ -5643,72 +5652,40 @@ class LFPG_NetworkManager
                 }
             }
 
-            // --- Write back to entity (Sprint 3 implements these) ---
-            // String function names hoisted before loop.
-            // v3.1 (GC reduction): Reuse Param1 objects instead of allocating per battery.
-            m_ReusableParamFloat.param1 = newStored;
-            GetGame().GameScript.CallFunctionParams(batEnt, fnSetStored, null, m_ReusableParamFloat);
-
-            if (newDischargeEnabled != dischargeEnabled)
+            // v4.2: chargeRateDisplay derived from actual stored delta, NOT netFlow.
+            // v4.3 (Audit fix F1): Post-clamp guard. The effectiveMax clamp on
+            // newStored can produce a larger delta than physical rates allow
+            // (e.g. healthRatio drops → effectiveMax < storedEnergy → snap down).
+            float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
+            if (chargeRateDisplay > maxCharge)
             {
-                m_ReusableParamBool.param1 = newDischargeEnabled;
-                GetGame().GameScript.CallFunctionParams(batEnt, fnSetDisch, null, m_ReusableParamBool);
+                chargeRateDisplay = maxCharge;
+            }
+            float negMaxDischDisplay = -maxDischarge;
+            if (chargeRateDisplay < negMaxDischDisplay)
+            {
+                chargeRateDisplay = negMaxDischDisplay;
             }
 
-            // Write charge rate for UI SyncVar (positive = charging, negative = discharging).
-            // v4.2: Derived from actual stored energy delta, NOT from graph netFlow.
-            // netFlow reads transient graph state (m_InputPower, SumOutgoingAllocations)
-            // which can desync between propagation epochs, producing values like -164
-            // that exceed physical limits. The real delta (newStored - storedEnergy)
-            // is already clamped by charge/discharge rates and storage bounds,
-            // so it always reflects what actually happened to the battery.
-            float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
-            m_ReusableParamFloat.param1 = chargeRateDisplay;
-            GetGame().GameScript.CallFunctionParams(batEnt, fnSetChargeRate, null, m_ReusableParamFloat);
-
-            // ============================================================
-            // DIAG: Battery tick full snapshot (TEMPORAL — remover tras confirmar bug -220)
-            // Logs every battery every tick (~5s). Remove after diagnosis.
-            // ============================================================
-            string dg = "[BAT-DIAG] id=";
-            dg = dg + batId;
-            dg = dg + " inRecv=";
-            dg = dg + inputReceived.ToString();
-            dg = dg + " outDeliv=";
-            dg = dg + outputDelivered.ToString();
-            dg = dg + " selfCons=";
-            dg = dg + selfCons.ToString();
-            dg = dg + " rawNet=";
-            dg = dg + rawNetFlow.ToString();
-            dg = dg + " clampNet=";
-            dg = dg + netFlow.ToString();
-            dg = dg + " eDelta=";
-            dg = dg + energyDelta.ToString();
-            dg = dg + " stored=";
-            dg = dg + storedEnergy.ToString();
-            dg = dg + " newStored=";
-            dg = dg + newStored.ToString();
-            dg = dg + " dispRate=";
-            dg = dg + chargeRateDisplay.ToString();
-            dg = dg + " dt=";
-            dg = dg + deltaSec.ToString();
-            dg = dg + " maxChg=";
-            dg = dg + maxCharge.ToString();
-            dg = dg + " maxDis=";
-            dg = dg + maxDischarge.ToString();
-            dg = dg + " eff=";
-            dg = dg + efficiency.ToString();
-            dg = dg + " vGen=";
-            dg = dg + node.m_VirtualGeneration.ToString();
-            dg = dg + " sDem=";
-            dg = dg + node.m_SoftDemand.ToString();
-            dg = dg + " lastStable=";
-            dg = dg + node.m_LastStableOutput.ToString();
-            dg = dg + " inPow=";
-            dg = dg + node.m_InputPower.ToString();
-            dg = dg + " health=";
-            dg = dg + healthRatio.ToString();
-            LFPG_Util.Warn(dg);
+            // --- Write back to entity (v4.3: direct Cast, no CallFunctionParams) ---
+            if (batBase)
+            {
+                batBase.LFPG_SetStoredEnergy(newStored);
+                if (newDischargeEnabled != dischargeEnabled)
+                {
+                    batBase.LFPG_SetDischargeEnabled(newDischargeEnabled);
+                }
+                batBase.LFPG_SetChargeRateCurrent(chargeRateDisplay);
+            }
+            else if (batAdapt)
+            {
+                batAdapt.LFPG_SetStoredEnergy(newStored);
+                if (newDischargeEnabled != dischargeEnabled)
+                {
+                    batAdapt.LFPG_SetDischargeEnabled(newDischargeEnabled);
+                }
+                batAdapt.LFPG_SetChargeRateCurrent(chargeRateDisplay);
+            }
 
             // --- Update graph node + mark dirty if changed ---
             float vgDelta = newVirtualGen - node.m_VirtualGeneration;

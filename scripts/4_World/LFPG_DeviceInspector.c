@@ -1224,7 +1224,11 @@ class LFPG_DeviceInspector
     protected void ResizePanelHeight(int wireCount)
     {
         float h = ComputePanelHeight(wireCount);
-        h = h + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
+        // v4.3 (Audit fix F3): Include ALL dynamic line offsets.
+        // Previously missing m_LinkLineOffset + m_BatteryLineOffset
+        // caused panel clipping when Sorter LinkLine or Battery
+        // charge line were visible alongside wire rows.
+        h = h + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset;
         ApplyPanelSize(h);
     }
 
@@ -1232,7 +1236,8 @@ class LFPG_DeviceInspector
     // Separator and WiresHeader are hidden, so panel stops after CapLine + padding.
     protected void ResizePanelCompact()
     {
-        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
+        // v4.3 (Audit fix F3): Include ALL dynamic line offsets (same as ResizePanelHeight).
+        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset);
     }
 
     // Shared resize implementation: sets panel, background, and accent bar heights.
