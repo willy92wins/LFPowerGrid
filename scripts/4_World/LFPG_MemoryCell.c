@@ -277,10 +277,9 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
+        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=camosymbol
         string symTex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        int idxCamo = 0;
-        int idxSymbol = 4;
-        SetObjectTexture(idxCamo, symTex);
+        int idxSymbol = 3;
         SetObjectTexture(idxSymbol, symTex);
 
         int desiredState = 0;
@@ -303,19 +302,19 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         if (desiredState == 2)
         {
-            SetObjectMaterial(1, LFPG_MCELL_RVMAT_RED);
+            SetObjectMaterial(0, LFPG_MCELL_RVMAT_RED);
         }
         else if (desiredState == 1)
         {
-            SetObjectMaterial(1, LFPG_MCELL_RVMAT_GREEN);
+            SetObjectMaterial(0, LFPG_MCELL_RVMAT_GREEN);
         }
         else
         {
-            SetObjectMaterial(1, LFPG_MCELL_RVMAT_OFF);
+            SetObjectMaterial(0, LFPG_MCELL_RVMAT_OFF);
         }
 
+        SetObjectMaterial(1, LFPG_MCELL_RVMAT_OFF);
         SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
-        SetObjectMaterial(3, LFPG_MCELL_RVMAT_OFF);
         #endif
     }
 
@@ -323,9 +322,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     {
         #ifndef SERVER
         string tex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        int idxCamo = 0;
-        int idxSymbol = 4;
-        SetObjectTexture(idxCamo, tex);
+        int idxSymbol = 3;
         SetObjectTexture(idxSymbol, tex);
         #endif
     }

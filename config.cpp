@@ -1199,8 +1199,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
+        hiddenSelections[] = {"camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
     };
 
     // ---- OR Gate Kit ----
@@ -1218,8 +1218,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
+        hiddenSelections[] = {"camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
     };
 
     // ---- XOR Gate Kit ----
@@ -1237,8 +1237,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
+        hiddenSelections[] = {"camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
     };
 
     // ---- AND Gate (placed device) ----
@@ -1254,9 +1254,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
+        hiddenSelections[] = {"light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // ---- OR Gate (placed device) ----
@@ -1272,9 +1272,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
+        hiddenSelections[] = {"light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // ---- XOR Gate (placed device) ----
@@ -1290,9 +1290,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
+        hiddenSelections[] = {"light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // =========================================================
@@ -1316,8 +1316,8 @@ class CfgVehicles
         physLayer = "item_large";
         slopeTolerance = 0.0;
         yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"camo", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
+        hiddenSelections[] = {"camosymbol"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
     };
 
     // ---- Memory Cell (placed device) ----
@@ -1333,9 +1333,9 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"camo", "light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa", "", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
-        hiddenSelectionsMaterials[] = {"", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
+        hiddenSelections[] = {"light_led_input0", "light_led_input1", "light_led_output0", "camosymbol"};
+        hiddenSelectionsTextures[] = {"", "", "", "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", "\LFPowerGrid\data\button\materials\led_off.rvmat", ""};
     };
 
     // =========================================================

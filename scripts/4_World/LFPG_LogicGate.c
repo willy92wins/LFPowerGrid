@@ -8,7 +8,7 @@
 // LFPG_AND_Gate, LFPG_OR_Gate, LFPG_XOR_Gate: override gate logic + symbol texture.
 //
 // Ports: input_0 (IN), input_1 (IN), output_0 (OUT)
-// LEDs: 0=symbol texture, 1=input0, 2=input1, 3=output
+// LEDs: 0=input0, 1=input1, 2=output, 3=symbol texture
 // Persistence: [base: DeviceId + ver + wireJSON] — no extras
 // =========================================================
 
@@ -67,9 +67,7 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
         string tex = LFPG_GetSymbolTexturePath();
         if (tex != "")
         {
-            int idxCamo = 0;
-            int idxSymbol = 1;
-            SetObjectTexture(idxCamo, tex);
+            int idxSymbol = 0;
             SetObjectTexture(idxSymbol, tex);
         }
     }
@@ -310,36 +308,34 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // hiddenSelections: 0=camo, 1=led_input0, 2=led_input1, 3=led_output0, 4=camosymbol
+        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=camosymbol
 
         // Force correct symbol texture (MLOD cache bug + proxy lid)
         string symTex = LFPG_GetSymbolTexturePath();
         if (symTex != "")
         {
-            int idxCamo = 0;
-            int idxSymbol = 4;
-            SetObjectTexture(idxCamo, symTex);
+            int idxSymbol = 3;
             SetObjectTexture(idxSymbol, symTex);
         }
 
         // Input 0 LED
         if (m_Input0Powered)
         {
-            SetObjectMaterial(1, LFPG_GATE_RVMAT_GREEN);
+            SetObjectMaterial(0, LFPG_GATE_RVMAT_GREEN);
         }
         else
         {
-            SetObjectMaterial(1, LFPG_GATE_RVMAT_OFF);
+            SetObjectMaterial(0, LFPG_GATE_RVMAT_OFF);
         }
 
         // Input 1 LED
         if (m_Input1Powered)
         {
-            SetObjectMaterial(2, LFPG_GATE_RVMAT_GREEN);
+            SetObjectMaterial(1, LFPG_GATE_RVMAT_GREEN);
         }
         else
         {
-            SetObjectMaterial(2, LFPG_GATE_RVMAT_OFF);
+            SetObjectMaterial(1, LFPG_GATE_RVMAT_OFF);
         }
 
         // Output LED: evaluate gate logic client-side from synced per-input states
@@ -353,15 +349,15 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
 
         if (gateOpen && hasAnyInput)
         {
-            SetObjectMaterial(3, LFPG_GATE_RVMAT_GREEN);
+            SetObjectMaterial(2, LFPG_GATE_RVMAT_GREEN);
         }
         else if (hasAnyInput)
         {
-            SetObjectMaterial(3, LFPG_GATE_RVMAT_RED);
+            SetObjectMaterial(2, LFPG_GATE_RVMAT_RED);
         }
         else
         {
-            SetObjectMaterial(3, LFPG_GATE_RVMAT_OFF);
+            SetObjectMaterial(2, LFPG_GATE_RVMAT_OFF);
         }
         #endif
     }
@@ -372,9 +368,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         string tex = LFPG_GetSymbolTexturePath();
         if (tex != "")
         {
-            int idxCamo = 0;
-            int idxSymbol = 4;
-            SetObjectTexture(idxCamo, tex);
+            int idxSymbol = 3;
             SetObjectTexture(idxSymbol, tex);
         }
         #endif
