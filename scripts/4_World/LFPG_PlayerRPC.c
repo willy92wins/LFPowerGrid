@@ -211,6 +211,10 @@ modded class PlayerBase
         {
             HandleLFPG_SorterSortAck(ctx);
         }
+        else if (subId == LFPG_RPC_SubId.SORTER_CARGO_REFRESH)
+        {
+            HandleLFPG_SorterCargoRefresh();
+        }
         else if (subId == LFPG_RPC_SubId.SEARCHLIGHT_ENTER_CONFIRM)
         {
             HandleLFPG_SearchlightEnterConfirm(ctx);
@@ -2578,7 +2582,13 @@ modded class PlayerBase
         }
 
         // Delegate to NetworkManager (handles powered + container checks)
-        int sortMoved = LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter);
+        // v5.0: Pass sender ID so cargo refresh broadcast excludes requester
+        string senderPlayerId = "";
+        if (sender)
+        {
+            senderPlayerId = sender.GetId();
+        }
+        int sortMoved = LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter, senderPlayerId);
         bool sortOk = (sortMoved >= 0);
 
         // Send ACK only to requesting player (not broadcast)
@@ -2700,6 +2710,33 @@ modded class PlayerBase
         if (success && movedCount > 0)
         {
             UpdateInventoryMenu();
+
+            // v5.0: Also refresh vicinity items so the proximity panel
+            // re-scans containers. Without this, the LeftArea (vicinity)
+            // may show stale cargo until the player closes and reopens
+            // the inventory.
+            VicinityItemManager vicMgr = VicinityItemManager.GetInstance();
+            if (vicMgr)
+            {
+                vicMgr.RefreshVicinityItems();
+            }
+        }
+    }
+
+    // =====================================
+    // CLIENT: Sorter CARGO_REFRESH (SubId 34)
+    // v5.0: Server broadcasts after sort operations to notify
+    // nearby players (other than the requester) that containers
+    // changed. Forces inventory UI refresh so cargo grids update.
+    // =====================================
+    protected void HandleLFPG_SorterCargoRefresh()
+    {
+        UpdateInventoryMenu();
+
+        VicinityItemManager vicMgr = VicinityItemManager.GetInstance();
+        if (vicMgr)
+        {
+            vicMgr.RefreshVicinityItems();
         }
     }
 

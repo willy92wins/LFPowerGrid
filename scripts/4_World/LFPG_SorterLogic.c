@@ -14,7 +14,7 @@
 //   GetItemSlotSize    — CfgVehicles itemSize lookup (area)
 //   ResolveOutputContainer — wire topology → dest container
 //   MoveItemToContainer — server-authoritative inventory move
-//   BinPackCargo       — greedy 2D bin-packing for SORT RPC
+//   RepackCargoInPlace — in-place 2D bin-packing (no ground round-trip)
 //
 // Enforce Script rules:
 //   No foreach, no ++/--, no ternario, no +=/-=
@@ -857,24 +857,31 @@ class LFPG_SorterLogic
     }
 
     // ---------------------------------------------------------
-    // BinPackCargo: rearranges items in a cargo grid using
-    // greedy largest-area-first bin-packing.
+    // RepackCargoInPlace: rearranges items in a cargo grid using
+    // greedy largest-area-first bin-packing WITHOUT moving items
+    // to the ground. Replaces BinPackCargo (v4.3) and
+    // BinPackSpread (v4.3) which caused desync via ground
+    // round-trip (items temporarily on ground = stealable,
+    // race conditions with TickSorters, client flicker).
     //
-    // 1. Collect all items and their sizes
-    // 2. Sort by area descending
-    // 3. Create a virtual 2D grid
-    // 4. For each item, scan for first fit (try both orientations)
-    // 5. Move items to their new grid positions
+    // Algorithm:
+    //   1. Collect all items and their sizes
+    //   2. Sort by area descending
+    //   3. Compute optimal grid positions (virtual 2D bin-pack)
+    //   4. Multi-pass in-place moves: each pass tries to move
+    //      items whose target cell is free. Successful moves
+    //      free cells for the next pass. Bounded by N passes.
+    //   5. Items that cannot reach optimal position (deadlock)
+    //      stay in their current cargo slot — no items on ground.
     //
     // Returns number of items successfully repositioned.
     // ---------------------------------------------------------
-    static int BinPackCargo(EntityAI container)
+    static int RepackCargoInPlace(EntityAI container)
     {
         #ifdef SERVER
         if (!container)
             return 0;
 
-        // S3.1: Container must be accessible (not locked/closed/virtualized)
         if (!CanTakeFromContainer(container, null))
             return 0;
 
@@ -891,20 +898,20 @@ class LFPG_SorterLogic
         if (gridW <= 0 || gridH <= 0)
             return 0;
 
-        // --- Phase 1: Collect all items with dimensions ---
         int totalItems = cargo.GetItemCount();
         if (totalItems <= 0)
             return 0;
 
+        // --- Phase 1: Collect all items with dimensions ---
         ref array<EntityAI> items = new array<EntityAI>;
         ref array<int> itemWidths = new array<int>;
         ref array<int> itemHeights = new array<int>;
         ref array<int> itemAreas = new array<int>;
 
-        int ci;
-        int iw;
-        int ih;
-        EntityAI cItem;
+        int ci = 0;
+        int iw = 0;
+        int ih = 0;
+        EntityAI cItem = null;
 
         for (ci = 0; ci < totalItems; ci = ci + 1)
         {
@@ -925,16 +932,15 @@ class LFPG_SorterLogic
 
         // --- Phase 2: Sort indices by area descending (insertion sort) ---
         ref array<int> sortedIdx = new array<int>;
-        int si;
+        int si = 0;
         for (si = 0; si < n; si = si + 1)
         {
             sortedIdx.Insert(si);
         }
 
-        // Insertion sort — stable, simple, no Enforce issues
-        int j;
-        int keyIdx;
-        int keyArea;
+        int j = 0;
+        int keyIdx = 0;
+        int keyArea = 0;
         for (si = 1; si < n; si = si + 1)
         {
             keyIdx = sortedIdx[si];
@@ -950,22 +956,20 @@ class LFPG_SorterLogic
         }
 
         // --- Phase 3: Create virtual 2D grid (row-major) ---
-        // grid[row * gridW + col] = true if occupied
         int gridSize = gridW * gridH;
         ref array<bool> grid = new array<bool>;
-        int gi;
+        int gi = 0;
         for (gi = 0; gi < gridSize; gi = gi + 1)
         {
             grid.Insert(false);
         }
 
-        // --- Phase 4: Place items greedily ---
+        // --- Phase 4: Compute optimal placements greedily ---
         ref array<int> placedRow = new array<int>;
         ref array<int> placedCol = new array<int>;
         ref array<bool> placedFlip = new array<bool>;
         ref array<bool> placedOk = new array<bool>;
 
-        // Initialize placement arrays
         for (si = 0; si < n; si = si + 1)
         {
             placedRow.Insert(-1);
@@ -974,12 +978,10 @@ class LFPG_SorterLogic
             placedOk.Insert(false);
         }
 
-        int idx;
-        int pw;
-        int ph;
-        bool placed;
-        int row;
-        int col;
+        int idx = 0;
+        int pw = 0;
+        int ph = 0;
+        bool placed = false;
 
         for (si = 0; si < n; si = si + 1)
         {
@@ -988,7 +990,6 @@ class LFPG_SorterLogic
             ph = itemHeights[idx];
             placed = false;
 
-            // Try original orientation
             placed = TryPlaceOnGrid(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx);
             if (placed)
             {
@@ -997,7 +998,6 @@ class LFPG_SorterLogic
                 MarkGridOccupied(grid, gridW, placedRow[idx], placedCol[idx], pw, ph);
             }
 
-            // Try rotated orientation if original didn't fit
             if (!placed && pw != ph)
             {
                 placed = TryPlaceOnGrid(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx);
@@ -1008,158 +1008,95 @@ class LFPG_SorterLogic
                     MarkGridOccupied(grid, gridW, placedRow[idx], placedCol[idx], ph, pw);
                 }
             }
-
-            // Item doesn't fit → stays where it is (placedOk[idx] = false)
         }
 
-        // --- Phase 5: Move items to their new grid positions ---
-        // Strategy: first move ALL items to ground (clears the cargo grid),
-        // then place each item at its computed position.
-        // This avoids intra-cargo conflicts where item A's target cell
-        // is occupied by item B that hasn't been moved yet.
+        // --- Phase 5: Multi-pass in-place moves ---
+        // Each pass tries to move items to their optimal position.
+        // If target cells are occupied by another item, the move
+        // fails (LocationSyncMoveEntity returns false) and we retry
+        // next pass. Successful moves free cells for subsequent items.
+        // Bounded by N passes (each pass resolves at least 1 if any
+        // progress is possible). Deadlocked items stay in place.
+        ref array<bool> done = new array<bool>;
+        for (si = 0; si < n; si = si + 1)
+        {
+            done.Insert(false);
+        }
+
         int repositioned = 0;
-        InventoryLocation il_src;
-        InventoryLocation il_ground;
-        InventoryLocation il_dst;
-        bool dropOk;
-        bool placeOk;
-        vector groundPos = container.GetPosition();
-        // Offset slightly above ground to prevent clipping
-        groundPos[1] = groundPos[1] + 0.05;
+        int maxPasses = n;
+        int pass = 0;
+        bool progress = false;
+        InventoryLocation il_src = null;
+        InventoryLocation il_dst = null;
+        bool moveOk = false;
 
-        // Build identity transform matrix with container position.
-        // SetGround requires vector mat[4] (3×3 rotation + position).
-        // mat[0]=right, mat[1]=up, mat[2]=forward, mat[3]=position.
-        vector groundMat[4];
-        Math3D.MatrixIdentity4(groundMat);
-        groundMat[3] = groundPos;
-
-        // Phase 5a: Move ALL items to ground (clears cargo grid entirely).
-        // We must move ALL items, not just placedOk ones, because unplaced
-        // items sitting at their original positions would block Phase 5b
-        // SetCargo calls. Items that didn't fit (placedOk=false) will stay
-        // on the ground near the container after Phase 5b completes.
-        ref array<bool> movedToGround = new array<bool>;
-        for (si = 0; si < n; si = si + 1)
+        for (pass = 0; pass < maxPasses; pass = pass + 1)
         {
-            movedToGround.Insert(false);
-        }
+            progress = false;
 
-        for (si = 0; si < n; si = si + 1)
-        {
-            cItem = items[si];
-            if (!cItem)
-                continue;
-
-            if (!cItem.GetInventory())
-                continue;
-
-            il_src = new InventoryLocation;
-            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
-
-            // Already on ground? Skip removal
-            if (il_src.GetType() == InventoryLocationType.GROUND)
+            for (si = 0; si < n; si = si + 1)
             {
-                movedToGround[si] = true;
-                continue;
+                idx = sortedIdx[si];
+
+                if (done[idx])
+                    continue;
+
+                if (!placedOk[idx])
+                {
+                    done[idx] = true;
+                    continue;
+                }
+
+                cItem = items[idx];
+                if (!cItem)
+                {
+                    done[idx] = true;
+                    continue;
+                }
+
+                if (!cItem.GetInventory())
+                {
+                    done[idx] = true;
+                    continue;
+                }
+
+                il_src = new InventoryLocation;
+                cItem.GetInventory().GetCurrentInventoryLocation(il_src);
+
+                il_dst = new InventoryLocation;
+                il_dst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
+
+                moveOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
+                if (moveOk)
+                {
+                    done[idx] = true;
+                    repositioned = repositioned + 1;
+                    progress = true;
+                }
             }
 
-            il_ground = new InventoryLocation;
-            il_ground.SetGround(cItem, groundMat);
-
-            dropOk = GameInventory.LocationSyncMoveEntity(il_src, il_ground);
-            if (dropOk)
-            {
-                movedToGround[si] = true;
-            }
+            if (!progress)
+                break;
         }
 
-        // Phase 5b: Place items back at computed cargo positions
-        // Process in sorted order (largest first) to match virtual grid
-        for (si = 0; si < n; si = si + 1)
+        // --- Phase 6: Force container network sync ---
+        if (repositioned > 0)
         {
-            idx = sortedIdx[si];
+            container.SetSynchDirty();
 
-            if (!placedOk[idx])
-                continue;
-
-            if (!movedToGround[idx])
-                continue;
-
-            cItem = items[idx];
-            if (!cItem)
-                continue;
-
-            if (!cItem.GetInventory())
-                continue;
-
-            il_src = new InventoryLocation;
-            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
-
-            il_dst = new InventoryLocation;
-            il_dst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
-
-            placeOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
-            if (placeOk)
-            {
-                repositioned = repositioned + 1;
-            }
+            string rpLog = "[RepackCargoInPlace] items=";
+            rpLog = rpLog + n.ToString();
+            rpLog = rpLog + " repositioned=";
+            rpLog = rpLog + repositioned.ToString();
+            rpLog = rpLog + " passes=";
+            rpLog = rpLog + pass.ToString();
+            rpLog = rpLog + " grid=";
+            rpLog = rpLog + gridW.ToString();
+            rpLog = rpLog + "x";
+            rpLog = rpLog + gridH.ToString();
+            LFPG_Util.Info(rpLog);
         }
-
-        // Phase 5c: Fallback for items still on ground.
-        // Items that didn't fit in virtual grid (!placedOk) or whose
-        // SetCargo failed in Phase 5b are still on the ground.
-        // Try to re-insert them using FindFreeLocationFor as best-effort.
-        // If that also fails, item stays on ground near the container.
-        for (si = 0; si < n; si = si + 1)
-        {
-            if (!movedToGround[si])
-                continue;
-
-            cItem = items[si];
-            if (!cItem)
-                continue;
-
-            if (!cItem.GetInventory())
-                continue;
-
-            il_src = new InventoryLocation;
-            cItem.GetInventory().GetCurrentInventoryLocation(il_src);
-
-            // Only try fallback if item is still on ground
-            if (il_src.GetType() != InventoryLocationType.GROUND)
-                continue;
-
-            // Best-effort: let the engine find any free cargo slot
-            il_dst = new InventoryLocation;
-            placeOk = inv.FindFreeLocationFor(cItem, FindInventoryLocationType.CARGO, il_dst);
-            if (placeOk)
-            {
-                GameInventory.LocationSyncMoveEntity(il_src, il_dst);
-            }
-        }
-
-        // Phase 5d: Force container network sync so clients refresh
-        // their cached cargo grid. LocationSyncMoveEntity syncs
-        // individual item positions but the container entity itself
-        // needs a dirty signal for DayZ proximity-loot to re-read
-        // the cargo layout — especially after the ground round-trip
-        // (Phase 5a→5b) that produces many rapid sequential moves.
-        container.SetSynchDirty();
-
-        // v4.1 DIAG: Log total inventory operations for desync investigation.
-        // 2×N ops (ground + reposition) is the suspected cause of client desync.
-        #ifdef LFPG_DEBUG
-        string bpDiag = "[BinPackCargo] items=";
-        bpDiag = bpDiag + n.ToString();
-        bpDiag = bpDiag + " repositioned=";
-        bpDiag = bpDiag + repositioned.ToString();
-        bpDiag = bpDiag + " grid=";
-        bpDiag = bpDiag + gridW.ToString();
-        bpDiag = bpDiag + "x";
-        bpDiag = bpDiag + gridH.ToString();
-        LFPG_Util.Info(bpDiag);
-        #endif
 
         return repositioned;
         #else

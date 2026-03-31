@@ -279,6 +279,7 @@ enum LFPG_RPC_SubId
 	SORTER_PREVIEW_REQUEST     = 31,  // v2.6: Client→Server: request matching items for preview
 	SORTER_PREVIEW_RESPONSE    = 32,  // v2.6: Server→Client: matched item list (cap 50)
 	SORTER_SORT_ACK            = 33,   // v3.2: Server→Client: sort result (success, movedCount)*
+	SORTER_CARGO_REFRESH       = 34,   // v5.0: Server→Client broadcast: nearby containers changed, refresh UI
 	// ---- BTC ATM (Sprint BTC) ----
     BTC_OPEN_REQUEST       = 40,
     BTC_OPEN_RESPONSE      = 41,
@@ -717,7 +718,7 @@ static const int   LFPG_INTERCOM_FREQ_COUNT            = 7;       // vanilla fre
 // v5.0: SPRINKLER constants (CONSUMER, water delivery)
 // =========================================================
 static const float  LFPG_SPRINKLER_CONSUMPTION         = 5.0;       // u/s electrical
-static const float  LFPG_SPRINKLER_RADIUS              = 3.0;       // metres effect radius
+static const float  LFPG_SPRINKLER_RADIUS              = 2.0;       // metres effect radius
 static const float  LFPG_SPRINKLER_DRAIN_PER_HOUR      = 1.0;       // L/hour in-game from T2 tank
 static const float  LFPG_SPRINKLER_WATER_AMOUNT         = 50.0;      // water per slot per tick (TUNABLE)
 static const float  LFPG_SPRINKLER_WET_AMOUNT           = 0.05;      // wetness per tick to items/clothing (TUNABLE)

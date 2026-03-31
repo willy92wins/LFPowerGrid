@@ -124,20 +124,8 @@ class LFPG_NetworkManager
     // v1.2.0 (Sprint S5): Reusable item cache for TickSorters (GC reduction)
     protected ref array<EntityAI> m_SorterItemCache;
 
-    // v4.3: BinPack timer spread — avoids 2×N ground round-trip in one frame.
-    // Phase 0=idle, 1=removing to ground, 2=placing from ground to grid.
-    protected int m_BinPackPhase;
-    protected EntityAI m_BinPackContainer;
-    protected ref array<EntityAI> m_BinPackItems;
-    protected ref array<int> m_BinPackRow;
-    protected ref array<int> m_BinPackCol;
-    protected ref array<bool> m_BinPackFlip;
-    protected ref array<bool> m_BinPackOk;
-    protected ref array<bool> m_BinPackMoved;
-    protected ref array<int> m_BinPackSorted;
-    protected int m_BinPackCursor;
-    protected int m_BinPackTotal;
-    protected vector m_BinPackGroundMat[4];
+    // v5.0: Reusable container list for TickSorters cargo refresh broadcast
+    protected ref array<EntityAI> m_TickAffectedContainers;
 
     // v1.5.0: Motion Sensor dedicated registry
     protected ref array<LFPG_MotionSensor> m_RegisteredSensors;
@@ -273,18 +261,7 @@ class LFPG_NetworkManager
         // v1.2.0: Always allocate (Register/Unregister not guarded with #ifdef)
         m_RegisteredSorters = new array<LFPG_Sorter>;
         m_SorterItemCache = new array<EntityAI>;
-        // v4.3: BinPack spread state
-        m_BinPackPhase = 0;
-        m_BinPackContainer = null;
-        m_BinPackItems = new array<EntityAI>;
-        m_BinPackRow = new array<int>;
-        m_BinPackCol = new array<int>;
-        m_BinPackFlip = new array<bool>;
-        m_BinPackOk = new array<bool>;
-        m_BinPackMoved = new array<bool>;
-        m_BinPackSorted = new array<int>;
-        m_BinPackCursor = 0;
-        m_BinPackTotal = 0;
+        m_TickAffectedContainers = new array<EntityAI>;
         m_RegisteredSensors = new array<LFPG_MotionSensor>;
         m_RegisteredPads = new array<LFPG_PressurePad>;
         m_RegisteredLasers = new array<LFPG_LaserDetector>;
@@ -4205,6 +4182,9 @@ class LFPG_NetworkManager
         int pi;
         EntityAI wireCheck;
 
+        // v5.0: Track affected containers for post-batch cargo refresh broadcast
+        m_TickAffectedContainers.Clear();
+
         for (bi = m_SorterCursor; bi < batchEnd; bi = bi + 1)
         {
             // Safety: array may shrink if sorter destroyed externally
@@ -4342,6 +4322,12 @@ class LFPG_NetworkManager
                     // Dirty dest so client refreshes cargo view.
                     // SetSynchDirty is idempotent — safe to call per-item.
                     destContainer.SetSynchDirty();
+
+                    // v5.0: Track dest container for post-batch broadcast
+                    if (m_TickAffectedContainers.Find(destContainer) < 0)
+                    {
+                        m_TickAffectedContainers.Insert(destContainer);
+                    }
                 }
             }
 
@@ -4349,6 +4335,12 @@ class LFPG_NetworkManager
             if (moved > 0)
             {
                 inputContainer.SetSynchDirty();
+
+                // v5.0: Track source container for post-batch broadcast
+                if (m_TickAffectedContainers.Find(inputContainer) < 0)
+                {
+                    m_TickAffectedContainers.Insert(inputContainer);
+                }
 
                 // v4.1 DIAG: Log tick-based sorting for desync investigation
                 string tickDiag = "[TickSorters] moved=";
@@ -4361,6 +4353,14 @@ class LFPG_NetworkManager
             }
         }
 
+        // v5.0: Broadcast cargo refresh to nearby players after batch.
+        // No excludePlayerId — auto-sort has no requester.
+        if (m_TickAffectedContainers.Count() > 0)
+        {
+            string emptyExclude = "";
+            BroadcastCargoRefreshToNearby(m_TickAffectedContainers, emptyExclude);
+        }
+
         // 4. Advance cursor
         m_SorterCursor = batchEnd;
         if (m_SorterCursor >= total)
@@ -4371,14 +4371,111 @@ class LFPG_NetworkManager
     }
 
     // ===========================
-    // v1.2.0 (Sprint S3): Sorter Bin-Pack (RPC handler)
+    // v5.0: Cargo Refresh Broadcast
+    // Sends SORTER_CARGO_REFRESH RPC to players within 15m of any
+    // affected container. Fixes Bug 2: other players viewing containers
+    // now get explicit UI refresh after sort operations.
+    // ===========================
+    void BroadcastCargoRefreshToNearby(array<EntityAI> containers, string excludePlayerId)
+    {
+        #ifdef SERVER
+        if (!containers)
+            return;
+
+        int containerCount = containers.Count();
+        if (containerCount <= 0)
+            return;
+
+        // Reuse class-level player array (avoid GC in periodic ticks)
+        m_ReusablePlayers.Clear();
+        GetGame().GetPlayers(m_ReusablePlayers);
+        int playerCount = m_ReusablePlayers.Count();
+        if (playerCount <= 0)
+            return;
+
+        float maxDistSq = 225.0;
+        int pi = 0;
+        int ci = 0;
+        Man man = null;
+        PlayerBase pb = null;
+        PlayerIdentity pid = null;
+        string pidStr = "";
+        float distSq = 0.0;
+        vector playerPos = vector.Zero;
+        vector containerPos = vector.Zero;
+        bool isNear = false;
+        int notified = 0;
+        int refreshSubId = LFPG_RPC_SubId.SORTER_CARGO_REFRESH;
+
+        for (pi = 0; pi < playerCount; pi = pi + 1)
+        {
+            man = m_ReusablePlayers[pi];
+            if (!man)
+                continue;
+
+            pb = PlayerBase.Cast(man);
+            if (!pb)
+                continue;
+
+            pid = pb.GetIdentity();
+            if (!pid)
+                continue;
+
+            // Exclude the requester (they already got SORT_ACK)
+            pidStr = pid.GetId();
+            if (excludePlayerId != "" && pidStr == excludePlayerId)
+                continue;
+
+            playerPos = pb.GetPosition();
+            isNear = false;
+
+            // Check distance to any affected container
+            for (ci = 0; ci < containerCount; ci = ci + 1)
+            {
+                if (!containers[ci])
+                    continue;
+
+                containerPos = containers[ci].GetPosition();
+                distSq = LFPG_WorldUtil.DistSq(playerPos, containerPos);
+                if (distSq <= maxDistSq)
+                {
+                    isNear = true;
+                    break;
+                }
+            }
+
+            if (!isNear)
+                continue;
+
+            // Send lightweight refresh RPC (no payload beyond SubId)
+            ScriptRPC refreshRpc = new ScriptRPC();
+            refreshRpc.Write(refreshSubId);
+            refreshRpc.Send(pb, LFPG_RPC_CHANNEL, true, pid);
+            notified = notified + 1;
+        }
+
+        if (notified > 0)
+        {
+            string bcastLog = "[Sorter] CargoRefresh broadcast: notified=";
+            bcastLog = bcastLog + notified.ToString();
+            bcastLog = bcastLog + " containers=";
+            bcastLog = bcastLog + containerCount.ToString();
+            LFPG_Util.Debug(bcastLog);
+        }
+        #endif
+    }
+
+    // ===========================
+    // v1.2.0 (Sprint S3): Sorter Sort (RPC handler)
     // ===========================
     // Called by PlayerRPC after validating proximity + type.
     // Sorter already resolved and validated upstream.
 
     // v3.2: Returns moved count (-1 = error/skip, 0+ = items moved).
     // Caller (PlayerRPC) sends SORT_ACK with the result.
-    int HandleSorterRequestSort(LFPG_Sorter sorter)
+    // v5.0: excludePlayerId — player ID string of the requester to skip
+    //        in the cargo refresh broadcast (they get SORT_ACK instead).
+    int HandleSorterRequestSort(LFPG_Sorter sorter, string excludePlayerId)
     {
         #ifdef SERVER
         if (!sorter)
@@ -4464,8 +4561,12 @@ class LFPG_NetworkManager
         {
             string d2 = "[Sorter] REQUEST_SORT: no wired outputs, bin-pack only";
             LFPG_Util.Debug(d2);
-            // v4.3: Still bin-pack even without outputs (organizes container)
-            StartBinPackSpread(container);
+            // v5.0: Repack in-place (no ground round-trip)
+            LFPG_SorterLogic.RepackCargoInPlace(container);
+            // v5.0: Broadcast to nearby players
+            array<EntityAI> repackOnly = new array<EntityAI>;
+            repackOnly.Insert(container);
+            BroadcastCargoRefreshToNearby(repackOnly, excludePlayerId);
             return 0;
         }
 
@@ -4550,8 +4651,21 @@ class LFPG_NetworkManager
             container.SetSynchDirty();
         }
 
-        // v4.3: Bin-pack remaining items in source (timer spread, 3 items/tick)
-        StartBinPackSpread(container);
+        // v5.0: Repack remaining items in source (in-place, no ground round-trip)
+        LFPG_SorterLogic.RepackCargoInPlace(container);
+
+        // v5.0: Broadcast cargo refresh to nearby players (excluding requester)
+        // Requester already gets SORT_ACK which triggers their own UI refresh.
+        array<EntityAI> affectedContainers = new array<EntityAI>;
+        affectedContainers.Insert(container);
+        for (di = 0; di < dirtiedDests.Count(); di = di + 1)
+        {
+            if (affectedContainers.Find(dirtiedDests[di]) < 0)
+            {
+                affectedContainers.Insert(dirtiedDests[di]);
+            }
+        }
+        BroadcastCargoRefreshToNearby(affectedContainers, excludePlayerId);
 
         string sortLog = "[Sorter] REQUEST_SORT: evaluated=";
         sortLog = sortLog + evaluated.ToString();
@@ -4562,305 +4676,6 @@ class LFPG_NetworkManager
         return moved;
         #endif
         return -1;
-    }
-
-    // ===========================
-    // v4.3: BinPack Timer Spread
-    // Computes optimal grid positions, then moves 3 items per tick
-    // via CallLater chain (200ms). Phase 1: cargo→ground. Phase 2: ground→grid.
-    // Avoids 2×N sync burst that caused client inventory desync.
-    // ===========================
-    protected void StartBinPackSpread(EntityAI container)
-    {
-        #ifdef SERVER
-        // Only one bin-pack at a time
-        if (m_BinPackPhase != 0)
-        {
-            string wBusy = "[BinPackSpread] already in progress, skipping";
-            LFPG_Util.Debug(wBusy);
-            return;
-        }
-
-        if (!container)
-            return;
-
-        if (!LFPG_SorterLogic.CanTakeFromContainer(container, null))
-            return;
-
-        GameInventory inv = container.GetInventory();
-        if (!inv)
-            return;
-
-        CargoBase cargo = inv.GetCargo();
-        if (!cargo)
-            return;
-
-        int gridW = cargo.GetWidth();
-        int gridH = cargo.GetHeight();
-        if (gridW <= 0 || gridH <= 0)
-            return;
-
-        int totalItems = cargo.GetItemCount();
-        if (totalItems <= 0)
-            return;
-
-        // Collect items + dimensions
-        m_BinPackItems.Clear();
-        m_BinPackRow.Clear();
-        m_BinPackCol.Clear();
-        m_BinPackFlip.Clear();
-        m_BinPackOk.Clear();
-        m_BinPackMoved.Clear();
-        m_BinPackSorted.Clear();
-
-        ref array<int> bpWidths = new array<int>;
-        ref array<int> bpHeights = new array<int>;
-        ref array<int> bpAreas = new array<int>;
-
-        int ci = 0;
-        int iw = 0;
-        int ih = 0;
-        EntityAI cItem = null;
-
-        for (ci = 0; ci < totalItems; ci = ci + 1)
-        {
-            cItem = cargo.GetItem(ci);
-            if (!cItem)
-                continue;
-
-            LFPG_SorterLogic.GetItemSlotDimensions(cItem, iw, ih);
-            m_BinPackItems.Insert(cItem);
-            bpWidths.Insert(iw);
-            bpHeights.Insert(ih);
-            bpAreas.Insert(iw * ih);
-            m_BinPackRow.Insert(0);
-            m_BinPackCol.Insert(0);
-            m_BinPackFlip.Insert(false);
-            m_BinPackOk.Insert(false);
-            m_BinPackMoved.Insert(false);
-        }
-
-        int n = m_BinPackItems.Count();
-        if (n <= 0)
-            return;
-
-        // Sort indices by area descending (bubble sort, small N)
-        int si = 0;
-        for (si = 0; si < n; si = si + 1)
-        {
-            m_BinPackSorted.Insert(si);
-        }
-        bool bSwapped = true;
-        int bLimit = n - 1;
-        int bj = 0;
-        int bNext = 0;
-        int bTmp = 0;
-        while (bSwapped)
-        {
-            bSwapped = false;
-            for (bj = 0; bj < bLimit; bj = bj + 1)
-            {
-                bNext = bj + 1;
-                if (bpAreas[m_BinPackSorted[bj]] < bpAreas[m_BinPackSorted[bNext]])
-                {
-                    bTmp = m_BinPackSorted[bj];
-                    m_BinPackSorted[bj] = m_BinPackSorted[bNext];
-                    m_BinPackSorted[bNext] = bTmp;
-                    bSwapped = true;
-                }
-            }
-            bLimit = bLimit - 1;
-        }
-
-        // Build virtual grid and compute placements
-        int gridSize = gridW * gridH;
-        ref array<bool> grid = new array<bool>;
-        int gi = 0;
-        for (gi = 0; gi < gridSize; gi = gi + 1)
-        {
-            grid.Insert(false);
-        }
-
-        int idx = 0;
-        int pw = 0;
-        int ph = 0;
-        bool placed = false;
-        for (si = 0; si < n; si = si + 1)
-        {
-            idx = m_BinPackSorted[si];
-            pw = bpWidths[idx];
-            ph = bpHeights[idx];
-
-            placed = LFPG_SorterLogic.TryPlaceOnGrid(grid, gridW, gridH, pw, ph, m_BinPackRow, m_BinPackCol, idx);
-            if (placed)
-            {
-                m_BinPackFlip[idx] = false;
-                m_BinPackOk[idx] = true;
-                LFPG_SorterLogic.MarkGridOccupied(grid, gridW, m_BinPackRow[idx], m_BinPackCol[idx], pw, ph);
-            }
-
-            if (!placed && pw != ph)
-            {
-                placed = LFPG_SorterLogic.TryPlaceOnGrid(grid, gridW, gridH, ph, pw, m_BinPackRow, m_BinPackCol, idx);
-                if (placed)
-                {
-                    m_BinPackFlip[idx] = true;
-                    m_BinPackOk[idx] = true;
-                    LFPG_SorterLogic.MarkGridOccupied(grid, gridW, m_BinPackRow[idx], m_BinPackCol[idx], ph, pw);
-                }
-            }
-        }
-
-        // Setup ground position
-        vector groundPos = container.GetPosition();
-        float gpY = groundPos[1];
-        gpY = gpY + 0.05;
-        groundPos[1] = gpY;
-        Math3D.MatrixIdentity4(m_BinPackGroundMat);
-        m_BinPackGroundMat[3] = groundPos;
-
-        // Start phase 1 (remove to ground)
-        m_BinPackContainer = container;
-        m_BinPackPhase = 1;
-        m_BinPackCursor = 0;
-        m_BinPackTotal = n;
-
-        string startLog = "[BinPackSpread] started items=";
-        startLog = startLog + n.ToString();
-        LFPG_Util.Info(startLog);
-
-        // First tick immediately
-        bool bFalse = false;
-        int tickMs = 200;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(BinPackTick, tickMs, bFalse);
-        #endif
-    }
-
-    protected void BinPackTick()
-    {
-        #ifdef SERVER
-        if (m_BinPackPhase == 0)
-            return;
-
-        if (!m_BinPackContainer)
-        {
-            m_BinPackPhase = 0;
-            return;
-        }
-
-        int opsPerTick = 3;
-        int ops = 0;
-        EntityAI bpItem = null;
-        InventoryLocation il_src = null;
-        InventoryLocation il_dst = null;
-
-        if (m_BinPackPhase == 1)
-        {
-            // Phase 1: Remove items to ground (3 per tick)
-            while (m_BinPackCursor < m_BinPackTotal && ops < opsPerTick)
-            {
-                bpItem = m_BinPackItems[m_BinPackCursor];
-                if (bpItem && bpItem.GetInventory())
-                {
-                    il_src = new InventoryLocation;
-                    bpItem.GetInventory().GetCurrentInventoryLocation(il_src);
-                    if (il_src.GetType() != InventoryLocationType.GROUND)
-                    {
-                        il_dst = new InventoryLocation;
-                        il_dst.SetGround(bpItem, m_BinPackGroundMat);
-                        bool dropOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
-                        if (dropOk)
-                        {
-                            m_BinPackMoved[m_BinPackCursor] = true;
-                        }
-                    }
-                    else
-                    {
-                        m_BinPackMoved[m_BinPackCursor] = true;
-                    }
-                    ops = ops + 1;
-                }
-                m_BinPackCursor = m_BinPackCursor + 1;
-            }
-
-            if (m_BinPackCursor >= m_BinPackTotal)
-            {
-                // Switch to phase 2
-                m_BinPackPhase = 2;
-                m_BinPackCursor = 0;
-            }
-        }
-        else if (m_BinPackPhase == 2)
-        {
-            // Phase 2: Place items from ground to computed grid positions (3 per tick)
-            // Process in sorted order (largest first)
-            int idx = 0;
-            while (m_BinPackCursor < m_BinPackTotal && ops < opsPerTick)
-            {
-                idx = m_BinPackSorted[m_BinPackCursor];
-                bpItem = m_BinPackItems[idx];
-
-                if (bpItem && m_BinPackOk[idx] && m_BinPackMoved[idx])
-                {
-                    if (bpItem.GetInventory())
-                    {
-                        il_src = new InventoryLocation;
-                        bpItem.GetInventory().GetCurrentInventoryLocation(il_src);
-
-                        if (il_src.GetType() == InventoryLocationType.GROUND)
-                        {
-                            il_dst = new InventoryLocation;
-                            il_dst.SetCargo(m_BinPackContainer, bpItem, 0, m_BinPackRow[idx], m_BinPackCol[idx], m_BinPackFlip[idx]);
-                            GameInventory.LocationSyncMoveEntity(il_src, il_dst);
-                        }
-                    }
-                    ops = ops + 1;
-                }
-
-                // Items not placed (!placedOk): try best-effort FindFreeLocation
-                if (bpItem && !m_BinPackOk[idx] && m_BinPackMoved[idx])
-                {
-                    if (bpItem.GetInventory())
-                    {
-                        il_src = new InventoryLocation;
-                        bpItem.GetInventory().GetCurrentInventoryLocation(il_src);
-                        if (il_src.GetType() == InventoryLocationType.GROUND)
-                        {
-                            il_dst = new InventoryLocation;
-                            bool freeOk = m_BinPackContainer.GetInventory().FindFreeLocationFor(bpItem, FindInventoryLocationType.CARGO, il_dst);
-                            if (freeOk)
-                            {
-                                GameInventory.LocationSyncMoveEntity(il_src, il_dst);
-                            }
-                        }
-                    }
-                    ops = ops + 1;
-                }
-
-                m_BinPackCursor = m_BinPackCursor + 1;
-            }
-
-            if (m_BinPackCursor >= m_BinPackTotal)
-            {
-                // Done — dirty and cleanup
-                m_BinPackContainer.SetSynchDirty();
-                string doneLog = "[BinPackSpread] completed items=";
-                doneLog = doneLog + m_BinPackTotal.ToString();
-                LFPG_Util.Info(doneLog);
-                m_BinPackPhase = 0;
-                m_BinPackContainer = null;
-                return;
-            }
-        }
-
-        // Schedule next tick if still in progress
-        if (m_BinPackPhase != 0)
-        {
-            bool bFalse2 = false;
-            int nextMs = 200;
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(BinPackTick, nextMs, bFalse2);
-        }
-        #endif
     }
 
     // ===========================
@@ -5062,7 +4877,7 @@ class LFPG_NetworkManager
     // ===========================
     // v4.1: Consolidated Simple Devices Tick
     // ===========================
-    // Single 1,000ms timer drives 7 device subsystems via staggered sub-counters.
+    // Single 1,000ms timer drives 6 device subsystems via staggered sub-counters.
     // Cycle 1→10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
     //   - Intercoms:       every tick       (1,000ms)  — ticks 1,2,3,4,5,6,7,8,9,10
     //   - DoorControllers: counter % 2 == 1 (2,000ms)  — ticks 1,3,5,7,9
@@ -5070,7 +4885,6 @@ class LFPG_NetworkManager
     //   - Batteries:       counter % 5 == 4 (5,000ms)  — ticks 4,9
     //   - Fridges:         counter % 10 == 6 (10,000ms) — tick 6
     //   - ElectricStoves:  counter % 3 == 1 (3,000ms)  — ticks 1,4,7
-    //   - Sprinklers:      counter == 8     (10,000ms) — tick 8 (v5.4)
     // OPT-2: Early-out when all registries empty.
     protected void LFPG_TickSimpleDevices()
     {
@@ -5081,8 +4895,7 @@ class LFPG_NetworkManager
         int totalBat = m_RegisteredBatteries.Count();
         int totalFri = m_RegisteredFridges.Count();
         int totalStv = m_RegisteredStoves.Count();
-        int totalSpr = m_RegisteredSprinklers.Count();
-        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv + totalSpr;
+        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv;
         if (totalSimple == 0)
             return;
 
@@ -5196,30 +5009,6 @@ class LFPG_NetworkManager
                     continue;
 
                 stove.LFPG_TickCooking(stoveDelta);
-            }
-        }
-
-        // --- Sprinklers: every 10th tick, offset 8 (tick 8) = ~10s ---
-        // v5.4: Integrates LFPG_TickWatering into centralized tick.
-        // Only calls watering on active sprinklers (NM pre-filters via m_SprinklerActive).
-        if (m_SimpleTickCounter == 8 && totalSpr > 0)
-        {
-            int spri;
-            LFPG_Sprinkler spr;
-
-            for (spri = 0; spri < totalSpr; spri = spri + 1)
-            {
-                if (spri >= m_RegisteredSprinklers.Count())
-                    break;
-
-                spr = m_RegisteredSprinklers[spri];
-                if (!spr)
-                    continue;
-
-                if (!spr.LFPG_GetSprinklerActive())
-                    continue;
-
-                spr.LFPG_TickWatering();
             }
         }
         #endif
