@@ -15,11 +15,12 @@
 // Persistence: DeviceIdLow/High + m_BurnerMask (int).
 //   m_PoweredNet is derived state (NOT persisted).
 //
-// Visuals per burner (client-side, OnVariablesSynchronized):
+// Visuals per burner (client-side, LFPG_OnVarSync + LFPG_OnInit):
 //   - button_N animation phase: 1.0 if burner ON, 0.0 if OFF
 //     (persisted, independent of power)
 //   - stove_N material swap: emissive red if burner ON AND powered,
 //     default material if OFF or unpowered
+//   Re-applied on every VarSync (no diff tracking).
 //
 // Enforce Script rules: no ternary, no ++/--, no foreach,
 //   no inline concat, explicit typing, m_ prefix on members.
@@ -63,10 +64,6 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     protected ItemBase m_SlotCookware1;  // DirectCookingB
     protected ItemBase m_SlotCookware2;  // DirectCookingC
     protected ItemBase m_SlotCookware3;  // DirectCookingD
-
-    // ---- Client: last synced state for visual diff ----
-    protected int  m_LastBurnerMask  = -1;
-    protected bool m_LastPoweredNet  = false;
 
     // ============================================
     // Constructor
@@ -432,26 +429,9 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     // ============================================
     // Visuals (client-side)
     // ============================================
-    override void OnVariablesSynchronized()
+    override void LFPG_OnVarSync()
     {
-        super.OnVariablesSynchronized();
-
-        bool visualChanged = false;
-        if (m_BurnerMask != m_LastBurnerMask)
-        {
-            visualChanged = true;
-        }
-        if (m_PoweredNet != m_LastPoweredNet)
-        {
-            visualChanged = true;
-        }
-
-        if (visualChanged)
-        {
-            LFPG_UpdateVisuals();
-            m_LastBurnerMask = m_BurnerMask;
-            m_LastPoweredNet = m_PoweredNet;
-        }
+        LFPG_UpdateVisuals();
     }
 
     protected void LFPG_UpdateVisuals()
@@ -517,6 +497,11 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     // ============================================
     // Lifecycle hooks
     // ============================================
+    override void LFPG_OnInit()
+    {
+        LFPG_UpdateVisuals();
+    }
+
     override void EEInit()
     {
         super.EEInit();
@@ -530,9 +515,6 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         #ifdef SERVER
         LFPG_NetworkManager.Get().RegisterStove(this);
         #endif
-
-        // Init visuals on client
-        LFPG_UpdateVisuals();
     }
 
     override void LFPG_OnKilled()

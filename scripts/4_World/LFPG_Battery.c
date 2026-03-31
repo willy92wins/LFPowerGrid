@@ -52,7 +52,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     protected bool  m_Overloaded       = false;
     protected bool  m_OutputEnabled    = true;
     protected float m_StoredEnergy     = 0.0;
-    protected float m_ChargeRateCurrent = 0.0;
+    protected int   m_ChargeRateX10    = 0;
 
     // ---- Battery state (persisted, not SyncVars) ----
     protected bool m_DischargeEnabled = true;
@@ -80,16 +80,18 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         string varOverloaded  = "m_Overloaded";
         string varOutput      = "m_OutputEnabled";
         string varStored      = "m_StoredEnergy";
-        string varChargeRate  = "m_ChargeRateCurrent";
+        string varChargeRate  = "m_ChargeRateX10";
 
         RegisterNetSyncVariableBool(varPowered);
         RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableBool(varOutput);
         RegisterNetSyncVariableFloat(varStored, 0.0, 100000.0, 12);
-        // v4.3 (Audit fix F4): 8 bits → 10 bits. Old resolution 1.56 u/s
-        // caused CHG/IDLE oscillation near threshold (±0.5). New: ~0.39 u/s.
+        // v4.4: Changed from Float(10bit) to Int. The 10-bit quantized float
+        // arrived corrupted on the client (bit alignment bug in engine when
+        // two floats of different bit widths share the SyncVar bitstream).
+        // Int SyncVar is bullet-proof. Stores rate * 10 for 0.1 u/s resolution.
         // SAVE WIPE required (SyncVar layout change).
-        RegisterNetSyncVariableFloat(varChargeRate, -200.0, 200.0, 10);
+        RegisterNetSyncVariableInt(varChargeRate);
     }
 
     // ============================================
@@ -416,59 +418,19 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     void LFPG_SetChargeRateCurrent(float val)
     {
         #ifdef SERVER
-        // v4.2: Sync on sign change OR significant magnitude delta.
-        // Previous sign-only sync left the client frozen at a stale value
-        // when the rate changed within the same sign (e.g. -164 → -30).
-        bool needsSync = false;
-
-        int oldSign = 0;
-        if (m_ChargeRateCurrent > LFPG_PROPAGATION_EPSILON)
-        {
-            oldSign = 1;
-        }
-        else if (m_ChargeRateCurrent < -LFPG_PROPAGATION_EPSILON)
-        {
-            oldSign = -1;
-        }
-
-        int newSign = 0;
-        if (val > LFPG_PROPAGATION_EPSILON)
-        {
-            newSign = 1;
-        }
-        else if (val < -LFPG_PROPAGATION_EPSILON)
-        {
-            newSign = -1;
-        }
-
-        if (oldSign != newSign)
-        {
-            needsSync = true;
-        }
-
-        // Magnitude delta threshold: sync if rate changed by > 2 u/s
-        float rateDelta = val - m_ChargeRateCurrent;
-        if (rateDelta < 0.0)
-        {
-            rateDelta = -rateDelta;
-        }
-        if (rateDelta > 2.0)
-        {
-            needsSync = true;
-        }
-
-        m_ChargeRateCurrent = val;
-
-        if (needsSync)
-        {
-            SetSynchDirty();
-        }
+        // v4.4: Store as int (rate × 10) for reliable SyncVar delivery.
+        // Called only every ~5s from battery timer → always sync.
+        int rateX10 = val * 10.0;
+        m_ChargeRateX10 = rateX10;
+        SetSynchDirty();
         #endif
     }
 
     float LFPG_GetChargeRateCurrent()
     {
-        return m_ChargeRateCurrent;
+        float result = m_ChargeRateX10;
+        result = result / 10.0;
+        return result;
     }
 
     void LFPG_InitFreshSpawn()

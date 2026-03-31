@@ -1917,16 +1917,14 @@ class CfgVehicles
         descriptionShort = "$STR_LFPG_FridgeKit_Desc";
         model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
-        itemSize[] = {4, 4};
-        rotationFlags = 17;
-        isDeployable = 1;
+        itemSize[] = {5, 3};
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
         carveNavmesh = 1;
-        physLayer = "item_large";
-        slopeTolerance = 0.0;
-        yawPitchRollLimit[] = {90, 90, 90};
-        hiddenSelections[] = {"zbytek"};
-        hiddenSelectionsTextures[] = {""};
-        hiddenSelectionsMaterials[] = {""};
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // ---- Fridge (placed device, CONSUMER 1 IN, 20 u/s) ----

@@ -142,6 +142,7 @@ modded class PlayerBase
         {
             HandleLFPG_SearchlightExit(sender, ctx);
         }
+        #ifdef LBmaster_Core
         else if (subId == LFPG_RPC_SubId.BTC_OPEN_REQUEST)
         {
             HandleLFPG_BTCOpenRequest(sender, ctx);
@@ -170,6 +171,7 @@ modded class PlayerBase
         {
             HandleLFPG_BTCDepositCash(sender, ctx);
         }
+        #endif
         #else
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
         {
@@ -3511,7 +3513,9 @@ modded class PlayerBase
 
     // =========================================================
     // BTC ATM: Server Handlers (Sprint BTC-3)
+    // Requires LBmaster_Core for LB_ATM_Playerbase
     // =========================================================
+    #ifdef LBmaster_Core
 
     // ---- OPEN REQUEST: player interacted with ATM ----
     protected void HandleLFPG_BTCOpenRequest(PlayerIdentity sender, ParamsReadContext ctx)
@@ -4318,6 +4322,7 @@ modded class PlayerBase
         LFPG_Util.Info(logDC);
         #endif
     }
+    #endif // LBmaster_Core
 
     // =========================================================
     // BTC ATM: Client Handlers (Sprint BTC-3)
