@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Sprinkler device (v5.3 Player Wetting)
+// LF_PowerGrid - Sprinkler device (v5.4 Watering Fix)
 //
 // LFPG_Sprinkler_Kit:  Holdable, deployable (same-model pattern).
 // LFPG_Sprinkler:      CONSUMER, 1 IN (input_0), 5 u/s, no wire store.
@@ -12,8 +12,11 @@
 //        Vanilla Environment detects wet clothing and updates
 //        GetStatWet() / hypothermia on its own tick — no manual
 //        stat manipulation needed.
+// v5.4: LFPG_TickWatering integrated into NM TickSimpleDevices
+//        (counter==8, ~10s). Radius 3m. GardenBaseMod removed
+//        deprecated WaterAllSlots → GiveWater only (vanilla parity).
 //
-// Watering: LFPG_TickWatering() called by NM every ~15s.
+// Watering: LFPG_TickWatering() called by NM TickSimpleDevices ~10s.
 //   - Phase A: GardenBase within radius → LFPG_WaterFromSprinkler()
 //   - Phase B: ItemBase within radius → SetWet() increment
 //   - Phase C: PlayerBase within radius → wet attachments + cargo
@@ -268,7 +271,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     // =========================================================
     // LFPG_TickWatering — SERVER: water gardens + wet items + wet players
     //
-    // Called by NM every LFPG_SPRINKLER_WATER_TICK_COUNT ticks (~15s).
+    // Called by NM TickSimpleDevices (counter==8, ~10s effective).
     // Only called when m_SprinklerActive == true (NM pre-filters).
     //
     // Phase A: Find GardenBase within radius → LFPG_WaterFromSprinkler()

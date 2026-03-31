@@ -1,14 +1,19 @@
 // =========================================================
-// LF_PowerGrid - GardenBase Extension (v5.2 Sprinkler Watering)
+// LF_PowerGrid - GardenBase Extension (v5.4 Sprinkler Watering)
 //
 // Adds LFPG_WaterFromSprinkler() to vanilla GardenBase.
 // m_Slots is protected → only accessible via modded class.
 //
 // Called by LFPG_Sprinkler.LFPG_TickWatering() during NM tick.
-// Replicates vanilla CheckRainTick watering logic:
-//   1. WaterAllSlots() → sets watered bitmask (visual)
-//   2. slot.GiveWater() → adds actual water for plant growth
-//   3. SetSynchDirty() → syncs state to clients
+// Mirrors vanilla CheckRainTick pattern exactly:
+//   slot.GiveWater() handles everything internally:
+//     - updates water quantity via SetWaterQuantity bitmap
+//     - transitions DRY→WET via SetWateredState+SlotWaterStateUpdate
+//     - triggers CreatePlant if seed present + water sufficient
+//
+// v5.4: Removed deprecated WaterAllSlots() (vanilla [Obsolete]).
+//        GiveWater alone is the correct future-proof path.
+//        Works for GardenBase and all subclasses (GardenPlot, etc).
 // =========================================================
 
 modded class GardenBase
@@ -16,10 +21,9 @@ modded class GardenBase
     void LFPG_WaterFromSprinkler(float amount)
     {
         #ifdef SERVER
-        // Phase 1: Set visual watered state (bitmask)
-        WaterAllSlots();
+        if (!m_Slots)
+            return;
 
-        // Phase 2: Add actual water to each slot (plant growth)
         int slotsCount = GetGardenSlotsCount();
         int i;
         Slot slot;
@@ -27,9 +31,6 @@ modded class GardenBase
 
         for (i = 0; i < slotsCount; i = i + 1)
         {
-            if (!m_Slots)
-                break;
-
             if (i >= m_Slots.Count())
                 break;
 
@@ -41,7 +42,7 @@ modded class GardenBase
             slot.GiveWater(waterAmt);
         }
 
-        // Phase 3: Sync to clients
+        // Sync bitmap changes to clients
         SetSynchDirty();
         #endif
     }

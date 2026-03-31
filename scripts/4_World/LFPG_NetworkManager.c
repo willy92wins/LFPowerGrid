@@ -5062,7 +5062,7 @@ class LFPG_NetworkManager
     // ===========================
     // v4.1: Consolidated Simple Devices Tick
     // ===========================
-    // Single 1,000ms timer drives 6 device subsystems via staggered sub-counters.
+    // Single 1,000ms timer drives 7 device subsystems via staggered sub-counters.
     // Cycle 1→10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
     //   - Intercoms:       every tick       (1,000ms)  — ticks 1,2,3,4,5,6,7,8,9,10
     //   - DoorControllers: counter % 2 == 1 (2,000ms)  — ticks 1,3,5,7,9
@@ -5070,6 +5070,7 @@ class LFPG_NetworkManager
     //   - Batteries:       counter % 5 == 4 (5,000ms)  — ticks 4,9
     //   - Fridges:         counter % 10 == 6 (10,000ms) — tick 6
     //   - ElectricStoves:  counter % 3 == 1 (3,000ms)  — ticks 1,4,7
+    //   - Sprinklers:      counter == 8     (10,000ms) — tick 8 (v5.4)
     // OPT-2: Early-out when all registries empty.
     protected void LFPG_TickSimpleDevices()
     {
@@ -5080,7 +5081,8 @@ class LFPG_NetworkManager
         int totalBat = m_RegisteredBatteries.Count();
         int totalFri = m_RegisteredFridges.Count();
         int totalStv = m_RegisteredStoves.Count();
-        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv;
+        int totalSpr = m_RegisteredSprinklers.Count();
+        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv + totalSpr;
         if (totalSimple == 0)
             return;
 
@@ -5194,6 +5196,30 @@ class LFPG_NetworkManager
                     continue;
 
                 stove.LFPG_TickCooking(stoveDelta);
+            }
+        }
+
+        // --- Sprinklers: every 10th tick, offset 8 (tick 8) = ~10s ---
+        // v5.4: Integrates LFPG_TickWatering into centralized tick.
+        // Only calls watering on active sprinklers (NM pre-filters via m_SprinklerActive).
+        if (m_SimpleTickCounter == 8 && totalSpr > 0)
+        {
+            int spri;
+            LFPG_Sprinkler spr;
+
+            for (spri = 0; spri < totalSpr; spri = spri + 1)
+            {
+                if (spri >= m_RegisteredSprinklers.Count())
+                    break;
+
+                spr = m_RegisteredSprinklers[spri];
+                if (!spr)
+                    continue;
+
+                if (!spr.LFPG_GetSprinklerActive())
+                    continue;
+
+                spr.LFPG_TickWatering();
             }
         }
         #endif
