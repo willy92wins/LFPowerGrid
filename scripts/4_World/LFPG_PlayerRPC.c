@@ -2711,15 +2711,8 @@ modded class PlayerBase
         {
             UpdateInventoryMenu();
 
-            // v5.0: Also refresh vicinity items so the proximity panel
-            // re-scans containers. Without this, the LeftArea (vicinity)
-            // may show stale cargo until the player closes and reopens
-            // the inventory.
-            VicinityItemManager vicMgr = VicinityItemManager.GetInstance();
-            if (vicMgr)
-            {
-                vicMgr.RefreshVicinityItems();
-            }
+            // v5.0: Signal 5_Mission to refresh vicinity containers
+            LFPG_CargoRefreshSignal.Request();
         }
     }
 
@@ -2733,11 +2726,8 @@ modded class PlayerBase
     {
         UpdateInventoryMenu();
 
-        VicinityItemManager vicMgr = VicinityItemManager.GetInstance();
-        if (vicMgr)
-        {
-            vicMgr.RefreshVicinityItems();
-        }
+        // v5.0: Signal 5_Mission to refresh vicinity containers
+        LFPG_CargoRefreshSignal.Request();
     }
 
     // =====================================
