@@ -661,6 +661,7 @@ static const float LFPG_FURNACE_CAPACITY              = 50.0;    // u/s output w
 static const int   LFPG_FURNACE_MAX_FUEL              = 2880;    // max fuel squares (= 1 day at 1/30s)
 static const int   LFPG_FURNACE_BURN_INTERVAL_MS      = 30000;   // 30 seconds between burns
 // LFPG_FURNACE_POLL_MS removed in v4.1 (absorbed into LFPG_TickSimpleDevices)
+static const string LFPG_FURNACE_LOOP_SOUNDSET         = "LFPG_Furnace_Loop_SoundSet";
 
 // ---- v1.5.1: Searchlight (CONSUMER, grab system) ----
 static const float LFPG_SEARCHLIGHT_CONSUMPTION       = 25.0;    // u/s

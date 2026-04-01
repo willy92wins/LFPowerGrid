@@ -84,6 +84,15 @@ class CfgSoundShaders
         range = 5;
         rangeCurve[] = {{ 0, 1 }, { 3, 0.3 }, { 5, 0 }};
     };
+    // v4.5: Furnace loop (ambient burning hum while m_SourceOn)
+    class LFPG_Furnace_Loop_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\data\furnace\Furnace", 1 }};
+        volume = 0.4;
+        range = 15;
+        loop = 1;
+        rangeCurve[] = {{ 0, 1 }, { 8, 0.5 }, { 15, 0 }};
+    };
     // v3.0: Intercom static burst (one-shot, radio noise)
     class LFPG_Intercom_Static_Shader
     {
@@ -140,6 +149,14 @@ class CfgSoundSets
     class LFPG_Intercom_Static_SoundSet
     {
         soundShaders[] = { "LFPG_Intercom_Static_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
+    // v4.5: Furnace loop — spatial 3D, played while m_SourceOn
+    class LFPG_Furnace_Loop_SoundSet
+    {
+        soundShaders[] = { "LFPG_Furnace_Loop_Shader" };
         volumeFactor = 1;
         frequencyFactor = 1;
         spatial = 1;

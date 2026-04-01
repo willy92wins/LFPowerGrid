@@ -43,6 +43,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // BurnTick checks: if now < m_BurnNextMs, skip.
     protected int m_BurnNextMs = 0;
 
+    // ---- Client sound ----
+    protected EffectSound m_FurnaceLoopSound;
+
     // ============================================
     // Constructor — port + SyncVars
     // ============================================
@@ -216,6 +219,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             SetSynchDirty();
         }
         #endif
+
+        if (m_FurnaceLoopSound)
+        {
+            m_FurnaceLoopSound.SoundStop();
+            m_FurnaceLoopSound = null;
+        }
     }
 
     override void LFPG_OnDeleted()
@@ -223,6 +232,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterFurnace(this);
         #endif
+
+        if (m_FurnaceLoopSound)
+        {
+            m_FurnaceLoopSound.SoundStop();
+            m_FurnaceLoopSound = null;
+        }
     }
 
     override void LFPG_OnWiresCut()
@@ -233,6 +248,30 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             m_SourceOn = false;
             LFPG_NetworkManager.Get().UnregisterFurnace(this);
             SetSynchDirty();
+        }
+        #endif
+    }
+
+    // ============================================
+    // VarSync: loop sound (client-side)
+    // ============================================
+    override void LFPG_OnVarSyncDevice()
+    {
+        #ifndef SERVER
+        if (m_SourceOn && !m_FurnaceLoopSound)
+        {
+            string soundSet = LFPG_FURNACE_LOOP_SOUNDSET;
+            m_FurnaceLoopSound = SEffectManager.PlaySound(soundSet, GetPosition());
+            if (m_FurnaceLoopSound)
+            {
+                m_FurnaceLoopSound.SetAutodestroy(false);
+            }
+        }
+
+        if (!m_SourceOn && m_FurnaceLoopSound)
+        {
+            m_FurnaceLoopSound.SoundStop();
+            m_FurnaceLoopSound = null;
         }
         #endif
     }
