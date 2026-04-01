@@ -719,7 +719,7 @@ static const int   LFPG_INTERCOM_FREQ_COUNT            = 7;       // vanilla fre
 // v5.0: SPRINKLER constants (CONSUMER, water delivery)
 // =========================================================
 static const float  LFPG_SPRINKLER_CONSUMPTION         = 5.0;       // u/s electrical
-static const float  LFPG_SPRINKLER_RADIUS              = 2.0;       // metres effect radius
+static const float  LFPG_SPRINKLER_RADIUS              = 4.0;       // metres effect radius
 static const float  LFPG_SPRINKLER_DRAIN_PER_HOUR      = 1.0;       // L/hour in-game from T2 tank
 static const float  LFPG_SPRINKLER_WATER_AMOUNT         = 50.0;      // water per slot per tick (TUNABLE)
 static const float  LFPG_SPRINKLER_WET_AMOUNT           = 0.05;      // wetness per tick to items/clothing (TUNABLE)
