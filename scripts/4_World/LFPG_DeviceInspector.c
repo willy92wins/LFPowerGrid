@@ -1483,7 +1483,7 @@ class LFPG_DeviceInspector
 
     // Clean up entity type name for display.
     // "LF_TestLamp" → "Lamp"
-    // "LF_TestGenerator" → "Generator"
+    // "LFPG_Generator" → "Generator"
     // "LFPG_Splitter" → "Splitter"
     protected static string FormatDeviceName(string typeName)
     {

@@ -1,6 +1,6 @@
 // =========================================================
 // LF_PowerGrid - Example devices (v0.7.47)
-// - LF_TestGenerator: source (output_1..4) + owns wires + persistence
+// - LFPG_Generator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
 //
@@ -41,7 +41,7 @@
 // Wire manipulation delegated to LFPG_WireHelper (3_Game).
 // =========================================================
 
-class LF_TestGenerator : PowerGenerator
+class LFPG_Generator : PowerGenerator
 {
     protected int m_DeviceIdLow = 0;
 
@@ -88,7 +88,7 @@ class LF_TestGenerator : PowerGenerator
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
     // with round-robin batching (Audit 1+2 closure).
 
-    void LF_TestGenerator()
+    void LFPG_Generator()
     {
         m_Wires = new array<ref LFPG_WireData>;
         RegisterNetSyncVariableInt("m_DeviceIdLow");
@@ -115,7 +115,7 @@ class LF_TestGenerator : PowerGenerator
         // v0.7.27 (Audit 5): Remove vanilla electrical connection actions.
         // PowerGenerator inherits plug/unplug from its base class hierarchy.
         // Without explicit removal, players with vanilla CableReel near
-        // an LF_TestGenerator see "Plug in" / "Unplug" vanilla actions.
+        // an LFPG_Generator see "Plug in" / "Unplug" vanilla actions.
         RemoveAction(ActionPlugIn);
         RemoveAction(ActionUnplugThisByCord);
 
@@ -177,7 +177,7 @@ class LF_TestGenerator : PowerGenerator
                     // Persisted ON but sparkplug invalid: clear m_SourceOn
                     m_SourceOn = false;
                     SetSynchDirty();
-                    string eeMsg = "[LF_TestGenerator] EEInit: cleared m_SourceOn (invalid SparkPlug) id=" + m_DeviceId;
+                    string eeMsg = "[LFPG_Generator] EEInit: cleared m_SourceOn (invalid SparkPlug) id=" + m_DeviceId;
                     LFPG_Util.Info(eeMsg);
                 }
             }
@@ -253,7 +253,7 @@ class LF_TestGenerator : PowerGenerator
         #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            string wsBlkMsg = "[LF_TestGenerator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId;
+            string wsBlkMsg = "[LFPG_Generator] OnWorkStart blocked: invalid SparkPlug id=" + m_DeviceId;
             LFPG_Util.Info(wsBlkMsg);
             ComponentEnergyManager emForce = GetCompEM();
             if (emForce)
@@ -270,7 +270,7 @@ class LF_TestGenerator : PowerGenerator
         m_SourceOn = true;
         SetSynchDirty();
 
-        string wsMsg = "[LF_TestGenerator] OnWorkStart id=" + m_DeviceId + " SourceOn=true";
+        string wsMsg = "[LFPG_Generator] OnWorkStart id=" + m_DeviceId + " SourceOn=true";
         LFPG_Util.Info(wsMsg);
         if (m_DeviceId != "")
         {
@@ -287,7 +287,7 @@ class LF_TestGenerator : PowerGenerator
         m_SourceOn = false;
         SetSynchDirty();
 
-        string wstpMsg = "[LF_TestGenerator] OnWorkStop id=" + m_DeviceId + " SourceOn=false";
+        string wstpMsg = "[LFPG_Generator] OnWorkStop id=" + m_DeviceId + " SourceOn=false";
         LFPG_Util.Info(wstpMsg);
         if (m_DeviceId != "")
         {
@@ -312,7 +312,7 @@ class LF_TestGenerator : PowerGenerator
             // v0.7.27: Re-validate after attachment (checks health too)
             if (LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
-                string spAMsg = "[LF_TestGenerator] SparkPlug attached while ON, starting CompEM + propagating";
+                string spAMsg = "[LFPG_Generator] SparkPlug attached while ON, starting CompEM + propagating";
                 LFPG_Util.Info(spAMsg);
                 ComponentEnergyManager emAttach = GetCompEM();
                 if (emAttach)
@@ -335,7 +335,7 @@ class LF_TestGenerator : PowerGenerator
         slotLowerD.ToLower();
         if (slotLowerD == "sparkplug" && m_SourceOn && m_DeviceId != "")
         {
-            string spDMsg = "[LF_TestGenerator] SparkPlug detached while ON, stopping CompEM + propagating";
+            string spDMsg = "[LFPG_Generator] SparkPlug detached while ON, stopping CompEM + propagating";
             LFPG_Util.Info(spDMsg);
 
             // v0.7.25 (Bug 1): Clear m_SourceOn FIRST — the generator cannot
@@ -367,7 +367,7 @@ class LF_TestGenerator : PowerGenerator
         #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            string owBlkMsg = "[LF_TestGenerator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId;
+            string owBlkMsg = "[LFPG_Generator] OnWork blocked: invalid SparkPlug id=" + m_DeviceId;
             LFPG_Util.Info(owBlkMsg);
             ComponentEnergyManager emKill = GetCompEM();
             if (emKill)
@@ -402,7 +402,7 @@ class LF_TestGenerator : PowerGenerator
         #ifdef SERVER
         if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
         {
-            string soBlkMsg = "[LF_TestGenerator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId;
+            string soBlkMsg = "[LFPG_Generator] OnSwitchOn blocked: invalid SparkPlug id=" + m_DeviceId;
             LFPG_Util.Info(soBlkMsg);
             ComponentEnergyManager emBlock = GetCompEM();
             if (emBlock)
@@ -424,7 +424,7 @@ class LF_TestGenerator : PowerGenerator
         {
             m_SourceOn = false;
             SetSynchDirty();
-            string soffMsg = "[LF_TestGenerator] OnSwitchOff: cleared m_SourceOn id=" + m_DeviceId;
+            string soffMsg = "[LFPG_Generator] OnSwitchOff: cleared m_SourceOn id=" + m_DeviceId;
             LFPG_Util.Info(soffMsg);
             if (m_DeviceId != "")
             {
@@ -484,7 +484,7 @@ class LF_TestGenerator : PowerGenerator
                             scq.CallLater(LFPG_RetryCompEM, retryDelay, retryRepeat);
                         }
 
-                        string retryMsg = "[LF_TestGenerator] CompEM SwitchOn failed on client, retry scheduled #";
+                        string retryMsg = "[LFPG_Generator] CompEM SwitchOn failed on client, retry scheduled #";
                         retryMsg = retryMsg + m_LFPG_CompEMRetries.ToString();
                         retryMsg = retryMsg + " id=" + m_DeviceId;
                         LFPG_Util.Info(retryMsg);
@@ -558,7 +558,7 @@ class LF_TestGenerator : PowerGenerator
 
         bool didStart = emRetry.IsWorking();
 
-        string retryLog = "[LF_TestGenerator] LFPG_RetryCompEM attempt=";
+        string retryLog = "[LFPG_Generator] LFPG_RetryCompEM attempt=";
         retryLog = retryLog + m_LFPG_CompEMRetries.ToString();
         retryLog = retryLog + " success=" + didStart.ToString();
         retryLog = retryLog + " id=" + m_DeviceId;
@@ -746,7 +746,7 @@ class LF_TestGenerator : PowerGenerator
         {
             m_LoadRatio = ratio;
             SetSynchDirty();
-            string lrMsg = "[LF_TestGenerator] LoadRatio=" + m_LoadRatio.ToString() + " id=" + m_DeviceId;
+            string lrMsg = "[LFPG_Generator] LoadRatio=" + m_LoadRatio.ToString() + " id=" + m_DeviceId;
             LFPG_Util.Debug(lrMsg);
         }
         #endif
@@ -817,7 +817,7 @@ class LF_TestGenerator : PowerGenerator
 
         if (!LFPG_HasPort(wd.m_SourcePort, LFPG_PortDir.OUT))
         {
-            string awMsg = "[LF_TestGenerator] AddWire rejected: invalid port: " + wd.m_SourcePort;
+            string awMsg = "[LFPG_Generator] AddWire rejected: invalid port: " + wd.m_SourcePort;
             LFPG_Util.Warn(awMsg);
             return false;
         }
@@ -936,7 +936,7 @@ class LF_TestGenerator : PowerGenerator
             LFPG_Util.Error(slErrJson);
             return false;
         }
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LF_TestGenerator");
+        LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_Generator");
 
         return true;
     }
@@ -963,7 +963,7 @@ class LF_TestGenerator : PowerGenerator
         {
             if (!LFPG_DeviceLifecycle.IsSparkPlugValid(this))
             {
-                string togBlk = "[LF_TestGenerator] Toggle ON blocked: invalid SparkPlug id=" + m_DeviceId;
+                string togBlk = "[LFPG_Generator] Toggle ON blocked: invalid SparkPlug id=" + m_DeviceId;
                 LFPG_Util.Info(togBlk);
                 return;
             }

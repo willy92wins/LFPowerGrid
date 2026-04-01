@@ -996,7 +996,7 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (!targetObj)
             return false;
 
-        LF_TestGenerator gen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator gen = LFPG_Generator.Cast(targetObj);
         if (!gen)
             return false;
 
@@ -1068,7 +1068,7 @@ class ActionLFPG_ToggleSource : ActionInteractBase
         if (!targetObj)
             return;
 
-        LF_TestGenerator gen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator gen = LFPG_Generator.Cast(targetObj);
         if (!gen)
             return;
 

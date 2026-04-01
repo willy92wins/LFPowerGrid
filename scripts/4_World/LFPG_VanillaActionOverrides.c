@@ -7,7 +7,7 @@
 // (OnExecuteServer routes through LFPG logic).
 //
 // Defense-in-depth: works alongside RemoveAction() calls
-// in LF_TestGenerator.SetActions() and sparkplug validation
+// in LFPG_Generator.SetActions() and sparkplug validation
 // in ActionLFPG_ToggleSource.ActionCondition/OnExecuteServer.
 //
 // IMPORTANT: Do NOT override constructors in modded classes.
@@ -47,11 +47,11 @@ modded class ActionTurnOnPowerGenerator
         // ActionLFPG_ToggleSource handles on/off with sparkplug validation.
         // Use both Cast and IsKindOf for maximum compatibility across
         // DayZ versions where class resolution order may differ.
-        LF_TestGenerator lfpgGen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator lfpgGen = LFPG_Generator.Cast(targetObj);
         if (lfpgGen)
             return false;
 
-        if (targetObj.IsKindOf("LF_TestGenerator"))
+        if (targetObj.IsKindOf("LFPG_Generator"))
             return false;
 
         // All other PowerGenerators: vanilla behavior unchanged
@@ -77,7 +77,7 @@ modded class ActionTurnOnPowerGenerator
             return;
         }
 
-        LF_TestGenerator gen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator gen = LFPG_Generator.Cast(targetObj);
         if (gen)
         {
             Print("[LFPG] Vanilla TurnOn intercepted -- redirecting to LFPG_ToggleSource");
@@ -143,11 +143,11 @@ modded class ActionTurnOffPowerGenerator
             return false;
 
         // v0.7.37: Block vanilla TurnOff for LFPG generators.
-        LF_TestGenerator lfpgGen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator lfpgGen = LFPG_Generator.Cast(targetObj);
         if (lfpgGen)
             return false;
 
-        if (targetObj.IsKindOf("LF_TestGenerator"))
+        if (targetObj.IsKindOf("LFPG_Generator"))
             return false;
 
         // All other PowerGenerators: vanilla behavior unchanged
@@ -173,7 +173,7 @@ modded class ActionTurnOffPowerGenerator
             return;
         }
 
-        LF_TestGenerator gen = LF_TestGenerator.Cast(targetObj);
+        LFPG_Generator gen = LFPG_Generator.Cast(targetObj);
         if (gen)
         {
             Print("[LFPG] Vanilla TurnOff intercepted -- redirecting to LFPG_ToggleSource");

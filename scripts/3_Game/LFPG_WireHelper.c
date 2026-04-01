@@ -2,7 +2,7 @@
 // LF_PowerGrid - Wire ownership helper (v0.7.16, Hotfix)
 //
 // Centralized wire array manipulation. Used by any device
-// that owns wires (LF_TestGenerator, LFPG_Splitter, future).
+// that owns wires (LFPG_Generator, LFPG_Splitter, future).
 //
 // All methods are static and operate on an external array.
 // The calling device handles SetSynchDirty() after mutation.

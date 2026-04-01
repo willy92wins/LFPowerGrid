@@ -3,10 +3,10 @@
 //
 // Centralized static helpers for LFPG device lifecycle events.
 // Replaces duplicated EEKilled/EEDelete/EEItemLocationChanged
-// logic across LF_TestGenerator, LF_TestLamp, and LFPG_Splitter.
+// logic across LFPG_Generator, LF_TestLamp, and LFPG_Splitter.
 //
 // WHY STATIC HELPER INSTEAD OF BASE CLASS:
-//   LF_TestGenerator : PowerGenerator
+//   LFPG_Generator : PowerGenerator
 //   LF_TestLamp      : Spotlight
 //   LFPG_Splitter      : Inventory_Base
 //   Enforce Script has no multiple inheritance, so a common base

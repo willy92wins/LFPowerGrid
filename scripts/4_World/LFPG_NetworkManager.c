@@ -15,7 +15,7 @@
 //   RC-07: m_StartupValidationDone flag — RPCs rejected until initial validation completes
 //
 // Wire storage:
-//   - LFPG sources (LF_TestGenerator): wires stored ON the object
+//   - LFPG sources (LFPG_Generator): wires stored ON the object
 //   - Vanilla sources (PowerGenerator etc): wires stored centrally
 //     in m_VanillaWires keyed by position-based device ID ("vp:TYPE:QX:QY:QZ")
 //
@@ -2473,7 +2473,7 @@ class LFPG_NetworkManager
             // Generator-specific: force source off when physically moved.
             // CutAllWiresFromDevice handles consumers/passthroughs via
             // SetPowered(false), but generators produce (not consume).
-            LF_TestGenerator gen = LF_TestGenerator.Cast(movedDev);
+            LFPG_Generator gen = LFPG_Generator.Cast(movedDev);
             if (gen && gen.LFPG_GetSwitchState())
             {
                 gen.LFPG_ToggleSource();
