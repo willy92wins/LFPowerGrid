@@ -261,7 +261,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // ============================================
     protected vector LFPG_GetSmokePosition()
     {
-        string pos = "0.1 0.4 0.1";
+        string pos = "0.1 1.4 -0.1";
         return pos.ToVector();
     }
 

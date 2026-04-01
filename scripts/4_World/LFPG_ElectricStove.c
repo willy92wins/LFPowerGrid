@@ -47,6 +47,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     static const float  STOVE_CONSUMPTION_PER_BURNER = 10.0;
     static const float  STOVE_COOKING_TARGET_TEMP   = 400.0;
     static const float  STOVE_COOKING_TIME_COEF     = 0.5;
+    static const float  STOVE_HEAT_MULTIPLIER       = 2.0;  // x2 faster than gas stove (helps cold maps)
 
     // ---- Rvmat paths (assigned to local vars before use) ----
     static const string RVMAT_BURNER_ON  = "\LFPowerGrid\data\electric_stove\electric_stove_burner_on.rvmat";
@@ -294,7 +295,8 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         if (diff > 0)
         {
             float heatPermCoef = cookware.GetHeatPermeabilityCoef();
-            cookware.SetTemperatureEx(new TemperatureDataInterpolated(targetTemp, ETemperatureAccessTypes.ACCESS_FIREPLACE, deltaTime, GameConstants.TEMP_COEF_GAS_STOVE, heatPermCoef));
+            float heatCoef = GameConstants.TEMP_COEF_GAS_STOVE * STOVE_HEAT_MULTIPLIER;
+            cookware.SetTemperatureEx(new TemperatureDataInterpolated(targetTemp, ETemperatureAccessTypes.ACCESS_FIREPLACE, deltaTime, heatCoef, heatPermCoef));
         }
         #endif
     }
