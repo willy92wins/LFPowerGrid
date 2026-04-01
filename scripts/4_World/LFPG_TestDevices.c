@@ -1,9 +1,18 @@
 // =========================================================
-// LF_PowerGrid - Example devices (v0.7.47)
+// LF_PowerGrid - Example devices (v0.9.4)
 // - LFPG_Generator: source (output_1..4) + owns wires + persistence
 // - LF_TestLamp: consumer (input_main) + visible client light
 // - LF_TestLampHeavy: high-consumption consumer for load testing
 //
+// v0.9.4 (JIP Fix): Generator sound/particles after reconnect.
+//          Root cause: EEInit killed CompEM on client, and SwitchOn()
+//          from script cannot restart the C++ energy manager (469 failed
+//          retries confirmed in production logs, 0 successes).
+//          Fix: EEInit SwitchOff is now SERVER-ONLY. Client relies on
+//          engine C++ CompEM replication for correct working state.
+//          OnVariablesSynchronized simplified: only SwitchOff path kept.
+//          Entire retry mechanism removed (~80 lines, eliminates ~1200
+//          spam log lines per JIP session). No save wipe needed.
 // v0.7.14: Generator LFPG_GetSourceOn uses m_SourceOn only.
 // v0.7.23: SparkPlug validation on toggle, EEInit sync.
 // v0.7.25: Remove vanilla actions, lower movement threshold.
@@ -74,15 +83,10 @@ class LFPG_Generator : PowerGenerator
     // for a device leaving the network bubble after EEDelete has started.
     protected bool m_LFPG_Deleting = false;
 
-    // v0.9.1 (H3 JIP Fix): CompEM retry counter for client-side recovery.
-    // When OnVarSync tries SwitchOn but CompEM fails (fuel/sparkplug not
-    // yet synced), we schedule retries up to LFPG_COMPEM_RETRY_MAX times.
-    protected int m_LFPG_CompEMRetries = 0;
-    // v0.9.3 (Audit): Increased from 3/1500 to 8/2000.
-    // On loaded servers, sparkplug/fuel attachment replication to client
-    // can take >5s. Previous 4.5s window was insufficient.
-    static const int LFPG_COMPEM_RETRY_MAX = 8;
-    static const int LFPG_COMPEM_RETRY_MS = 2000;
+    // v0.9.4: CompEM retry mechanism REMOVED.
+    // Client-side SwitchOn() from script cannot restart the C++ energy
+    // manager — the retry loop ran 469+ times with 0 successes.
+    // Fix: EEInit no longer kills CompEM on client (see EEInit comment).
 
     // v0.7.30: Per-device position polling removed.
     // Movement detection is now centralized in NetworkManager.CheckDeviceMovement()
@@ -138,17 +142,21 @@ class LFPG_Generator : PowerGenerator
     {
         super.EEInit();
 
-        // v0.7.29 (Audit fix): Force vanilla CompEM off on BOTH client+server.
-        // PowerGenerator.EEInit() may start CompEM via internal C++ paths
-        // that bypass script hooks (OnWorkStart, OnSwitchOn, CanTurnOn).
-        // We kill it here unconditionally, then re-enable below ONLY if
-        // LFPG validation passes. This closes the timing window where
-        // CompEM is "working" without sparkplug on the client side.
+        // v0.9.4 (JIP Fix): SwitchOff moved to SERVER-ONLY.
+        // Previous v0.7.29 killed CompEM on BOTH sides, but client-side
+        // SwitchOn() from script cannot restart the C++ energy manager
+        // after EEInit kills it — confirmed by 469 failed retry attempts
+        // in production logs. On the client, the engine's C++ CompEM
+        // replication delivers the correct working state from the server.
+        // Killing it here on client permanently breaks sound/particles
+        // with no script-level recovery path.
+        #ifdef SERVER
         ComponentEnergyManager emKillVanilla = GetCompEM();
         if (emKillVanilla)
         {
             emKillVanilla.SwitchOff();
         }
+        #endif
 
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
@@ -206,14 +214,6 @@ class LFPG_Generator : PowerGenerator
         // v0.7.38 (RC-04): Set deletion flag BEFORE unregistration.
         // Prevents OnVariablesSynchronized from re-registering a dying device.
         m_LFPG_Deleting = true;
-
-        // v0.9.1 (H3): Cancel any pending CompEM retry to prevent
-        // post-mortem SwitchOn on a deleted entity.
-        ScriptCallQueue scqDel = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
-        if (scqDel)
-        {
-            scqDel.Remove(LFPG_RetryCompEM);
-        }
 
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
         super.EEDelete(parent);
@@ -440,66 +440,22 @@ class LFPG_Generator : PowerGenerator
         LFPG_TryRegister();
 
         #ifndef SERVER
-        // v0.7.47 (Desync Fix P0+P5): Reconcile CompEM with m_SourceOn on client.
-        // Analogous to LF_TestLamp reconciling light with m_PoweredNet.
-        // Without this, CompEM stays dead after EEInit kills it (EEInit does
-        // SwitchOff on both sides but SwitchOn only on server). This is the
-        // single recovery path for all client-side CompEM desync scenarios.
-        //
-        // v0.9.1 (H3 JIP Fix): If SwitchOn fails silently (fuel/sparkplug
-        // not yet synced to client), schedule a deferred retry via CallLater.
-        // Without retry, CompEM stays dead permanently when no further
-        // SyncVar updates arrive. Max LFPG_COMPEM_RETRY_MAX attempts.
+        // v0.9.4 (JIP Fix): Client CompEM reconciliation SIMPLIFIED.
+        // Previous approach tried SwitchOn() from script when m_SourceOn=true
+        // but CompEM wasn't working. This NEVER succeeds — the C++ energy
+        // manager cannot be restarted from script after EEInit kills it.
+        // Fix: EEInit no longer kills CompEM on client (server-only now).
+        // The engine's C++ CompEM replication delivers the correct state.
+        // We only need the SwitchOff path here (which DOES work from script).
         if (!m_LFPG_Deleting)
         {
             ComponentEnergyManager emSync = GetCompEM();
             if (emSync)
             {
                 bool emWorking = emSync.IsWorking();
-                if (m_SourceOn && !emWorking)
-                {
-                    // v0.9.3 (Audit Fix #1): Reset retry counter on every OnVarSync
-                    // that detects desync. Each SyncVar update is a signal that server
-                    // state has progressed — attachments (sparkplug/fuel) may have
-                    // replicated since the last failed attempt. Without this reset,
-                    // once LFPG_COMPEM_RETRY_MAX is reached the only recovery path
-                    // is another OnVarSync where SwitchOn succeeds on the first try.
-                    // With the reset, every OnVarSync gets a fresh batch of retries.
-                    m_LFPG_CompEMRetries = 0;
-
-                    emSync.SwitchOn();
-
-                    // v0.9.1 (H3): Check if SwitchOn actually succeeded.
-                    // C++ CompEM may reject SwitchOn if fuel or sparkplug
-                    // haven't replicated to this client yet.
-                    bool didStart = emSync.IsWorking();
-                    if (!didStart && m_LFPG_CompEMRetries < LFPG_COMPEM_RETRY_MAX)
-                    {
-                        ScriptCallQueue scq = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
-                        if (scq)
-                        {
-                            scq.Remove(LFPG_RetryCompEM);
-                            int retryDelay = LFPG_COMPEM_RETRY_MS;
-                            bool retryRepeat = false;
-                            scq.CallLater(LFPG_RetryCompEM, retryDelay, retryRepeat);
-                        }
-
-                        string retryMsg = "[LFPG_Generator] CompEM SwitchOn failed on client, retry scheduled #";
-                        retryMsg = retryMsg + m_LFPG_CompEMRetries.ToString();
-                        retryMsg = retryMsg + " id=" + m_DeviceId;
-                        LFPG_Util.Info(retryMsg);
-                    }
-                }
-                else if (!m_SourceOn && emWorking)
+                if (!m_SourceOn && emWorking)
                 {
                     emSync.SwitchOff();
-                }
-
-                // v0.9.1 (H3): Reset retry counter on successful sync
-                // (either CompEM started, or source is off — both are resolved states).
-                if (!m_SourceOn || emSync.IsWorking())
-                {
-                    m_LFPG_CompEMRetries = 0;
                 }
             }
         }
@@ -526,59 +482,6 @@ class LFPG_Generator : PowerGenerator
             }
         }
         #endif
-    }
-
-    // v0.9.1 (H3 JIP Fix): Deferred CompEM recovery for client-side JIP.
-    // Called via CallLater when OnVarSync's SwitchOn() fails because
-    // fuel/sparkplug replication has not completed yet.
-    // Runs on client only (the CallLater is scheduled inside #ifndef SERVER).
-    // Retry count is bounded by LFPG_COMPEM_RETRY_MAX to prevent infinite loops.
-    void LFPG_RetryCompEM()
-    {
-        if (m_LFPG_Deleting)
-            return;
-
-        if (!m_SourceOn)
-            return;
-
-        ComponentEnergyManager emRetry = GetCompEM();
-        if (!emRetry)
-            return;
-
-        bool isWorking = emRetry.IsWorking();
-        if (isWorking)
-        {
-            // CompEM recovered on its own (another OnVarSync or C++ path).
-            m_LFPG_CompEMRetries = 0;
-            return;
-        }
-
-        m_LFPG_CompEMRetries = m_LFPG_CompEMRetries + 1;
-        emRetry.SwitchOn();
-
-        bool didStart = emRetry.IsWorking();
-
-        string retryLog = "[LFPG_Generator] LFPG_RetryCompEM attempt=";
-        retryLog = retryLog + m_LFPG_CompEMRetries.ToString();
-        retryLog = retryLog + " success=" + didStart.ToString();
-        retryLog = retryLog + " id=" + m_DeviceId;
-        LFPG_Util.Info(retryLog);
-
-        if (!didStart && m_LFPG_CompEMRetries < LFPG_COMPEM_RETRY_MAX)
-        {
-            // Schedule another retry
-            ScriptCallQueue scq = GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM);
-            if (scq)
-            {
-                int retryDelay = LFPG_COMPEM_RETRY_MS;
-                bool retryRepeat = false;
-                scq.CallLater(LFPG_RetryCompEM, retryDelay, retryRepeat);
-            }
-        }
-        else if (didStart)
-        {
-            m_LFPG_CompEMRetries = 0;
-        }
     }
 
     protected void LFPG_UpdateDeviceIdString()
