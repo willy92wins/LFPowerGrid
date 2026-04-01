@@ -793,11 +793,11 @@ class CfgVehicles
     // =========================================================
     // v0.8.0: MODDED VANILLA ITEMS (additive, not destructive)
     // =========================================================
-    class MetalPlate
+    class MetalPlate : Inventory_Base
     {
         inventorySlot[] += {"LFPG_SolarPlate", "LFPG_PumpPlate"};
     };
-    class Nail
+    class Nail : Inventory_Base
     {
         inventorySlot[] += {"LFPG_SolarNails", "LFPG_PumpNails"};
     };
