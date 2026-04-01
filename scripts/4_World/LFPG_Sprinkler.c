@@ -22,8 +22,9 @@
 //   - Phase C: PlayerBase within radius → wet attachments + cargo
 //   - Uses pre-allocated m_ arrays (no alloc in tick)
 //
-// Particle: PENDING — needs custom sprinkler_spray.ptc.
-//   No vanilla looping water particle exists.
+// Particle: Custom lfpg_sprinkler_spray.ptc (2 emitters: spray cone + drops).
+//   Toggled in LFPG_OnVarSync via Pattern A helpers (ParticleManager).
+//   Cleanup in LFPG_CleanupClientFX (killed/deleted).
 // =========================================================
 
 // ---------------------------------------------------------
@@ -56,8 +57,9 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     protected ref array<Object>    m_WaterNearby;
     protected ref array<CargoBase> m_WaterCargos;
 
-    // ---- Client: sound ----
+    // ---- Client: sound + particle ----
     protected EffectSound m_LoopSound;
+    protected Particle m_SprayEffect;
 
     void LFPG_Sprinkler()
     {
@@ -244,7 +246,45 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     }
 
     // =========================================================
-    // VarSync: sound toggle (CLIENT)
+    // Particle helpers (Pattern A — FireplaceBase style)
+    // =========================================================
+    protected bool LFPG_PlayParticle(out Particle particle, int particleType, vector localPos)
+    {
+        if (particle)
+            return false;
+
+        if (GetGame().IsDedicatedServer())
+            return false;
+
+        ParticleManager pm = ParticleManager.GetInstance();
+        if (!pm)
+            return false;
+
+        particle = pm.PlayOnObject(particleType, this, localPos);
+        return true;
+    }
+
+    protected bool LFPG_StopParticle(out Particle particle)
+    {
+        if (!particle)
+            return false;
+
+        if (GetGame().IsDedicatedServer())
+            return false;
+
+        particle.Stop();
+        particle = null;
+        return true;
+    }
+
+    protected vector LFPG_GetSprayPosition()
+    {
+        string pos = "0 0.15 0";
+        return pos.ToVector();
+    }
+
+    // =========================================================
+    // VarSync: sound + particle toggle (CLIENT)
     // =========================================================
     override void LFPG_OnVarSync()
     {
@@ -264,7 +304,17 @@ class LFPG_Sprinkler : LFPG_DeviceBase
             m_LoopSound.SoundStop();
             m_LoopSound = null;
         }
-        // TODO: custom sprinkler_spray.ptc particle toggle here
+        // ---- Particle toggle ----
+        if (m_SprinklerActive && !m_SprayEffect)
+        {
+            int sprayId = ParticleList.LFPG_SPRINKLER_SPRAY;
+            vector sprayPos = LFPG_GetSprayPosition();
+            LFPG_PlayParticle(m_SprayEffect, sprayId, sprayPos);
+        }
+        if (!m_SprinklerActive && m_SprayEffect)
+        {
+            LFPG_StopParticle(m_SprayEffect);
+        }
         #endif
     }
 
@@ -492,6 +542,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     // ---- Client FX cleanup ----
     protected void LFPG_CleanupClientFX()
     {
+        LFPG_StopParticle(m_SprayEffect);
         if (m_LoopSound)
         {
             m_LoopSound.SoundStop();

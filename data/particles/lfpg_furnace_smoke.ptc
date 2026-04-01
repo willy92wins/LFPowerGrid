@@ -1,0 +1,40 @@
+EffectDef {
+ Emitors {
+  EmitorDef furnace_smoke {
+   ShapeType Box
+   ShapeSize 0.2 0 0.2
+   MaxNum 30
+   BirthRate 15
+   BirthRateRND 3
+   Angles 0 0 75
+   Offset 0.1 0.4 0.1
+   Material "{008E25684854DAB8}Graphics/Particles/materials/smoke/steam_small_cook_01.emat"
+   SizeMultiplier 2.2
+   SizeRND 0.4
+   RandomRotDir 1
+   RotMultiplier 35
+   Velocity 2.2
+   VelocityRND 0.4
+   AirResistance 0.5
+   AirResistanceRND 0.2
+   Wind 0.8
+   AnimFPS 30
+   LifeTime 1.2
+   LifeTimeRND 0.8
+   Color {
+    0 0.15 0.14 0.13 0.5 0.10 0.09 0.08 1 0.04 0.03 0.03
+   }
+   Alpha {
+    0 0 0.08 0.25 0.7 0.15 1 0
+   }
+   RotationSpeed {
+    0 0 1 1
+   }
+   Size {
+    0 0.15 0.4 0.5 1 1
+   }
+   EffectTime 1
+   Repeat 1
+  }
+ }
+}

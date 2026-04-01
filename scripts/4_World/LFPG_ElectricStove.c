@@ -337,13 +337,18 @@ class LFPG_ElectricStove : LFPG_DeviceBase
 
     protected int LFPG_SlotNameToIndex(string slotName)
     {
-        if (slotName == "DirectCookingA")
+        // v1.0.1: Case-insensitive comparison. Some DayZ versions
+        // normalize slot names to lowercase in EEItemAttached/Detached.
+        // Same pattern as v0.7.28 sparkplug fix in LF_TestGenerator.
+        string slotLower = slotName;
+        slotLower.ToLower();
+        if (slotLower == "directcookinga")
             return 0;
-        if (slotName == "DirectCookingB")
+        if (slotLower == "directcookingb")
             return 1;
-        if (slotName == "DirectCookingC")
+        if (slotLower == "directcookingc")
             return 2;
-        if (slotName == "DirectCookingD")
+        if (slotLower == "directcookingd")
             return 3;
         return -1;
     }

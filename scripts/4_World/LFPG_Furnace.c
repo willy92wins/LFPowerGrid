@@ -27,6 +27,17 @@ class LFPG_Furnace_Kit : LFPG_KitBaseDeployable
 };
 
 // ---------------------------------------------------------
+// EFFECT: Furnace smoke (EffectParticle subclass for SEffectManager)
+// ---------------------------------------------------------
+class EffLFPGFurnaceSmoke : EffectParticle
+{
+    void EffLFPGFurnaceSmoke()
+    {
+        SetParticleID(ParticleList.LFPG_FURNACE_SMOKE);
+    }
+};
+
+// ---------------------------------------------------------
 // DEVICE — SOURCE : LFPG_WireOwnerBase
 // 1 OUT (output_1), 50 u/s while burning
 // ---------------------------------------------------------
@@ -43,8 +54,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // BurnTick checks: if now < m_BurnNextMs, skip.
     protected int m_BurnNextMs = 0;
 
-    // ---- Client sound ----
+    // ---- Client: sound + particle ----
     protected EffectSound m_FurnaceLoopSound;
+    protected ref Effect m_SmokeEffect;
 
     // ============================================
     // Constructor — port + SyncVars
@@ -220,11 +232,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         }
         #endif
 
-        if (m_FurnaceLoopSound)
-        {
-            m_FurnaceLoopSound.SoundStop();
-            m_FurnaceLoopSound = null;
-        }
+        LFPG_CleanupClientFX();
     }
 
     override void LFPG_OnDeleted()
@@ -233,11 +241,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         LFPG_NetworkManager.Get().UnregisterFurnace(this);
         #endif
 
-        if (m_FurnaceLoopSound)
-        {
-            m_FurnaceLoopSound.SoundStop();
-            m_FurnaceLoopSound = null;
-        }
+        LFPG_CleanupClientFX();
     }
 
     override void LFPG_OnWiresCut()
@@ -253,11 +257,48 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // VarSync: loop sound (client-side)
+    // Smoke position (relative to model)
+    // ============================================
+    protected vector LFPG_GetSmokePosition()
+    {
+        string pos = "0.1 0.4 0.1";
+        return pos.ToVector();
+    }
+
+    protected vector LFPG_GetSmokeOrientation()
+    {
+        string ori = "0 0 0";
+        return ori.ToVector();
+    }
+
+    // ============================================
+    // Client FX cleanup (sound + smoke)
+    // ============================================
+    protected void LFPG_CleanupClientFX()
+    {
+        SEffectManager.DestroyEffect(m_SmokeEffect);
+        if (m_FurnaceLoopSound)
+        {
+            m_FurnaceLoopSound.SoundStop();
+            m_FurnaceLoopSound = null;
+        }
+    }
+
+    // ============================================
+    // Destructor — safety net for SEffectManager
+    // ============================================
+    void ~LFPG_Furnace()
+    {
+        SEffectManager.DestroyEffect(m_SmokeEffect);
+    }
+
+    // ============================================
+    // VarSync: loop sound + smoke particle (client-side)
     // ============================================
     override void LFPG_OnVarSyncDevice()
     {
         #ifndef SERVER
+        // ---- Sound toggle ----
         if (m_SourceOn && !m_FurnaceLoopSound)
         {
             string soundSet = LFPG_FURNACE_LOOP_SOUNDSET;
@@ -272,6 +313,20 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         {
             m_FurnaceLoopSound.SoundStop();
             m_FurnaceLoopSound = null;
+        }
+
+        // ---- Smoke toggle ----
+        if (m_SourceOn && !m_SmokeEffect)
+        {
+            m_SmokeEffect = new EffLFPGFurnaceSmoke();
+            vector smokePos = LFPG_GetSmokePosition();
+            vector smokeOri = LFPG_GetSmokeOrientation();
+            SEffectManager.PlayOnObject(m_SmokeEffect, this, smokePos, smokeOri);
+        }
+
+        if (!m_SourceOn && m_SmokeEffect)
+        {
+            SEffectManager.DestroyEffect(m_SmokeEffect);
         }
         #endif
     }
