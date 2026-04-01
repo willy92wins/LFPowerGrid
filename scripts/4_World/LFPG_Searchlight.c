@@ -368,7 +368,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         vector entOri = Vector(modelYaw, 0, 0);
         SetOrientation(entOri);
 
-        float pitchPhase = 0.5 - (m_AimPitch / 180.0);
+        float pitchPhase = 0.5 + (m_AimPitch / 180.0);
         string animName = "light_main";
         SetAnimationPhase(animName, pitchPhase);
 
@@ -479,7 +479,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         vector entOri = Vector(modelYaw, 0, 0);
         SetOrientation(entOri);
 
-        float pitchPhase = 0.5 - (pitch / 180.0);
+        float pitchPhase = 0.5 + (pitch / 180.0);
         string animName = "light_main";
         SetAnimationPhase(animName, pitchPhase);
 

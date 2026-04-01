@@ -4895,7 +4895,8 @@ class LFPG_NetworkManager
         int totalBat = m_RegisteredBatteries.Count();
         int totalFri = m_RegisteredFridges.Count();
         int totalStv = m_RegisteredStoves.Count();
-        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv;
+        int totalSpr = m_RegisteredSprinklers.Count();
+        int totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv + totalSpr;
         if (totalSimple == 0)
             return;
 
@@ -5009,6 +5010,28 @@ class LFPG_NetworkManager
                     continue;
 
                 stove.LFPG_TickCooking(stoveDelta);
+            }
+        }
+
+        // --- Sprinklers: every 10th tick, offset 8 (tick 8) = ~10s ---
+        if (m_SimpleTickCounter == 8 && totalSpr > 0)
+        {
+            int spi;
+            LFPG_Sprinkler spr;
+
+            for (spi = 0; spi < totalSpr; spi = spi + 1)
+            {
+                if (spi >= m_RegisteredSprinklers.Count())
+                    break;
+
+                spr = m_RegisteredSprinklers[spi];
+                if (!spr)
+                    continue;
+
+                if (!spr.LFPG_GetSprinklerActive())
+                    continue;
+
+                spr.LFPG_TickWatering();
             }
         }
         #endif
