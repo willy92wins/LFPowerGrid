@@ -2452,13 +2452,13 @@ class CfgVehicles
 };
 
 // =========================================================
-// v2.2: Proxy definitions for BatteryAdapter attachments
-// Allows CarBattery / TruckBattery to render visually on the adapter.
+// v2.3: Proxy definitions for BatteryAdapter + Electric Stove DirectCookingD
+// Class naming: Proxy + model filename (vanilla convention).
 // =========================================================
 class CfgNonAIVehicles
 {
     class ProxyAttachment;
-    class ProxyLFPG_BatterySlot : ProxyAttachment
+    class Proxyproxy_battery : ProxyAttachment
     {
         scope = 2;
         inventorySlot[] = {"CarBattery", "TruckBattery"};
@@ -2470,5 +2470,13 @@ class CfgNonAIVehicles
         model = "\LFPowerGrid\data\battery_adapter\proxy_battery.p3d";
         simulation = "interiortarget";
         autocenter = 0;
+    };
+
+    // v1.0.1: DirectCookingD proxy (vanilla only defines A/B/C)
+    class Proxyproxy_direct_cooking_d : ProxyAttachment
+    {
+        scope = 2;
+        inventorySlot[] = {"DirectCookingD"};
+        model = "\LFPowerGrid\data\electric_stove\proxy_direct_cooking_d.p3d";
     };
 };
