@@ -290,7 +290,9 @@ enum LFPG_RPC_SubId
     BTC_TX_RESULT          = 46,
     BTC_PRICE_UNAVAILABLE  = 47,
     BTC_WITHDRAW_CASH      = 48,
-    BTC_DEPOSIT_CASH       = 49
+    BTC_DEPOSIT_CASH       = 49,
+    // ---- Server settings sync (v4.5) ----
+    SYNC_SERVER_SETTINGS   = 50   // Server→Client: send config flags on JIP
 };
 
 // ---- Sorter tick constants (Sprint S3) ----
@@ -527,6 +529,11 @@ static const float LFPG_CABLE_WIDTH          = 2.0;    // base cable line width 
 static const float LFPG_DEPTH_WIDTH_MIN      = 1.0;    // min depth-scaled width
 static const float LFPG_DEPTH_WIDTH_MAX      = 4.0;    // max depth-scaled width
 static const float LFPG_DEPTH_WIDTH_REF      = 20.0;   // reference distance for depth scaling
+
+// v4.5: Width multiplier when player is NOT holding CableReel or Pliers.
+// Cables are drawn thinner so they're less intrusive during normal gameplay.
+// 0.5 = half width. Applied to both regular and ultra-LOD paths.
+static const float LFPG_NO_REEL_WIDTH_MULT   = 0.5;
 
 // ---- Cable shadow ----
 static const int   LFPG_SHADOW_COLOR         = 0x40000000;  // semi-transparent black

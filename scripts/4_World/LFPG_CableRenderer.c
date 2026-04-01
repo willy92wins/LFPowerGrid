@@ -666,6 +666,15 @@ class LFPG_CableRenderer
     // when entering a large base with many devices.
     protected static ref map<string, float> s_DeviceSyncCooldowns;
 
+    // v4.5: Server setting synced via RPC on JIP.
+    // When true, cables are hidden unless player holds CableReel or Pliers.
+    protected static bool s_ServerHideCablesNoReel = false;
+
+    static void SetServerHideCablesNoReel(bool val)
+    {
+        s_ServerHideCablesNoReel = val;
+    }
+
     protected ref map<string, ref LFPG_OwnerWireState> m_ByOwnerId;
 
     // Wire segment info (key = "ownerId|wireIdx")
@@ -822,6 +831,10 @@ class LFPG_CableRenderer
         // v0.7.36 (M3): Clear static cooldown map to prevent stale
         // throttle entries from a previous server session.
         s_DeviceSyncCooldowns = null;
+
+        // v4.5: Reset server settings flag to default (visible).
+        // Prevents carry-over from previous server session.
+        s_ServerHideCablesNoReel = false;
 
         if (s_Instance)
         {
@@ -2200,6 +2213,22 @@ class LFPG_CableRenderer
             }
         }
 
+        // v4.5: Server option to hide cables entirely without tools.
+        // s_ServerHideCablesNoReel is set via RPC on JIP (SYNC_SERVER_SETTINGS).
+        // Check once per frame. Early return skips all drawing but
+        // camera state is still updated above (m_LastCamPos/Dir).
+        if (!showStateColors && s_ServerHideCablesNoReel)
+        {
+            return;
+        }
+
+        // v4.5: Width multiplier for no-reel mode (pre-computed once per frame).
+        float noReelMult = 1.0;
+        if (!showStateColors)
+        {
+            noReelMult = LFPG_NO_REEL_WIDTH_MULT;
+        }
+
         // v0.7.9: wrap to prevent unbounded growth in long sessions
         m_OccStaggerIdx = (m_OccStaggerIdx + 1) % 3;
         int wireCount = m_WireSegments.Count();
@@ -2574,6 +2603,9 @@ class LFPG_CableRenderer
             // ================================================
             if (lodTier == 2)
             {
+                // v4.5: Pre-compute ultra-LOD width with no-reel multiplier.
+                float ulWidthBase = LFPG_DEPTH_WIDTH_MIN * noReelMult;
+
                 vector ulA = GetGame().GetScreenPos(wsi.cachedPosA);
                 vector ulB = GetGame().GetScreenPos(wsi.cachedPosB);
 
@@ -2700,15 +2732,15 @@ class LFPG_CableRenderer
                             float uld1 = (ulPcX1 - ulx1) * (ulPcX1 - ulx1) + (ulPcY1 - uly1) * (ulPcY1 - uly1);
                             if (uld1 > 1.0)
                             {
-                                hud.DrawLineScreen(ulx1, uly1, ulPcX1, ulPcY1, LFPG_DEPTH_WIDTH_MIN, ulDraw);
+                                hud.DrawLineScreen(ulx1, uly1, ulPcX1, ulPcY1, ulWidthBase, ulDraw);
                             }
                             // Tramo 2: Pin → Pout (faded behind player)
-                            hud.DrawLineScreen(ulPcX1, ulPcY1, ulPcX2, ulPcY2, LFPG_DEPTH_WIDTH_MIN, ulPlDraw);
+                            hud.DrawLineScreen(ulPcX1, ulPcY1, ulPcX2, ulPcY2, ulWidthBase, ulPlDraw);
                             // Tramo 3: Pout → B (opaque, skip if degenerate)
                             float uld3 = (ulx2 - ulPcX2) * (ulx2 - ulPcX2) + (uly2 - ulPcY2) * (uly2 - ulPcY2);
                             if (uld3 > 1.0)
                             {
-                                hud.DrawLineScreen(ulPcX2, ulPcY2, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, ulDraw);
+                                hud.DrawLineScreen(ulPcX2, ulPcY2, ulx2, uly2, ulWidthBase, ulDraw);
                             }
 
                             tRnd.m_WiresDrawn = tRnd.m_WiresDrawn + 1;
@@ -2717,7 +2749,7 @@ class LFPG_CableRenderer
                         }
                     }
                 }
-                hud.DrawLineScreen(ulx1, uly1, ulx2, uly2, LFPG_DEPTH_WIDTH_MIN, ulDraw);
+                hud.DrawLineScreen(ulx1, uly1, ulx2, uly2, ulWidthBase, ulDraw);
 
                 tRnd.m_WiresDrawn = tRnd.m_WiresDrawn + 1;
                 tRnd.m_SegmentsDrawn = tRnd.m_SegmentsDrawn + 1;
@@ -2937,6 +2969,9 @@ class LFPG_CableRenderer
                         depthWidth = LFPG_DEPTH_WIDTH_MAX;
                     }
                 }
+
+                // v4.5: Thinner cables when not holding tools.
+                depthWidth = depthWidth * noReelMult;
 
                 // ---- v0.7.38: Per-segment player negative clipping ----
                 // ClipSegToScreen returns the portion INSIDE the player rect.

@@ -237,7 +237,26 @@ modded class PlayerBase
         {
             HandleLFPG_BTCPriceUnavailable();
         }
+        else if (subId == LFPG_RPC_SubId.SYNC_SERVER_SETTINGS)
+        {
+            HandleLFPG_SyncServerSettings(ctx);
+        }
         #endif
+    }
+
+    // =====================================
+    // CLIENT: receive server config flags
+    // =====================================
+    protected void HandleLFPG_SyncServerSettings(ParamsReadContext ctx)
+    {
+        bool hideFlag = false;
+        if (!ctx.Read(hideFlag)) return;
+
+        LFPG_CableRenderer.SetServerHideCablesNoReel(hideFlag);
+
+        string logMsg = "[LFPG] Server settings received: HideCablesWithoutReel=";
+        logMsg = logMsg + hideFlag.ToString();
+        Print(logMsg);
     }
 
     // =====================================
@@ -1922,6 +1941,33 @@ modded class PlayerBase
         LFPG_Util.Info("FullSync requested by pid=" + sender.GetPlainId());
         PlayerBase player = this;
         LFPG_NetworkManager.Get().SendFullSyncTo(player);
+
+        // v4.5: Send server settings to client after FullSync.
+        LFPG_SendServerSettingsTo(player);
+    }
+
+    // =====================================
+    // SERVER: send server config flags to client
+    // =====================================
+    static void LFPG_SendServerSettingsTo(PlayerBase target)
+    {
+        if (!target) return;
+
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        bool hideFlag = false;
+        if (st)
+        {
+            hideFlag = st.HideCablesWithoutReel;
+        }
+
+        ScriptRPC rpc = new ScriptRPC();
+        rpc.Write((int)LFPG_RPC_SubId.SYNC_SERVER_SETTINGS);
+        rpc.Write(hideFlag);
+        rpc.Send(target, LFPG_RPC_CHANNEL, true, null);
+
+        string logMsg = "[LFPG] Sent server settings: HideCablesWithoutReel=";
+        logMsg = logMsg + hideFlag.ToString();
+        LFPG_Util.Debug(logMsg);
     }
 
     // =====================================

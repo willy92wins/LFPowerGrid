@@ -35,6 +35,11 @@ class LFPG_ServerSettings
     // Doubles I/O on save but catches rare write corruption.
     // Set to false if you notice save lag with very large wire files (>5MB).
     bool AtomicVerifyReadback = true;
+
+    // v4.5: When true, cables are completely hidden unless the player
+    // holds a CableReel or Pliers in hand. Sent to clients on JIP.
+    // Default false: cables always visible (grey when no tools).
+    bool HideCablesWithoutReel = false;
 };
 
 // ---- Validation bounds (v0.7.35, Gemini 3b) ----
@@ -214,6 +219,7 @@ class LFPG_Settings
                 msg = msg + " RpcCooldownSeconds=" + s_Settings.RpcCooldownSeconds.ToString();
                 msg = msg + " DeviceBubbleM=" + s_Settings.DeviceBubbleM.ToString();
                 msg = msg + " AtomicVerifyReadback=" + s_Settings.AtomicVerifyReadback.ToString();
+                msg = msg + " HideCablesWithoutReel=" + s_Settings.HideCablesWithoutReel.ToString();
                 LFPG_Util.Info(msg);
             }
         }
