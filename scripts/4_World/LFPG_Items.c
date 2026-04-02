@@ -65,6 +65,6 @@ class LFPG_CableReel : CableReel
     override void EEInit()
     {
         super.EEInit();
-        LFPG_Bootstrap.LogOnce("LFPG_CableReel EEInit reached -> script class active");
+        LFPG_Util.LogOnce("LFPG_CableReel EEInit reached -> script class active");
     }
 };

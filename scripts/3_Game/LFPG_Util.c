@@ -29,4 +29,15 @@ class LFPG_Util
             return "";
         return low.ToString() + ":" + high.ToString();
     }
+
+    // Merged from LFPG_Bootstrap.c (Phase B refactor)
+    static bool s_BootstrapLogged;
+
+    static void LogOnce(string msg)
+    {
+        if (s_BootstrapLogged) return;
+        s_BootstrapLogged = true;
+        string fullMsg = LFPG_LOG_PREFIX + msg;
+        Print(fullMsg);
+    }
 };
