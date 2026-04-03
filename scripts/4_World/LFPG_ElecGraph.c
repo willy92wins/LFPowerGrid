@@ -124,17 +124,6 @@ class LFPG_ElecGraph
     // converges while the node is limit-skipped.
     protected ref array<string> m_DeferredRequeue;
 
-    // --- v2.1: Epoch-skip recovery for gate-capable devices ---
-    // When SyncNodeToEntity calls LFPG_SetPowered on a gate-capable device,
-    // the entity may change its gate state and call RequestPropagate, which
-    // re-dirties and re-enqueues the node. But since m_LastEpoch was already
-    // set to m_CurrentEpoch (Step 4), the re-enqueued node hits epoch-skip
-    // and ends up stuck: dirty=true, inQueue=false, never re-processed.
-    // This buffer collects those nodes; after the main loop they are
-    // re-inserted for next-epoch processing. Same pattern as m_DeferredRequeue.
-    // O(K) where K = gate-capable nodes that changed state (typically 0-2).
-    protected ref array<string> m_EpochSkipRecovery;
-
     // --- v0.7.43 (Fix 3): NetworkID backup for entity re-resolution ---
     // When DeviceRegistry ref goes stale (entity streamed/recreated),
     // SyncNodeToEntity can re-resolve via GetObjectByNetworkId.
@@ -182,9 +171,6 @@ class LFPG_ElecGraph
         // v0.8.3: Deferred requeue
         m_DeferredRequeue = new array<string>;
 
-        // v2.1: Epoch-skip recovery
-        m_EpochSkipRecovery = new array<string>;
-
         // v0.7.43 (Fix 3): NetworkID backup maps
         m_NodeNetLow = new map<string, int>;
         m_NodeNetHigh = new map<string, int>;
@@ -224,7 +210,6 @@ class LFPG_ElecGraph
             m_DeferredOrphanCleanup.Clear();
         }
         m_DeferredRequeue.Clear();
-        m_EpochSkipRecovery.Clear();
 
         // Step 1: Iterate all registered devices to create nodes
         ref array<EntityAI> allDevices = new array<EntityAI>;
@@ -1927,17 +1912,6 @@ class LFPG_ElecGraph
                 // even though they are no longer in the queue, permanently blocking
                 // re-enqueue and leaving stale dirty state (zombie node).
                 node.m_InQueue = false;
-                // v2.1: Track nodes re-dirtied by their own SyncNodeToEntity.
-                // Gate-capable devices (LogicGate, MemoryCell, Counter) change
-                // gate state inside LFPG_SetPowered (Step 5) and call
-                // RequestPropagate, which re-sets m_Dirty=true via MarkNodeDirty.
-                // These need re-processing in the next epoch with updated state.
-                // Without recovery, they end up dirty=true + inQueue=false
-                // permanently — the graph never re-evaluates with the new gate.
-                if (node.m_Dirty)
-                {
-                    m_EpochSkipRecovery.Insert(nodeId);
-                }
                 continue;  // Sprint 4.3 fix: processed NOT incremented here
             }
 
@@ -2562,44 +2536,6 @@ class LFPG_ElecGraph
                 }
             }
             m_DeferredRequeue.Clear();
-        }
-
-        // v2.1: Epoch-skip recovery — re-queue nodes that were re-dirtied
-        // by their own SyncNodeToEntity (e.g. gate-capable PASSTHROUGH that
-        // changed gate state inside SetPowered). Without this, these nodes
-        // end up dirty=true, inQueue=false permanently — the graph never
-        // re-evaluates them with the updated gate state.
-        // Same pattern as m_DeferredRequeue. O(K) where K is typically 0-2.
-        if (m_EpochSkipRecovery.Count() > 0)
-        {
-            int esi;
-            int esRecovered = 0;
-            for (esi = 0; esi < m_EpochSkipRecovery.Count(); esi = esi + 1)
-            {
-                string esNodeId = m_EpochSkipRecovery[esi];
-                ref LFPG_ElecNode esNode;
-                if (m_Nodes.Find(esNodeId, esNode) && esNode)
-                {
-                    if (esNode.m_Dirty && !esNode.m_InQueue)
-                    {
-                        esNode.m_InQueue = true;
-                        m_DirtyQueue.Insert(esNodeId);
-                        bool bEsEnq = true;
-                        m_EnqueuedThisEpoch.Set(esNodeId, bEsEnq);
-                        esRecovered = esRecovered + 1;
-                    }
-                }
-            }
-            m_EpochSkipRecovery.Clear();
-
-            if (esRecovered > 0)
-            {
-                string esLog = "[ElecGraph] EpochSkipRecovery: re-queued ";
-                esLog = esLog + esRecovered.ToString();
-                esLog = esLog + " gate-capable nodes, epoch=";
-                esLog = esLog + m_CurrentEpoch.ToString();
-                LFPG_Util.Debug(esLog);
-            }
         }
 
         // H4: Compact the queue only when head passes threshold
@@ -3630,7 +3566,14 @@ class LFPG_ElecGraph
             else if (!enabled && wasEnabled)
             {
                 edge.m_Flags = 0;
-                edge.m_AllocatedPower = 0.0;
+                // v3.1: Do NOT zero m_AllocatedPower here.
+                // All readers (AllocateOutput, IsPortReceivingPower,
+                // ValidateConsumerStates, PDQ input eval) check
+                // LFPG_EDGE_ENABLED before reading allocation.
+                // Zeroing here disrupts the demand signal mid-epoch,
+                // causing upstream reallocation oscillation.
+                // DIRTY_TOPOLOGY + forceDownstream ensures downstream
+                // re-evaluates and sees the disabled edge via flag check.
                 anyChanged = true;
             }
         }

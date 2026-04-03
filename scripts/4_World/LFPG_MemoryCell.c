@@ -1,26 +1,26 @@
 // =========================================================
-// LF_PowerGrid - Memory Cell / SR Latch (v2.1.1 — Cleanup)
+// LF_PowerGrid - Memory Cell / SR Latch (v3.1.0 — Routing fix)
 //
-// LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT. GATE.
+// LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT.
 //   input_0 = power, input_1 = toggle, input_2 = reset, input_3 = set
 //   output_0 = active (Q), output_1 = inverted (!Q)
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
-// v2.1.1: Removed CallLater(LFPG_DeferredRouting) workaround from
-//   SetPowered — now handled by graph-level epoch-skip recovery
-//   (m_EpochSkipRecovery in LFPG_ElecGraph). ApplyRouting still runs
-//   immediately for edge flags; the graph handles re-queueing.
+// v3.1.0: ApplyRouting runs every SetPowered call. Fixes edge
+//   flags for cables connected after init (edges start ENABLED,
+//   routing must re-disable the correct port each pass).
+//   Diagnostic log every SetPowered call for troubleshooting.
 //
-// Persistence: [base: DeviceId + ver + wireJSON] + m_CellActive
+// Persistence: [base: DeviceId + ver + wireJSON] + m_LatchState
 // =========================================================
 
-static const string LFPG_MCELL_RVMAT_OFF    = "\LFPowerGrid\data\button\materials\led_off.rvmat";
-static const string LFPG_MCELL_RVMAT_GREEN   = "\LFPowerGrid\data\button\materials\led_green.rvmat";
-static const string LFPG_MCELL_RVMAT_RED     = "\LFPowerGrid\data\button\materials\led_red.rvmat";
-static const float  LFPG_MCELL_CAPACITY      = 20.0;
+static const string LFPG_MCELL_RVMAT_OFF   = "\LFPowerGrid\data\button\materials\led_off.rvmat";
+static const string LFPG_MCELL_RVMAT_GREEN  = "\LFPowerGrid\data\button\materials\led_green.rvmat";
+static const string LFPG_MCELL_RVMAT_RED    = "\LFPowerGrid\data\button\materials\led_red.rvmat";
+static const float  LFPG_MCELL_CAPACITY     = 20.0;
 
 // ---------------------------------------------------------
-// KIT — unchanged (inherits LFPG_LogicGate_Kit)
+// KIT
 // ---------------------------------------------------------
 class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
 {
@@ -31,7 +31,7 @@ class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
 };
 
 // ---------------------------------------------------------
-// DEVICE: PASSTHROUGH, SR latch with rising edge detection
+// DEVICE: PASSTHROUGH, SR latch + toggle override
 // ---------------------------------------------------------
 class LFPG_MemoryCell : LFPG_WireOwnerBase
 {
@@ -40,11 +40,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected bool m_Overloaded = false;
     protected bool m_CellActive = false;
 
-    // ---- Non-synced edge detection ----
-    protected bool m_PrevToggle = false;
-    protected bool m_PrevReset  = false;
-    protected bool m_PrevSet    = false;
-    protected bool m_RoutingApplied = false;
+    // ---- Server-only: persisted latch ----
+    protected bool m_LatchState = false;
 
     // ---- Client visual cache ----
     protected int m_LastVisualState = -1;
@@ -82,12 +79,14 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     override int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
     override bool LFPG_IsSource() { return true; }
     override bool LFPG_GetSourceOn() { return m_PoweredNet; }
-    override bool LFPG_IsGateCapable() { return true; }
-    override bool LFPG_IsGateOpen() { return m_CellActive; }
+    override bool LFPG_IsGateCapable() { return false; }
     override float LFPG_GetConsumption() { return 0.0; }
     override float LFPG_GetCapacity() { return LFPG_MCELL_CAPACITY; }
     override bool LFPG_IsPowered() { return m_PoweredNet; }
     override bool LFPG_GetOverloaded() { return m_Overloaded; }
+
+    // Public getter for DeviceInspector UI
+    bool LFPG_GetCellActive() { return m_CellActive; }
 
     override void LFPG_SetOverloaded(bool val)
     {
@@ -101,7 +100,15 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // SetPowered — rising edge detection on control inputs
+    // SetPowered — level-sensitive, no edge detection
+    //
+    // Priority: TOGGLE > SET/RESET > latch hold
+    //   TOGGLE energized   -> effective ON (override)
+    //   SET && !RESET       -> latch ON
+    //   RESET && !SET       -> latch OFF
+    //   SET && RESET        -> latch unchanged
+    //   neither             -> latch unchanged
+    //   TOGGLE off          -> effective = latch
     // ============================================
     override void LFPG_SetPowered(bool powered)
     {
@@ -114,76 +121,90 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             changed = true;
         }
 
-        // --- Rising-edge detection on control inputs ---
-        // Priority: Set > Reset > Toggle
+        // --- Read control inputs (level-sensitive) ---
+        bool hasToggle = false;
+        bool hasSet    = false;
+        bool hasReset  = false;
+
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm)
         {
             string portToggle = "input_1";
             string portReset  = "input_2";
             string portSet    = "input_3";
-
-            bool curToggle = nm.IsPortReceivingPower(m_DeviceId, portToggle);
-            bool curReset  = nm.IsPortReceivingPower(m_DeviceId, portReset);
-            bool curSet    = nm.IsPortReceivingPower(m_DeviceId, portSet);
-
-            bool newState = m_CellActive;
-
-            if (curSet && !m_PrevSet)
-            {
-                newState = true;
-            }
-            else if (curReset && !m_PrevReset)
-            {
-                newState = false;
-            }
-            else if (curToggle && !m_PrevToggle)
-            {
-                if (m_CellActive)
-                {
-                    newState = false;
-                }
-                else
-                {
-                    newState = true;
-                }
-            }
-
-            m_PrevToggle = curToggle;
-            m_PrevReset  = curReset;
-            m_PrevSet    = curSet;
-
-            if (newState != m_CellActive)
-            {
-                m_CellActive = newState;
-                changed = true;
-
-                LFPG_ApplyRouting();
-
-                // v2.1.1: The graph-level epoch-skip recovery (m_EpochSkipRecovery
-                // in LFPG_ElecGraph) handles re-queueing this node for next-epoch
-                // processing. ApplyRouting sets edge flags immediately, which calls
-                // SetOutputPortEnabled → MarkNodeDirty → re-dirties the node.
-                // The recovery mechanism detects the epoch-skipped dirty node and
-                // re-enqueues it. No CallLater workaround needed anymore.
-
-                string scLog = "[MemoryCell] State changed: active=";
-                scLog = scLog + m_CellActive.ToString();
-                scLog = scLog + " id=";
-                scLog = scLog + m_DeviceId;
-                LFPG_Util.Info(scLog);
-            }
+            hasToggle = nm.IsPortReceivingPower(m_DeviceId, portToggle);
+            hasReset  = nm.IsPortReceivingPower(m_DeviceId, portReset);
+            hasSet    = nm.IsPortReceivingPower(m_DeviceId, portSet);
         }
 
-        if (!m_RoutingApplied)
+        // --- Update latch from SET/RESET (always, even under TOGGLE) ---
+        if (hasSet && !hasReset)
         {
-            LFPG_ApplyRouting();
+            m_LatchState = true;
+        }
+        else if (hasReset && !hasSet)
+        {
+            m_LatchState = false;
+        }
+        // Both or neither: latch unchanged
+
+        // --- Compute effective state: TOGGLE overrides ---
+        bool newActive = m_LatchState;
+        if (hasToggle)
+        {
+            newActive = true;
+        }
+
+        // --- State change ---
+        bool stateChanged = false;
+        if (m_CellActive != newActive)
+        {
+            m_CellActive = newActive;
+            changed = true;
+            stateChanged = true;
+        }
+
+        // --- ALWAYS re-apply routing ---
+        // Edges start ENABLED when wires are connected. If routing
+        // was applied before the wire existed, the edge bypasses it.
+        // Calling every SetPowered ensures edges match current state.
+        // SetOutputPortEnabled is idempotent (no dirty mark if no change).
+        LFPG_ApplyRouting();
+
+        // If state actually changed, schedule deferred re-propagation
+        // so downstream picks up the new routing in the next epoch.
+        if (stateChanged)
+        {
+            int deferDelay = 50;
+            bool deferRepeat = false;
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, deferDelay, deferRepeat);
         }
 
         if (changed)
         {
             SetSynchDirty();
         }
+
+        // --- Diagnostic log (every call, remove after confirmed working) ---
+        string dLog = "[MemoryCell] SetPowered v3.1: pw=";
+        dLog = dLog + powered.ToString();
+        dLog = dLog + " net=";
+        dLog = dLog + m_PoweredNet.ToString();
+        dLog = dLog + " T=";
+        dLog = dLog + hasToggle.ToString();
+        dLog = dLog + " S=";
+        dLog = dLog + hasSet.ToString();
+        dLog = dLog + " R=";
+        dLog = dLog + hasReset.ToString();
+        dLog = dLog + " latch=";
+        dLog = dLog + m_LatchState.ToString();
+        dLog = dLog + " active=";
+        dLog = dLog + m_CellActive.ToString();
+        dLog = dLog + " chg=";
+        dLog = dLog + stateChanged.ToString();
+        dLog = dLog + " id=";
+        dLog = dLog + m_DeviceId;
+        LFPG_Util.Info(dLog);
         #endif
     }
 
@@ -208,14 +229,6 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         string portOut1 = "output_1";
         graph.SetOutputPortEnabled(m_DeviceId, portOut0, m_CellActive);
         graph.SetOutputPortEnabled(m_DeviceId, portOut1, !m_CellActive);
-
-        m_RoutingApplied = true;
-
-        string rLog = "[MemoryCell] ApplyRouting: active=";
-        rLog = rLog + m_CellActive.ToString();
-        rLog = rLog + " id=";
-        rLog = rLog + m_DeviceId;
-        LFPG_Util.Debug(rLog);
         #endif
     }
 
@@ -235,11 +248,15 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         #endif
     }
 
-    // ---- Init hook: deferred routing after graph edges exist ----
+    // ---- Init: deferred routing after graph edges exist ----
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, 500, false);
+        m_CellActive = m_LatchState;
+
+        int initDelay = 500;
+        bool initRepeat = false;
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, initDelay, initRepeat);
         #endif
 
         LFPG_UpdateVisuals();
@@ -282,8 +299,6 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         //   3 = light_led_input2  (Reset)
         //   4 = light_led_input3  (Set)
 
-        // Encode state as int to avoid redundant SetObjectMaterial calls.
-        // 0 = unpowered, 1 = powered + inactive, 2 = powered + active
         int desiredState = 0;
         if (m_PoweredNet)
         {
@@ -312,10 +327,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             SetObjectMaterial(0, LFPG_MCELL_RVMAT_OFF);
         }
 
-        // LED 1 (Toggle): off — momentary signal, no persistent state
+        // LED 1 (Toggle): off (runtime only, no SyncVar)
         SetObjectMaterial(1, LFPG_MCELL_RVMAT_OFF);
 
-        // LED 2 (Output Q): green = active output, red = powered but inactive
+        // LED 2 (Output Q): green = active, red = powered but inactive
         if (m_PoweredNet && m_CellActive)
         {
             SetObjectMaterial(2, LFPG_MCELL_RVMAT_GREEN);
@@ -329,28 +344,29 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
         }
 
-        // LED 3 (Reset): off — momentary signal
+        // LED 3 (Reset): off (momentary)
         SetObjectMaterial(3, LFPG_MCELL_RVMAT_OFF);
 
-        // LED 4 (Set): off — momentary signal
+        // LED 4 (Set): off (momentary)
         SetObjectMaterial(4, LFPG_MCELL_RVMAT_OFF);
         #endif
     }
 
-    // ---- Persistence (m_CellActive) ----
+    // ---- Persistence: m_LatchState (1 bool, same binary format as v2) ----
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        ctx.Write(m_CellActive);
+        ctx.Write(m_LatchState);
     }
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-        if (!ctx.Read(m_CellActive))
+        if (!ctx.Read(m_LatchState))
         {
-            string err = "[LFPG_MemoryCell] OnStoreLoad: failed to read m_CellActive";
+            string err = "[LFPG_MemoryCell] OnStoreLoad: failed to read m_LatchState";
             LFPG_Util.Error(err);
             return false;
         }
+        m_CellActive = m_LatchState;
         return true;
     }
 };

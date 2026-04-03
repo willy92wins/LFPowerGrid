@@ -637,6 +637,28 @@ class LFPG_DeviceInspector
                 statusText = Loc("#STR_LFPG_INSPECT_NOT_TRANSMITTING");
                 statusColor = COL_GRAY_DIM;
             }
+
+            // v3.1: MemoryCell state indicator (ON/OFF)
+            LFPG_MemoryCell mcInspect = LFPG_MemoryCell.Cast(device);
+            if (mcInspect)
+            {
+                bool cellOn = mcInspect.LFPG_GetCellActive();
+                if (ptPowered)
+                {
+                    if (cellOn)
+                    {
+                        string onTag = " — ON";
+                        statusText = statusText + onTag;
+                        statusColor = COL_GREEN_OK;
+                    }
+                    else
+                    {
+                        string offTag = " — OFF";
+                        statusText = statusText + offTag;
+                        statusColor = COL_ORANGE;
+                    }
+                }
+            }
         }
         else
         {
