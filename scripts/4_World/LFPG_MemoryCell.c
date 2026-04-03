@@ -1,10 +1,15 @@
 // =========================================================
-// LF_PowerGrid - Memory Cell / SR Latch (v2.0.0 — Refactor)
+// LF_PowerGrid - Memory Cell / SR Latch (v2.1.0 — Gate timing fix)
 //
 // LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT. GATE.
 //   input_0 = power, input_1 = toggle, input_2 = reset, input_3 = set
 //   output_0 = active (Q), output_1 = inverted (!Q)
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
+//
+// v2.1.0: Fixed gate timing race — graph read IsGateOpen before
+//   SetPowered updated m_CellActive, causing epoch-skip deadlock.
+//   Now defers re-propagation via CallLater so next epoch sees
+//   the updated gate state. Fixed LED visuals (all 5 LEDs).
 //
 // Persistence: [base: DeviceId + ver + wireJSON] + m_CellActive
 // =========================================================
@@ -155,6 +160,17 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
                 LFPG_ApplyRouting();
 
+                // v2.1: The graph evaluated this node with the OLD gate
+                // state (IsGateOpen read m_CellActive before SetPowered
+                // updated it). The immediate ApplyRouting sets edge flags
+                // correctly but the MarkNodeDirty it triggers gets
+                // epoch-skipped (node already processed this epoch).
+                // Schedule deferred re-propagation so the graph
+                // re-evaluates with the updated gate state next epoch.
+                int deferDelay = 50;
+                bool deferRepeat = false;
+                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, deferDelay, deferRepeat);
+
                 string scLog = "[MemoryCell] State changed: active=";
                 scLog = scLog + m_CellActive.ToString();
                 scLog = scLog + " id=";
@@ -263,8 +279,15 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=led_input2, 4=led_input3
+        // hiddenSelections from config.cpp (memory_cell.p3d):
+        //   0 = light_led_input0  (Power)
+        //   1 = light_led_input1  (Toggle)
+        //   2 = light_led_output0 (Output Q)
+        //   3 = light_led_input2  (Reset)
+        //   4 = light_led_input3  (Set)
 
+        // Encode state as int to avoid redundant SetObjectMaterial calls.
+        // 0 = unpowered, 1 = powered + inactive, 2 = powered + active
         int desiredState = 0;
         if (m_PoweredNet)
         {
@@ -283,11 +306,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         m_LastVisualState = desiredState;
 
-        if (desiredState == 2)
-        {
-            SetObjectMaterial(0, LFPG_MCELL_RVMAT_RED);
-        }
-        else if (desiredState == 1)
+        // LED 0 (Power): green when device has power
+        if (m_PoweredNet)
         {
             SetObjectMaterial(0, LFPG_MCELL_RVMAT_GREEN);
         }
@@ -296,8 +316,28 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             SetObjectMaterial(0, LFPG_MCELL_RVMAT_OFF);
         }
 
+        // LED 1 (Toggle): off — momentary signal, no persistent state
         SetObjectMaterial(1, LFPG_MCELL_RVMAT_OFF);
-        SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
+
+        // LED 2 (Output Q): green = active output, red = powered but inactive
+        if (m_PoweredNet && m_CellActive)
+        {
+            SetObjectMaterial(2, LFPG_MCELL_RVMAT_GREEN);
+        }
+        else if (m_PoweredNet)
+        {
+            SetObjectMaterial(2, LFPG_MCELL_RVMAT_RED);
+        }
+        else
+        {
+            SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
+        }
+
+        // LED 3 (Reset): off — momentary signal
+        SetObjectMaterial(3, LFPG_MCELL_RVMAT_OFF);
+
+        // LED 4 (Set): off — momentary signal
+        SetObjectMaterial(4, LFPG_MCELL_RVMAT_OFF);
         #endif
     }
 

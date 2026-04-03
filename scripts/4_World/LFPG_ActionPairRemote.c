@@ -16,7 +16,7 @@
 // Register in ActionConstructor.RegisterActions().
 // =========================================================
 
-class LFPG_ActionPairRemote : ActionInteractBase
+class LFPG_ActionPairRemote : ActionSingleUseBase
 {
     void LFPG_ActionPairRemote()
     {
