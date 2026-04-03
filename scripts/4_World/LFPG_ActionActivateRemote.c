@@ -12,7 +12,7 @@
 //
 // Conditions:
 //   - Item in hands must be LFPG_RemoteController
-//   - At least 1 paired device
+//   - Always visible (no switches in range = harmless beep)
 //
 // Register in ActionConstructor.RegisterActions().
 // =========================================================
@@ -43,10 +43,6 @@ class LFPG_ActionActivateRemote : ActionInteractBase
 
         LFPG_RemoteController rc = LFPG_RemoteController.Cast(item);
         if (!rc)
-            return false;
-
-        // Must have at least one paired device
-        if (rc.LFPG_GetPairedCount() < 1)
             return false;
 
         return true;

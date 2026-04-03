@@ -878,6 +878,9 @@ class LFPG_DeviceAPI
     static bool IsRFCapable(EntityAI e)
     {
         if (!e) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_IsRFCapable();
         return CallBool(e, "LFPG_IsRFCapable", null, false);
     }
 
@@ -886,6 +889,9 @@ class LFPG_DeviceAPI
     static bool RemoteToggle(EntityAI e)
     {
         if (!e) return false;
+        LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+        if (dev)
+            return dev.LFPG_RemoteToggle();
         return CallBool(e, "LFPG_RemoteToggle", null, false);
     }
 };

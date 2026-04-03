@@ -136,9 +136,9 @@ class LFPG_SwitchV2Remote : LFPG_WireOwnerBase
     }
 
     // ---- RF ----
-    bool LFPG_IsRFCapable() { return true; }
+    override bool LFPG_IsRFCapable() { return true; }
 
-    bool LFPG_RemoteToggle()
+    override bool LFPG_RemoteToggle()
     {
         #ifdef SERVER
         LFPG_ToggleSwitch();

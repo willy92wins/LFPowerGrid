@@ -443,6 +443,17 @@ class LFPG_DeviceBase : Inventory_Base
         return false;
     }
 
+    // ---- RF capability (v4.7) ----
+    bool LFPG_IsRFCapable()
+    {
+        return false;
+    }
+
+    bool LFPG_RemoteToggle()
+    {
+        return false;
+    }
+
     // ============================================
     // Hooks (empty — subclass overrides)
     // ============================================

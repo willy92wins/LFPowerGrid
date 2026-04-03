@@ -5,10 +5,10 @@
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //   Gate logic via virtual LFPG_EvaluateGateLogic(in0, in1).
 //
-// LFPG_AND_Gate, LFPG_OR_Gate, LFPG_XOR_Gate: override gate logic + symbol texture.
+// LFPG_AND_Gate, LFPG_OR_Gate, LFPG_XOR_Gate: override gate logic.
 //
 // Ports: input_0 (IN), input_1 (IN), output_0 (OUT)
-// LEDs: 0=input0, 1=input1, 2=output, 3=symbol texture
+// LEDs: 0=input0, 1=input1, 2=output
 // Persistence: [base: DeviceId + ver + wireJSON] — no extras
 // =========================================================
 
@@ -43,34 +43,6 @@ class LFPG_LogicGate_Kit : LFPG_KitBase
     {
         return 180.0;
     }
-
-    // ---- Virtual: symbol texture for shared p3d cache fix ----
-    string LFPG_GetSymbolTexturePath()
-    {
-        string empty = "";
-        return empty;
-    }
-
-    // ---- Deferred texture fix: engine caches first texture for shared p3d ----
-    override void EEInit()
-    {
-        super.EEInit();
-        #ifndef SERVER
-        int delay = 100;
-        bool repeat = false;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, delay, repeat);
-        #endif
-    }
-
-    protected void LFPG_DeferredSymbolTexture()
-    {
-        string tex = LFPG_GetSymbolTexturePath();
-        if (tex != "")
-        {
-            int idxSymbol = 0;
-            SetObjectTexture(idxSymbol, tex);
-        }
-    }
 };
 
 class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit
@@ -79,12 +51,6 @@ class LFPG_AND_Gate_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_AND_Gate";
     }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa";
-        return path;
-    }
 };
 class LFPG_OR_Gate_Kit : LFPG_LogicGate_Kit
 {
@@ -92,24 +58,12 @@ class LFPG_OR_Gate_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_OR_Gate";
     }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa";
-        return path;
-    }
 };
 class LFPG_XOR_Gate_Kit : LFPG_LogicGate_Kit
 {
     override string LFPG_GetSpawnClassname()
     {
         return "LFPG_XOR_Gate";
-    }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa";
-        return path;
     }
 };
 
@@ -160,13 +114,6 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     bool LFPG_EvaluateGateLogic(bool in0, bool in1)
     {
         return false;
-    }
-
-    // ---- Virtual symbol texture (subclass overrides) ----
-    string LFPG_GetSymbolTexturePath()
-    {
-        string empty = "";
-        return empty;
     }
 
     // ---- Gate state: latched in SetPowered, read by ElecGraph ----
@@ -258,21 +205,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     // ---- Lifecycle ----
     override void LFPG_OnInitDevice()
     {
-        // Force correct symbol texture on client at spawn time.
-        // DayZ caches the first texture loaded for a shared p3d,
-        // so all gates (AND/OR/XOR/Mem) show the same (OR) symbol
-        // unless we explicitly SetObjectTexture on init.
-        // OnVariablesSynchronized only fires on SyncVar CHANGE,
-        // which never happens on fresh spawn (all defaults = false).
-        // Immediate call may be too early (engine overwrites),
-        // so also schedule a deferred call after model is loaded.
         LFPG_UpdateVisuals();
-
-        #ifndef SERVER
-        int delay = 100;
-        bool repeat = false;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, delay, repeat);
-        #endif
     }
 
     override void LFPG_OnKilled()
@@ -308,15 +241,7 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=camosymbol
-
-        // Force correct symbol texture (MLOD cache bug + proxy lid)
-        string symTex = LFPG_GetSymbolTexturePath();
-        if (symTex != "")
-        {
-            int idxSymbol = 3;
-            SetObjectTexture(idxSymbol, symTex);
-        }
+        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0
 
         // Input 0 LED
         if (m_Input0Powered)
@@ -362,18 +287,6 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
         #endif
     }
 
-    protected void LFPG_DeferredSymbolTexture()
-    {
-        #ifndef SERVER
-        string tex = LFPG_GetSymbolTexturePath();
-        if (tex != "")
-        {
-            int idxSymbol = 3;
-            SetObjectTexture(idxSymbol, tex);
-        }
-        #endif
-    }
-
     // ---- No persist extras ----
 };
 
@@ -390,12 +303,6 @@ class LFPG_AND_Gate : LFPG_LogicGateBase
         }
         return false;
     }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_and.paa";
-        return path;
-    }
 };
 
 // ---------------------------------------------------------
@@ -410,12 +317,6 @@ class LFPG_OR_Gate : LFPG_LogicGateBase
             return true;
         }
         return false;
-    }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_or.paa";
-        return path;
     }
 };
 
@@ -435,11 +336,5 @@ class LFPG_XOR_Gate : LFPG_LogicGateBase
             return true;
         }
         return false;
-    }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_xor.paa";
-        return path;
     }
 };

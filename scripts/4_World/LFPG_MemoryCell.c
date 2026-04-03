@@ -23,12 +23,6 @@ class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
     {
         return "LFPG_MemoryCell";
     }
-
-    override string LFPG_GetSymbolTexturePath()
-    {
-        string path = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        return path;
-    }
 };
 
 // ---------------------------------------------------------
@@ -236,15 +230,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, 500, false);
         #endif
 
-        // Force correct symbol texture on client at spawn.
-        // Same shared-p3d cache bug as LogicGateBase.
         LFPG_UpdateVisuals();
-
-        #ifndef SERVER
-        int texDelay = 100;
-        bool texRepeat = false;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredSymbolTexture, texDelay, texRepeat);
-        #endif
     }
 
     // ---- Lifecycle hooks ----
@@ -277,10 +263,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
-        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=camosymbol
-        string symTex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        int idxSymbol = 3;
-        SetObjectTexture(idxSymbol, symTex);
+        // hiddenSelections: 0=led_input0, 1=led_input1, 2=led_output0, 3=led_input2, 4=led_input3
 
         int desiredState = 0;
         if (m_PoweredNet)
@@ -315,15 +298,6 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         SetObjectMaterial(1, LFPG_MCELL_RVMAT_OFF);
         SetObjectMaterial(2, LFPG_MCELL_RVMAT_OFF);
-        #endif
-    }
-
-    protected void LFPG_DeferredSymbolTexture()
-    {
-        #ifndef SERVER
-        string tex = "\LFPowerGrid\data\logic_gate\data\memory_cell_symbol_mem.paa";
-        int idxSymbol = 3;
-        SetObjectTexture(idxSymbol, tex);
         #endif
     }
 
