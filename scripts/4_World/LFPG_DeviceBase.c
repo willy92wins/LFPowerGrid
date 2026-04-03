@@ -454,4 +454,18 @@ class LFPG_DeviceBase : Inventory_Base
     void LFPG_OnStoreSaveExtra(ParamsWriteContext ctx) {}
     bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver) { return true; }
     int  LFPG_GetDevicePersistVersion() { return 1; }
+
+    // ============================================
+    // Dismantle support (v4.5)
+    // Returns kit classname to spawn on dismantle.
+    // Default: GetType() + "_Kit" (convention).
+    // Override to return "" for non-dismantlable devices
+    // (T2 upgrades, BatteryAdapter, etc.)
+    // ============================================
+    string LFPG_GetKitClassname()
+    {
+        string kitClass = GetType();
+        kitClass = kitClass + "_Kit";
+        return kitClass;
+    }
 };

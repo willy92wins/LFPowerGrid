@@ -5,7 +5,35 @@
 // v0.7.16 (Hotfix H4): AtomicVerifyReadback setting.
 // v0.7.35 (Gemini 3b): Range validation + clamping on load.
 // v0.7.36 (Hotfix): Pre-build Warn strings for Enforce compat.
+// v4.6: Vanilla compat — external mod consumer support.
 // =========================================================
+
+// ---- Vanilla consumption override entry (v4.6) ----
+// JSON-serializable. Matches by IsKindOf (inheritance-aware).
+// Example: { "classname": "Spotlight", "consumption": 10.0 }
+class LFPG_VanillaConsumptionEntry
+{
+    string classname;
+    float consumption;
+
+    void LFPG_VanillaConsumptionEntry()
+    {
+        classname = "";
+        consumption = 0.0;
+    }
+};
+
+// ---- Vanilla blacklist entry (v4.6) ----
+// JSON-serializable. Supports prefix ("BBP_*") or exact ("Fireplace").
+class LFPG_VanillaBlacklistEntry
+{
+    string pattern;
+
+    void LFPG_VanillaBlacklistEntry()
+    {
+        pattern = "";
+    }
+};
 
 class LFPG_ServerSettings
 {
@@ -40,6 +68,70 @@ class LFPG_ServerSettings
     // holds a CableReel or Pliers in hand. Sent to clients on JIP.
     // Default false: cables always visible (grey when no tools).
     bool HideCablesWithoutReel = false;
+
+    // ---- v4.6: Vanilla Compat (external mod consumers) ----
+    // When true, any non-LFPG entity with CompEM.GetEnergyUsage() > 0
+    // is accepted as a consumer (subject to blacklist).
+    // When false, only Spotlight is accepted (legacy behavior).
+    bool VanillaCompatEnabled = true;
+
+    // Default consumption (u/s) for vanilla-compat devices that have
+    // no entry in VanillaCustomConsumption and whose CompEM usage is 0.
+    float VanillaDefaultConsumption = 20.0;
+
+    // Per-class consumption overrides. Matched via IsKindOf (inheritance).
+    // Example: Spotlight=10, BatteryCharger=15
+    ref array<ref LFPG_VanillaConsumptionEntry> VanillaCustomConsumption;
+
+    // Blacklist patterns. Prefix: "BBP_*" blocks any type starting
+    // with "BBP_". Exact: "Fireplace" blocks via IsKindOf (inheritance).
+    ref array<ref LFPG_VanillaBlacklistEntry> VanillaBlacklist;
+
+    void LFPG_ServerSettings()
+    {
+        VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
+        VanillaBlacklist = new array<ref LFPG_VanillaBlacklistEntry>;
+
+        // Default custom consumption: Spotlight keeps legacy 10 u/s
+        ref LFPG_VanillaConsumptionEntry spotEntry = new LFPG_VanillaConsumptionEntry();
+        string spotClass = "Spotlight";
+        spotEntry.classname = spotClass;
+        spotEntry.consumption = 10.0;
+        VanillaCustomConsumption.Insert(spotEntry);
+
+        // Default blacklist: handheld/unsuitable vanilla items
+        ref LFPG_VanillaBlacklistEntry e0 = new LFPG_VanillaBlacklistEntry();
+        e0.pattern = "Flashlight_*";
+        VanillaBlacklist.Insert(e0);
+
+        ref LFPG_VanillaBlacklistEntry e1 = new LFPG_VanillaBlacklistEntry();
+        e1.pattern = "HeadTorch_*";
+        VanillaBlacklist.Insert(e1);
+
+        ref LFPG_VanillaBlacklistEntry e2 = new LFPG_VanillaBlacklistEntry();
+        e2.pattern = "PersonalRadio";
+        VanillaBlacklist.Insert(e2);
+
+        ref LFPG_VanillaBlacklistEntry e3 = new LFPG_VanillaBlacklistEntry();
+        e3.pattern = "Megaphone";
+        VanillaBlacklist.Insert(e3);
+
+        ref LFPG_VanillaBlacklistEntry e4 = new LFPG_VanillaBlacklistEntry();
+        e4.pattern = "Defibrillator";
+        VanillaBlacklist.Insert(e4);
+
+        ref LFPG_VanillaBlacklistEntry e5 = new LFPG_VanillaBlacklistEntry();
+        e5.pattern = "CattleProd";
+        VanillaBlacklist.Insert(e5);
+
+        ref LFPG_VanillaBlacklistEntry e6 = new LFPG_VanillaBlacklistEntry();
+        e6.pattern = "StunBaton";
+        VanillaBlacklist.Insert(e6);
+
+        ref LFPG_VanillaBlacklistEntry e7 = new LFPG_VanillaBlacklistEntry();
+        e7.pattern = "RadioTransmitterCivil";
+        VanillaBlacklist.Insert(e7);
+    }
 };
 
 // ---- Validation bounds (v0.7.35, Gemini 3b) ----
@@ -54,6 +146,10 @@ static const float LFPG_SETTINGS_MIN_RPC_COOLDOWN = 0.1;
 static const float LFPG_SETTINGS_MAX_RPC_COOLDOWN = 30.0;
 static const float LFPG_SETTINGS_MIN_BUBBLE_M     = 0.0;
 static const float LFPG_SETTINGS_MAX_BUBBLE_M     = 500.0;
+
+// v4.6: Vanilla compat bounds
+static const float LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION = 0.1;
+static const float LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION = 500.0;
 
 class LFPG_Settings
 {
@@ -181,6 +277,60 @@ class LFPG_Settings
             msg = "Settings: " + clamped.ToString() + " value(s) clamped. Review LF_PowerGrid.json";
             LFPG_Util.Warn(msg);
         }
+
+        // ---- v4.6: Vanilla compat validation ----
+        floatVal = ClampFloat(s_Settings.VanillaDefaultConsumption,
+                              LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION,
+                              LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION);
+        if (floatVal != s_Settings.VanillaDefaultConsumption)
+        {
+            msg = "Settings: VanillaDefaultConsumption=";
+            msg = msg + s_Settings.VanillaDefaultConsumption.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            s_Settings.VanillaDefaultConsumption = floatVal;
+        }
+
+        // Ensure arrays exist (could be null from malformed JSON)
+        if (!s_Settings.VanillaCustomConsumption)
+        {
+            s_Settings.VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
+        }
+        if (!s_Settings.VanillaBlacklist)
+        {
+            s_Settings.VanillaBlacklist = new array<ref LFPG_VanillaBlacklistEntry>;
+        }
+
+        // Validate custom consumption entries
+        int vci;
+        for (vci = 0; vci < s_Settings.VanillaCustomConsumption.Count(); vci = vci + 1)
+        {
+            LFPG_VanillaConsumptionEntry vce = s_Settings.VanillaCustomConsumption[vci];
+            if (!vce)
+                continue;
+            if (vce.classname == "")
+            {
+                msg = "Settings: VanillaCustomConsumption[";
+                msg = msg + vci.ToString();
+                msg = msg + "] has empty classname";
+                LFPG_Util.Warn(msg);
+            }
+            floatVal = ClampFloat(vce.consumption,
+                                  LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION,
+                                  LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION);
+            if (floatVal != vce.consumption)
+            {
+                msg = "Settings: VanillaCustomConsumption[";
+                msg = msg + vci.ToString();
+                msg = msg + "] consumption=";
+                msg = msg + vce.consumption.ToString();
+                msg = msg + " clamped to ";
+                msg = msg + floatVal.ToString();
+                LFPG_Util.Warn(msg);
+                vce.consumption = floatVal;
+            }
+        }
     }
 
     static void Load()
@@ -220,6 +370,20 @@ class LFPG_Settings
                 msg = msg + " DeviceBubbleM=" + s_Settings.DeviceBubbleM.ToString();
                 msg = msg + " AtomicVerifyReadback=" + s_Settings.AtomicVerifyReadback.ToString();
                 msg = msg + " HideCablesWithoutReel=" + s_Settings.HideCablesWithoutReel.ToString();
+                msg = msg + " VanillaCompat=" + s_Settings.VanillaCompatEnabled.ToString();
+                msg = msg + " VanillaDefConsumption=" + s_Settings.VanillaDefaultConsumption.ToString();
+                int vcCount = 0;
+                if (s_Settings.VanillaCustomConsumption)
+                {
+                    vcCount = s_Settings.VanillaCustomConsumption.Count();
+                }
+                msg = msg + " CustomEntries=" + vcCount.ToString();
+                int blCount = 0;
+                if (s_Settings.VanillaBlacklist)
+                {
+                    blCount = s_Settings.VanillaBlacklist.Count();
+                }
+                msg = msg + " Blacklist=" + blCount.ToString();
                 LFPG_Util.Info(msg);
             }
         }
@@ -228,6 +392,9 @@ class LFPG_Settings
             LFPG_Util.Info("Settings file not found; creating defaults: " + SETTINGS_FILE);
             Save(); // create defaults
         }
+
+        // v4.6: Parse blacklist into prefix/exact arrays for fast lookup
+        BuildBlacklistIndex();
     }
 
     static void Save()
@@ -247,5 +414,210 @@ class LFPG_Settings
         {
             LFPG_Util.Error("Settings atomic save failed: " + SETTINGS_FILE);
         }
+    }
+
+    // =========================================================
+    // v4.6: Vanilla Compat runtime cache + helpers
+    //
+    // Lazy caches: populated on first query per typename, cleared
+    // on Load(). Avoids repeated IsKindOf/array iteration during
+    // graph propagation. O(1) after first hit per typename.
+    // =========================================================
+
+    // Cache: typename -> true (blacklisted) / false (allowed)
+    protected static ref map<string, bool> s_BlacklistCache;
+
+    // Cache: typename -> resolved consumption (custom or default)
+    protected static ref map<string, float> s_ConsumptionCache;
+
+    // Parsed blacklist: prefix patterns (without trailing *)
+    protected static ref array<string> s_BLPrefixes;
+
+    // Parsed blacklist: exact patterns (for IsKindOf)
+    protected static ref array<string> s_BLExact;
+
+    // Called after Load to parse blacklist into prefix/exact arrays.
+    protected static void BuildBlacklistIndex()
+    {
+        s_BlacklistCache = new map<string, bool>;
+        s_ConsumptionCache = new map<string, float>;
+        s_BLPrefixes = new array<string>;
+        s_BLExact = new array<string>;
+
+        if (!s_Settings || !s_Settings.VanillaBlacklist)
+            return;
+
+        int i;
+        for (i = 0; i < s_Settings.VanillaBlacklist.Count(); i = i + 1)
+        {
+            LFPG_VanillaBlacklistEntry entry = s_Settings.VanillaBlacklist[i];
+            if (!entry)
+                continue;
+
+            string pattern = entry.pattern;
+            if (pattern == "")
+                continue;
+
+            int lastIdx = pattern.Length() - 1;
+            string lastChar = pattern.Substring(lastIdx, 1);
+            if (lastChar == "*")
+            {
+                // Prefix pattern: strip trailing *
+                string prefix = pattern.Substring(0, lastIdx);
+                if (prefix != "")
+                {
+                    s_BLPrefixes.Insert(prefix);
+                }
+            }
+            else
+            {
+                // Exact class (matched via IsKindOf for inheritance)
+                s_BLExact.Insert(pattern);
+            }
+        }
+
+        string blMsg = "VanillaCompat: blacklist parsed prefixes=";
+        blMsg = blMsg + s_BLPrefixes.Count().ToString();
+        blMsg = blMsg + " exact=";
+        blMsg = blMsg + s_BLExact.Count().ToString();
+        LFPG_Util.Info(blMsg);
+    }
+
+    // Check if entity is blacklisted. Uses prefix match on GetType()
+    // and IsKindOf for exact entries (catches inheritance).
+    // Result cached per typename for O(1) subsequent lookups.
+    static bool IsVanillaBlacklistedEntity(EntityAI e)
+    {
+        if (!e)
+            return true;
+
+        string typeName = e.GetType();
+
+        // Fast path: check typename cache first
+        if (s_BlacklistCache)
+        {
+            bool cached = false;
+            bool found = s_BlacklistCache.Find(typeName, cached);
+            if (found)
+                return cached;
+        }
+
+        // Ensure cache exists
+        if (!s_BlacklistCache)
+        {
+            s_BlacklistCache = new map<string, bool>;
+        }
+
+        bool blocked = false;
+        int typeLen = typeName.Length();
+
+        // Check prefix patterns on typename
+        if (s_BLPrefixes)
+        {
+            int pi;
+            for (pi = 0; pi < s_BLPrefixes.Count(); pi = pi + 1)
+            {
+                string prefix = s_BLPrefixes[pi];
+                int prefixLen = prefix.Length();
+                if (typeLen >= prefixLen)
+                {
+                    string sub = typeName.Substring(0, prefixLen);
+                    if (sub == prefix)
+                    {
+                        blocked = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Check exact patterns via IsKindOf (inheritance-aware)
+        if (!blocked && s_BLExact)
+        {
+            int ei;
+            for (ei = 0; ei < s_BLExact.Count(); ei = ei + 1)
+            {
+                string exact = s_BLExact[ei];
+                if (e.IsKindOf(exact))
+                {
+                    blocked = true;
+                    break;
+                }
+            }
+        }
+
+        s_BlacklistCache.Set(typeName, blocked);
+        return blocked;
+    }
+
+    // Get consumption for a vanilla-compat device. Priority:
+    // 1. Custom entry match (IsKindOf) → use configured value
+    // 2. CompEM.GetEnergyUsage() > 0 → use engine value
+    // 3. VanillaDefaultConsumption fallback
+    // Result cached per typename.
+    static float GetVanillaConsumption(EntityAI e)
+    {
+        if (!e)
+            return 0.0;
+
+        string typeName = e.GetType();
+
+        // Cache hit?
+        if (s_ConsumptionCache)
+        {
+            float cached = 0.0;
+            bool found = s_ConsumptionCache.Find(typeName, cached);
+            if (found)
+                return cached;
+        }
+
+        // Ensure cache exists
+        if (!s_ConsumptionCache)
+        {
+            s_ConsumptionCache = new map<string, float>;
+        }
+
+        LFPG_ServerSettings st = Get();
+        float result = st.VanillaDefaultConsumption;
+        bool hadCustomMatch = false;
+
+        // Step 1: Check custom entries (IsKindOf for inheritance)
+        if (st.VanillaCustomConsumption)
+        {
+            int ci;
+            for (ci = 0; ci < st.VanillaCustomConsumption.Count(); ci = ci + 1)
+            {
+                LFPG_VanillaConsumptionEntry entry = st.VanillaCustomConsumption[ci];
+                if (!entry)
+                    continue;
+                if (entry.classname == "")
+                    continue;
+                if (e.IsKindOf(entry.classname))
+                {
+                    result = entry.consumption;
+                    hadCustomMatch = true;
+                    break;
+                }
+            }
+        }
+
+        // Step 2: No custom match → try CompEM native usage
+        if (!hadCustomMatch)
+        {
+            ComponentEnergyManager em = e.GetCompEM();
+            if (em)
+            {
+                float emUsage = em.GetEnergyUsage();
+                if (emUsage > 0.0)
+                {
+                    result = emUsage;
+                }
+            }
+        }
+
+        // Step 3: result is already VanillaDefaultConsumption if neither matched
+
+        s_ConsumptionCache.Set(typeName, result);
+        return result;
     }
 };

@@ -206,4 +206,11 @@ class LFPG_SolarPanel_T2 : LFPG_SolarPanel
     {
         return false;
     }
+
+    // T2 cannot be dismantled (upgraded device)
+    override string LFPG_GetKitClassname()
+    {
+        string empty = "";
+        return empty;
+    }
 };

@@ -412,6 +412,13 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         AddAction(LFPG_ActionFillPump);
     }
 
+    // T2 cannot be dismantled (upgraded device)
+    override string LFPG_GetKitClassname()
+    {
+        string empty = "";
+        return empty;
+    }
+
     // ============================================
     // Attachment override
     // ============================================

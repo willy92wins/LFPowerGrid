@@ -345,6 +345,9 @@ class LFPG_DeviceAPI
     }
 
     // Check if a device is a vanilla consumer (has CompEM, no LFPG device ID)
+    // v4.6: Vanilla Compat — accepts any entity with CompEM.GetEnergyUsage() > 0
+    // unless blacklisted. Spotlight always accepted (bypass blacklist).
+    // When VanillaCompatEnabled=false, falls back to Spotlight-only (legacy).
     static bool IsVanillaConsumer(EntityAI e)
     {
         if (!e)
@@ -355,15 +358,30 @@ class LFPG_DeviceAPI
         if (devId != "")
             return false;
 
-        // v0.7.38 (BugFix): Restrict to known vanilla consumer types.
-        // Previously any entity with CompEM was accepted, which included
-        // flashlights, stoves, barrels, radios, etc. Now only accepts
-        // Spotlight (tripod-mounted lights) — the only vanilla consumer
-        // type that makes sense for LFPG wiring.
-        if (e.IsKindOf("Spotlight"))
+        // Spotlight always accepted (backward compat, bypass blacklist)
+        string spotlightCls = "Spotlight";
+        if (e.IsKindOf(spotlightCls))
             return true;
 
-        return false;
+        // v4.6: Extended vanilla compat
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        if (!st.VanillaCompatEnabled)
+            return false;
+
+        // Must have CompEM with positive energy usage
+        ComponentEnergyManager em = e.GetCompEM();
+        if (!em)
+            return false;
+
+        float usage = em.GetEnergyUsage();
+        if (usage <= 0.0)
+            return false;
+
+        // Check blacklist (cached per typename)
+        if (LFPG_Settings.IsVanillaBlacklistedEntity(e))
+            return false;
+
+        return true;
     }
 
     // ----- Low-level dynamic calls -----
@@ -622,7 +640,7 @@ class LFPG_DeviceAPI
 
     // Get consumption rate (units/s) for a consumer device.
     // LFPG devices: LFPG_GetConsumption().
-    // Vanilla devices: CompEM.GetEnergyUsage() (DayZ native).
+    // Vanilla devices: v4.6 settings-based resolution (custom > CompEM > default).
     // Returns 0 for sources or devices without consumption.
     static float GetConsumption(EntityAI e)
     {
@@ -638,28 +656,18 @@ class LFPG_DeviceAPI
         if (val >= 0.0)
             return val;
 
-        // Vanilla fallback: CompEM usage
-        ComponentEnergyManager em = e.GetCompEM();
-        if (em)
-        {
-            float usage = em.GetEnergyUsage();
-            if (usage > 0.0)
-                return usage;
-        }
-
         // v0.7.47: PASSTHROUGH devices default to zero self-consumption.
         // Protects future passthrough types that forget to declare
         // LFPG_GetConsumption() — without this, IsEnergyConsumer below
         // returns true (they have an IN port) and assigns 10.0 erroneously.
-        // A PASSTHROUGH with real self-draw declares LFPG_GetConsumption()
-        // explicitly, which is caught by CallFloat above (step 1).
         int devTypeGuard = GetDeviceType(e);
         if (devTypeGuard == LFPG_DeviceType.PASSTHROUGH)
             return 0.0;
 
-        // Unknown consumer: use default
+        // v4.6: Vanilla-compat consumer — settings-based resolution
+        // Priority: custom entry > CompEM.GetEnergyUsage > VanillaDefaultConsumption
         if (IsEnergyConsumer(e))
-            return LFPG_DEFAULT_CONSUMER_CONSUMPTION;
+            return LFPG_Settings.GetVanillaConsumption(e);
 
         return 0.0;
     }

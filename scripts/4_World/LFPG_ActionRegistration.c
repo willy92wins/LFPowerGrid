@@ -110,7 +110,10 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionPairRemote);
         actions.Insert(LFPG_ActionActivateRemote);
 
-        LFPG_Util.Debug("[Actions] LFPG actions registered (54)");
+        // --- Dismantle (v4.5) ---
+        actions.Insert(LFPG_ActionDismantleDevice);
+
+        LFPG_Util.Debug("[Actions] LFPG actions registered (55)");
     }
 };
 
@@ -142,11 +145,13 @@ modded class Hammer
 };
 
 // v3.0: Screwdriver can install microphone on Intercom
+// v4.5: Screwdriver can dismantle LFPG devices
 modded class Screwdriver
 {
     override void SetActions()
     {
         super.SetActions();
         AddAction(LFPG_ActionInstallMic);
+        AddAction(LFPG_ActionDismantleDevice);
     }
 };

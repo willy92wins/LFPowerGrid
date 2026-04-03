@@ -157,6 +157,34 @@ class LFPG_ActionRaycast
         return s_DeviceCheckResult;
     }
 
+    // ---- IsCursorOnPlayer (v4.5) ----
+    // Returns true when the first raycast hit is another player (Man).
+    // Used by PlaceWaypoint to suppress the action when aiming at players,
+    // preventing the vanilla AddActionJuncture crash (GetCurrentInventoryLocation
+    // on a foreign player entity). Reuses the shared ray cache (zero extra cost).
+    // The local player is already excluded by the raycast (3rd param = player).
+    static bool IsCursorOnPlayer(PlayerBase player)
+    {
+        if (!player)
+            return false;
+
+        RefreshRayCache(player);
+
+        if (!s_RayCacheResults || s_RayCacheResults.Count() == 0)
+            return false;
+
+        ref RaycastRVResult first = s_RayCacheResults.Get(0);
+        Object hitObj = first.obj;
+        if (!hitObj)
+            return false;
+
+        Man hitMan = Man.Cast(hitObj);
+        if (hitMan)
+            return true;
+
+        return false;
+    }
+
     // ---- GetCursorWorldPos ----
     // Returns first hit position (any object or terrain).
     // Used by preview (per-frame) and anywhere needing raw cursor hit.
@@ -591,6 +619,22 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         if (LFPG_ActionRaycast.IsCursorOnDevice(player))
             return false;
 
+        // v4.5: Hide when cursor is on another player.
+        // DayZ soft-targeting can select nearby players even with CCTNone,
+        // which causes vanilla AddActionJuncture to crash (NULL pointer
+        // on foreign player's GameInventory.GetCurrentInventoryLocation).
+        if (LFPG_ActionRaycast.IsCursorOnPlayer(player))
+            return false;
+
+        return true;
+    }
+
+    // v4.5: Skip vanilla inventory juncture — PlaceWaypoint does NOT
+    // move items, it only records a world position. Without this,
+    // the juncture system can crash when soft-targeting resolves to
+    // a player entity. Same pattern as ActionLFPG_CancelWiring.
+    override bool AddActionJuncture(ActionData action_data)
+    {
         return true;
     }
 
