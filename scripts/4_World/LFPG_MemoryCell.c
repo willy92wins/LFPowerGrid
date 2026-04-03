@@ -1,15 +1,15 @@
 // =========================================================
-// LF_PowerGrid - Memory Cell / SR Latch (v2.1.0 — Gate timing fix)
+// LF_PowerGrid - Memory Cell / SR Latch (v2.1.1 — Cleanup)
 //
 // LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT. GATE.
 //   input_0 = power, input_1 = toggle, input_2 = reset, input_3 = set
 //   output_0 = active (Q), output_1 = inverted (!Q)
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
-// v2.1.0: Fixed gate timing race — graph read IsGateOpen before
-//   SetPowered updated m_CellActive, causing epoch-skip deadlock.
-//   Now defers re-propagation via CallLater so next epoch sees
-//   the updated gate state. Fixed LED visuals (all 5 LEDs).
+// v2.1.1: Removed CallLater(LFPG_DeferredRouting) workaround from
+//   SetPowered — now handled by graph-level epoch-skip recovery
+//   (m_EpochSkipRecovery in LFPG_ElecGraph). ApplyRouting still runs
+//   immediately for edge flags; the graph handles re-queueing.
 //
 // Persistence: [base: DeviceId + ver + wireJSON] + m_CellActive
 // =========================================================
@@ -160,16 +160,12 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
                 LFPG_ApplyRouting();
 
-                // v2.1: The graph evaluated this node with the OLD gate
-                // state (IsGateOpen read m_CellActive before SetPowered
-                // updated it). The immediate ApplyRouting sets edge flags
-                // correctly but the MarkNodeDirty it triggers gets
-                // epoch-skipped (node already processed this epoch).
-                // Schedule deferred re-propagation so the graph
-                // re-evaluates with the updated gate state next epoch.
-                int deferDelay = 50;
-                bool deferRepeat = false;
-                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, deferDelay, deferRepeat);
+                // v2.1.1: The graph-level epoch-skip recovery (m_EpochSkipRecovery
+                // in LFPG_ElecGraph) handles re-queueing this node for next-epoch
+                // processing. ApplyRouting sets edge flags immediately, which calls
+                // SetOutputPortEnabled → MarkNodeDirty → re-dirties the node.
+                // The recovery mechanism detects the epoch-skipped dirty node and
+                // re-enqueues it. No CallLater workaround needed anymore.
 
                 string scLog = "[MemoryCell] State changed: active=";
                 scLog = scLog + m_CellActive.ToString();
