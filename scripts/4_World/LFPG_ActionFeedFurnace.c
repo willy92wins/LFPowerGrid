@@ -84,8 +84,10 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (LFPG_IsLFPGKit(itemType))
             return false;
 
-        // Filter: items with zero-size in either dimension
-        string cfgPath = "CfgVehicles " + itemType + " itemSize";
+        // Filter: items with zero-size in either dimension (system items)
+        string cfgPath = "CfgVehicles ";
+        cfgPath = cfgPath + itemType;
+        cfgPath = cfgPath + " itemSize";
         if (GetGame().ConfigIsExisting(cfgPath))
         {
             TIntArray sizeArr = new TIntArray;
@@ -102,33 +104,59 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         }
         else
         {
-            // No itemSize config = can't calculate fuel value
+            // No itemSize config = not a valid item
             return false;
         }
 
-        // Furnace must not be full
+        // v4.7: Check whitelist mode for dynamic text
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        bool whitelistMode = st.FurnaceFuelWhitelistOnly;
+        bool isWhitelisted = false;
+
+        if (whitelistMode)
+        {
+            int burnSec = LFPG_Settings.GetWhitelistFuelSec(itemType);
+            if (burnSec > 0)
+            {
+                isWhitelisted = true;
+            }
+        }
+
         int fuelCur = furnace.LFPG_GetFuelCurrent();
-        if (fuelCur >= LFPG_FURNACE_MAX_FUEL)
-            return false;
-
-        // Dynamic text: show fuel percentage
         int fuelMax = LFPG_FURNACE_MAX_FUEL;
-        float feedPctF = 0.0;
-        if (fuelMax > 0)
+
+        // Non-whitelisted items in whitelist mode: always allowed (burn for nothing)
+        // Whitelisted items and normal mode: check fuel full
+        if (whitelistMode && !isWhitelisted)
         {
-            feedPctF = (fuelCur * 100.0) / fuelMax;
+            // Show "Burn Item (no fuel)" text
+            string burnLabel = Widget.TranslateString("#STR_LFPG_ACTION_BURN_ITEM_NO_FUEL");
+            m_Text = burnLabel;
         }
-        int feedPctWhole = Math.Floor(feedPctF);
-        float feedPctFrac = feedPctF - feedPctWhole;
-        int feedPctTenths = Math.Round(feedPctFrac * 10.0);
-        if (feedPctTenths >= 10)
+        else
         {
-            feedPctWhole = feedPctWhole + 1;
-            feedPctTenths = 0;
+            // Furnace must not be full for items that give fuel
+            if (fuelCur >= fuelMax)
+                return false;
+
+            // Dynamic text: show fuel percentage
+            float feedPctF = 0.0;
+            if (fuelMax > 0)
+            {
+                feedPctF = (fuelCur * 100.0) / fuelMax;
+            }
+            int feedPctWhole = Math.Floor(feedPctF);
+            float feedPctFrac = feedPctF - feedPctWhole;
+            int feedPctTenths = Math.Round(feedPctFrac * 10.0);
+            if (feedPctTenths >= 10)
+            {
+                feedPctWhole = feedPctWhole + 1;
+                feedPctTenths = 0;
+            }
+            string feedLabel = Widget.TranslateString("#STR_LFPG_ACTION_FEED_FURNACE");
+            string feedPct = " (" + feedPctWhole.ToString() + "." + feedPctTenths.ToString() + "%)";
+            m_Text = feedLabel + feedPct;
         }
-        string feedLabel = Widget.TranslateString("#STR_LFPG_ACTION_FEED_FURNACE");
-        string feedPct = " (" + feedPctWhole.ToString() + "." + feedPctTenths.ToString() + "%)";
-        m_Text = feedLabel + feedPct;
 
         return true;
     }
@@ -165,26 +193,42 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (feedItem.IsRuined())
             return;
 
-        // Calculate fuel recursively (item + all contents)
-        int fuelToAdd = furnace.LFPG_CalcFuelRecursive(feedItem);
+        // v4.7: Calculate fuel based on mode
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        bool whitelistMode = st.FurnaceFuelWhitelistOnly;
+        int fuelToAdd = 0;
 
-        if (fuelToAdd <= 0)
+        if (whitelistMode)
         {
-            pb.MessageStatus("[LFPG] Item has no fuel value.");
+            fuelToAdd = furnace.LFPG_CalcFuelWhitelist(feedItem);
+        }
+        else
+        {
+            fuelToAdd = furnace.LFPG_CalcFuelRecursive(feedItem);
+        }
+
+        // Non-whitelist mode: reject items with 0 fuel (preserve item)
+        if (!whitelistMode && fuelToAdd <= 0)
+        {
+            string noFuelMsg = "[LFPG] Item has no fuel value.";
+            pb.MessageStatus(noFuelMsg);
             return;
         }
 
-        // Check overflow: reject if would exceed max
-        int fuelCur = furnace.LFPG_GetFuelCurrent();
-        int fuelAfter = fuelCur + fuelToAdd;
-        if (fuelAfter > LFPG_FURNACE_MAX_FUEL)
+        // If item gives fuel, check overflow
+        if (fuelToAdd > 0)
         {
-            pb.MessageStatus("[LFPG] Furnace fuel full. Item preserved.");
-            return;
-        }
+            int fuelCur = furnace.LFPG_GetFuelCurrent();
+            int fuelAfter = fuelCur + fuelToAdd;
+            if (fuelAfter > LFPG_FURNACE_MAX_FUEL)
+            {
+                string fullMsg = "[LFPG] Furnace fuel full. Item preserved.";
+                pb.MessageStatus(fullMsg);
+                return;
+            }
 
-        // Add fuel
-        furnace.LFPG_AddFuel(fuelToAdd);
+            furnace.LFPG_AddFuel(fuelToAdd);
+        }
 
         // Destroy item (+ all contents recursively via engine)
         GetGame().ObjectDelete(feedItem);
@@ -196,7 +240,13 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         {
             playerName = identity.GetName();
         }
-        LFPG_Util.Info("[ActionFeedFurnace] Player=" + playerName + " fed +" + fuelToAdd.ToString() + " fuel. total=" + fuelAfter.ToString());
+        string logMsg = "[ActionFeedFurnace] Player=";
+        logMsg = logMsg + playerName;
+        logMsg = logMsg + " fed +";
+        logMsg = logMsg + fuelToAdd.ToString();
+        logMsg = logMsg + " fuel. total=";
+        logMsg = logMsg + furnace.LFPG_GetFuelCurrent().ToString();
+        LFPG_Util.Info(logMsg);
     }
 
     // ---- Helper: check if item type is an LFPG kit ----

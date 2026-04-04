@@ -6,7 +6,25 @@
 // v0.7.35 (Gemini 3b): Range validation + clamping on load.
 // v0.7.36 (Hotfix): Pre-build Warn strings for Enforce compat.
 // v4.6: Vanilla compat — external mod consumer support.
+// v4.7: Furnace fuel whitelist + heat emission (UTS).
 // =========================================================
+
+// ---- Furnace fuel whitelist entry (v4.7) ----
+// JSON-serializable. Matched by exact classname (GetType()).
+// burnTimeSec: how many seconds ONE unit of this item fuels the furnace.
+// Internally converted to fuel units: fuelUnits = burnTimeSec / 30.
+// Example: { "classname": "Firewood", "burnTimeSec": 300 } = 5 minutes
+class LFPG_FurnaceFuelEntry
+{
+    string classname;
+    int burnTimeSec;
+
+    void LFPG_FurnaceFuelEntry()
+    {
+        classname = "";
+        burnTimeSec = 0;
+    }
+};
 
 // ---- Vanilla consumption override entry (v4.6) ----
 // JSON-serializable. Matches by IsKindOf (inheritance-aware).
@@ -87,6 +105,33 @@ class LFPG_ServerSettings
     // with "BBP_". Exact: "Fireplace" blocks via IsKindOf (inheritance).
     ref array<ref LFPG_VanillaBlacklistEntry> VanillaBlacklist;
 
+    // ---- v4.7: Furnace Fuel Whitelist ----
+    // When true, ONLY items listed in FurnaceFuelWhitelist generate fuel.
+    // Items NOT in the list are still burned (destroyed) but add 0 fuel.
+    // When false (default), any item generates fuel based on its inventory size (w*h*qty).
+    bool FurnaceFuelWhitelistOnly = false;
+
+    // List of accepted fuel items with burn time in seconds per unit.
+    // Only used when FurnaceFuelWhitelistOnly = true.
+    // Each entry: classname (exact match) + burnTimeSec (seconds of fuel per item).
+    // Stack items (canBeSplit) multiply by quantity.
+    ref array<ref LFPG_FurnaceFuelEntry> FurnaceFuelWhitelist;
+
+    // ---- v4.7: Furnace Heat Emission ----
+    // When true, the furnace warms nearby players/items while burning,
+    // similar to a vanilla campfire. Uses DayZ UniversalTemperatureSource.
+    bool FurnaceHeatEnabled = false;
+
+    // Radius (meters) where players receive full warmth. Campfire = 2m.
+    float FurnaceHeatFullWarmthRadiusM = 3.0;
+
+    // Radius (meters) where warmth fades to zero. Must be > FullWarmthRadiusM. Campfire = 4m.
+    float FurnaceHeatFadeOutRadiusM = 5.0;
+
+    // Heat intensity as a multiplier of a vanilla campfire.
+    // 1.0 = same as campfire, 1.5 = 50% warmer, 2.0 = double. Campfire = 1.0.
+    float FurnaceHeatStrengthMultiplier = 1.25;
+
     void LFPG_ServerSettings()
     {
         VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
@@ -131,6 +176,21 @@ class LFPG_ServerSettings
         ref LFPG_VanillaBlacklistEntry e7 = new LFPG_VanillaBlacklistEntry();
         e7.pattern = "RadioTransmitterCivil";
         VanillaBlacklist.Insert(e7);
+
+        // ---- Furnace fuel whitelist defaults (v4.7) ----
+        FurnaceFuelWhitelist = new array<ref LFPG_FurnaceFuelEntry>;
+
+        ref LFPG_FurnaceFuelEntry fuelFirewood = new LFPG_FurnaceFuelEntry();
+        string fwClass = "Firewood";
+        fuelFirewood.classname = fwClass;
+        fuelFirewood.burnTimeSec = 300;
+        FurnaceFuelWhitelist.Insert(fuelFirewood);
+
+        ref LFPG_FurnaceFuelEntry fuelLog = new LFPG_FurnaceFuelEntry();
+        string logClass = "WoodenLog";
+        fuelLog.classname = logClass;
+        fuelLog.burnTimeSec = 600;
+        FurnaceFuelWhitelist.Insert(fuelLog);
     }
 };
 
@@ -150,6 +210,21 @@ static const float LFPG_SETTINGS_MAX_BUBBLE_M     = 500.0;
 // v4.6: Vanilla compat bounds
 static const float LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION = 0.1;
 static const float LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION = 500.0;
+
+// v4.7: Furnace fuel whitelist bounds
+static const int   LFPG_SETTINGS_MIN_FUEL_BURN_SEC  = 30;
+static const int   LFPG_SETTINGS_MAX_FUEL_BURN_SEC  = 86400;
+
+// v4.7: Furnace heat emission bounds
+static const float LFPG_SETTINGS_MIN_HEAT_RADIUS    = 0.5;
+static const float LFPG_SETTINGS_MAX_HEAT_FULL_R    = 10.0;
+static const float LFPG_SETTINGS_MAX_HEAT_FADE_R    = 20.0;
+static const float LFPG_SETTINGS_MIN_HEAT_MULT      = 0.1;
+static const float LFPG_SETTINGS_MAX_HEAT_MULT      = 5.0;
+
+// Vanilla campfire heat cap (PARAM_MAX_TRANSFERED_TEMPERATURE).
+// Used internally: effective temp = this * FurnaceHeatStrengthMultiplier.
+static const float LFPG_CAMPFIRE_HEAT_CAP = 20.0;
 
 class LFPG_Settings
 {
@@ -331,6 +406,104 @@ class LFPG_Settings
                 vce.consumption = floatVal;
             }
         }
+
+        // ---- v4.7: Furnace fuel whitelist validation ----
+        if (!s_Settings.FurnaceFuelWhitelist)
+        {
+            s_Settings.FurnaceFuelWhitelist = new array<ref LFPG_FurnaceFuelEntry>;
+        }
+
+        int fwi;
+        for (fwi = 0; fwi < s_Settings.FurnaceFuelWhitelist.Count(); fwi = fwi + 1)
+        {
+            LFPG_FurnaceFuelEntry fwe = s_Settings.FurnaceFuelWhitelist[fwi];
+            if (!fwe)
+                continue;
+            if (fwe.classname == "")
+            {
+                msg = "Settings: FurnaceFuelWhitelist[";
+                msg = msg + fwi.ToString();
+                msg = msg + "] has empty classname";
+                LFPG_Util.Warn(msg);
+            }
+            intVal = ClampInt(fwe.burnTimeSec,
+                              LFPG_SETTINGS_MIN_FUEL_BURN_SEC,
+                              LFPG_SETTINGS_MAX_FUEL_BURN_SEC);
+            if (intVal != fwe.burnTimeSec)
+            {
+                msg = "Settings: FurnaceFuelWhitelist[";
+                msg = msg + fwi.ToString();
+                msg = msg + "] burnTimeSec=";
+                msg = msg + fwe.burnTimeSec.ToString();
+                msg = msg + " clamped to ";
+                msg = msg + intVal.ToString();
+                LFPG_Util.Warn(msg);
+                fwe.burnTimeSec = intVal;
+            }
+        }
+
+        // Warn: whitelist enabled but empty
+        if (s_Settings.FurnaceFuelWhitelistOnly)
+        {
+            if (s_Settings.FurnaceFuelWhitelist.Count() <= 0)
+            {
+                msg = "Settings: FurnaceFuelWhitelistOnly=true but whitelist is empty.";
+                msg = msg + " Furnace will burn items without fuel benefit.";
+                LFPG_Util.Warn(msg);
+            }
+        }
+
+        // ---- v4.7: Furnace heat emission validation ----
+        floatVal = ClampFloat(s_Settings.FurnaceHeatFullWarmthRadiusM,
+                              LFPG_SETTINGS_MIN_HEAT_RADIUS,
+                              LFPG_SETTINGS_MAX_HEAT_FULL_R);
+        if (floatVal != s_Settings.FurnaceHeatFullWarmthRadiusM)
+        {
+            msg = "Settings: FurnaceHeatFullWarmthRadiusM=";
+            msg = msg + s_Settings.FurnaceHeatFullWarmthRadiusM.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            s_Settings.FurnaceHeatFullWarmthRadiusM = floatVal;
+        }
+
+        floatVal = ClampFloat(s_Settings.FurnaceHeatFadeOutRadiusM,
+                              LFPG_SETTINGS_MIN_HEAT_RADIUS,
+                              LFPG_SETTINGS_MAX_HEAT_FADE_R);
+        if (floatVal != s_Settings.FurnaceHeatFadeOutRadiusM)
+        {
+            msg = "Settings: FurnaceHeatFadeOutRadiusM=";
+            msg = msg + s_Settings.FurnaceHeatFadeOutRadiusM.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            s_Settings.FurnaceHeatFadeOutRadiusM = floatVal;
+        }
+
+        // Ensure FullWarmth < FadeOut
+        if (s_Settings.FurnaceHeatFullWarmthRadiusM >= s_Settings.FurnaceHeatFadeOutRadiusM)
+        {
+            msg = "Settings: FurnaceHeatFullWarmthRadiusM (";
+            msg = msg + s_Settings.FurnaceHeatFullWarmthRadiusM.ToString();
+            msg = msg + ") must be < FadeOutRadiusM (";
+            msg = msg + s_Settings.FurnaceHeatFadeOutRadiusM.ToString();
+            msg = msg + "). Adjusting FadeOut to Full+2.";
+            LFPG_Util.Warn(msg);
+            s_Settings.FurnaceHeatFadeOutRadiusM = s_Settings.FurnaceHeatFullWarmthRadiusM + 2.0;
+        }
+
+        floatVal = ClampFloat(s_Settings.FurnaceHeatStrengthMultiplier,
+                              LFPG_SETTINGS_MIN_HEAT_MULT,
+                              LFPG_SETTINGS_MAX_HEAT_MULT);
+        if (floatVal != s_Settings.FurnaceHeatStrengthMultiplier)
+        {
+            msg = "Settings: FurnaceHeatStrengthMultiplier=";
+            msg = msg + s_Settings.FurnaceHeatStrengthMultiplier.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            s_Settings.FurnaceHeatStrengthMultiplier = floatVal;
+        }
     }
 
     static void Load()
@@ -384,6 +557,23 @@ class LFPG_Settings
                     blCount = s_Settings.VanillaBlacklist.Count();
                 }
                 msg = msg + " Blacklist=" + blCount.ToString();
+                // v4.7: Furnace settings
+                msg = msg + " FuelWhitelistOnly=" + s_Settings.FurnaceFuelWhitelistOnly.ToString();
+                int fwCount = 0;
+                if (s_Settings.FurnaceFuelWhitelist)
+                {
+                    fwCount = s_Settings.FurnaceFuelWhitelist.Count();
+                }
+                msg = msg + " FuelEntries=" + fwCount.ToString();
+                msg = msg + " FurnaceHeat=" + s_Settings.FurnaceHeatEnabled.ToString();
+                if (s_Settings.FurnaceHeatEnabled)
+                {
+                    float heatAbs = LFPG_CAMPFIRE_HEAT_CAP * s_Settings.FurnaceHeatStrengthMultiplier;
+                    msg = msg + " FullRadius=" + s_Settings.FurnaceHeatFullWarmthRadiusM.ToString() + "m";
+                    msg = msg + " FadeOut=" + s_Settings.FurnaceHeatFadeOutRadiusM.ToString() + "m";
+                    msg = msg + " Strength=x" + s_Settings.FurnaceHeatStrengthMultiplier.ToString();
+                    msg = msg + " (=" + heatAbs.ToString() + ", campfire=20)";
+                }
                 LFPG_Util.Info(msg);
             }
         }
@@ -436,6 +626,9 @@ class LFPG_Settings
     // Parsed blacklist: exact patterns (for IsKindOf)
     protected static ref array<string> s_BLExact;
 
+    // v4.7: Fuel whitelist cache: classname -> burnTimeSec
+    protected static ref map<string, int> s_FuelWhitelistCache;
+
     // Called after Load to parse blacklist into prefix/exact arrays.
     protected static void BuildBlacklistIndex()
     {
@@ -443,6 +636,7 @@ class LFPG_Settings
         s_ConsumptionCache = new map<string, float>;
         s_BLPrefixes = new array<string>;
         s_BLExact = new array<string>;
+        s_FuelWhitelistCache = new map<string, int>;
 
         if (!s_Settings || !s_Settings.VanillaBlacklist)
             return;
@@ -481,6 +675,46 @@ class LFPG_Settings
         blMsg = blMsg + " exact=";
         blMsg = blMsg + s_BLExact.Count().ToString();
         LFPG_Util.Info(blMsg);
+
+        // v4.7: Build fuel whitelist cache
+        if (s_Settings && s_Settings.FurnaceFuelWhitelist)
+        {
+            int fwi;
+            for (fwi = 0; fwi < s_Settings.FurnaceFuelWhitelist.Count(); fwi = fwi + 1)
+            {
+                LFPG_FurnaceFuelEntry fwe = s_Settings.FurnaceFuelWhitelist[fwi];
+                if (!fwe)
+                    continue;
+                if (fwe.classname == "")
+                    continue;
+                if (fwe.burnTimeSec <= 0)
+                    continue;
+                s_FuelWhitelistCache.Set(fwe.classname, fwe.burnTimeSec);
+            }
+
+            string fwMsg = "FurnaceFuel: whitelist cached entries=";
+            fwMsg = fwMsg + s_FuelWhitelistCache.Count().ToString();
+            LFPG_Util.Info(fwMsg);
+        }
+    }
+
+    // =========================================================
+    // v4.7: Furnace fuel whitelist helper
+    //
+    // Returns burnTimeSec for a given classname, or -1 if not found.
+    // O(1) via cached map. Only meaningful when FurnaceFuelWhitelistOnly=true.
+    // =========================================================
+    static int GetWhitelistFuelSec(string typeName)
+    {
+        if (!s_FuelWhitelistCache)
+            return -1;
+
+        int burnSec = 0;
+        bool found = s_FuelWhitelistCache.Find(typeName, burnSec);
+        if (found)
+            return burnSec;
+
+        return -1;
     }
 
     // Check if entity is blacklisted. Uses prefix match on GetType()

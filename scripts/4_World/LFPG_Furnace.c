@@ -58,6 +58,10 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     protected EffectSound m_FurnaceLoopSound;
     protected ref Effect m_SmokeEffect;
 
+    // ---- v4.7: Heat emission (UTS) ----
+    protected ref UniversalTemperatureSource m_UTSource;
+    protected ref UniversalTemperatureSourceSettings m_UTSSettings;
+
     // ============================================
     // Constructor — port + SyncVars
     // ============================================
@@ -94,6 +98,52 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     override bool CanDisplayCargo()
     {
         return true;
+    }
+
+    // ============================================
+    // EEInit — v4.7: Create UTS for heat emission
+    // ============================================
+    override void EEInit()
+    {
+        super.EEInit();
+
+        #ifdef SERVER
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        if (st.FurnaceHeatEnabled)
+        {
+            m_UTSSettings = new UniversalTemperatureSourceSettings();
+            m_UTSSettings.m_Updateable = true;
+            m_UTSSettings.m_ManualUpdate = false;
+            float utsInterval = 3.0;
+            m_UTSSettings.m_UpdateInterval = utsInterval;
+            m_UTSSettings.m_RangeFull = st.FurnaceHeatFullWarmthRadiusM;
+            m_UTSSettings.m_RangeMax = st.FurnaceHeatFadeOutRadiusM;
+            float heatCap = LFPG_CAMPFIRE_HEAT_CAP * st.FurnaceHeatStrengthMultiplier;
+            m_UTSSettings.m_TemperatureCap = heatCap;
+            m_UTSSettings.m_TemperatureItemCap = GameConstants.ITEM_TEMPERATURE_NEUTRAL_ZONE_MIDDLE;
+
+            UniversalTemperatureSourceLambdaConstant utsLambda = new UniversalTemperatureSourceLambdaConstant();
+            m_UTSource = new UniversalTemperatureSource(this, m_UTSSettings, utsLambda);
+            // UTS starts inactive; activated in LFPG_OnInitDevice or ToggleFurnace
+        }
+        #endif
+    }
+
+    // v4.7: Helper to toggle UTS heat on/off
+    protected void LFPG_SetHeatActive(bool active)
+    {
+        #ifdef SERVER
+        if (m_UTSource)
+        {
+            m_UTSource.SetActive(active);
+        }
+        #endif
+    }
+
+    // v4.7: Prevent external heat sources from overriding furnace temp
+    override bool IsSelfAdjustingTemperature()
+    {
+        return m_SourceOn;
     }
 
     // ============================================
@@ -218,6 +268,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         {
             LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
         }
+
+        // v4.7: Restore UTS heat if furnace was on
+        if (m_SourceOn)
+        {
+            LFPG_SetHeatActive(true);
+        }
         #endif
     }
 
@@ -230,6 +286,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             LFPG_NetworkManager.Get().UnregisterFurnace(this);
             SetSynchDirty();
         }
+        LFPG_SetHeatActive(false);
         #endif
 
         LFPG_CleanupClientFX();
@@ -239,6 +296,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     {
         #ifdef SERVER
         LFPG_NetworkManager.Get().UnregisterFurnace(this);
+        LFPG_SetHeatActive(false);
         #endif
 
         LFPG_CleanupClientFX();
@@ -252,6 +310,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             m_SourceOn = false;
             LFPG_NetworkManager.Get().UnregisterFurnace(this);
             SetSynchDirty();
+
+            LFPG_SetHeatActive(false);
         }
         #endif
     }
@@ -290,6 +350,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     void ~LFPG_Furnace()
     {
         SEffectManager.DestroyEffect(m_SmokeEffect);
+
+        // v4.7: Deactivate UTS before GC
+        if (m_UTSource)
+        {
+            m_UTSource.SetActive(false);
+        }
     }
 
     // ============================================
@@ -401,6 +467,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
                 string offMsg = "[LFPG_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
                 offMsg = offMsg + m_DeviceId;
                 LFPG_Util.Info(offMsg);
+
+                LFPG_SetHeatActive(false);
             }
         }
         #endif
@@ -426,6 +494,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             offMsg = offMsg + " id=";
             offMsg = offMsg + m_DeviceId;
             LFPG_Util.Info(offMsg);
+
+            LFPG_SetHeatActive(false);
         }
         else
         {
@@ -459,6 +529,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
                 onMsg = onMsg + " id=";
                 onMsg = onMsg + m_DeviceId;
                 LFPG_Util.Info(onMsg);
+
+                LFPG_SetHeatActive(true);
             }
         }
         #endif
@@ -529,6 +601,44 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             fuel = fuel + LFPG_CalcFuelRecursive(att);
         }
 
+        return fuel;
+    }
+
+    // v4.7: Calculate fuel for a single item using whitelist config.
+    // Only checks the top-level item type (no recursive contents).
+    // Returns 0 if item is not in the whitelist.
+    // Fuel units = (burnTimeSec / 30) * quantity.
+    int LFPG_CalcFuelWhitelist(EntityAI item)
+    {
+        if (!item)
+            return 0;
+
+        string itemType = item.GetType();
+        int burnSec = LFPG_Settings.GetWhitelistFuelSec(itemType);
+        if (burnSec <= 0)
+            return 0;
+
+        int fuelPerUnit = burnSec / 30;
+        if (fuelPerUnit <= 0)
+        {
+            fuelPerUnit = 1;
+        }
+
+        int qty = 1;
+        string splitPath = "CfgVehicles ";
+        splitPath = splitPath + itemType;
+        splitPath = splitPath + " canBeSplit";
+        int splitVal = GetGame().ConfigGetInt(splitPath);
+        if (splitVal > 0)
+        {
+            int rawQty = item.GetQuantity();
+            if (rawQty > 1)
+            {
+                qty = rawQty;
+            }
+        }
+
+        int fuel = fuelPerUnit * qty;
         return fuel;
     }
 
@@ -612,6 +722,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (count <= 0)
             return false;
 
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        bool whitelistMode = st.FurnaceFuelWhitelistOnly;
+
         int bestFuel = 0;
         int bestIdx = -1;
         int si;
@@ -621,7 +734,17 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (!scanItem)
                 continue;
 
-            int scanFuel = LFPG_CalcFuelRecursive(scanItem);
+            int scanFuel = 0;
+            if (whitelistMode)
+            {
+                // v4.7: Only consider whitelisted items
+                scanFuel = LFPG_CalcFuelWhitelist(scanItem);
+            }
+            else
+            {
+                scanFuel = LFPG_CalcFuelRecursive(scanItem);
+            }
+
             if (scanFuel > bestFuel)
             {
                 bestFuel = scanFuel;

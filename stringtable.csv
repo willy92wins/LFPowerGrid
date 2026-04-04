@@ -71,6 +71,7 @@
 "STR_LFPG_ACTION_TOGGLE_FURNACE","Toggle Furnace","Toggle Furnace","Encender/Apagar Horno","Ofen umschalten","Переключить печь","切换焚化炉"
 "STR_LFPG_ACTION_FURNACE_ON","Turn On Furnace","Turn On Furnace","Encender Horno","Ofen einschalten","Включить печь","开启焚化炉"
 "STR_LFPG_ACTION_FURNACE_OFF","Turn Off Furnace","Turn Off Furnace","Apagar Horno","Ofen ausschalten","Выключить печь","关闭焚化炉"
+"STR_LFPG_ACTION_BURN_ITEM_NO_FUEL","Burn Item (no fuel)","Burn Item (no fuel)","Quemar Item (sin combustible)","Gegenstand verbrennen (kein Brennstoff)","Сжечь предмет (без топлива)","燃烧物品（无燃料）"
 "STR_LFPG_SorterKit","Sorter Kit","Sorter Kit","Kit Clasificador","Sortierer-Kit","Набор сортировщика","分拣器套件"
 "STR_LFPG_SorterKit_Desc","An automated item sorter. Place near a container to link.","An automated item sorter. Place near a container to link.","Un clasificador automatico de items. Colocar cerca de un contenedor.","Ein automatischer Gegenstandssortierer. In der Naehe eines Behaelters platzieren.","Автоматический сортировщик предметов. Размещайте рядом с контейнером.","自动物品分拣器。放置在容器附近以关联。"
 "STR_LFPG_Sorter","Power Sorter","Power Sorter","Clasificador Electrico","Stromsortierer","Электросортировщик","电力分拣器"

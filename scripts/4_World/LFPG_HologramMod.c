@@ -433,10 +433,16 @@ modded class Hologram
         vector hitNormal;
         int contactComponent;
 
-        // Raycast: exclude projection entity to avoid self-hit.
+        // Raycast: exclude BOTH player and projection to avoid self-hit.
+        // FIX: In first person, GetCurrentCameraPosition() is inside the
+        // player's head. Without excluding the player from the ray, it
+        // immediately hits the player's own collision geometry, placing
+        // the hologram at eye level. Vanilla Hologram.GetProjectionEntityPosition()
+        // passes player as 'with' param (7th) for exactly this reason.
+        // 'with' (param 7) and 'ignore' (param 8) both act as exclude objects.
         float rayRadius = 0.0;
         set<Object> rayResults = null;
-        Object rayWith = null;
+        Object rayWith = player;
         bool bSorted = false;
         bool bGroundOnly = false;
 
@@ -690,14 +696,17 @@ modded class Hologram
         vector groundHitNormal;
         int groundComponent;
         set<Object> groundResults = null;
-        Object groundWith = null;
 
         EntityAI proj = GetProjectionEntity();
         bool gSorted = false;
         bool gGroundOnly = false;
         float gRadius = 0.0;
 
-        bool groundHit = DayZPhysics.RaycastRV(rayFrom, rayTo, groundHitPos, groundHitNormal, groundComponent, groundResults, groundWith, proj, gSorted, gGroundOnly, ObjIntersectFire, gRadius);
+        // FIX: Exclude player ('with' param) so vertical ray doesn't
+        // hit player collision when standing directly above snap point.
+        Object gWith = m_Player;
+
+        bool groundHit = DayZPhysics.RaycastRV(rayFrom, rayTo, groundHitPos, groundHitNormal, groundComponent, groundResults, gWith, proj, gSorted, gGroundOnly, ObjIntersectFire, gRadius);
 
         if (groundHit)
         {
