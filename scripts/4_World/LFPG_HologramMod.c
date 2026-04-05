@@ -71,6 +71,17 @@ modded class Hologram
     protected bool m_LFPG_WasWallMode;
 
     // ============================================
+    // Constructor: safety-clear hologram flag (v4.4)
+    // Base Hologram() runs first (incl. CreateObjectEx at line 114).
+    // If CreateObjectEx failed without reaching EEInit, the static
+    // flag could be stale — clear it here as a safety net.
+    // ============================================
+    void Hologram(PlayerBase player, vector pos, ItemBase item)
+    {
+        LFPG_DeviceBase.LFPG_ClearHologramFlag();
+    }
+
+    // ============================================
     // Different-model kit hologram overrides
     // v3.0: Single Cast to LFPG_KitBaseDeployable
     // ============================================
@@ -82,6 +93,9 @@ modded class Hologram
             LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
             if (deployKit)
             {
+                // v4.4: Signal DeviceBase.EEInit to skip LFPG registration
+                // for the projection entity that CreateObjectEx is about to spawn.
+                LFPG_DeviceBase.LFPG_FlagHologramCreation();
                 return deployKit.GetDeployedClassname();
             }
         }

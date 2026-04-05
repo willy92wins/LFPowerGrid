@@ -43,6 +43,23 @@ class LFPG_DeviceBase : Inventory_Base
     // ---- Port system ----
     protected ref array<ref LFPG_PortDef> m_Ports;
 
+    // ---- Hologram projection guard (v4.4) ----
+    // Static flag: set by HologramMod.ProjectionBasedOnParent() just before
+    // CreateObjectEx spawns the projection entity. Checked + cleared in EEInit.
+    // Prevents hologram projections from registering as real LFPG devices.
+    static bool s_LFPG_SkipHologramInit;
+    protected bool m_LFPG_IsHologramProjection;
+
+    static void LFPG_FlagHologramCreation()
+    {
+        s_LFPG_SkipHologramInit = true;
+    }
+
+    static void LFPG_ClearHologramFlag()
+    {
+        s_LFPG_SkipHologramInit = false;
+    }
+
     // ============================================
     // Constructor
     // ============================================
@@ -183,6 +200,16 @@ class LFPG_DeviceBase : Inventory_Base
     {
         super.EEInit();
 
+        // v4.4: Hologram projection guard.
+        // When Hologram constructor spawns a projection entity of a device
+        // type, skip all LFPG init (DeviceId, registry, NM registration).
+        if (s_LFPG_SkipHologramInit)
+        {
+            s_LFPG_SkipHologramInit = false;
+            m_LFPG_IsHologramProjection = true;
+            return;
+        }
+
         #ifdef SERVER
         if (m_DeviceIdLow == 0 && m_DeviceIdHigh == 0)
         {
@@ -203,6 +230,12 @@ class LFPG_DeviceBase : Inventory_Base
     // ============================================
     override void EEKilled(Object killer)
     {
+        if (m_LFPG_IsHologramProjection)
+        {
+            super.EEKilled(killer);
+            return;
+        }
+
         LFPG_DeviceLifecycle.OnDeviceKilled(this, m_DeviceId);
         LFPG_OnKilled();
         super.EEKilled(killer);
@@ -213,6 +246,12 @@ class LFPG_DeviceBase : Inventory_Base
     // ============================================
     override void EEDelete(EntityAI parent)
     {
+        if (m_LFPG_IsHologramProjection)
+        {
+            super.EEDelete(parent);
+            return;
+        }
+
         m_LFPG_Deleting = true;
         LFPG_OnDeleted();
         // Future: LFPG_SpatialGrid.Get().Remove(this)
@@ -246,6 +285,10 @@ class LFPG_DeviceBase : Inventory_Base
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
+
+        if (m_LFPG_IsHologramProjection)
+            return;
+
         LFPG_TryRegister();
 
         #ifndef SERVER
