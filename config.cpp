@@ -1940,7 +1940,7 @@ class CfgVehicles
         descriptionShort = "$STR_LFPG_Fridge_Desc";
         model = "\LFPowerGrid\data\fridge\fridge.p3d";
         weight = 15000;
-        itemSize[] = {0, 0};
+        itemSize[] = {10, 10};
         itemBehaviour = 0;
         carveNavmesh = 1;
         physLayer = "item_large";
@@ -1961,6 +1961,17 @@ class CfgVehicles
                 source = "user";
                 initPhase = 0;
                 animPeriod = 0.5;
+            };
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 1000;
+                };
             };
         };
     };
