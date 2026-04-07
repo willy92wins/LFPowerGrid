@@ -105,6 +105,13 @@ class LFPG_ServerSettings
     // with "BBP_". Exact: "Fireplace" blocks via IsKindOf (inheritance).
     ref array<ref LFPG_VanillaBlacklistEntry> VanillaBlacklist;
 
+    // ---- v4.8: Door Controller ----
+    // When true, the DoorController calls LockDoor()/UnlockDoor() on
+    // vanilla building doors so players cannot manually open/close them
+    // while the controller is active. Only applies to Building doors,
+    // NOT to Fences or BBP doors.
+    bool DoorControllerLockBuildingDoors = true;
+
     // ---- v4.7: Furnace Fuel Whitelist ----
     // When true, ONLY items listed in FurnaceFuelWhitelist generate fuel.
     // Items NOT in the list are still burned (destroyed) but add 0 fuel.
@@ -565,6 +572,7 @@ class LFPG_Settings
                     fwCount = s_Settings.FurnaceFuelWhitelist.Count();
                 }
                 msg = msg + " FuelEntries=" + fwCount.ToString();
+                msg = msg + " DCLockDoors=" + s_Settings.DoorControllerLockBuildingDoors.ToString();
                 msg = msg + " FurnaceHeat=" + s_Settings.FurnaceHeatEnabled.ToString();
                 if (s_Settings.FurnaceHeatEnabled)
                 {

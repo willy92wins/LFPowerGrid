@@ -1,11 +1,13 @@
 // =========================================================
-// LF_PowerGrid - Door Controller device (v4.0 Refactor)
+// LF_PowerGrid - Door Controller device (v4.8)
 //
 // LFPG_DoorController_Kit:  Holdable, deployable (same-model pattern).
 // LFPG_DoorController:      CONSUMER, 1 IN (input_1), 5 u/s, no wire store.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_DeviceBase.
-//   Boilerplate removed. Door logic preserved unchanged.
+// v4.8: Building door pairing fix (GetDoorSoundPos-based search),
+//        LockDoor/UnlockDoor support via DoorControllerLockBuildingDoors,
+//        persist DoorType + DoorIndex (ver 2, no save wipe).
 // =========================================================
 
 static const string LFPG_DC_RVMAT_OFF = "\LFPowerGrid\data\door_controller\data\door_controller_red.rvmat";
@@ -15,9 +17,14 @@ static const int LFPG_DOORTYPE_NONE     = 0;
 static const int LFPG_DOORTYPE_FENCE    = 1;
 static const int LFPG_DOORTYPE_BUILDING = 2;
 
-static const float LFPG_DC_PAIR_RADIUS     = 1.0;
-static const float LFPG_DC_PAIR_RADIUS_SQ  = 1.0;
-static const int LFPG_DC_MAX_DOOR_INDEX    = 5;
+// Search radius for GetObjectsAtPosition (large to catch building origins)
+static const float LFPG_DC_SEARCH_RADIUS = 50.0;
+
+// Max distance squared from controller to Fence position (2m)
+static const float LFPG_DC_PAIR_DIST_SQ_FENCE = 4.0;
+
+// Max distance squared from controller to building door via GetDoorSoundPos (2.5m)
+static const float LFPG_DC_PAIR_DIST_SQ_DOOR = 6.25;
 
 class LFPG_DoorController_Kit : LFPG_KitBase
 {
@@ -55,10 +62,14 @@ class LFPG_DoorController : LFPG_DeviceBase
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet = false;
 
-    // ---- Door pairing (server only, NOT persisted) ----
+    // ---- Door pairing (server only, persisted via Extra) ----
     protected Object m_PairedDoor   = null;
     protected int    m_DoorType     = 0;
     protected int    m_DoorIndex    = -1;
+
+    // ---- Persistence hints (loaded before EEInit, used by OnInit) ----
+    protected int m_SavedDoorType  = 0;
+    protected int m_SavedDoorIndex = -1;
 
     void LFPG_DoorController()
     {
@@ -121,12 +132,56 @@ class LFPG_DoorController : LFPG_DeviceBase
         #endif
     }
 
+    // ============================================
+    // Persistence (v4.8: persist DoorType + DoorIndex)
+    // ============================================
+    override int LFPG_GetDevicePersistVersion()
+    {
+        return 2;
+    }
+
+    override void LFPG_OnStoreSaveExtra(ParamsWriteContext ctx)
+    {
+        ctx.Write(m_DoorType);
+        ctx.Write(m_DoorIndex);
+    }
+
+    override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver)
+    {
+        if (ver >= 2)
+        {
+            if (!ctx.Read(m_SavedDoorType))
+            {
+                string errType = "[LFPG_DoorController] OnStoreLoad failed: m_DoorType";
+                LFPG_Util.Error(errType);
+                return false;
+            }
+
+            if (!ctx.Read(m_SavedDoorIndex))
+            {
+                string errIdx = "[LFPG_DoorController] OnStoreLoad failed: m_DoorIndex";
+                LFPG_Util.Error(errIdx);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // ---- Lifecycle hooks ----
     override void LFPG_OnInit()
     {
         #ifdef SERVER
         LFPG_NetworkManager.Get().RegisterDoorController(this);
-        LFPG_SearchAndPairDoor();
+
+        if (m_SavedDoorType > 0 && m_SavedDoorIndex >= 0)
+        {
+            LFPG_SearchAndPairDoorWithHint(m_SavedDoorType, m_SavedDoorIndex);
+        }
+        else
+        {
+            LFPG_SearchAndPairDoor();
+        }
         #endif
     }
 
@@ -185,6 +240,28 @@ class LFPG_DoorController : LFPG_DeviceBase
     // ============================================
     protected void LFPG_UnpairDoor()
     {
+        #ifdef SERVER
+        // Unlock building door before unpairing so it is not left
+        // permanently locked after the controller is destroyed/cut.
+        if (m_DoorType == LFPG_DOORTYPE_BUILDING && m_PairedDoor)
+        {
+            Building bUnpair = Building.Cast(m_PairedDoor);
+            if (bUnpair)
+            {
+                if (bUnpair.IsDoorLocked(m_DoorIndex))
+                {
+                    bUnpair.UnlockDoor(m_DoorIndex);
+
+                    string unlockMsg = "[LFPG_DoorController] Unlocked door on unpair idx=";
+                    unlockMsg = unlockMsg + m_DoorIndex.ToString();
+                    unlockMsg = unlockMsg + " id=";
+                    unlockMsg = unlockMsg + m_DeviceId;
+                    LFPG_Util.Debug(unlockMsg);
+                }
+            }
+        }
+        #endif
+
         m_PairedDoor = null;
         m_DoorType = LFPG_DOORTYPE_NONE;
         m_DoorIndex = -1;
@@ -198,6 +275,7 @@ class LFPG_DoorController : LFPG_DeviceBase
 
         if (m_PairedDoor)
         {
+            // ---- Check paired object is still alive ----
             EntityAI pairedEntity = EntityAI.Cast(m_PairedDoor);
             bool isAlive = false;
             if (pairedEntity)
@@ -215,16 +293,35 @@ class LFPG_DoorController : LFPG_DeviceBase
                 return;
             }
 
+            // ---- Distance check: type-specific ----
             vector myPos = GetPosition();
-            vector doorPos = m_PairedDoor.GetPosition();
-            float dx = myPos[0] - doorPos[0];
-            float dy = myPos[1] - doorPos[1];
-            float dz = myPos[2] - doorPos[2];
-            float distSq = (dx * dx) + (dy * dy) + (dz * dz);
+            float distSq = 0.0;
+            float maxDistSq = 0.0;
 
-            if (distSq > LFPG_DC_PAIR_RADIUS_SQ)
+            if (m_DoorType == LFPG_DOORTYPE_FENCE)
             {
-                string unpairMsg = "[LFPG_DoorController] Door moved out of range, unpairing. id=" + m_DeviceId;
+                distSq = vector.DistanceSq(myPos, m_PairedDoor.GetPosition());
+                maxDistSq = LFPG_DC_PAIR_DIST_SQ_FENCE;
+            }
+            else if (m_DoorType == LFPG_DOORTYPE_BUILDING)
+            {
+                Building bPoll = Building.Cast(m_PairedDoor);
+                if (bPoll)
+                {
+                    vector doorSoundPos = bPoll.GetDoorSoundPos(m_DoorIndex);
+                    distSq = vector.DistanceSq(myPos, doorSoundPos);
+                }
+                else
+                {
+                    distSq = 9999.0;
+                }
+                maxDistSq = LFPG_DC_PAIR_DIST_SQ_DOOR;
+            }
+
+            if (distSq > maxDistSq)
+            {
+                string unpairMsg = "[LFPG_DoorController] Door out of range, unpairing. id=";
+                unpairMsg = unpairMsg + m_DeviceId;
                 LFPG_Util.Debug(unpairMsg);
                 LFPG_UnpairDoor();
                 return;
@@ -263,17 +360,48 @@ class LFPG_DoorController : LFPG_DeviceBase
             {
                 LFPG_ForceCloseDoor();
             }
+            else
+            {
+                // Door already closed — ensure it is locked if setting enabled
+                LFPG_EnsureDoorLocked();
+            }
         }
         #endif
     }
 
+    // ============================================
+    // Search and pair: main entry (no hint)
+    // ============================================
     protected void LFPG_SearchAndPairDoor()
     {
         #ifdef SERVER
         LFPG_UnpairDoor();
+        LFPG_DoSearchAndPair(-1, -1);
+        #endif
+    }
 
+    // ============================================
+    // Search and pair: with persistence hint
+    // ============================================
+    protected void LFPG_SearchAndPairDoorWithHint(int hintType, int hintIndex)
+    {
+        #ifdef SERVER
+        LFPG_UnpairDoor();
+        LFPG_DoSearchAndPair(hintType, hintIndex);
+        #endif
+    }
+
+    // ============================================
+    // Core search logic (shared between normal and hint paths)
+    //
+    // hintType / hintIndex: if >= 0, prefer a Building door with
+    // that index (from persisted state). Falls back to best match.
+    // ============================================
+    protected void LFPG_DoSearchAndPair(int hintType, int hintIndex)
+    {
+        #ifdef SERVER
         array<Object> objects = new array<Object>;
-        GetGame().GetObjectsAtPosition(GetPosition(), LFPG_DC_PAIR_RADIUS, objects, null);
+        GetGame().GetObjectsAtPosition(GetPosition(), LFPG_DC_SEARCH_RADIUS, objects, null);
 
         float bestDistSq = 9999.0;
         Object bestDoor = null;
@@ -286,15 +414,15 @@ class LFPG_DoorController : LFPG_DeviceBase
         int i = 0;
 
         Object obj;
-        float dx;
-        float dy;
-        float dz;
         float distSq;
         Fence fence;
         bool isFenceValid;
         Building bld;
-        int doorIdx;
         vector objPos;
+        vector doorSoundPos;
+        int doorCount;
+        int di;
+        float doorDistSq;
 
         #ifdef BBP
         BBP_BASE bbpBase;
@@ -310,15 +438,16 @@ class LFPG_DoorController : LFPG_DeviceBase
             if (obj == this)
                 continue;
 
-            objPos = obj.GetPosition();
-            dx = myPos[0] - objPos[0];
-            dy = myPos[1] - objPos[1];
-            dz = myPos[2] - objPos[2];
-            distSq = (dx * dx) + (dy * dy) + (dz * dz);
-
+            // ---- FENCE / BBP ----
             fence = Fence.Cast(obj);
             if (fence)
             {
+                objPos = fence.GetPosition();
+                distSq = vector.DistanceSq(myPos, objPos);
+
+                if (distSq > LFPG_DC_PAIR_DIST_SQ_FENCE)
+                    continue;
+
                 isFenceValid = false;
 
                 if (fence.HasHinges())
@@ -363,16 +492,42 @@ class LFPG_DoorController : LFPG_DeviceBase
                 continue;
             }
 
+            // ---- BUILDING ----
             bld = Building.Cast(obj);
             if (bld)
             {
-                doorIdx = LFPG_FindFirstValidDoorIndex(bld);
-                if (doorIdx >= 0 && distSq < bestDistSq)
+                doorCount = bld.GetDoorCount();
+
+                // If we have a hint for this building, try hinted index first
+                if (hintType == LFPG_DOORTYPE_BUILDING && hintIndex >= 0 && hintIndex < doorCount)
                 {
-                    bestDistSq = distSq;
-                    bestDoor = obj;
-                    bestType = LFPG_DOORTYPE_BUILDING;
-                    bestIndex = doorIdx;
+                    doorSoundPos = bld.GetDoorSoundPos(hintIndex);
+                    doorDistSq = vector.DistanceSq(myPos, doorSoundPos);
+
+                    if (doorDistSq <= LFPG_DC_PAIR_DIST_SQ_DOOR && doorDistSq < bestDistSq)
+                    {
+                        bestDistSq = doorDistSq;
+                        bestDoor = obj;
+                        bestType = LFPG_DOORTYPE_BUILDING;
+                        bestIndex = hintIndex;
+                        // Hinted door found within range — skip other doors
+                        continue;
+                    }
+                }
+
+                // Scan all doors for the closest one within range
+                for (di = 0; di < doorCount; di = di + 1)
+                {
+                    doorSoundPos = bld.GetDoorSoundPos(di);
+                    doorDistSq = vector.DistanceSq(myPos, doorSoundPos);
+
+                    if (doorDistSq <= LFPG_DC_PAIR_DIST_SQ_DOOR && doorDistSq < bestDistSq)
+                    {
+                        bestDistSq = doorDistSq;
+                        bestDoor = obj;
+                        bestType = LFPG_DOORTYPE_BUILDING;
+                        bestIndex = di;
+                    }
                 }
 
                 continue;
@@ -386,7 +541,8 @@ class LFPG_DoorController : LFPG_DeviceBase
             m_DoorIndex = bestIndex;
 
             float bestDist = Math.Sqrt(bestDistSq);
-            string pairMsg = "[LFPG_DoorController] Paired to door type=" + bestType.ToString();
+            string pairMsg = "[LFPG_DoorController] Paired type=";
+            pairMsg = pairMsg + bestType.ToString();
             pairMsg = pairMsg + " idx=";
             pairMsg = pairMsg + bestIndex.ToString();
             pairMsg = pairMsg + " dist=";
@@ -394,31 +550,21 @@ class LFPG_DoorController : LFPG_DeviceBase
             pairMsg = pairMsg + " id=";
             pairMsg = pairMsg + m_DeviceId;
             LFPG_Util.Info(pairMsg);
+
+            LFPG_ApplyDoorState();
+        }
+        else
+        {
+            string noMsg = "[LFPG_DoorController] No door found within range. id=";
+            noMsg = noMsg + m_DeviceId;
+            LFPG_Util.Debug(noMsg);
         }
         #endif
     }
 
-    protected int LFPG_FindFirstValidDoorIndex(Building bld)
-    {
-        if (!bld)
-            return -1;
-
-        int i = 0;
-        bool canOpen = false;
-
-        for (i = 0; i <= LFPG_DC_MAX_DOOR_INDEX; i = i + 1)
-        {
-            if (bld.IsDoorOpen(i))
-                return i;
-
-            canOpen = bld.CanDoorBeOpened(i, false);
-            if (canOpen)
-                return i;
-        }
-
-        return -1;
-    }
-
+    // ============================================
+    // Door state queries
+    // ============================================
     protected bool LFPG_IsPairedDoorOpen()
     {
         if (!m_PairedDoor)
@@ -447,6 +593,9 @@ class LFPG_DoorController : LFPG_DeviceBase
         return false;
     }
 
+    // ============================================
+    // Door manipulation
+    // ============================================
     protected void LFPG_ForceOpenDoor()
     {
         #ifdef SERVER
@@ -462,7 +611,8 @@ class LFPG_DoorController : LFPG_DeviceBase
                 {
                     f.OpenFence();
 
-                    string openFenceMsg = "[LFPG_DoorController] Opened fence. id=" + m_DeviceId;
+                    string openFenceMsg = "[LFPG_DoorController] Opened fence. id=";
+                    openFenceMsg = openFenceMsg + m_DeviceId;
                     LFPG_Util.Debug(openFenceMsg);
                 }
             }
@@ -474,11 +624,22 @@ class LFPG_DoorController : LFPG_DeviceBase
             Building b = Building.Cast(m_PairedDoor);
             if (b)
             {
+                // Unlock first if locked (setting-dependent)
+                bool lockSetting = LFPG_Settings.Get().DoorControllerLockBuildingDoors;
+                if (lockSetting)
+                {
+                    if (b.IsDoorLocked(m_DoorIndex))
+                    {
+                        b.UnlockDoor(m_DoorIndex, false);
+                    }
+                }
+
                 if (!b.IsDoorOpen(m_DoorIndex))
                 {
                     b.OpenDoor(m_DoorIndex);
 
-                    string openDoorMsg = "[LFPG_DoorController] Opened building door idx=" + m_DoorIndex.ToString();
+                    string openDoorMsg = "[LFPG_DoorController] Opened building door idx=";
+                    openDoorMsg = openDoorMsg + m_DoorIndex.ToString();
                     openDoorMsg = openDoorMsg + " id=";
                     openDoorMsg = openDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(openDoorMsg);
@@ -504,7 +665,8 @@ class LFPG_DoorController : LFPG_DeviceBase
                 {
                     f.CloseFence();
 
-                    string closeFenceMsg = "[LFPG_DoorController] Closed fence. id=" + m_DeviceId;
+                    string closeFenceMsg = "[LFPG_DoorController] Closed fence. id=";
+                    closeFenceMsg = closeFenceMsg + m_DeviceId;
                     LFPG_Util.Debug(closeFenceMsg);
                 }
             }
@@ -520,13 +682,62 @@ class LFPG_DoorController : LFPG_DeviceBase
                 {
                     b.CloseDoor(m_DoorIndex);
 
-                    string closeDoorMsg = "[LFPG_DoorController] Closed building door idx=" + m_DoorIndex.ToString();
+                    string closeDoorMsg = "[LFPG_DoorController] Closed building door idx=";
+                    closeDoorMsg = closeDoorMsg + m_DoorIndex.ToString();
                     closeDoorMsg = closeDoorMsg + " id=";
                     closeDoorMsg = closeDoorMsg + m_DeviceId;
                     LFPG_Util.Debug(closeDoorMsg);
                 }
+
+                // Lock after close (setting-dependent)
+                bool lockSetting = LFPG_Settings.Get().DoorControllerLockBuildingDoors;
+                if (lockSetting)
+                {
+                    if (!b.IsDoorLocked(m_DoorIndex))
+                    {
+                        b.LockDoor(m_DoorIndex, true);
+
+                        string lockMsg = "[LFPG_DoorController] Locked building door idx=";
+                        lockMsg = lockMsg + m_DoorIndex.ToString();
+                        lockMsg = lockMsg + " id=";
+                        lockMsg = lockMsg + m_DeviceId;
+                        LFPG_Util.Debug(lockMsg);
+                    }
+                }
             }
             return;
+        }
+        #endif
+    }
+
+    // Ensures door is locked when power is off and door is already closed.
+    // Called from ApplyDoorState when doorOpen==false and m_PoweredNet==false.
+    protected void LFPG_EnsureDoorLocked()
+    {
+        #ifdef SERVER
+        if (!m_PairedDoor)
+            return;
+
+        if (m_DoorType != LFPG_DOORTYPE_BUILDING)
+            return;
+
+        bool lockSetting = LFPG_Settings.Get().DoorControllerLockBuildingDoors;
+        if (!lockSetting)
+            return;
+
+        Building b = Building.Cast(m_PairedDoor);
+        if (!b)
+            return;
+
+        if (!b.IsDoorLocked(m_DoorIndex))
+        {
+            b.LockDoor(m_DoorIndex, true);
+
+            string lockMsg = "[LFPG_DoorController] EnsureLocked idx=";
+            lockMsg = lockMsg + m_DoorIndex.ToString();
+            lockMsg = lockMsg + " id=";
+            lockMsg = lockMsg + m_DeviceId;
+            LFPG_Util.Debug(lockMsg);
         }
         #endif
     }
