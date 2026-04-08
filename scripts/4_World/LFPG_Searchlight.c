@@ -460,6 +460,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         #ifdef SERVER
         m_AimYaw   = yaw;
         m_AimPitch = pitch;
+        SetSynchDirty();
         #endif
     }
 
@@ -533,6 +534,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         m_SplashX   = sx;
         m_SplashY   = sy;
         m_SplashZ   = sz;
+        SetSynchDirty();
         #endif
     }
 
@@ -552,7 +554,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
             return false;
 
         #ifdef SERVER
-        Object opObj = GetGame().GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
+        Object opObj = g_Game.GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
         if (!opObj)
         {
             string warnGone = "[LFPG_Searchlight] Operator entity gone (disconnect?) — clearing lock";
@@ -599,7 +601,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         if (m_OperatorNetLow == 0 && m_OperatorNetHigh == 0)
             return;
 
-        Object opObj = GetGame().GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
+        Object opObj = g_Game.GetObjectByNetworkId(m_OperatorNetLow, m_OperatorNetHigh);
         if (opObj)
         {
             PlayerBase opPlayer = PlayerBase.Cast(opObj);

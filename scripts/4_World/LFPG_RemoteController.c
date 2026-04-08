@@ -283,7 +283,7 @@ class LFPG_RemoteController : Inventory_Base
     int LFPG_ActivateToggle(vector playerPos)
     {
         #ifdef SERVER
-        int now = GetGame().GetTime();
+        int now = g_Game.GetTime();
         int elapsed = now - m_LastActivateTime;
         if (elapsed < LFPG_REMOTE_COOLDOWN_MS)
             return -1;
@@ -396,8 +396,8 @@ class LFPG_RemoteController : Inventory_Base
         SetObjectMaterial(LFPG_RC_HS_LED1, LFPG_RC_RVMAT_RED);
         string animBtn1 = "activate_button_1";
         SetAnimationPhase(animBtn1, 1.0);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED1, LFPG_REMOTE_LED_DURATION_MS, false);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn1, LFPG_REMOTE_BTN_DURATION_MS, false);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED1, LFPG_REMOTE_LED_DURATION_MS, false);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn1, LFPG_REMOTE_BTN_DURATION_MS, false);
     }
 
     void LFPG_ResetLED1()
@@ -416,8 +416,8 @@ class LFPG_RemoteController : Inventory_Base
         SetObjectMaterial(LFPG_RC_HS_LED2, LFPG_RC_RVMAT_GREEN);
         string animBtn2 = "activate_button_2";
         SetAnimationPhase(animBtn2, 1.0);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED2, LFPG_REMOTE_LED_DURATION_MS, false);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn2, LFPG_REMOTE_BTN_DURATION_MS, false);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED2, LFPG_REMOTE_LED_DURATION_MS, false);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn2, LFPG_REMOTE_BTN_DURATION_MS, false);
     }
 
     void LFPG_ResetLED2()
@@ -533,7 +533,7 @@ class LFPG_RemoteController : Inventory_Base
         LFPG_Util.Debug(loadMsg);
 
         // Delayed sync to owner (player might not have identity yet during load)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_SyncToOwner, LFPG_REMOTE_SYNC_DELAY_MS, false);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_SyncToOwner, LFPG_REMOTE_SYNC_DELAY_MS, false);
 
         return true;
     }

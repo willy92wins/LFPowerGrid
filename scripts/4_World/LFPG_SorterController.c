@@ -17,7 +17,7 @@
 //   S6: Merged save/sort feedback timers into m_FeedbackTimer
 //   E1: String literals converted to local variables
 //   V2: Tab rule indicators (* on tabs with rules/catch-all)
-//   R4: GetGame() null-guard in BtnSave/BtnSort
+//   R4: g_Game null-guard in BtnSave/BtnSort
 //
 // v2.2 changes (Polish Sprint):
 //   - Visual disabled state when unpaired (IGNOREPOINTER + dim)
@@ -1039,10 +1039,10 @@ class LFPG_SorterController extends ViewController
         string stSaving = "SAVING...";
         SetStatus(stSaving);
         #ifndef SERVER
-        // R4: GetGame guard
-        if (!GetGame())
+        // R4: g_Game guard
+        if (!g_Game)
             return;
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             ScriptRPC rpc = new ScriptRPC();
@@ -1084,10 +1084,10 @@ class LFPG_SorterController extends ViewController
         // S6: Timeout timer — SORT_ACK will override with real result
         m_FeedbackTimer = 8.0;
         #ifndef SERVER
-        // R4: GetGame guard
-        if (!GetGame())
+        // R4: g_Game guard
+        if (!g_Game)
             return;
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             ScriptRPC rpc = new ScriptRPC();
@@ -1726,9 +1726,9 @@ class LFPG_SorterController extends ViewController
             return;
         }
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             ScriptRPC rpc = new ScriptRPC();

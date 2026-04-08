@@ -189,7 +189,7 @@ class LFPG_ElecGraph
         if (!mgr)
             return;
 
-        int startMs = GetGame().GetTime();
+        int startMs = g_Game.GetTime();
 
         // Clear everything
         m_Nodes.Clear();
@@ -320,7 +320,7 @@ class LFPG_ElecGraph
         m_ComponentsDirty = true;
         RebuildComponents();
 
-        int elapsed = GetGame().GetTime() - startMs;
+        int elapsed = g_Game.GetTime() - startMs;
         m_LastRebuildMs = elapsed;
 
         string rbMsg = "[ElecGraph] Rebuilt: " + m_NodeCount.ToString() + " nodes, ";
@@ -1388,7 +1388,7 @@ class LFPG_ElecGraph
             {
                 if (cachedNetLow != 0 || cachedNetHigh != 0)
                 {
-                    Object rawObj = GetGame().GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
+                    Object rawObj = g_Game.GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
                     orphanObj = EntityAI.Cast(rawObj);
                 }
             }
@@ -1874,7 +1874,7 @@ class LFPG_ElecGraph
             return 0;
         }
 
-        int startMs = GetGame().GetTime();
+        int startMs = g_Game.GetTime();
 
         if (m_ComponentsDirty)
             RebuildComponents();
@@ -2567,7 +2567,7 @@ class LFPG_ElecGraph
             remaining = m_DirtyQueue.Count();
         }
 
-        int elapsed = GetGame().GetTime() - startMs;
+        int elapsed = g_Game.GetTime() - startMs;
         m_LastProcessMs = elapsed;
 
         if (processed > 0)
@@ -2613,7 +2613,7 @@ class LFPG_ElecGraph
             {
                 if (cachedNetLow != 0 || cachedNetHigh != 0)
                 {
-                    Object rawObj = GetGame().GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
+                    Object rawObj = g_Game.GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
                     entObj = EntityAI.Cast(rawObj);
                     if (entObj)
                     {

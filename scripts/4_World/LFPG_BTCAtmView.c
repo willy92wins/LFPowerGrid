@@ -19,6 +19,7 @@ class LFPG_BTCAtmView extends ScriptView
     protected static ref LFPG_BTCAtmView s_Instance;
     protected bool m_IsOpen;
     protected bool m_FocusLocked;
+    protected bool m_ControlsLocked;
 
     // ── Drag state ──
     protected bool m_Dragging;
@@ -156,6 +157,7 @@ class LFPG_BTCAtmView extends ScriptView
     {
         m_IsOpen = false;
         m_FocusLocked = false;
+        m_ControlsLocked = false;
         m_Dragging = false;
         m_DragOffX = 0.0;
         m_DragOffY = 0.0;
@@ -167,25 +169,22 @@ class LFPG_BTCAtmView extends ScriptView
 
     void ~LFPG_BTCAtmView()
     {
-        if (GetGame())
+        #ifndef SERVER
+        if (g_Game)
         {
-            PlayerBase dtorPlayer = PlayerBase.Cast(GetGame().GetPlayer());
-            if (dtorPlayer)
+            if (m_ControlsLocked && g_Game.GetMission())
             {
-                HumanInputController hicDtor = dtorPlayer.GetInputController();
-                if (hicDtor)
-                {
-                    hicDtor.SetDisabled(false);
-                }
+                g_Game.GetMission().PlayerControlEnable(false);
+                m_ControlsLocked = false;
             }
             if (m_FocusLocked)
             {
-                Input inp = GetGame().GetInput();
+                Input inp = g_Game.GetInput();
                 if (inp)
                 {
                     inp.ChangeGameFocus(-1);
                 }
-                UIManager uiMgr = GetGame().GetUIManager();
+                UIManager uiMgr = g_Game.GetUIManager();
                 if (uiMgr)
                 {
                     uiMgr.ShowUICursor(false);
@@ -193,6 +192,7 @@ class LFPG_BTCAtmView extends ScriptView
                 m_FocusLocked = false;
             }
         }
+        #endif
     }
 
     // =========================================================
@@ -1052,16 +1052,16 @@ class LFPG_BTCAtmView extends ScriptView
     protected void ShowCursor()
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
-        UIManager uiMgr = GetGame().GetUIManager();
+        UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
         {
             uiMgr.ShowUICursor(true);
         }
         if (!m_FocusLocked)
         {
-            Input inp = GetGame().GetInput();
+            Input inp = g_Game.GetInput();
             if (inp)
             {
                 inp.ChangeGameFocus(1);
@@ -1074,16 +1074,16 @@ class LFPG_BTCAtmView extends ScriptView
     protected void HideCursor()
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
-        UIManager uiMgr = GetGame().GetUIManager();
+        UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
         {
             uiMgr.ShowUICursor(false);
         }
         if (m_FocusLocked)
         {
-            Input inp = GetGame().GetInput();
+            Input inp = g_Game.GetInput();
             if (inp)
             {
                 inp.ChangeGameFocus(-1);
@@ -1158,9 +1158,9 @@ class LFPG_BTCAtmView extends ScriptView
                 return true;
             }
         }
-        if (GetGame())
+        if (g_Game)
         {
-            s_EscCloseTime = GetGame().GetTickTime();
+            s_EscCloseTime = g_Game.GetTickTime();
         }
         s_Instance.DoClose();
         return true;
@@ -1170,9 +1170,9 @@ class LFPG_BTCAtmView extends ScriptView
     {
         if (s_EscCloseTime <= 0.0)
             return false;
-        if (!GetGame())
+        if (!g_Game)
             return false;
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
         float elapsed = now - s_EscCloseTime;
         if (elapsed < 0.2)
             return true;
@@ -1247,17 +1247,10 @@ class LFPG_BTCAtmView extends ScriptView
         ShowCursor();
 
         #ifndef SERVER
-        if (GetGame())
+        if (g_Game && g_Game.GetMission())
         {
-            PlayerBase openPlayer = PlayerBase.Cast(GetGame().GetPlayer());
-            if (openPlayer)
-            {
-                HumanInputController hicOpen = openPlayer.GetInputController();
-                if (hicOpen)
-                {
-                    hicOpen.SetDisabled(true);
-                }
-            }
+            g_Game.GetMission().PlayerControlDisable(INPUT_EXCLUDE_ALL);
+            m_ControlsLocked = true;
         }
         #endif
 
@@ -1305,17 +1298,10 @@ class LFPG_BTCAtmView extends ScriptView
         }
 
         #ifndef SERVER
-        if (GetGame())
+        if (m_ControlsLocked && g_Game && g_Game.GetMission())
         {
-            PlayerBase closePlayer = PlayerBase.Cast(GetGame().GetPlayer());
-            if (closePlayer)
-            {
-                HumanInputController hicClose = closePlayer.GetInputController();
-                if (hicClose)
-                {
-                    hicClose.SetDisabled(false);
-                }
-            }
+            g_Game.GetMission().PlayerControlEnable(false);
+            m_ControlsLocked = false;
         }
         #endif
 

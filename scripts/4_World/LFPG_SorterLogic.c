@@ -435,7 +435,7 @@ class LFPG_SorterLogic
         {
             // S-006: RARITY stub — not exposed in UI (no button creates type 3 rules).
             // Safe as-is. When implemented, requires Expansion-Hardline mod.
-            hasHardline = GetGame().ConfigIsExisting(kHardlineCfg);
+            hasHardline = g_Game.ConfigIsExisting(kHardlineCfg);
             if (!hasHardline)
                 return false;
 
@@ -749,12 +749,12 @@ class LFPG_SorterLogic
         string sZero = " 0";
         string sOne = " 1";
 
-        if (GetGame().ConfigIsExisting(cfgPath))
+        if (g_Game.ConfigIsExisting(cfgPath))
         {
             pathX = cfgPath + sZero;
             pathY = cfgPath + sOne;
-            outW = GetGame().ConfigGetInt(pathX);
-            outH = GetGame().ConfigGetInt(pathY);
+            outW = g_Game.ConfigGetInt(pathX);
+            outH = g_Game.ConfigGetInt(pathY);
         }
 
         if (outW <= 0)

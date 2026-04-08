@@ -76,7 +76,7 @@ class LFPG_ActionRaycast
     // reuse the same results. Subsumes per-frame dedup.
     protected static void RefreshRayCache(PlayerBase player)
     {
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
 
         // Still fresh: reuse cached results
         if (s_RayCacheValid)
@@ -87,8 +87,8 @@ class LFPG_ActionRaycast
         }
 
         // Stale or first call: fire one ray matching rendering bubble
-        vector from = GetGame().GetCurrentCameraPosition();
-        vector dir  = GetGame().GetCurrentCameraDirection();
+        vector from = g_Game.GetCurrentCameraPosition();
+        vector dir  = g_Game.GetCurrentCameraDirection();
         vector to   = from + dir * LFPG_CULL_DISTANCE_M;
 
         RaycastRVParams rp = new RaycastRVParams(from, to, player, 0);
@@ -111,7 +111,7 @@ class LFPG_ActionRaycast
             return false;
 
         // 100ms throttle — skip entirely if checked recently
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
         float elapsed = now - s_DeviceCheckTime;
         if (s_DeviceCheckTime >= 0.0 && elapsed < DEVICE_CHECK_TTL_S)
         {
@@ -139,7 +139,7 @@ class LFPG_ActionRaycast
 
         // Distance check (replaces the old 3m ray range limit)
         // v0.7.10: Uses shared DistSq helper for consistency
-        vector camPos = GetGame().GetCurrentCameraPosition();
+        vector camPos = g_Game.GetCurrentCameraPosition();
         if (LFPG_WorldUtil.DistSq(camPos, first.pos) > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
         {
             s_DeviceCheckResult = false;
@@ -224,7 +224,7 @@ class LFPG_ActionRaycast
             return null;
 
         // Distance check (interact range)
-        vector camPos = GetGame().GetCurrentCameraPosition();
+        vector camPos = g_Game.GetCurrentCameraPosition();
         if (LFPG_WorldUtil.DistSq(camPos, first.pos) > LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M)
             return null;
 
@@ -270,8 +270,8 @@ class LFPG_ActionRaycast
         // If ray hit nothing, use a point in front of camera
         if (!hasAimPos)
         {
-            vector camFrom = GetGame().GetCurrentCameraPosition();
-            vector camDir = GetGame().GetCurrentCameraDirection();
+            vector camFrom = g_Game.GetCurrentCameraPosition();
+            vector camDir = g_Game.GetCurrentCameraDirection();
             float probeDistM = 3.0;
             aimPos = camFrom + camDir * probeDistM;
         }
@@ -280,11 +280,11 @@ class LFPG_ActionRaycast
         float proxyRadius = 1.5;
         array<Object> nearby = new array<Object>;
         array<CargoBase> proxyCargo = new array<CargoBase>;
-        GetGame().GetObjectsAtPosition3D(aimPos, proxyRadius, nearby, proxyCargo);
+        g_Game.GetObjectsAtPosition3D(aimPos, proxyRadius, nearby, proxyCargo);
 
         // Find the closest electrical device IN FRONT of the camera
-        vector camCheck = GetGame().GetCurrentCameraPosition();
-        vector camDirCheck = GetGame().GetCurrentCameraDirection();
+        vector camCheck = g_Game.GetCurrentCameraPosition();
+        vector camDirCheck = g_Game.GetCurrentCameraDirection();
         float maxSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
         float bestDistSq = maxSq;
         EntityAI bestDevice = null;
@@ -460,7 +460,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
 
         // Get connection info (client only) - both OUT and IN are 1:1
         string connType = "";
-        if (!GetGame().IsDedicatedServer())
+        if (!g_Game.IsDedicatedServer())
         {
             LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
             if (renderer)
@@ -478,7 +478,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         {
             // Port empty: text depends on wiring session state
             bool sessionActive = false;
-            if (!GetGame().IsDedicatedServer())
+            if (!g_Game.IsDedicatedServer())
             {
                 sessionActive = LFPG_WiringClient.Get().IsActive();
             }
@@ -520,7 +520,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         e.GetNetworkID(low, high);
 
         LFPG_WiringClient wc = LFPG_WiringClient.Get();
-        PlayerBase localPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase localPlayer = PlayerBase.Cast(g_Game.GetPlayer());
 
         if (!wc.IsActive())
         {
@@ -609,7 +609,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         if (!item.IsInherited(LFPG_CableReel))
             return false;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return true;
 
         if (!LFPG_WiringClient.Get().IsActive())
@@ -642,7 +642,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
     {
         super.OnExecuteClient(action_data);
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -688,7 +688,7 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         if (!item.IsInherited(LFPG_CableReel))
             return false;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return true;
 
         if (!LFPG_WiringClient.Get().IsActive())
@@ -708,7 +708,7 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
 
         LFPG_WiringClient.Get().Cancel();
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             player.MessageStatus("[LFPG] Wiring cancelled.");
@@ -855,7 +855,7 @@ class ActionLFPG_CutPortBase : ActionSingleUseBase
         // Server: checks wire data directly (authoritative).
         string connType = "";
 
-        if (!GetGame().IsDedicatedServer())
+        if (!g_Game.IsDedicatedServer())
         {
             // CLIENT: use cached connection info from CableRenderer
             LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
@@ -1078,14 +1078,14 @@ class ActionLFPG_ToggleSource : ActionInteractBase
             m_Text = newText;
             s_LastTargetLow = tLow;
             s_LastTargetHigh = tHigh;
-            s_LastChangeMs = GetGame().GetTime();
+            s_LastChangeMs = g_Game.GetTime();
             return true;
         }
 
         // Same generator: only allow text change if debounce window expired.
         if (newText != m_Text)
         {
-            float nowMs = GetGame().GetTime();
+            float nowMs = g_Game.GetTime();
             if (s_LastChangeMs >= 0.0)
             {
                 float elapsed = nowMs - s_LastChangeMs;
@@ -1105,7 +1105,7 @@ class ActionLFPG_ToggleSource : ActionInteractBase
     {
         super.OnExecuteServer(action_data);
 
-        if (!action_data.m_Target)
+        if (!action_data || !action_data.m_Target)
             return;
 
         Object targetObj = action_data.m_Target.GetObject();
@@ -1223,7 +1223,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         if (!dev)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 

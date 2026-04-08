@@ -57,6 +57,11 @@ static const string LFPG_INTERCOM_SND_RF_BEEP      = "LFPG_Intercom_RFBeep_Sound
 static const string LFPG_INTERCOM_SND_KNOB_CLICK   = "LFPG_Intercom_KnobClick_SoundSet";
 static const string LFPG_INTERCOM_SND_STATIC_BURST  = "LFPG_Intercom_Static_SoundSet";
 
+static const int LFPG_SND_NONE         = 0;
+static const int LFPG_SND_KNOB_CLICK   = 1;
+static const int LFPG_SND_RF_BEEP      = 2;
+static const int LFPG_SND_STATIC_BURST = 3;
+
 class LFPG_Intercom_Kit : LFPG_KitBase
 {
     override string LFPG_GetSpawnClassname()
@@ -83,6 +88,10 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected bool m_BroadcastEnabled = false;
     protected int  m_FrequencyIndex  = 0;
     protected bool m_Overloaded      = false;
+
+    // ---- Sound event SyncVar ----
+    protected int m_SoundEvent      = 0;
+    protected int m_SoundEventPrev  = 0;
 
     // ---- RF toggle state (not SyncVars) ----
     protected bool m_PrevToggleInput   = false;
@@ -120,6 +129,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         RegisterNetSyncVariableBool(varBroadcast);
         RegisterNetSyncVariableInt(varFreq);
         RegisterNetSyncVariableBool(varOverloaded);
+        RegisterNetSyncVariableInt("m_SoundEvent", 0, 15);
     }
 
     // ============================================
@@ -316,7 +326,10 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_DestroyGhostRadio();
         LFPG_DestroyGhostPAS();
 
-        LFPG_NetworkManager.Get().UnregisterIntercom(this);
+        #ifdef SERVER
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterIntercom(this);
+        #endif
     }
 
     override void LFPG_OnWiresCut()
@@ -349,6 +362,17 @@ class LFPG_Intercom : LFPG_DeviceBase
     {
         #ifndef SERVER
         LFPG_UpdateVisuals();
+
+        if (m_SoundEvent != m_SoundEventPrev)
+        {
+            m_SoundEventPrev = m_SoundEvent;
+            if (m_SoundEvent == LFPG_SND_KNOB_CLICK)
+                SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
+            else if (m_SoundEvent == LFPG_SND_RF_BEEP)
+                SEffectManager.PlaySound(LFPG_INTERCOM_SND_RF_BEEP, GetPosition());
+            else if (m_SoundEvent == LFPG_SND_STATIC_BURST)
+                SEffectManager.PlaySound(LFPG_INTERCOM_SND_STATIC_BURST, GetPosition());
+        }
         #endif
     }
 
@@ -525,7 +549,7 @@ class LFPG_Intercom : LFPG_DeviceBase
 
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
-        SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
+        m_SoundEvent = LFPG_SND_KNOB_CLICK;
         #endif
     }
 
@@ -563,7 +587,7 @@ class LFPG_Intercom : LFPG_DeviceBase
     void LFPG_ExecuteRFToggle()
     {
         #ifdef SERVER
-        int now = GetGame().GetTime();
+        int now = g_Game.GetTime();
         int elapsed = now - m_LastRFToggleTime;
         if (elapsed < LFPG_INTERCOM_RF_COOLDOWN_MS)
             return;
@@ -607,7 +631,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         rfMsg = rfMsg + m_DeviceId;
         LFPG_Util.Info(rfMsg);
 
-        SEffectManager.PlaySound(LFPG_INTERCOM_SND_RF_BEEP, GetPosition());
+        m_SoundEvent = LFPG_SND_RF_BEEP;
         #endif
     }
 
@@ -674,7 +698,7 @@ class LFPG_Intercom : LFPG_DeviceBase
 
         vector pos = GetPosition();
         string ghostClass = "LFPG_GhostRadio";
-        Object ghostObj = GetGame().CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
+        Object ghostObj = g_Game.CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
         m_GhostRadio = LFPG_GhostRadio.Cast(ghostObj);
         if (!m_GhostRadio)
         {
@@ -710,7 +734,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         #ifdef SERVER
         if (m_GhostRadio)
         {
-            GetGame().ObjectDelete(m_GhostRadio);
+            g_Game.ObjectDelete(m_GhostRadio);
             m_GhostRadio = null;
 
             string destroyMsg = "[LFPG_Intercom] GhostRadio destroyed, id=";
@@ -751,7 +775,7 @@ class LFPG_Intercom : LFPG_DeviceBase
 
         vector pasPos = GetPosition();
         string pasClass = "LFPG_GhostPASBroadcaster";
-        Object pasObj = GetGame().CreateObjectEx(pasClass, pasPos, ECE_CREATEPHYSICS);
+        Object pasObj = g_Game.CreateObjectEx(pasClass, pasPos, ECE_CREATEPHYSICS);
         m_GhostPAS = LFPG_GhostPASBroadcaster.Cast(pasObj);
         if (!m_GhostPAS)
         {
@@ -781,7 +805,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         #ifdef SERVER
         if (m_GhostPAS)
         {
-            GetGame().ObjectDelete(m_GhostPAS);
+            g_Game.ObjectDelete(m_GhostPAS);
             m_GhostPAS = null;
 
             string pasDestroyMsg = "[LFPG_Intercom] GhostPASBroadcaster destroyed, id=";
@@ -864,7 +888,7 @@ class LFPG_Intercom : LFPG_DeviceBase
 
         if (m_BroadcastEnabled)
         {
-            SEffectManager.PlaySound(LFPG_INTERCOM_SND_STATIC_BURST, GetPosition());
+            m_SoundEvent = LFPG_SND_STATIC_BURST;
         }
         #endif
     }
@@ -894,7 +918,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         freqMsg = freqMsg + m_DeviceId;
         LFPG_Util.Info(freqMsg);
 
-        SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
+        m_SoundEvent = LFPG_SND_KNOB_CLICK;
         #endif
     }
 };

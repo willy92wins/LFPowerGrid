@@ -101,7 +101,8 @@ class LFPG_ActionToggleBatteryOutput : ActionInteractBase
         LFPG_Util.Info(togMsg);
 
         // Propagate immediately so downstream sees gate change
-        LFPG_NetworkManager.Get().RequestPropagate(devId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(devId);
 
         // Player feedback
         PlayerBase pb = PlayerBase.Cast(action_data.m_Player);

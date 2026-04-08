@@ -192,6 +192,11 @@ class LFPG_NetworkManager
     protected ref array<EntityAI> m_ReusableMovedDevs;
     protected ref array<string>   m_ReusableDisappearedIds;
 
+    // v3.2 (GC reduction): Reusable arrays for BroadcastOwnerWires/BroadcastVanillaWires.
+    // Avoids per-call heap allocation of player list and target position list.
+    protected ref array<Man>      m_ReusableBroadcastPlayers;
+    protected ref array<vector>   m_ReusableBroadcastPositions;
+
     // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
     protected static const string VANILLA_WIRES_FILE = "$profile:LF_PowerGrid\\vanilla_wires.json";
@@ -281,6 +286,8 @@ class LFPG_NetworkManager
         m_ReusableMovedIds = new array<string>;
         m_ReusableMovedDevs = new array<EntityAI>;
         m_ReusableDisappearedIds = new array<string>;
+        m_ReusableBroadcastPlayers = new array<Man>;
+        m_ReusableBroadcastPositions = new array<vector>;
 
         #ifdef SERVER
         // v0.7.30: Tracked device set for centralized polling.
@@ -303,54 +310,65 @@ class LFPG_NetworkManager
         LoadVanillaWires();
         bool bFalse = false;
         bool bTrue = true;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(ValidateAllWiresAndPropagate, 5000, bFalse);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(ValidateAllWiresAndPropagate, 5000, bFalse);
         // Periodic rate limiter cleanup (every 5 minutes)
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(PurgeStaleRateLimiters, 300000, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(PurgeStaleRateLimiters, 300000, bTrue);
         // v0.7.4: periodic vanilla wire flush (deferred persistence)
         int flushMs = (int)(LFPG_VANILLA_FLUSH_S * 1000.0);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(FlushVanillaIfDirty, flushMs, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(FlushVanillaIfDirty, flushMs, bTrue);
         // Sprint 4.2: periodic propagation tick (event-driven via graph dirty queue)
         int propTickMs = (int)LFPG_PROPAGATE_TICK_MS;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(TickPropagation, propTickMs, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(TickPropagation, propTickMs, bTrue);
         // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
         // Replaces per-device timers. Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
         // Runtime guard: prevents timer registration in SP/local-host hybrid contexts
         // where #ifdef SERVER is active but the instance isn't a true dedicated server.
-        if (GetGame().IsServer())
+        if (g_Game.IsServer())
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, bTrue);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(CheckDeviceMovement, LFPG_MOVE_DETECT_TICK_MS, bTrue);
         }
 
         // v0.8.0: Centralized solar timer — 1 timer for all solar panels.
         // Seed cached sun state immediately (panels may init before first tick).
         LFPG_ComputeSunState();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSolarPanels, LFPG_SOLAR_CHECK_MS, bTrue);
 
         // v1.1.0: Water Pump filter degradation + tank timer
         LFPG_InitTankFillTime();
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickWaterPumps, LFPG_PUMP_CHECK_MS, bTrue);
 
         // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSorters, LFPG_SORTER_TICK_MS, bTrue);
 
         // v4.1: Consolidated player detection tick (lasers 300ms + pads 600ms + sensors 3s).
         // Replaces 4 separate timers. Sub-counters gate slower devices.
         m_PlayerDetectCounter = 0;
         m_LaserBeamCounter = 22;
         int pdTickMs = 300;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPlayerDetection, pdTickMs, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickPlayerDetection, pdTickMs, bTrue);
 
         // v4.1: Consolidated simple devices tick (intercoms/DC/furnaces/batteries/fridges).
         // Replaces 5 separate timers. Stagger offsets prevent spike alignment.
         // Intercoms=every tick, DC=%2==1, Furnaces=%5==2, Batteries=%5==4, Fridges=%10==6.
         m_SimpleTickCounter = 0;
-        m_BatteryLastTickMs = GetGame().GetTime();
+        m_BatteryLastTickMs = g_Game.GetTime();
         int simpleTickMs = 1000;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSimpleDevices, simpleTickMs, bTrue);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickSimpleDevices, simpleTickMs, bTrue);
 		
 		
 		// v5.0: BTC ATM price fetcher
         LFPG_BTCConfig.Load();
+
+        // v5.1: Balance provider registry
+        LFPG_BalanceProvider_Native nativeProv = new LFPG_BalanceProvider_Native();
+        LFPG_BalanceRegistry.Register(nativeProv);
+        #ifdef LBmaster_Core
+        LFPG_BalanceProvider_LBmaster lbProv = new LFPG_BalanceProvider_LBmaster();
+        LFPG_BalanceRegistry.Register(lbProv);
+        #endif
+        string balMode = LFPG_BTCConfig.GetBalanceMode();
+        LFPG_BalanceRegistry.Init(balMode);
+
         if (LFPG_BTCConfig.IsEnabled())
         {
             LFPG_BTCPriceFetcher.Create();
@@ -360,7 +378,7 @@ class LFPG_NetworkManager
                 m_BTCPriceFetcher.Init();
                 int btcTickMs = LFPG_BTC_PRICE_CHECK_MS;
                 bool bTrueBtc = true;
-                GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBTCPrice, btcTickMs, bTrueBtc);
+                g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_TickBTCPrice, btcTickMs, bTrueBtc);
                 string btcInitMsg = "[NM] BTC Price fetcher initialized, tick every ";
                 btcInitMsg = btcInitMsg + btcTickMs.ToString();
                 btcInitMsg = btcInitMsg + "ms";
@@ -398,7 +416,7 @@ class LFPG_NetworkManager
 
         string pid = ident.GetPlainId();
         LFPG_ServerSettings st = LFPG_Settings.Get();
-        float now = GetGame().GetTime() * 0.001;
+        float now = g_Game.GetTime() * 0.001;
 
         // --- Layer 1: sliding window ---
         float windowStart = 0.0;
@@ -461,7 +479,7 @@ class LFPG_NetworkManager
     protected void PurgeStaleRateLimiters()
     {
         #ifdef SERVER
-        float now = GetGame().GetTime() * 0.001;
+        float now = g_Game.GetTime() * 0.001;
         ref array<string> staleKeys = new array<string>;
 
         int i;
@@ -1382,8 +1400,8 @@ class LFPG_NetworkManager
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
 
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
+        m_ReusableBroadcastPlayers.Clear();
+        g_Game.GetPlayers(m_ReusableBroadcastPlayers);
 
         int low = 0;
         int high = 0;
@@ -1406,7 +1424,7 @@ class LFPG_NetworkManager
 
         // v0.7.35 B-CRIT2: Collect unique target device positions.
         // Players near ANY target also need the owner's wire blob.
-        array<vector> targetPositions = new array<vector>;
+        m_ReusableBroadcastPositions.Clear();
         ref array<ref LFPG_WireData> ownerWires = LFPG_DeviceAPI.GetDeviceWires(owner);
         if (ownerWires)
         {
@@ -1420,15 +1438,15 @@ class LFPG_NetworkManager
                 EntityAI targetObj = reg.FindById(ownerWires[tw].m_TargetDeviceId);
                 if (targetObj)
                 {
-                    targetPositions.Insert(targetObj.GetPosition());
+                    m_ReusableBroadcastPositions.Insert(targetObj.GetPosition());
                 }
             }
         }
 
         int i;
-        for (i = 0; i < players.Count(); i = i + 1)
+        for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
-            PlayerBase pb = PlayerBase.Cast(players[i]);
+            PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
 
             vector playerPos = pb.GetPosition();
@@ -1440,9 +1458,9 @@ class LFPG_NetworkManager
             if (!inRange)
             {
                 int tp;
-                for (tp = 0; tp < targetPositions.Count(); tp = tp + 1)
+                for (tp = 0; tp < m_ReusableBroadcastPositions.Count(); tp = tp + 1)
                 {
-                    if (LFPG_WorldUtil.DistSq(playerPos, targetPositions[tp]) <= syncMaxDistSq)
+                    if (LFPG_WorldUtil.DistSq(playerPos, m_ReusableBroadcastPositions[tp]) <= syncMaxDistSq)
                     {
                         inRange = true;
                         break;
@@ -1500,8 +1518,8 @@ class LFPG_NetworkManager
             json = "";
         }
 
-        array<Man> players = new array<Man>;
-        GetGame().GetPlayers(players);
+        m_ReusableBroadcastPlayers.Clear();
+        g_Game.GetPlayers(m_ReusableBroadcastPlayers);
 
         int low = 0;
         int high = 0;
@@ -1513,7 +1531,7 @@ class LFPG_NetworkManager
         vector ownerObjPos = ownerObj.GetPosition();
 
         // v0.7.35 B-CRIT2: Collect target positions from vanilla wires
-        array<vector> vTargetPositions = new array<vector>;
+        m_ReusableBroadcastPositions.Clear();
         if (wires)
         {
             LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
@@ -1526,15 +1544,15 @@ class LFPG_NetworkManager
                 EntityAI targetObj = reg.FindById(wires[tw].m_TargetDeviceId);
                 if (targetObj)
                 {
-                    vTargetPositions.Insert(targetObj.GetPosition());
+                    m_ReusableBroadcastPositions.Insert(targetObj.GetPosition());
                 }
             }
         }
 
         int i;
-        for (i = 0; i < players.Count(); i = i + 1)
+        for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
-            PlayerBase pb = PlayerBase.Cast(players[i]);
+            PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
 
             vector playerPos = pb.GetPosition();
@@ -1546,9 +1564,9 @@ class LFPG_NetworkManager
             if (!inRange)
             {
                 int tp;
-                for (tp = 0; tp < vTargetPositions.Count(); tp = tp + 1)
+                for (tp = 0; tp < m_ReusableBroadcastPositions.Count(); tp = tp + 1)
                 {
-                    if (LFPG_WorldUtil.DistSq(playerPos, vTargetPositions[tp]) <= vSyncMaxDistSq)
+                    if (LFPG_WorldUtil.DistSq(playerPos, m_ReusableBroadcastPositions[tp]) <= vSyncMaxDistSq)
                     {
                         inRange = true;
                         break;
@@ -1948,7 +1966,7 @@ class LFPG_NetworkManager
         }
 
         // Periodic telemetry dump
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         float elapsed = nowMs - m_TelemLastDumpMs;
         if (m_TelemLastDumpMs < 0.0)
         {
@@ -2015,7 +2033,7 @@ class LFPG_NetworkManager
     void TrackDeviceForPolling(string deviceId)
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return;
 
         if (deviceId == "")
@@ -2041,7 +2059,7 @@ class LFPG_NetworkManager
     void UntrackDeviceFromPolling(string deviceId)
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return;
 
         if (deviceId == "")
@@ -2083,7 +2101,7 @@ class LFPG_NetworkManager
     protected bool DeviceHasAnyWires(EntityAI device, string deviceId)
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return false;
 
         if (!device || deviceId == "")
@@ -2126,7 +2144,7 @@ class LFPG_NetworkManager
     protected void RebuildTrackedDevices()
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return;
 
         m_TrackedDeviceIds.Clear();
@@ -2219,9 +2237,12 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- 2. Clear owned wires: reverse index + player quota ---
-        // Do NOT call OnWireRemoved per wire — OnDeviceRemoved in step 4
-        // handles all graph edges in a single pass (avoids double removal).
+        // --- 2. Clear owned wires: reverse index + player quota + graph ---
+        // Bug #18 fix: Notify graph via OnWireRemoved per outgoing wire here.
+        // Previously this was skipped, relying on OnDeviceRemoved in step 4.
+        // But step 3 (RemoveWiresTargeting) also calls OnWireRemoved for
+        // incoming edges, causing OnDeviceRemoved to double-remove them.
+        // Now each edge is removed exactly once: outgoing here, incoming in step 3.
         ref array<ref LFPG_WireData> vWires;
         if (m_VanillaWires.Find(deviceId, vWires) && vWires)
         {
@@ -2233,6 +2254,17 @@ class LFPG_NetworkManager
                 {
                     ReverseIdxRemove(vwd.m_TargetDeviceId, vwd.m_TargetPort, deviceId);
                     PlayerWireCountAdd(vwd.m_CreatorId, -1);
+
+                    // Notify graph for this outgoing edge (normalize port)
+                    if (m_Graph)
+                    {
+                        string vSrcP = vwd.m_SourcePort;
+                        if (vSrcP == "")
+                        {
+                            vSrcP = "output_1";
+                        }
+                        m_Graph.OnWireRemoved(deviceId, vwd.m_TargetDeviceId, vSrcP, vwd.m_TargetPort);
+                    }
                 }
                 vw = vw - 1;
             }
@@ -2279,14 +2311,11 @@ class LFPG_NetworkManager
             }
         }
 
-        // --- 4. Graph: single OnDeviceRemoved call ---
-        // Removes ALL edges (in+out) and the node in one pass.
-        // Individual OnWireRemoved calls are NOT needed — OnDeviceRemoved
-        // handles the full topology cleanup more efficiently.
-        if (anyChanged && m_Graph)
-        {
-            m_Graph.OnDeviceRemoved(deviceId);
-        }
+        // --- 4. Graph node cleanup ---
+        // Bug #18 fix: OnDeviceRemoved was removed. Outgoing edges are now
+        // cleaned in step 2 via OnWireRemoved; incoming edges in step 3 via
+        // RemoveWiresTargeting. OnWireRemoved calls CleanupOrphanNode which
+        // removes the node once all edges are gone — no separate call needed.
 
         // --- 5. SetPowered(false) on neighbor devices ---
         int ni;
@@ -2361,7 +2390,7 @@ class LFPG_NetworkManager
     protected void CheckDeviceMovement()
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return;
 
         int totalTracked = m_TrackedDeviceIds.Count();
@@ -2516,7 +2545,7 @@ class LFPG_NetworkManager
         if (m_SelfHealQueued) return;
         m_SelfHealQueued = true;
         bool bOnce = false;
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DoGlobalSelfHeal, 500, bOnce);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DoGlobalSelfHeal, 500, bOnce);
         #endif
     }
 
@@ -3452,10 +3481,10 @@ class LFPG_NetworkManager
     protected void LFPG_ComputeSunState()
     {
         #ifdef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        World world = GetGame().GetWorld();
+        World world = g_Game.GetWorld();
         if (!world)
             return;
 
@@ -3704,7 +3733,7 @@ class LFPG_NetworkManager
     protected void LFPG_InitTankFillTime()
     {
         #ifdef SERVER
-        m_TankFillLastMs = GetGame().GetTime();
+        m_TankFillLastMs = g_Game.GetTime();
         #endif
     }
 
@@ -3713,7 +3742,7 @@ class LFPG_NetworkManager
     protected void LFPG_TickWaterPumps()
     {
         #ifdef SERVER
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         float thresholdMs = LFPG_PUMP_FILTER_INTERVAL_MS;
 
         // --- Compute tank fill amount from real elapsed ms ---
@@ -4388,7 +4417,7 @@ class LFPG_NetworkManager
 
         // Reuse class-level player array (avoid GC in periodic ticks)
         m_ReusablePlayers.Clear();
-        GetGame().GetPlayers(m_ReusablePlayers);
+        g_Game.GetPlayers(m_ReusablePlayers);
         int playerCount = m_ReusablePlayers.Count();
         if (playerCount <= 0)
             return;
@@ -5080,7 +5109,7 @@ class LFPG_NetworkManager
         if (needPlayers)
         {
             m_ReusablePlayers.Clear();
-            GetGame().GetPlayers(m_ReusablePlayers);
+            g_Game.GetPlayers(m_ReusablePlayers);
         }
 
         // --- Lasers: crossing every tick, beam every 23 ticks (~6.9s) ---
@@ -5269,8 +5298,8 @@ class LFPG_NetworkManager
             return;
 
         // Real delta time (prevents drift on laggy servers).
-        // GetGame().GetTime() returns milliseconds (same as water pump / tank timers).
-        float nowMs = GetGame().GetTime();
+        // g_Game.GetTime() returns milliseconds (same as water pump / tank timers).
+        float nowMs = g_Game.GetTime();
         float deltaMs = nowMs - m_BatteryLastTickMs;
         m_BatteryLastTickMs = nowMs;
 

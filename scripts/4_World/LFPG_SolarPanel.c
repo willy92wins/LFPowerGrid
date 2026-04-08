@@ -115,7 +115,8 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
 
         if (m_DeviceId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(m_DeviceId);
         }
 
         string sunMsg = "[LFPG_SolarPanel] Sun state updated: m_SourceOn=" + m_SourceOn.ToString();
@@ -129,17 +130,19 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterSolar(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterSolar(this);
 
         bool preState = m_SourceOn;
-        bool cachedSun = LFPG_NetworkManager.Get().LFPG_GetCachedSunState();
+        bool cachedSun = false;
+        if (nm) cachedSun = nm.LFPG_GetCachedSunState();
         LFPG_UpdateSunState(cachedSun);
 
         // Persistence restore: if loaded m_SourceOn matched cached sun,
         // UpdateSunState was a no-op. Must propagate explicitly.
         if (preState == m_SourceOn && m_SourceOn && m_DeviceId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+            if (nm) nm.RequestPropagate(m_DeviceId);
         }
         #endif
     }
@@ -147,7 +150,8 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSolar(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSolar(this);
         if (m_SourceOn)
         {
             m_SourceOn = false;
@@ -159,7 +163,8 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSolar(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSolar(this);
         #endif
     }
 

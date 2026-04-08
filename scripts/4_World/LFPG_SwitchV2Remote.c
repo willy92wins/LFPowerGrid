@@ -131,7 +131,8 @@ class LFPG_SwitchV2Remote : LFPG_WireOwnerBase
         togMsg = togMsg + m_DeviceId;
         LFPG_Util.Info(togMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
         #endif
     }
 
@@ -181,7 +182,7 @@ class LFPG_SwitchV2Remote : LFPG_WireOwnerBase
         {
             offset = "0 0.02 0.025";
         }
-        return GetPosition() + offset;
+        return ModelToWorld(offset);
     }
 
     // ---- Lifecycle hooks ----

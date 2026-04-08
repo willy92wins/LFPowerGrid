@@ -193,7 +193,7 @@ class LFPG_DeviceAPI
 
         // Spatial search (2D radius on XZ, we check Y manually)
         array<Object> objects = new array<Object>;
-        GetGame().GetObjectsAtPosition(targetPos, searchRadius, objects, null);
+        g_Game.GetObjectsAtPosition(targetPos, searchRadius, objects, null);
 
         EntityAI bestMatch = null;
         float bestDist = searchRadius + 1.0;
@@ -390,7 +390,7 @@ class LFPG_DeviceAPI
     {
         if (!inst) return fallback;
         int ret = fallback;
-        int ok = GetGame().GameScript.CallFunctionParams(inst, fn, ret, parms);
+        int ok = g_Game.GameScript.CallFunctionParams(inst, fn, ret, parms);
         if (ok) return ret;
         return fallback;
     }
@@ -399,7 +399,7 @@ class LFPG_DeviceAPI
     {
         if (!inst) return fallback;
         bool ret = fallback;
-        int ok = GetGame().GameScript.CallFunctionParams(inst, fn, ret, parms);
+        int ok = g_Game.GameScript.CallFunctionParams(inst, fn, ret, parms);
         if (ok) return ret;
         return fallback;
     }
@@ -408,7 +408,7 @@ class LFPG_DeviceAPI
     {
         if (!inst) return fallback;
         string ret = fallback;
-        int ok = GetGame().GameScript.CallFunctionParams(inst, fn, ret, parms);
+        int ok = g_Game.GameScript.CallFunctionParams(inst, fn, ret, parms);
         if (ok) return ret;
         return fallback;
     }
@@ -417,7 +417,7 @@ class LFPG_DeviceAPI
     {
         if (!inst) return fallback;
         vector ret = fallback;
-        int ok = GetGame().GameScript.CallFunctionParams(inst, fn, ret, parms);
+        int ok = g_Game.GameScript.CallFunctionParams(inst, fn, ret, parms);
         if (ok) return ret;
         return fallback;
     }
@@ -425,14 +425,14 @@ class LFPG_DeviceAPI
     protected static void CallVoid(Class inst, string fn, Class parms = null)
     {
         if (!inst) return;
-        GetGame().GameScript.CallFunctionParams(inst, fn, NULL, parms);
+        g_Game.GameScript.CallFunctionParams(inst, fn, NULL, parms);
     }
 
     protected static float CallFloat(Class inst, string fn, Class parms = null, float fallback = 0.0)
     {
         if (!inst) return fallback;
         float ret = fallback;
-        int ok = GetGame().GameScript.CallFunctionParams(inst, fn, ret, parms);
+        int ok = g_Game.GameScript.CallFunctionParams(inst, fn, ret, parms);
         if (ok) return ret;
         return fallback;
     }
@@ -599,7 +599,7 @@ class LFPG_DeviceAPI
         if (wo)
             return wo.LFPG_GetWires();
         array<ref LFPG_WireData> ret;
-        int ok = GetGame().GameScript.CallFunctionParams(obj, "LFPG_GetWires", ret, null);
+        int ok = g_Game.GameScript.CallFunctionParams(obj, "LFPG_GetWires", ret, null);
         if (ok != 0)
             return ret;
         return null;
@@ -846,7 +846,7 @@ class LFPG_DeviceAPI
         if (netLow == 0 && netHigh == 0)
             return null;
 
-        Object rawObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        Object rawObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
         if (!rawObj)
             return null;
 

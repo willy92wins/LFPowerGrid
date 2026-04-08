@@ -426,8 +426,8 @@ modded class Hologram
             return;
         }
 
-        vector camPos = GetGame().GetCurrentCameraPosition();
-        vector camDir = GetGame().GetCurrentCameraDirection();
+        vector camPos = g_Game.GetCurrentCameraPosition();
+        vector camDir = g_Game.GetCurrentCameraDirection();
 
         // FIX: Looking-at-sky guard. Vanilla constant LOOKING_TO_SKY = 0.75.
         // When looking nearly straight up, camera ray goes into sky and misses
@@ -729,7 +729,7 @@ modded class Hologram
         }
 
         // Fallback: use engine surface Y
-        float surfaceY = GetGame().SurfaceY(pos[0], pos[2]);
+        float surfaceY = g_Game.SurfaceY(pos[0], pos[2]);
         vector fallback = Vector(pos[0], surfaceY + LFPG_HOLO_FLOOR_GROUND_SNAP, pos[2]);
         return fallback;
     }

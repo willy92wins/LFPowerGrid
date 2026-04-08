@@ -246,6 +246,7 @@
 "STR_LFPG_BTC_BTN_WITHDRAW_BTC","Withdraw BTC","Withdraw BTC","Retirar BTC","Withdraw BTC","Withdraw BTC","取款 BTC"
 "STR_LFPG_BTC_BTN_DEPOSIT_BTC","Deposit BTC","Deposit BTC","Ingresar BTC","Deposit BTC","Ingresar BTC","存款 BTC"
 "STR_LFPG_BTC_ERR_EMPTY_EUR","Enter EUR amount","Enter EUR amount","Introduce cantidad de EUR","Enter EUR amount","Enter EUR amount","请输入 EUR 数量"
+"STR_LFPG_BTC_ERR_NO_BALANCE","No balance system available","No balance system available","Sistema de balance no disponible","No balance system available","No balance system available","余额系统不可用"
 "STR_LFPG_SPEAKER_KIT","Speaker Kit","Speaker Kit","Kit Altavoz","Lautsprecher-Kit","Комплект динамика","扬声器套件"
 "STR_LFPG_SPEAKER_KIT_DESC","A PAS speaker. Receives megaphone audio when powered. Place to deploy.","A PAS speaker. Receives megaphone audio when powered. Place to deploy.","Altavoz PAS. Recibe audio de megafonía con energía. Colocar para desplegar.","PAS-Lautsprecher. Empfängt Megafon-Audio bei Stromversorgung. Platzieren zum Aufstellen.","PAS-динамик. Принимает звук мегафона при питании. Установите для развертывания.","PAS 扬声器。通电时接收扩音器音频。放置以部署。"
 "STR_LFPG_SPEAKER","Speaker","Speaker","Altavoz","Lautsprecher","Динамик","扬声器"

@@ -34,6 +34,7 @@ static const float LFPG_BTC_ATM_CONSUMPTION = 30.0;  // u/s for player-deployed 
 // ---- BTC ATM: Config paths ----
 static const string LFPG_BTC_SETTINGS_DIR  = "$profile:LF_PowerGrid";
 static const string LFPG_BTC_SETTINGS_FILE = "$profile:LF_PowerGrid\\LF_BTCAtm.json";
+static const string LFPG_BALANCE_NATIVE_FILE = "$profile:LF_PowerGrid\\LF_Balances.json";
 
 // ---- BTC ATM: Transaction types (for TX_RESULT RPC) ----
 static const int LFPG_BTC_TX_BUY      = 1;
@@ -55,6 +56,7 @@ static const int LFPG_BTC_ERR_NOT_POWERED     = 7;   // device not powered (cons
 static const int LFPG_BTC_ERR_TOO_FAR         = 8;   // player too far from ATM
 static const int LFPG_BTC_ERR_INVALID         = 9;   // generic validation failure
 static const int LFPG_BTC_ERR_NO_CASH         = 10;  // player has no EUR bills
+static const int LFPG_BTC_ERR_NO_BALANCE_PROVIDER = 11;  // no balance provider active
 
 // ---- BTC ATM: Safety cap for greedy change ----
 static const int LFPG_BTC_MAX_CHANGE_ITEMS = 500;
@@ -126,5 +128,25 @@ class LFPG_BTCAtmClientData
     {
         s_PriceUnavailable = true;
         s_Price = -1.0;
+    }
+
+    static void Reset()
+    {
+        s_Price = -1.0;
+        s_Stock = 0;
+        s_Balance = 0;
+        s_CashOnInventory = 0;
+        s_BtcOnInventory = 0;
+        s_WithdrawOnly = false;
+        s_PriceUnavailable = false;
+        s_PriceChange24h = 0.0;
+        s_NetLow = 0;
+        s_NetHigh = 0;
+        s_LastTxType = 0;
+        s_LastErrCode = 0;
+        s_LastNewStock = 0;
+        s_LastNewBalance = 0;
+        s_LastBtcMoved = 0;
+        s_LastEurAmount = 0.0;
     }
 };

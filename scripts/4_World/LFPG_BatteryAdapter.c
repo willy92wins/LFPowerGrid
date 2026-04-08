@@ -210,7 +210,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterBattery(this);
 
         // Check if a battery is already attached (e.g., after server restart).
         // Vanilla persistence restores attachments before EEInit.
@@ -226,14 +227,16 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
             m_PoweredNet = false;
             SetSynchDirty();
         }
-        LFPG_NetworkManager.Get().UnregisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterBattery(this);
         #endif
     }
 
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterBattery(this);
         #endif
     }
 
@@ -280,7 +283,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         string devId = LFPG_GetDeviceId();
         if (devId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(devId);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(devId);
         }
         #endif
     }
@@ -313,7 +317,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         string devId = LFPG_GetDeviceId();
         if (devId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(devId);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(devId);
         }
         #endif
     }

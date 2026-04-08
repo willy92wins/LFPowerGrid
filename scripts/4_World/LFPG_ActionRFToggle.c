@@ -59,7 +59,7 @@ class LFPG_ActionRFToggle : ActionInteractBase
             return false;
 
         // Cooldown check (client-side hint — server re-checks in ExecuteRFToggle)
-        int now = GetGame().GetTime();
+        int now = g_Game.GetTime();
         int lastToggle = ic.LFPG_GetLastRFToggleTime();
         int elapsed = now - lastToggle;
         if (elapsed < LFPG_INTERCOM_RF_COOLDOWN_MS)

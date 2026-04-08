@@ -280,11 +280,11 @@ class LFPG_SorterView extends ScriptView
     // S1 fix: destructor releases input lock if destroyed while open
     void ~LFPG_SorterView()
     {
-        if (GetGame())
+        if (g_Game)
         {
             // v2.4 Bug D: Restore player actions on destruction
             // BUG 7 fix: unified cast to PlayerBase (matches DoOpen/DoClose)
-            PlayerBase dtorPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase dtorPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             if (dtorPlayer)
             {
                 HumanInputController hicDtor = dtorPlayer.GetInputController();
@@ -296,12 +296,12 @@ class LFPG_SorterView extends ScriptView
 
             if (m_FocusLocked)
             {
-                Input inp = GetGame().GetInput();
+                Input inp = g_Game.GetInput();
                 if (inp)
                 {
                     inp.ChangeGameFocus(-1);
                 }
-                UIManager uiMgr = GetGame().GetUIManager();
+                UIManager uiMgr = g_Game.GetUIManager();
                 if (uiMgr)
                 {
                     uiMgr.ShowUICursor(false);
@@ -1258,9 +1258,9 @@ class LFPG_SorterView extends ScriptView
             }
         }
         // A7: Record timestamp before close
-        if (GetGame())
+        if (g_Game)
         {
-            s_EscCloseTime = GetGame().GetTickTime();
+            s_EscCloseTime = g_Game.GetTickTime();
         }
         s_Instance.DoClose();
         return true;
@@ -1271,9 +1271,9 @@ class LFPG_SorterView extends ScriptView
     {
         if (s_EscCloseTime <= 0.0)
             return false;
-        if (!GetGame())
+        if (!g_Game)
             return false;
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
         float elapsed = now - s_EscCloseTime;
         if (elapsed < 0.2)
             return true;
@@ -1282,7 +1282,7 @@ class LFPG_SorterView extends ScriptView
 
     // S2 fix: Cleanup deletes instance properly (prevents leak).
     // Input release is handled by the destructor (S1) which has
-    // GetGame() null guard for safe shutdown.
+    // g_Game null guard for safe shutdown.
     static void Cleanup()
     {
         // v2.5 B3: Release scaler arrays before destroying widgets
@@ -1379,9 +1379,9 @@ class LFPG_SorterView extends ScriptView
         // (CCTV pattern: SetDisabled blocks movement/interaction/inventory
         //  but widget event system still works for EditBox typing + buttons)
         #ifndef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            PlayerBase openPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase openPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             if (openPlayer)
             {
                 HumanInputController hicOpen = openPlayer.GetInputController();
@@ -1447,9 +1447,9 @@ class LFPG_SorterView extends ScriptView
         }
         // v2.4 Bug D: Restore player actions before releasing cursor
         #ifndef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            PlayerBase closePlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase closePlayer = PlayerBase.Cast(g_Game.GetPlayer());
             if (closePlayer)
             {
                 HumanInputController hicClose = closePlayer.GetInputController();
@@ -1473,16 +1473,16 @@ class LFPG_SorterView extends ScriptView
     protected void ShowCursor()
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
-        UIManager uiMgr = GetGame().GetUIManager();
+        UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
         {
             uiMgr.ShowUICursor(true);
         }
         if (!m_FocusLocked)
         {
-            Input inp = GetGame().GetInput();
+            Input inp = g_Game.GetInput();
             if (inp)
             {
                 inp.ChangeGameFocus(1);
@@ -1495,16 +1495,16 @@ class LFPG_SorterView extends ScriptView
     protected void HideCursor()
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
-        UIManager uiMgr = GetGame().GetUIManager();
+        UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
         {
             uiMgr.ShowUICursor(false);
         }
         if (m_FocusLocked)
         {
-            Input inp = GetGame().GetInput();
+            Input inp = g_Game.GetInput();
             if (inp)
             {
                 inp.ChangeGameFocus(-1);

@@ -98,7 +98,7 @@ class LFPG_SwitchRemote : LFPG_WireOwnerBase
 
         if (!powered && m_SwitchOn)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
             m_SwitchOn = false;
         }
 
@@ -140,8 +140,9 @@ class LFPG_SwitchRemote : LFPG_WireOwnerBase
         togMsg = togMsg + m_DeviceId;
         LFPG_Util.Info(togMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_BUTTON_PULSE_MS, false);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_BUTTON_PULSE_MS, false);
         #endif
     }
 
@@ -157,7 +158,8 @@ class LFPG_SwitchRemote : LFPG_WireOwnerBase
         offMsg = offMsg + m_DeviceId;
         LFPG_Util.Info(offMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
         #endif
     }
 
@@ -214,9 +216,9 @@ class LFPG_SwitchRemote : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
@@ -227,18 +229,18 @@ class LFPG_SwitchRemote : LFPG_WireOwnerBase
 
     override void LFPG_OnDeleted()
     {
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
     }
 
     override void LFPG_OnWiresCut()
     {
         #ifdef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }

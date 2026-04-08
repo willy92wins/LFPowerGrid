@@ -171,10 +171,10 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         LFPG_DeviceLifecycle.OnDeviceKilled(panel, deviceId);
 
         // ---- Delete T1 ----
-        GetGame().ObjectDelete(panel);
+        g_Game.ObjectDelete(panel);
 
         // ---- Spawn T2 at same position ----
-        EntityAI t2 = GetGame().CreateObjectEx("LFPG_SolarPanel_T2", pos, ECE_CREATEPHYSICS);
+        EntityAI t2 = EntityAI.Cast(g_Game.CreateObjectEx("LFPG_SolarPanel_T2", pos, ECE_CREATEPHYSICS));
         if (t2)
         {
             t2.SetPosition(pos);
@@ -202,7 +202,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
         if (currentQty <= required)
         {
             // Consume all — delete the item
-            GetGame().ObjectDelete(item);
+            g_Game.ObjectDelete(item);
         }
         else
         {
@@ -213,7 +213,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
             vector spawnPos = dropPos;
             spawnPos[1] = spawnPos[1] + 0.1;
 
-            EntityAI excess = GetGame().CreateObject(itemType, spawnPos, false);
+            EntityAI excess = EntityAI.Cast(g_Game.CreateObject(itemType, spawnPos, false));
             if (excess)
             {
                 ItemBase excessItem = ItemBase.Cast(excess);
@@ -224,7 +224,7 @@ class LFPG_ActionUpgradeSolarPanel : ActionContinuousBase
             }
 
             // Delete original (consumed). Also handles cascade from panel delete.
-            GetGame().ObjectDelete(item);
+            g_Game.ObjectDelete(item);
         }
     }
 };

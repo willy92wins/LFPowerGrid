@@ -244,14 +244,16 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterMotionSensor(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterMotionSensor(this);
         #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterMotionSensor(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterMotionSensor(this);
 
         bool dirty = false;
         if (m_PoweredNet)
@@ -274,7 +276,8 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterMotionSensor(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterMotionSensor(this);
         #endif
     }
 
@@ -515,7 +518,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
         // ---- Scan players ----
         bool detected = false;
-        float nowSec = GetGame().GetTickTime();
+        float nowSec = g_Game.GetTickTime();
 
         int i;
         int pCount = players.Count();

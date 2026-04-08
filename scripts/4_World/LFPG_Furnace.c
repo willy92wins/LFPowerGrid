@@ -238,11 +238,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     {
         #ifdef SERVER
         // Post-load restore: if furnace was on with fuel, register with NM
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (m_SourceOn && m_FuelCurrent > 0)
         {
-            int now = GetGame().GetTime();
+            int now = g_Game.GetTime();
             m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
-            LFPG_NetworkManager.Get().RegisterFurnace(this);
+            if (nm) nm.RegisterFurnace(this);
         }
 
         // Safety: source on but no fuel → try auto-consume
@@ -251,9 +252,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             bool restoreConsumed = LFPG_AutoConsumeLargestItem();
             if (restoreConsumed)
             {
-                int now2 = GetGame().GetTime();
+                int now2 = g_Game.GetTime();
                 m_BurnNextMs = now2 + LFPG_FURNACE_BURN_INTERVAL_MS;
-                LFPG_NetworkManager.Get().RegisterFurnace(this);
+                if (nm) nm.RegisterFurnace(this);
             }
             else
             {
@@ -266,7 +267,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         // Propagate on init to rebuild graph edge allocations
         if (m_SourceOn && m_DeviceId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+            if (nm) nm.RequestPropagate(m_DeviceId);
         }
 
         // v4.7: Restore UTS heat if furnace was on
@@ -283,7 +284,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (m_SourceOn)
         {
             m_SourceOn = false;
-            LFPG_NetworkManager.Get().UnregisterFurnace(this);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.UnregisterFurnace(this);
             SetSynchDirty();
         }
         LFPG_SetHeatActive(false);
@@ -295,7 +297,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterFurnace(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterFurnace(this);
         LFPG_SetHeatActive(false);
         #endif
 
@@ -308,7 +311,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (m_SourceOn)
         {
             m_SourceOn = false;
-            LFPG_NetworkManager.Get().UnregisterFurnace(this);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.UnregisterFurnace(this);
             SetSynchDirty();
 
             LFPG_SetHeatActive(false);
@@ -438,7 +442,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             return;
 
         // Timing gate: NM polls every 5s, but burn happens every 30s
-        int now = GetGame().GetTime();
+        int now = g_Game.GetTime();
         if (now < m_BurnNextMs)
             return;
 
@@ -458,11 +462,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (!consumed)
             {
                 m_SourceOn = false;
-                LFPG_NetworkManager.Get().UnregisterFurnace(this);
+                LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+                if (nm) nm.UnregisterFurnace(this);
                 SetSynchDirty();
                 if (m_DeviceId != "")
                 {
-                    LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                    if (nm) nm.RequestPropagate(m_DeviceId);
                 }
                 string offMsg = "[LFPG_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
                 offMsg = offMsg + m_DeviceId;
@@ -483,11 +488,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (m_SourceOn)
         {
             m_SourceOn = false;
-            LFPG_NetworkManager.Get().UnregisterFurnace(this);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.UnregisterFurnace(this);
             SetSynchDirty();
             if (m_DeviceId != "")
             {
-                LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                if (nm) nm.RequestPropagate(m_DeviceId);
             }
             string offMsg = "[LFPG_Furnace] Toggled OFF. fuel=";
             offMsg = offMsg + m_FuelCurrent.ToString();
@@ -516,13 +522,14 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (canIgnite)
             {
                 m_SourceOn = true;
-                int now = GetGame().GetTime();
+                int now = g_Game.GetTime();
                 m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
-                LFPG_NetworkManager.Get().RegisterFurnace(this);
+                LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
+                if (nm2) nm2.RegisterFurnace(this);
                 SetSynchDirty();
                 if (m_DeviceId != "")
                 {
-                    LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+                    if (nm2) nm2.RequestPropagate(m_DeviceId);
                 }
                 string onMsg = "[LFPG_Furnace] Toggled ON. fuel=";
                 onMsg = onMsg + m_FuelCurrent.ToString();
@@ -554,10 +561,10 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         int qty = 0;
         int fuel = 0;
 
-        if (GetGame().ConfigIsExisting(cfgPath))
+        if (g_Game.ConfigIsExisting(cfgPath))
         {
             TIntArray sizeArr = new TIntArray;
-            GetGame().ConfigGetIntArray(cfgPath, sizeArr);
+            g_Game.ConfigGetIntArray(cfgPath, sizeArr);
             if (sizeArr.Count() >= 2)
             {
                 w = sizeArr[0];
@@ -569,7 +576,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         string splitPath = "CfgVehicles ";
         splitPath = splitPath + itemType;
         splitPath = splitPath + " canBeSplit";
-        int splitVal = GetGame().ConfigGetInt(splitPath);
+        int splitVal = g_Game.ConfigGetInt(splitPath);
         if (splitVal > 0)
         {
             int rawQty = item.GetQuantity();
@@ -581,7 +588,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
         fuel = w * h * qty;
 
-        CargoBase cargo = item.GetInventory().GetCargo();
+        GameInventory inv = item.GetInventory();
+        if (!inv) return fuel;
+        CargoBase cargo = inv.GetCargo();
         if (cargo)
         {
             int cargoCount = cargo.GetItemCount();
@@ -628,7 +637,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         string splitPath = "CfgVehicles ";
         splitPath = splitPath + itemType;
         splitPath = splitPath + " canBeSplit";
-        int splitVal = GetGame().ConfigGetInt(splitPath);
+        int splitVal = g_Game.ConfigGetInt(splitPath);
         if (splitVal > 0)
         {
             int rawQty = item.GetQuantity();
@@ -767,7 +776,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         m_FuelCurrent = fuelAfter;
 
         string burnedType = bestItem.GetType();
-        GetGame().ObjectDelete(bestItem);
+        g_Game.ObjectDelete(bestItem);
 
         SetSynchDirty();
 

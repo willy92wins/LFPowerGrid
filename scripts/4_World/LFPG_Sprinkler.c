@@ -186,13 +186,17 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     // ---- Lifecycle hooks ----
     override void LFPG_OnInit()
     {
-        LFPG_NetworkManager.Get().RegisterSprinkler(this);
+        #ifdef SERVER
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterSprinkler(this);
+        #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSprinkler(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSprinkler(this);
         bool dirty = false;
         if (m_PoweredNet)
         {
@@ -210,7 +214,8 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         }
         if (m_WaterSourceId != "")
         {
-            LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
+            LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
+            if (nm2) nm2.LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
         }
         #endif
 
@@ -222,10 +227,12 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSprinkler(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSprinkler(this);
         if (m_WaterSourceId != "")
         {
-            LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
+            LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
+            if (nm2) nm2.LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
         }
         #endif
 
@@ -253,7 +260,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         if (particle)
             return false;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return false;
 
         ParticleManager pm = ParticleManager.GetInstance();
@@ -269,7 +276,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         if (!particle)
             return false;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return false;
 
         particle.Stop();
@@ -340,7 +347,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
 
         // Spatial query: all objects within radius
         float radius = LFPG_SPRINKLER_RADIUS;
-        GetGame().GetObjectsAtPosition3D(sprPos, radius, m_WaterNearby, m_WaterCargos);
+        g_Game.GetObjectsAtPosition3D(sprPos, radius, m_WaterNearby, m_WaterCargos);
 
         int objCount = m_WaterNearby.Count();
         int i;

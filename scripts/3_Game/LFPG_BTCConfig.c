@@ -48,6 +48,9 @@ class LFPG_BTCSettingsData
     // ATM behavior
     bool atmWithdrawOnlyDefault;  // Default for new ATMs
 
+    // Balance provider mode: "auto", "native", "lbmaster"
+    string balanceMode;
+
     // Currency denominations (physical money items)
     ref array<ref LFPG_BTCCurrency> currencies;
 
@@ -63,6 +66,7 @@ class LFPG_BTCSettingsData
         btcItemClassname = "Ammo_9x19_25Rnd";
         maxBtcPerMachine = 100;
         atmWithdrawOnlyDefault = false;
+        balanceMode = "auto";
         currencies = new array<ref LFPG_BTCCurrency>;
 
         // Default denominations
@@ -241,6 +245,26 @@ class LFPG_BTCConfig
             LFPG_Util.Warn(warnItem);
         }
 
+        // balanceMode: must be auto, native, or lbmaster
+        if (s_Data.balanceMode == "")
+        {
+            s_Data.balanceMode = "auto";
+        }
+        string bmCheck = s_Data.balanceMode;
+        bmCheck.ToLower();
+        if (bmCheck != "auto" && bmCheck != "native" && bmCheck != "lbmaster")
+        {
+            string warnBm = "[LFPG_BTCConfig] Invalid balanceMode '";
+            warnBm = warnBm + s_Data.balanceMode;
+            warnBm = warnBm + "', reset to auto";
+            LFPG_Util.Warn(warnBm);
+            s_Data.balanceMode = "auto";
+        }
+        else
+        {
+            s_Data.balanceMode = bmCheck;
+        }
+
         // currencies: must have at least one entry
         if (!s_Data.currencies || s_Data.currencies.Count() == 0)
         {
@@ -353,6 +377,8 @@ class LFPG_BTCConfig
         msg = msg + s_Data.maxBtcPerMachine.ToString();
         msg = msg + " withdrawOnly=";
         msg = msg + s_Data.atmWithdrawOnlyDefault.ToString();
+        msg = msg + " balanceMode=";
+        msg = msg + s_Data.balanceMode;
 
         int curCount = 0;
         if (s_Data.currencies)
@@ -420,6 +446,12 @@ class LFPG_BTCConfig
     {
         LFPG_BTCSettingsData d = Get();
         return d.vsCurrency;
+    }
+
+    static string GetBalanceMode()
+    {
+        LFPG_BTCSettingsData d = Get();
+        return d.balanceMode;
     }
 
     // Returns the currencies array (sorted descending by value).

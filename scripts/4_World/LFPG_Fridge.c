@@ -90,14 +90,16 @@ class LFPG_Fridge : LFPG_DeviceBase
     override void LFPG_OnInit()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterFridge(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterFridge(this);
         #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterFridge(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterFridge(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -109,7 +111,8 @@ class LFPG_Fridge : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterFridge(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterFridge(this);
         #endif
     }
 

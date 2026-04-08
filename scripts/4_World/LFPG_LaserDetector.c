@@ -412,7 +412,8 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterLaserDetector(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterLaserDetector(this);
         #endif
 
         // Client: register with beam renderer
@@ -431,7 +432,8 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterLaserDetector(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterLaserDetector(this);
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
         if (m_GateOpen) { m_GateOpen = false; dirty = true; }
@@ -443,7 +445,8 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterLaserDetector(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterLaserDetector(this);
         #endif
 
         // Client: unregister from beam renderer

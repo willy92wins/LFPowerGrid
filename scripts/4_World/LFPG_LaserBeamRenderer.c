@@ -99,8 +99,8 @@ class LFPG_LaserBeamRenderer
         if (!hud || !hud.IsReady())
             return;
 
-        vector camPos = GetGame().GetCurrentCameraPosition();
-        vector camDir = GetGame().GetCurrentCameraDirection();
+        vector camPos = g_Game.GetCurrentCameraPosition();
+        vector camDir = g_Game.GetCurrentCameraDirection();
         float cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
 
         // v0.8.x: Precompute screen dims once (not per-laser).
@@ -160,8 +160,8 @@ class LFPG_LaserBeamRenderer
                 continue;
 
             // Project to screen — GetScreenPos returns vector(screenX, screenY, depth)
-            scrA = GetGame().GetScreenPos(beamStart);
-            scrB = GetGame().GetScreenPos(beamEnd);
+            scrA = g_Game.GetScreenPos(beamStart);
+            scrB = g_Game.GetScreenPos(beamEnd);
 
             // Z check (behind camera plane)
             bool lasBehindA = (scrA[2] < LFPG_BEHIND_CAM_Z);

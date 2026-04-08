@@ -52,7 +52,7 @@ class LFPG_TankHUD
         if (m_Root)
             return;
 
-        m_Root = GetGame().GetWorkspace().CreateWidgets("LFPowerGrid/gui/layouts/LFPG_TankHUD.layout");
+        m_Root = g_Game.GetWorkspace().CreateWidgets("LFPowerGrid/gui/layouts/LFPG_TankHUD.layout");
         if (!m_Root)
         {
             LFPG_Util.Error("[TankHUD] Failed to create layout");
@@ -86,7 +86,7 @@ class LFPG_TankHUD
         if (!m_Root)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
         {
             Hide();

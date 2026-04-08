@@ -23,7 +23,7 @@ class LFPG_Diag
         if (!LFPG_DIAG_ENABLED)
             return;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
         {
             string srvMsg = LFPG_LOG_PREFIX + "[CLI-ECHO] " + msg;
             Print(srvMsg);
@@ -35,7 +35,7 @@ class LFPG_Diag
         Print(cliMsg);
 
         // Rate limit: max ~10 per second
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
         float elapsed = now - s_LastEchoTime;
         if (elapsed < 0.1)
         {
@@ -49,7 +49,7 @@ class LFPG_Diag
             s_LastEchoTime = now;
         }
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 

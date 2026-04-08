@@ -64,7 +64,8 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     override void LFPG_OnInit()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().BroadcastOwnerWires(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.BroadcastOwnerWires(this);
         #endif
 
         LFPG_OnInitDevice();
@@ -189,7 +190,9 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
 
     bool LFPG_PruneMissingTargets()
     {
-        ref map<string, bool> validIds = LFPG_NetworkManager.Get().GetCachedValidIds();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        ref map<string, bool> validIds;
+        if (nm) validIds = nm.GetCachedValidIds();
         if (!validIds)
         {
             validIds = new map<string, bool>;

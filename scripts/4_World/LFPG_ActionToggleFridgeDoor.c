@@ -63,6 +63,9 @@ class LFPG_ActionToggleFridgeDoor : ActionInteractBase
     {
         super.OnExecuteServer(action_data);
 
+        if (!action_data || !action_data.m_Target)
+            return;
+
         Object targetObj = action_data.m_Target.GetObject();
         if (!targetObj)
             return;

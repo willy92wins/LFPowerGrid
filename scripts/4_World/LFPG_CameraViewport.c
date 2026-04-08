@@ -178,7 +178,7 @@ class LFPG_CameraViewport
     // =========================================================
     static LFPG_CameraViewport Get()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return null;
 
         if (!s_Instance)
@@ -251,7 +251,7 @@ class LFPG_CameraViewport
             return true;
 
         Print("[CameraViewport] DIAG: InitWidgets — pre-CreateWidgets");
-        m_OverlayRoot = GetGame().GetWorkspace().CreateWidgets(LFPG_CCTV_LAYOUT);
+        m_OverlayRoot = g_Game.GetWorkspace().CreateWidgets(LFPG_CCTV_LAYOUT);
         if (!m_OverlayRoot)
         {
             LFPG_Util.Error("[CameraViewport] Failed to create overlay from: " + LFPG_CCTV_LAYOUT);
@@ -354,7 +354,7 @@ class LFPG_CameraViewport
     {
         Print("[CameraViewport] DIAG: EnterFromList entry");
 
-        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase p = PlayerBase.Cast(g_Game.GetPlayer());
 
         if (!entries)
         {
@@ -656,7 +656,7 @@ class LFPG_CameraViewport
 
     protected void ShowCycleMessage()
     {
-        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase p = PlayerBase.Cast(g_Game.GetPlayer());
         if (!p)
             return;
 
@@ -704,7 +704,7 @@ class LFPG_CameraViewport
         m_PlayerRef = null;
 
         // Re-enable input in case we were in spectator mode
-        Human cleanupPlayer = Human.Cast(GetGame().GetPlayer());
+        Human cleanupPlayer = g_Game.GetPlayer();
         if (cleanupPlayer)
         {
             HumanInputController cleanupHic = cleanupPlayer.GetInputController();
@@ -755,7 +755,7 @@ class LFPG_CameraViewport
         }
 
         // Safety: re-enable HIC if still disabled
-        Human localPlayer = Human.Cast(GetGame().GetPlayer());
+        Human localPlayer = g_Game.GetPlayer();
         if (localPlayer)
         {
             HumanInputController hic = localPlayer.GetInputController();
@@ -911,7 +911,7 @@ class LFPG_CameraViewport
             int day    = 0;
             int hour   = 0;
             int minute = 0;
-            GetGame().GetWorld().GetDate(year, month, day, hour, minute);
+            g_Game.GetWorld().GetDate(year, month, day, hour, minute);
 
             string ts = year.ToStringLen(4);
             ts = ts + "-";
@@ -1066,7 +1066,7 @@ class LFPG_CameraViewport
         if (m_FocusLocked)
             return;
 
-        Input inp = GetGame().GetInput();
+        Input inp = g_Game.GetInput();
         if (inp)
         {
             inp.ChangeGameFocus(1);
@@ -1079,7 +1079,7 @@ class LFPG_CameraViewport
         if (!m_FocusLocked)
             return;
 
-        Input inp = GetGame().GetInput();
+        Input inp = g_Game.GetInput();
         if (inp)
         {
             inp.ChangeGameFocus(-1);
@@ -1089,7 +1089,7 @@ class LFPG_CameraViewport
 
     protected void HideHUD()
     {
-        Mission mission = GetGame().GetMission();
+        Mission mission = g_Game.GetMission();
         if (mission)
         {
             Hud hud = mission.GetHud();
@@ -1100,7 +1100,7 @@ class LFPG_CameraViewport
             }
         }
 
-        UIManager uiMgr = GetGame().GetUIManager();
+        UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
         {
             uiMgr.ShowUICursor(false);
@@ -1109,7 +1109,7 @@ class LFPG_CameraViewport
 
     protected void RestoreHUD()
     {
-        Mission mission = GetGame().GetMission();
+        Mission mission = g_Game.GetMission();
         if (mission)
         {
             Hud hud = mission.GetHud();

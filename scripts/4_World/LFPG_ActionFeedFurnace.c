@@ -88,10 +88,10 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         string cfgPath = "CfgVehicles ";
         cfgPath = cfgPath + itemType;
         cfgPath = cfgPath + " itemSize";
-        if (GetGame().ConfigIsExisting(cfgPath))
+        if (g_Game.ConfigIsExisting(cfgPath))
         {
             TIntArray sizeArr = new TIntArray;
-            GetGame().ConfigGetIntArray(cfgPath, sizeArr);
+            g_Game.ConfigGetIntArray(cfgPath, sizeArr);
             int w = 0;
             int h = 0;
             if (sizeArr.Count() >= 2)
@@ -193,6 +193,12 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (feedItem.IsRuined())
             return;
 
+        if (feedItem.IsKindOf("LFPG_CableReel"))
+            return;
+        string revalType = feedItem.GetType();
+        if (LFPG_IsLFPGKit(revalType))
+            return;
+
         // v4.7: Calculate fuel based on mode
         LFPG_ServerSettings st = LFPG_Settings.Get();
         bool whitelistMode = st.FurnaceFuelWhitelistOnly;
@@ -231,7 +237,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         }
 
         // Destroy item (+ all contents recursively via engine)
-        GetGame().ObjectDelete(feedItem);
+        g_Game.ObjectDelete(feedItem);
 
         // Log
         string playerName = "unknown";

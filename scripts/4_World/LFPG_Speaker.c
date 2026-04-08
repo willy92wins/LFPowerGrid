@@ -225,7 +225,7 @@ class LFPG_Speaker : LFPG_DeviceBase
 
         vector pos = GetPosition();
         string ghostClass = "LFPG_GhostPASReceiver";
-        Object ghostObj = GetGame().CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
+        Object ghostObj = g_Game.CreateObjectEx(ghostClass, pos, ECE_CREATEPHYSICS);
         m_GhostPAS = LFPG_GhostPASReceiver.Cast(ghostObj);
         if (!m_GhostPAS)
         {
@@ -248,7 +248,7 @@ class LFPG_Speaker : LFPG_DeviceBase
         #ifdef SERVER
         if (m_GhostPAS)
         {
-            GetGame().ObjectDelete(m_GhostPAS);
+            g_Game.ObjectDelete(m_GhostPAS);
             m_GhostPAS = null;
 
             string destroyMsg = "[LFPG_Speaker] GhostPASReceiver destroyed, id=";

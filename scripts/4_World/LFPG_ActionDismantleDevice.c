@@ -163,7 +163,7 @@ class LFPG_ActionDismantleDevice : ActionContinuousBase
         vector playerPos = player.GetPosition();
 
         // Spawn kit at player feet
-        EntityAI kit = GetGame().CreateObjectEx(kitClass, playerPos, ECE_CREATEPHYSICS);
+        EntityAI kit = EntityAI.Cast(g_Game.CreateObjectEx(kitClass, playerPos, ECE_CREATEPHYSICS));
         if (!kit)
         {
             string failMsg = "[LFPG] Dismantle failed: could not create ";
@@ -191,7 +191,7 @@ class LFPG_ActionDismantleDevice : ActionContinuousBase
         // Delete device — EEDelete handles full lifecycle:
         // LFPG_OnDeleted() → device-specific cleanup (NM unregister, sounds, etc.)
         // LFPG_DeviceLifecycle.OnDeviceDeleted() → wire cut + graph + registry
-        GetGame().ObjectDelete(device);
+        g_Game.ObjectDelete(device);
 
         // Log
         string okLog = "[Dismantle] ";
@@ -201,7 +201,10 @@ class LFPG_ActionDismantleDevice : ActionContinuousBase
         okLog = okLog + ") -> ";
         okLog = okLog + kitClass;
         okLog = okLog + " by ";
-        okLog = okLog + player.GetIdentity().GetName();
+        string playerName = "unknown";
+        PlayerIdentity pid = player.GetIdentity();
+        if (pid) playerName = pid.GetName();
+        okLog = okLog + playerName;
         LFPG_Util.Info(okLog);
 
         // Player feedback

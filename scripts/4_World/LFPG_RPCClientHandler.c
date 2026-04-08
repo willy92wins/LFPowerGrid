@@ -104,7 +104,7 @@ class LFPG_RPCClientHandler
         string msg;
         if (!ctx.Read(msg)) return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             player.MessageStatus("[LFPG] " + msg);
@@ -160,7 +160,7 @@ class LFPG_RPCClientHandler
 
         if (camCount <= 0)
         {
-            PlayerBase pLocal = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase pLocal = PlayerBase.Cast(g_Game.GetPlayer());
             if (pLocal)
                 pLocal.MessageStatus("[LFPG] No hay camaras activas conectadas.");
             return;
@@ -237,7 +237,7 @@ class LFPG_RPCClientHandler
 
         // v0.9.8: Guard de jugador valido. Si el jugador murio o esta
         // inconsciente entre el RPC request y la respuesta, no activar.
-        PlayerBase pGuard = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase pGuard = PlayerBase.Cast(g_Game.GetPlayer());
         if (!pGuard || !pGuard.IsAlive() || pGuard.IsUnconscious())
         {
             LFPG_Util.Warn("[CameraListResponse] player dead/unconscious — ignoring");
@@ -451,10 +451,10 @@ class LFPG_RPCClientHandler
         if (!ctx.Read(containerName))
             return;
 
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 

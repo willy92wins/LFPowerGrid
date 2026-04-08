@@ -42,7 +42,8 @@ class LFPG_DeviceLifecycle
             return;
 
         LFPG_Util.Warn("[DeviceLifecycle] OnDeviceKilled: id=" + deviceId + " type=" + device.GetType());
-        LFPG_NetworkManager.Get().CutAllWiresFromDevice(device);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.CutAllWiresFromDevice(device);
         #endif
     }
 
@@ -53,18 +54,19 @@ class LFPG_DeviceLifecycle
     // Cuts wires, notifies graph, and unregisters from registry.
     // Must be called BEFORE super.EEDelete().
     static void OnDeviceDeleted(EntityAI device, string deviceId)
-    {
-        #ifdef SERVER
-        if (device && deviceId != "")
-        {
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(device);
-        }
-        #endif
+	{
+		#ifdef SERVER
+		if (device && deviceId != "")
+		{
+			LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+			if (nm) nm.CutAllWiresFromDevice(device);
+		}
+		#endif
 
-        // These calls are safe on both client and server
-        LFPG_NetworkManager.Get().NotifyGraphDeviceRemoved(deviceId);
-        LFPG_DeviceRegistry.Get().Unregister(deviceId, device);
-    }
+		LFPG_NetworkManager nmGraph = LFPG_NetworkManager.Get();
+		if (nmGraph) nmGraph.NotifyGraphDeviceRemoved(deviceId);
+		LFPG_DeviceRegistry.Get().Unregister(deviceId, device);
+	}
 
     // ============================================
     // EEItemLocationChanged handler
@@ -76,46 +78,43 @@ class LFPG_DeviceLifecycle
     // Returns true if wires were cut (caller should handle
     // device-specific state like m_PoweredNet, m_SourceOn).
     static bool OnDeviceMoved(EntityAI device, string deviceId, notnull InventoryLocation oldLoc, notnull InventoryLocation newLoc)
-    {
-        #ifdef SERVER
-        if (!device)
-            return false;
+	{
+		#ifdef SERVER
+		if (!device)
+			return false;
 
-        if (deviceId == "")
-            return false;
+		if (deviceId == "")
+			return false;
 
-        // --- Primary: inventory type transition ---
-        // GROUND → anything else = picked up
-        bool wasGround = (oldLoc.GetType() == InventoryLocationType.GROUND);
-        bool nowGround = (newLoc.GetType() == InventoryLocationType.GROUND);
+		LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
 
-        if (wasGround && !nowGround)
-        {
-            LFPG_Util.Warn("[DeviceLifecycle] Picked up (GROUND->" + newLoc.GetType().ToString() + ") id=" + deviceId);
-            LFPG_NetworkManager.Get().CutAllWiresFromDevice(device);
-            return true;
-        }
+		bool wasGround = (oldLoc.GetType() == InventoryLocationType.GROUND);
+		bool nowGround = (newLoc.GetType() == InventoryLocationType.GROUND);
 
-        // --- Secondary: distance-based for GROUND→GROUND moves ---
-        // Catches admin teleport, physics push, building destruction.
-        vector oldPos = oldLoc.GetPos();
-        vector newPos = newLoc.GetPos();
+		if (wasGround && !nowGround)
+		{
+			LFPG_Util.Warn("[DeviceLifecycle] Picked up (GROUND->" + newLoc.GetType().ToString() + ") id=" + deviceId);
+			if (nm) nm.CutAllWiresFromDevice(device);
+			return true;
+		}
 
-        if (oldPos == vector.Zero)
-            return false;
+		vector oldPos = oldLoc.GetPos();
+		vector newPos = newLoc.GetPos();
 
-        float dist = vector.Distance(oldPos, newPos);
-        // Threshold 0.1m — physics bumps can be 0.2-0.4m
-        if (dist < 0.1)
-            return false;
+		if (oldPos == vector.Zero)
+			return false;
 
-        LFPG_Util.Warn("[DeviceLifecycle] Moved " + dist.ToString() + "m id=" + deviceId);
-        LFPG_NetworkManager.Get().CutAllWiresFromDevice(device);
-        return true;
-        #else
-        return false;
-        #endif
-    }
+		float dist = vector.Distance(oldPos, newPos);
+		if (dist < 0.1)
+			return false;
+
+		LFPG_Util.Warn("[DeviceLifecycle] Moved " + dist.ToString() + "m id=" + deviceId);
+		if (nm) nm.CutAllWiresFromDevice(device);
+		return true;
+		#else
+		return false;
+		#endif
+	}
 
     // ============================================
     // SparkPlug validation (for generators)

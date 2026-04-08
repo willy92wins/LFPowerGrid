@@ -187,7 +187,7 @@ class LFPG_WiringClient
         // sees !IsActive() and re-triggers Start() — creating an orphan
         // session that times out 2min later with confusing message.
         // Block Start() for 1s after Finish to let the action cycle settle.
-        float nowStart = GetGame().GetTime();
+        float nowStart = g_Game.GetTime();
         if (m_LastFinishMs > 0.0)
         {
             float sinceFin = nowStart - m_LastFinishMs;
@@ -206,7 +206,7 @@ class LFPG_WiringClient
         m_FrameCounter = 0;
         m_LastPreConnectStatus = LFPG_PreConnectStatus.NO_TARGET;
         m_LastPreConnectReason = "";
-        m_SessionStartMs = GetGame().GetTime();
+        m_SessionStartMs = g_Game.GetTime();
 
         m_Waypoints.Clear();
 
@@ -223,7 +223,7 @@ class LFPG_WiringClient
             return;
         }
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
         {
             LFPG_Util.Error("[WiringClient] Finish - no player");
@@ -236,8 +236,8 @@ class LFPG_WiringClient
         // If entities can't be resolved (network bubble), skip pre-validation
         // and let the server handle it — avoids false rejections.
         // =========================================================
-        EntityAI srcObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(m_SrcLow, m_SrcHigh));
-        EntityAI dstObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(dstLow, dstHigh));
+        EntityAI srcObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(m_SrcLow, m_SrcHigh));
+        EntityAI dstObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(dstLow, dstHigh));
 
         if (srcObj && dstObj)
         {
@@ -345,7 +345,7 @@ class LFPG_WiringClient
 
         // v0.7.38 (BugFix): Record finish time BEFORE Cancel clears state.
         // Prevents immediate re-Start from port action on same frame/next tick.
-        m_LastFinishMs = GetGame().GetTime();
+        m_LastFinishMs = g_Game.GetTime();
 
         Cancel();
     }
@@ -388,12 +388,12 @@ class LFPG_WiringClient
 
         // v0.7.33 (Fix #14): Session timeout — auto-cancel stale sessions.
         // Prevents stuck state from disconnect, alt-tab, or unresponsive server.
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         float elapsed = nowMs - wc.m_SessionStartMs;
         if (elapsed > LFPG_WIRING_SESSION_TIMEOUT_MS)
         {
             LFPG_Util.Warn("[WiringClient] Session TIMEOUT after " + elapsed.ToString() + "ms — auto-cancelling");
-            PlayerBase timeoutPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase timeoutPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             if (timeoutPlayer)
             {
                 timeoutPlayer.MessageStatus("[LFPG] Wiring session timed out.");
@@ -465,7 +465,7 @@ class LFPG_WiringClient
 
     protected void DrawPreviewFrame()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return;
 
         m_FrameCounter = m_FrameCounter + 1;
@@ -487,11 +487,11 @@ class LFPG_WiringClient
         }
 
         // ---------- Resolve source ----------
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
-        EntityAI srcObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(m_SrcLow, m_SrcHigh));
+        EntityAI srcObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(m_SrcLow, m_SrcHigh));
         if (!srcObj)
         {
             if (doLog)
@@ -515,7 +515,7 @@ class LFPG_WiringClient
         bool hasCursor = LFPG_ActionRaycast.GetCursorWorldPos(player, cursorPos);
         if (!hasCursor)
         {
-            cursorPos = GetGame().GetCurrentCameraPosition() + GetGame().GetCurrentCameraDirection() * 5.0;
+            cursorPos = g_Game.GetCurrentCameraPosition() + g_Game.GetCurrentCameraDirection() * 5.0;
         }
 
         // =========================================================
@@ -628,8 +628,8 @@ class LFPG_WiringClient
             return;
 
         // v0.7.14: Camera position and direction for near-plane clipping
-        vector camPos = GetGame().GetCurrentCameraPosition();
-        vector camDir = GetGame().GetCurrentCameraDirection();
+        vector camPos = g_Game.GetCurrentCameraPosition();
+        vector camDir = g_Game.GetCurrentCameraDirection();
 
         // Screen margin for off-screen culling (proportional, same as committed cables)
         float margin = shF * LFPG_SCREEN_MARGIN_RATIO;
@@ -735,7 +735,7 @@ class LFPG_WiringClient
                 // v0.8.x: Degenerate projection guard (same as CableRenderer Phase 1).
                 // Mark extreme projections by zeroing z so the behindA/behindB
                 // check downstream skips them naturally.
-                vector prvScr = GetGame().GetScreenPos(m_SagPts[pp]);
+                vector prvScr = g_Game.GetScreenPos(m_SagPts[pp]);
                 if (prvScr[2] > LFPG_BEHIND_CAM_Z)
                 {
                     float absPX = prvScr[0];
@@ -863,7 +863,7 @@ class LFPG_WiringClient
         int m;
         for (m = 0; m < wpCount; m = m + 1)
         {
-            vector wpScr = GetGame().GetScreenPos(m_Waypoints[m]);
+            vector wpScr = g_Game.GetScreenPos(m_Waypoints[m]);
             tPrv.m_Projections = tPrv.m_Projections + 1;
             if (wpScr[2] > LFPG_BEHIND_CAM_Z)
             {
@@ -874,7 +874,7 @@ class LFPG_WiringClient
         // v0.7.12 (B1): Draw snap indicator when endpoint is snapped to a port
         if (hasSnap)
         {
-            vector snapScr = GetGame().GetScreenPos(cursorPos);
+            vector snapScr = g_Game.GetScreenPos(cursorPos);
             tPrv.m_Projections = tPrv.m_Projections + 1;
             if (snapScr[2] > LFPG_BEHIND_CAM_Z && snapScr[0] == snapScr[0] && snapScr[1] == snapScr[1])
             {
@@ -929,10 +929,10 @@ class LFPG_WiringClient
     // =========================================================
     static bool RequestFullSync()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return false;
 
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         float elapsedSec = (nowMs - s_LastSyncRequestMs) * 0.001;
 
         if (elapsedSec < SYNC_COOLDOWN_SEC)
@@ -941,7 +941,7 @@ class LFPG_WiringClient
             return false;
         }
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player) return false;
 
         s_LastSyncRequestMs = nowMs;

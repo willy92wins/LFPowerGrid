@@ -197,7 +197,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterSorter(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterSorter(this);
 
         // Post-restart re-link: if container link persisted,
         // verify it still resolves. If stale, re-scan by proximity.
@@ -264,7 +265,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSorter(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSorter(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -277,7 +279,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterSorter(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterSorter(this);
         UnregisterContainer();
         #endif
     }
@@ -362,7 +365,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         EntityAI bestContainer = null;
 
         ref array<Object> nearObjects = new array<Object>;
-        GetGame().GetObjectsAtPosition(searchPos, LFPG_SORTER_LINK_RADIUS, nearObjects, null);
+        g_Game.GetObjectsAtPosition(searchPos, LFPG_SORTER_LINK_RADIUS, nearObjects, null);
 
         int i;
         for (i = 0; i < nearObjects.Count(); i = i + 1)

@@ -175,7 +175,7 @@ class LFPG_KitBase : Inventory_Base
         tLog = tLog + finalPos.ToString();
         LFPG_Util.Info(tLog);
 
-        EntityAI device = GetGame().CreateObjectEx(spawnClass, finalPos, ECE_CREATEPHYSICS);
+        EntityAI device = EntityAI.Cast(g_Game.CreateObjectEx(spawnClass, finalPos, ECE_CREATEPHYSICS));
         if (device)
         {
             device.SetPosition(finalPos);
@@ -190,7 +190,7 @@ class LFPG_KitBase : Inventory_Base
             okLog = okLog + finalPos.ToString();
             LFPG_Util.Info(okLog);
 
-            GetGame().ObjectDelete(this);
+            g_Game.ObjectDelete(this);
         }
         else
         {

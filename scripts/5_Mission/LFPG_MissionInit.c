@@ -19,7 +19,8 @@ modded class MissionServer
 
     override void OnMissionFinish()
     {
-        LFPG_NetworkManager.Get().FlushVanillaOnShutdown();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.FlushVanillaOnShutdown();
         super.OnMissionFinish();
     }
 };
@@ -67,6 +68,8 @@ modded class MissionGameplay
         LFPG_SorterView.Init();
         LFPG_BTCAtmView.Init();
         LFPG_LaserBeamRenderer.Reset();
+        LFPG_TankHUD.Init();
+        LFPG_BTCAtmClientData.Reset();
 
         Print(LFPG_LOG_PREFIX + "Client singletons reset complete");
     }
@@ -143,7 +146,7 @@ modded class MissionGameplay
     {
         super.OnUpdate(timeslice);
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return;
 
         // ---- R2: Force-close Sorter UI if player dies or goes unconscious ----
@@ -151,7 +154,7 @@ modded class MissionGameplay
         // Pattern: TraderPlus, Expansion Trader use same OnUpdate check.
         if (LFPG_SorterView.IsOpen())
         {
-            PlayerBase sorterPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase sorterPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             bool shouldClose = false;
             if (!sorterPlayer)
             {
@@ -174,7 +177,7 @@ modded class MissionGameplay
         // ---- Force-close BTC ATM UI if player dies or goes unconscious ----
         if (LFPG_BTCAtmView.IsOpen())
         {
-            PlayerBase btcPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase btcPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             bool btcShouldClose = false;
             if (!btcPlayer)
             {
@@ -197,7 +200,7 @@ modded class MissionGameplay
         // ---- FullSync: once when player position is valid ----
         if (!m_LFPG_SyncRequested)
         {
-            PlayerBase syncPlayer = PlayerBase.Cast(GetGame().GetPlayer());
+            PlayerBase syncPlayer = PlayerBase.Cast(g_Game.GetPlayer());
             if (syncPlayer)
             {
                 vector syncPos = syncPlayer.GetPosition();
@@ -293,7 +296,11 @@ modded class MissionGameplay
         hud.EndFrame();
 
         // Telemetry tick
-        LFPG_Telemetry.Tick(GetGame().GetTime());
+        LFPG_Telemetry.Tick(g_Game.GetTime());
+
+        // TankHUD tick
+        LFPG_TankHUD tankHud = LFPG_TankHUD.Get();
+		if (tankHud) tankHud.Tick();
 
         // DeviceInspector — skip durante CCTV activo
         if (!skipCameraOps)
@@ -309,7 +316,7 @@ modded class MissionGameplay
         if (!isActive)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -333,13 +340,14 @@ modded class MissionGameplay
         LFPG_SearchlightController.Reset();
         LFPG_SorterView.Cleanup();
         LFPG_BTCAtmView.Cleanup();
+        LFPG_TankHUD.Cleanup();
 
         super.OnMissionFinish();
     }
 
     protected void LFPG_ShowMsg(string text)
     {
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 

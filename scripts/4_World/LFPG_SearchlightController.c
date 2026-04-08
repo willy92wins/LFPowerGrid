@@ -58,7 +58,7 @@ class LFPG_SearchlightController
     // ============================================
     static LFPG_SearchlightController Get()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return null;
 
         if (!s_Instance)
@@ -120,7 +120,7 @@ class LFPG_SearchlightController
         m_AimDirty      = false;
 
         // Resolve searchlight entity
-        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        Object slObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
         if (!slObj)
         {
             LFPG_Util.Error("[SearchlightCtrl] Cannot resolve NetworkID on Enter");
@@ -136,7 +136,7 @@ class LFPG_SearchlightController
 
         m_Active = true;
 
-        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase p = PlayerBase.Cast(g_Game.GetPlayer());
         if (p)
         {
             p.MessageStatus("[LFPG] Searchlight grabbed. Scroll=Pitch  Walk=Aim  F=Release");
@@ -156,7 +156,7 @@ class LFPG_SearchlightController
         if (!m_Active)
             return;
 
-        PlayerBase p = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase p = PlayerBase.Cast(g_Game.GetPlayer());
         if (p)
         {
             ScriptRPC rpc = new ScriptRPC();
@@ -201,7 +201,7 @@ class LFPG_SearchlightController
         }
 
         // ---- Get player ----
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
         {
             DoCleanup();
@@ -229,7 +229,7 @@ class LFPG_SearchlightController
         // player walks around aiming the beam — crosshair is NOT on the
         // searchlight, so the action never resolves and F does nothing.
         // Detect UAAction (F key) directly here for reliable exit.
-        Input exitInp = GetGame().GetInput();
+        Input exitInp = g_Game.GetInput();
         if (exitInp)
         {
             string uaAction = "UAAction";
@@ -274,7 +274,7 @@ class LFPG_SearchlightController
         // With only one action visible ("Release Searchlight"), the action menu
         // scroll is inert. If conflict arises with multi-action objects nearby,
         // this can be switched to a different input binding.
-        Input inp = GetGame().GetInput();
+        Input inp = g_Game.GetInput();
         if (inp)
         {
             bool scrolled = false;

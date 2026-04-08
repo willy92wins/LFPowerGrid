@@ -770,28 +770,28 @@ class LFPG_CableRenderer
             m_DeviceBubbleM = LFPG_DEVICE_BUBBLE_M;
         }
 
-        if (!GetGame().IsDedicatedServer())
+        if (!g_Game.IsDedicatedServer())
         {
             bool bRepeat = true;
             // Lightweight culling tick (replaces the old 0.5s full Refresh)
-            GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(CullTick, (int)(LFPG_CULL_TICK_S * 1000.0), bRepeat);
+            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(CullTick, (int)(LFPG_CULL_TICK_S * 1000.0), bRepeat);
 
             // Retry tick for unresolved wire targets
-            GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(RetryTick, (int)(LFPG_RETRY_TICK_S * 1000.0), bRepeat);
+            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(RetryTick, (int)(LFPG_RETRY_TICK_S * 1000.0), bRepeat);
 
             // Periodic negative cache cleanup
-            GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(PurgeNegCache, NEG_CACHE_PURGE_INTERVAL_MS, bRepeat);
+            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(PurgeNegCache, NEG_CACHE_PURGE_INTERVAL_MS, bRepeat);
 
             // v0.7.38 (Audit #1): Periodic reconciliation for exhausted-retry wires.
             // Runs every 60s. Detects wires with data but no built segments and
             // no active retry entry, then re-inserts them for another build attempt.
-            GetGame().GetCallQueue(CALL_CATEGORY_GUI).CallLater(ReconcileTick, LFPG_RECONCILE_TICK_MS, bRepeat);
+            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(ReconcileTick, LFPG_RECONCILE_TICK_MS, bRepeat);
         }
     }
 
     static LFPG_CableRenderer Get()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return null;
 
         if (!s_Instance)
@@ -805,9 +805,9 @@ class LFPG_CableRenderer
     // timers pointing to the old instance, causing duplicate ticks and crashes.
     void ~LFPG_CableRenderer()
     {
-        if (GetGame())
+        if (g_Game)
         {
-            ScriptCallQueue cq = GetGame().GetCallQueue(CALL_CATEGORY_GUI);
+            ScriptCallQueue cq = g_Game.GetCallQueue(CALL_CATEGORY_GUI);
             if (cq)
             {
                 cq.Remove(CullTick);
@@ -891,7 +891,7 @@ class LFPG_CableRenderer
 
         // 2. Check negative cache: skip if recently failed
         float failTime = 0.0;
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         if (m_NegCache.Find(deviceId, failTime))
         {
             float age = nowMs - failTime;
@@ -954,7 +954,7 @@ class LFPG_CableRenderer
         // DeviceRegistry hasn't registered it yet (SyncVar lag window).
         if (netLow != 0 || netHigh != 0)
         {
-            EntityAI netObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            EntityAI netObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
             if (netObj)
             {
                 if (LFPG_DIAG_ENABLED)
@@ -969,7 +969,7 @@ class LFPG_CableRenderer
 
         // 3. Check negative cache (only reached if NetworkID also failed)
         float failTime = 0.0;
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         if (m_NegCache.Find(deviceId, failTime))
         {
             float age = nowMs - failTime;
@@ -1007,7 +1007,7 @@ class LFPG_CableRenderer
         if (m_NegCache.Count() == 0)
             return;
 
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
 
         m_TempKeys.Clear();
         int i;
@@ -1202,7 +1202,7 @@ class LFPG_CableRenderer
         ref LFPG_OwnerWireState st;
         if (!m_ByOwnerId.Find(ownerDeviceId, st) || !st) return;
 
-        EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+        EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
         if (!ownerObj) return;
 
         st.lastPowered      = IsOwnerActive(ownerObj);
@@ -1264,7 +1264,7 @@ class LFPG_CableRenderer
             s_DeviceSyncCooldowns = new map<string, float>;
         }
 
-        float now = GetGame().GetTickTime();
+        float now = g_Game.GetTickTime();
 
         // Check cooldown: skip if recently requested
         float lastReq;
@@ -1286,7 +1286,7 @@ class LFPG_CableRenderer
             PurgeStaleDeviceSyncCooldowns(now);
         }
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player) return;
 
         // v0.7.45 (H7): Extract NetworkID from entity for server-side
@@ -1422,7 +1422,7 @@ class LFPG_CableRenderer
             if (!st || !st.wires) continue;
 
             string ownerType = "";
-            EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+            EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
             if (ownerObj)
             {
                 ownerType = ownerObj.GetType();
@@ -1497,7 +1497,7 @@ class LFPG_CableRenderer
         string bowMsg = "[CableRenderer] BuildOwnerWires owner=" + ownerDeviceId + " net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString() + " wires=" + st.wires.Count().ToString();
         LFPG_Util.Info(bowMsg);
 
-        EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+        EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
         if (!ownerObj)
         {
             // Owner not yet loaded on client: queue ALL wires for retry
@@ -1776,7 +1776,7 @@ class LFPG_CableRenderer
     //   6. Compute cachedMinDist for LOD/alpha (v0.7.7)
     protected void CullTick()
     {
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player) return;
 
         vector pp = player.GetPosition();
@@ -1787,7 +1787,7 @@ class LFPG_CableRenderer
 
         // v0.7.38 (C3): Guard entire log block with DIAG check.
         // Prevents 5+ string concatenations per CullTick when diagnostics off.
-        int debugTick = GetGame().GetTime();
+        int debugTick = g_Game.GetTime();
         bool doCullLog = false;
         if (LFPG_DIAG_ENABLED)
         {
@@ -1817,7 +1817,7 @@ class LFPG_CableRenderer
             if (!st || !st.wires) continue;
 
             // Update powered state (only if entity is available)
-            EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+            EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
             if (ownerObj)
             {
                 // Owner entity is valid: reset null counter
@@ -2149,9 +2149,9 @@ class LFPG_CableRenderer
         // v0.7.13 (G5): Render telemetry — grab reference once per frame
         LFPG_RenderMetrics tRnd = LFPG_Telemetry.GetRender();
 
-        vector camPos = GetGame().GetCurrentCameraPosition();
-        vector camDir = GetGame().GetCurrentCameraDirection();
-        float nowMs = GetGame().GetTime();
+        vector camPos = g_Game.GetCurrentCameraPosition();
+        vector camDir = g_Game.GetCurrentCameraDirection();
+        float nowMs = g_Game.GetTime();
 
         // ---- Camera movement detection ----
         vector camDelta = camPos - m_LastCamPos;
@@ -2196,7 +2196,7 @@ class LFPG_CableRenderer
                 rayBudget = 5;
             }
         }
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
 
         // v0.7.23 (Bug 9): State colors only show when holding tools.
         // Cache this once per frame to avoid per-wire overhead.
@@ -2273,8 +2273,8 @@ class LFPG_CableRenderer
                 vector plHead = plPos;
                 plHead[1] = plHead[1] + LFPG_PLOCC_HEAD_OFFSET_Y;
 
-                vector plFeetScr = GetGame().GetScreenPos(plPos);
-                vector plHeadScr = GetGame().GetScreenPos(plHead);
+                vector plFeetScr = g_Game.GetScreenPos(plPos);
+                vector plHeadScr = g_Game.GetScreenPos(plHead);
 
                 // Both points must be in front of camera
                 if (plFeetScr[2] > LFPG_BEHIND_CAM_Z && plHeadScr[2] > LFPG_BEHIND_CAM_Z)
@@ -2432,7 +2432,7 @@ class LFPG_CableRenderer
                         // Save: 1-3 raycasts freed for wires the player can see.
                         if (plOccActive)
                         {
-                            vector scrPlCenter = GetGame().GetScreenPos(wsi.cachedCenter);
+                            vector scrPlCenter = g_Game.GetScreenPos(wsi.cachedCenter);
                             if (scrPlCenter[2] > 0.0 && scrPlCenter[2] > plDepthThreshold)
                             {
                                 if (scrPlCenter[0] > plRectX1 && scrPlCenter[0] < plRectX2 && scrPlCenter[1] > plRectY1 && scrPlCenter[1] < plRectY2)
@@ -2606,8 +2606,8 @@ class LFPG_CableRenderer
                 // v4.5: Pre-compute ultra-LOD width with no-reel multiplier.
                 float ulWidthBase = LFPG_DEPTH_WIDTH_MIN * noReelMult;
 
-                vector ulA = GetGame().GetScreenPos(wsi.cachedPosA);
-                vector ulB = GetGame().GetScreenPos(wsi.cachedPosB);
+                vector ulA = g_Game.GetScreenPos(wsi.cachedPosA);
+                vector ulB = g_Game.GetScreenPos(wsi.cachedPosB);
 
                 bool ulBehindA = (ulA[2] < LFPG_BEHIND_CAM_Z);
                 bool ulBehindB = (ulB[2] < LFPG_BEHIND_CAM_Z);
@@ -2793,7 +2793,7 @@ class LFPG_CableRenderer
             // Project first point (port endpoint: no sway)
             // v0.8.x: Degenerate guard — mark extreme projections by zeroing z.
             // Phase 2's behindA/behindB check then skips these naturally.
-            vector firstScr = GetGame().GetScreenPos(firstSeg.m_From);
+            vector firstScr = g_Game.GetScreenPos(firstSeg.m_From);
             if (firstScr[2] > LFPG_BEHIND_CAM_Z)
             {
                 float absFX = firstScr[0];
@@ -2844,7 +2844,7 @@ class LFPG_CableRenderer
                 }
 
                 // v0.8.x: Degenerate projection guard (see firstScr above).
-                vector segScr = GetGame().GetScreenPos(wp);
+                vector segScr = g_Game.GetScreenPos(wp);
                 if (segScr[2] > LFPG_BEHIND_CAM_Z)
                 {
                     float absWX = segScr[0];
@@ -3205,7 +3205,7 @@ class LFPG_CableRenderer
                         int jp;
                         for (jp = 0; jp < jCount; jp = jp + 1)
                         {
-                            m_JointScreenPts.Insert(GetGame().GetScreenPos(wsi.cachedJoints[jp]));
+                            m_JointScreenPts.Insert(g_Game.GetScreenPos(wsi.cachedJoints[jp]));
                         }
 
                         int ji;
@@ -3439,7 +3439,7 @@ class LFPG_CableRenderer
             // will be rebuilt on next CullTick if still visible.
             if (entry.reason == LFPG_RetryReason.BUDGET)
             {
-                float ageS = GetGame().GetTickTime() - entry.createdMs;
+                float ageS = g_Game.GetTickTime() - entry.createdMs;
                 if (ageS > LFPG_RETRY_BUDGET_TTL_S)
                 {
                     m_RetryQueue.Remove(wireKey);
@@ -3462,7 +3462,7 @@ class LFPG_CableRenderer
             }
 
             // Resolve owner
-            EntityAI ownerObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+            EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
             if (!ownerObj)
             {
                 // Owner still not loaded.
@@ -3665,7 +3665,7 @@ class LFPG_CableRenderer
         entry.wireIndex = wireIndex;
         entry.retryCount = 0;
         entry.reason = retryReason;
-        entry.createdMs = GetGame().GetTickTime();
+        entry.createdMs = g_Game.GetTickTime();
 
         m_RetryQueue[wireKey] = entry;
     }

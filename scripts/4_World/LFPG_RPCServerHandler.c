@@ -93,7 +93,6 @@ class LFPG_RPCServerHandler
         {
             HandleSearchlightExit(player, sender, ctx);
         }
-        #ifdef LBmaster_Core
         else if (subId == LFPG_RPC_SubId.BTC_OPEN_REQUEST)
         {
             LFPG_BTCHelper.HandleBTCOpenRequest(player, sender, ctx);
@@ -122,7 +121,6 @@ class LFPG_RPCServerHandler
         {
             LFPG_BTCHelper.HandleBTCDepositCash(player, sender, ctx);
         }
-        #endif
     }
 
     // =========================================================
@@ -227,8 +225,8 @@ class LFPG_RPCServerHandler
         }
 
         // Resolve objects by network ID
-        EntityAI srcObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(srcLow, srcHigh));
-        EntityAI dstObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(dstLow, dstHigh));
+        EntityAI srcObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(srcLow, srcHigh));
+        EntityAI dstObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(dstLow, dstHigh));
         if (!srcObj || !dstObj)
         {
             LFPG_Util.Warn("[FinishWiring-Server] invalid net objects");
@@ -425,7 +423,7 @@ class LFPG_RPCServerHandler
             LFPG_ServerSettings st = LFPG_Settings.Get();
             if (st && st.KickOnInvalidWire)
             {
-                GetGame().DisconnectPlayer(sender);
+                g_Game.DisconnectPlayer(sender);
             }
             return;
         }
@@ -716,7 +714,7 @@ class LFPG_RPCServerHandler
         if (!ctx.Read(low)) return;
         if (!ctx.Read(high)) return;
 
-        EntityAI obj = EntityAI.Cast(GetGame().GetObjectByNetworkId(low, high));
+        EntityAI obj = EntityAI.Cast(g_Game.GetObjectByNetworkId(low, high));
         if (!obj) return;
 
         if (vector.Distance(player.GetPosition(), obj.GetPosition()) > 4.0)
@@ -989,7 +987,7 @@ class LFPG_RPCServerHandler
             return;
 
         // Resolve monitor entity by NetworkID
-        EntityAI monEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(monNetLow, monNetHigh));
+        EntityAI monEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(monNetLow, monNetHigh));
         if (!monEnt)
         {
             LFPG_Util.Warn("[RequestCameraList] monitor entity not found");
@@ -1009,6 +1007,9 @@ class LFPG_RPCServerHandler
             PlayerBase.LFPG_SendClientMsg(player, "El monitor no tiene alimentacion.");
             return;
         }
+
+        if (vector.Distance(player.GetPosition(), monEnt.GetPosition()) > LFPG_INTERACT_DIST_M)
+            return;
 
         // Collect cameras from monitor's wire store
         array<ref LFPG_WireData> wires = monitor.LFPG_GetWires();
@@ -1116,8 +1117,8 @@ class LFPG_RPCServerHandler
         vector firstCamPos = camPositions[0];
 
         player.LFPG_SetSkipOnSelectPlayer(true);
-        GetGame().SelectPlayer(sender, null);
-        GetGame().SelectSpectator(sender, "staticcamera", firstCamPos);
+        g_Game.SelectPlayer(sender, null);
+        g_Game.SelectSpectator(sender, "staticcamera", firstCamPos);
 
         string specLog = "[RequestCameraList] SelectPlayer(null) + SelectSpectator at ";
         specLog = specLog + firstCamPos.ToString();
@@ -1168,7 +1169,7 @@ class LFPG_RPCServerHandler
             return;
 
         // Restore player camera — engine updates internal pointer
-        GetGame().SelectPlayer(sender, resolvedPlayer);
+        g_Game.SelectPlayer(sender, resolvedPlayer);
 
         // Send confirmation back to client — NOW safe to cleanup camera
         ScriptRPC confirmRpc = new ScriptRPC();
@@ -1200,7 +1201,7 @@ class LFPG_RPCServerHandler
             return;
 
         // Resolve searchlight by NetworkID
-        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        Object slObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
         if (!slObj)
         {
             LFPG_Util.Warn("[Searchlight_Enter] Cannot resolve NetworkID");
@@ -1270,6 +1271,9 @@ class LFPG_RPCServerHandler
         if (!sender)
             return;
 
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
         int netLow = 0;
         int netHigh = 0;
         float aimYaw = 0.0;
@@ -1284,7 +1288,7 @@ class LFPG_RPCServerHandler
         if (!ctx.Read(aimPitch))
             return;
 
-        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        Object slObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
         if (!slObj)
             return;
 
@@ -1375,7 +1379,7 @@ class LFPG_RPCServerHandler
         if (!ctx.Read(netHigh))
             return;
 
-        Object slObj = GetGame().GetObjectByNetworkId(netLow, netHigh);
+        Object slObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
         if (slObj)
         {
             LFPG_Searchlight sl = LFPG_Searchlight.Cast(slObj);
@@ -1458,7 +1462,7 @@ class LFPG_RPCServerHandler
             return;
         }
 
-        EntityAI obj = EntityAI.Cast(GetGame().GetObjectByNetworkId(low, high));
+        EntityAI obj = EntityAI.Cast(g_Game.GetObjectByNetworkId(low, high));
         if (!obj) return;
 
         if (vector.Distance(player.GetPosition(), obj.GetPosition()) > 4.0)
@@ -1661,7 +1665,7 @@ class LFPG_RPCServerHandler
         string serverDeviceId = clientDeviceId;
         if (netLow != 0 || netHigh != 0)
         {
-            EntityAI resolvedObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            EntityAI resolvedObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
             if (resolvedObj)
             {
                 string resolvedId = LFPG_DeviceAPI.GetDeviceId(resolvedObj);
@@ -1698,9 +1702,18 @@ class LFPG_RPCServerHandler
 
     static void HandleDiagClientLog(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
+        if (!sender)
+            return;
+
+        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
+            return;
+
         string msg;
         if (!ctx.Read(msg))
             return;
+
+        if (msg.Length() > 512)
+            msg = msg.Substring(0, 512);
 
         string pid = "unknown";
         if (sender)
@@ -1744,7 +1757,7 @@ class LFPG_RPCServerHandler
         string serverDeviceId = clientDeviceId;
         if (netLow != 0 || netHigh != 0)
         {
-            EntityAI resolvedObj = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+            EntityAI resolvedObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
             if (resolvedObj)
             {
                 string resolvedId = LFPG_DeviceAPI.GetDeviceId(resolvedObj);
@@ -1853,7 +1866,7 @@ class LFPG_RPCServerHandler
             rpc.Write(we.m_EdgeState);
         }
 
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
 
         string dbgSent = "[SERVER] InspectDevice: sent ";
         dbgSent = dbgSent + wireCount.ToString();
@@ -1898,7 +1911,7 @@ class LFPG_RPCServerHandler
             return;
 
         // Resolve sorter by NetworkID
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
         if (!devEnt)
         {
             LFPG_Util.Warn("[SorterConfigRequest] entity not found");
@@ -2067,7 +2080,7 @@ class LFPG_RPCServerHandler
         }
 
         // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
         if (!devEnt)
         {
             LFPG_Util.Warn("[SorterConfigSave] entity not found");
@@ -2136,7 +2149,7 @@ class LFPG_RPCServerHandler
             return;
 
         // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
         if (!devEnt)
         {
             LFPG_Util.Warn("[SorterRequestSort] entity not found");
@@ -2192,7 +2205,7 @@ class LFPG_RPCServerHandler
         if (!ctx.Read(netHigh))
             return;
 
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
         if (!devEnt)
         {
             string warnNotFound = "[SorterResync] entity not found";
@@ -2291,7 +2304,7 @@ class LFPG_RPCServerHandler
         array<string> matchInfo = new array<string>;
 
         // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(GetGame().GetObjectByNetworkId(netLow, netHigh));
+        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
         LFPG_Sorter sorter = null;
         if (devEnt)
         {

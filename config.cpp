@@ -2051,7 +2051,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        hiddenSelections[] = {"body"};
+        hiddenSelections[] = {"zbytek"};
 
         // Accepts vanilla CarBattery or TruckBattery as attachment.
         // Slots are defined in vanilla CfgSlots — no custom slot needed.
@@ -2237,8 +2237,30 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"screen", "light_led_0"};
+        hiddenSelections[] = {"HideScreen", "light_led_0"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_screen_off.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat"};
+
+        class AnimationSources
+        {
+            class HideScreen
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 200;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}},{0.0,{}}};
+                };
+            };
+        };
     };
 
     // ---- BTC ATM Admin Kit (deployable, different-model) ----
@@ -2273,8 +2295,30 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"screen", "light_led_0"};
+        hiddenSelections[] = {"HideScreen", "light_led_0"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat"};
+
+        class AnimationSources
+        {
+            class HideScreen
+            {
+                source = "user";
+                initPhase = 0;
+                animPeriod = 0.3;
+            };
+        };
+
+        class DamageSystem
+        {
+            class GlobalHealth
+            {
+                class Health
+                {
+                    hitpoints = 200;
+                    healthLevels[] = {{1.0,{}},{0.7,{}},{0.5,{}},{0.3,{}},{0.0,{}}};
+                };
+            };
+        };
     };
 
     // =========================================================

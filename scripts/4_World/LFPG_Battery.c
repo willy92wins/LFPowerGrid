@@ -205,7 +205,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterBattery(this);
 
         if (!m_LoadedFromPersistence)
         {
@@ -224,14 +225,16 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             m_PoweredNet = false;
             SetSynchDirty();
         }
-        LFPG_NetworkManager.Get().UnregisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterBattery(this);
         #endif
     }
 
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterBattery(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterBattery(this);
         #endif
     }
 

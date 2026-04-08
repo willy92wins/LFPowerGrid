@@ -144,7 +144,8 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
         LFPG_Util.Debug(msg);
 
         string noRemoved = "";
-        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
         #endif
     }
 
@@ -170,15 +171,17 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterT1Pump(this);
-        m_FilterLastRealMs = GetGame().GetTime();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterT1Pump(this);
+        m_FilterLastRealMs = g_Game.GetTime();
         #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterT1Pump(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterT1Pump(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -190,7 +193,8 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterT1Pump(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterT1Pump(this);
         #endif
 
         if (m_PumpLoopSound)
@@ -481,7 +485,8 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         LFPG_Util.Debug(msg);
 
         string noRemoved = "";
-        LFPG_NetworkManager.Get().LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.LFPG_RefreshPumpSprinklerLink(m_DeviceId, noRemoved);
         #endif
     }
 
@@ -507,15 +512,17 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterT2Pump(this);
-        m_FilterLastRealMs = GetGame().GetTime();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterT2Pump(this);
+        m_FilterLastRealMs = g_Game.GetTime();
         #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterT2Pump(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterT2Pump(this);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -527,7 +534,8 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterT2Pump(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterT2Pump(this);
         #endif
 
         if (m_PumpLoopSound)

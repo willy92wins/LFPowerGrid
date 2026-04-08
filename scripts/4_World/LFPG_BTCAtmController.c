@@ -598,10 +598,10 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -617,10 +617,10 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -637,10 +637,10 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCBuyRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -657,10 +657,10 @@ class LFPG_BTCAtmController extends ViewController
     protected void SendBTCCashRpc(int subId, int netLow, int netHigh, int eurAmount)
     {
         #ifndef SERVER
-        if (!GetGame())
+        if (!g_Game)
             return;
 
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
@@ -892,6 +892,12 @@ class LFPG_BTCAtmController extends ViewController
             string e10Key = "#STR_LFPG_BTC_ERR_NO_CASH";
             string e10 = Widget.TranslateString(e10Key);
             return e10;
+        }
+        if (errCode == LFPG_BTC_ERR_NO_BALANCE_PROVIDER)
+        {
+            string e11Key = "#STR_LFPG_BTC_ERR_NO_BALANCE";
+            string e11 = Widget.TranslateString(e11Key);
+            return e11;
         }
         string e9Key = "#STR_LFPG_BTC_ERR_UNKNOWN";
         string e9 = Widget.TranslateString(e9Key);

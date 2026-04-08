@@ -172,7 +172,8 @@ class LFPG_DoorController : LFPG_DeviceBase
     override void LFPG_OnInit()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterDoorController(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterDoorController(this);
 
         if (m_SavedDoorType > 0 && m_SavedDoorIndex >= 0)
         {
@@ -188,7 +189,8 @@ class LFPG_DoorController : LFPG_DeviceBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterDoorController(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterDoorController(this);
         LFPG_UnpairDoor();
 
         if (m_PoweredNet)
@@ -202,7 +204,8 @@ class LFPG_DoorController : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterDoorController(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterDoorController(this);
         LFPG_UnpairDoor();
         #endif
     }
@@ -270,7 +273,7 @@ class LFPG_DoorController : LFPG_DeviceBase
     void LFPG_OnDoorPoll()
     {
         #ifdef SERVER
-        if (!GetGame().IsServer())
+        if (!g_Game.IsServer())
             return;
 
         if (m_PairedDoor)
@@ -401,7 +404,7 @@ class LFPG_DoorController : LFPG_DeviceBase
     {
         #ifdef SERVER
         array<Object> objects = new array<Object>;
-        GetGame().GetObjectsAtPosition(GetPosition(), LFPG_DC_SEARCH_RADIUS, objects, null);
+        g_Game.GetObjectsAtPosition(GetPosition(), LFPG_DC_SEARCH_RADIUS, objects, null);
 
         float bestDistSq = 9999.0;
         Object bestDoor = null;

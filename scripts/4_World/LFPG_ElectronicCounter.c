@@ -173,9 +173,9 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
         if (!wasPowered && mainPower)
         {
             int nowMs = 0;
-            if (GetGame())
+            if (g_Game)
             {
-                nowMs = GetGame().GetTime();
+                nowMs = g_Game.GetTime();
             }
             int offDuration = nowMs - m_PowerOffTime;
 
@@ -209,9 +209,9 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
                 m_RestoredFromSave = false;
                 if (m_PulseActive)
                 {
-                    if (GetGame())
+                    if (g_Game)
                     {
-                        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+                        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
                     }
                     m_PulseActive = false;
                 }
@@ -230,16 +230,16 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
         }
         else if (wasPowered && !mainPower)
         {
-            if (GetGame())
+            if (g_Game)
             {
-                m_PowerOffTime = GetGame().GetTime();
+                m_PowerOffTime = g_Game.GetTime();
             }
 
             if (m_PulseActive)
             {
-                if (GetGame())
+                if (g_Game)
                 {
-                    GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+                    g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
                 }
                 m_PulseActive = false;
             }
@@ -340,11 +340,12 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
         pulseMsg = pulseMsg + m_DeviceId;
         LFPG_Util.Info(pulseMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
 
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_COUNTER_PULSE_MS, false);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_PulseOff, LFPG_COUNTER_PULSE_MS, false);
         }
         #endif
     }
@@ -361,7 +362,8 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
         offMsg = offMsg + m_DeviceId;
         LFPG_Util.Info(offMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
         #endif
     }
 
@@ -369,9 +371,9 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
 
         bool dirty = false;
@@ -385,18 +387,18 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
 
     override void LFPG_OnDeleted()
     {
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
     }
 
     override void LFPG_OnWiresCut()
     {
         #ifdef SERVER
-        if (GetGame())
+        if (g_Game)
         {
-            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
         }
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }

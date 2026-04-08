@@ -215,7 +215,7 @@ class LFPG_DeviceInspector
         if (m_Root)
             return;
 
-        m_Root = GetGame().GetWorkspace().CreateWidgets(LAYOUT_PATH);
+        m_Root = g_Game.GetWorkspace().CreateWidgets(LAYOUT_PATH);
         if (!m_Root)
         {
             LFPG_Util.Error("[DeviceInspector] Failed to create widgets from: " + LAYOUT_PATH);
@@ -425,7 +425,7 @@ class LFPG_DeviceInspector
     // =========================================================
     static void Tick()
     {
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
             return;
 
         LFPG_DeviceInspector inst = Get();
@@ -433,7 +433,7 @@ class LFPG_DeviceInspector
             return;
 
         // ---- Condition 1: Player exists ----
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
         {
             inst.HidePanel();
@@ -471,7 +471,7 @@ class LFPG_DeviceInspector
             return;
         }
 
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
 
         // ---- New device? Full populate + request RPC ----
         if (deviceId != inst.m_CurrentDeviceId)
@@ -1328,7 +1328,7 @@ class LFPG_DeviceInspector
         vector worldPos = device.GetPosition();
         worldPos[1] = worldPos[1] + LFPG_INSPECT_WORLD_Y_OFFSET;
 
-        vector screenPos = GetGame().GetScreenPos(worldPos);
+        vector screenPos = g_Game.GetScreenPos(worldPos);
 
         // Behind camera check — return false, caller hides without clearing state
         if (screenPos[2] < LFPG_BEHIND_CAM_Z)
@@ -1473,7 +1473,7 @@ class LFPG_DeviceInspector
             return;
 
         // Cooldown
-        float nowMs = GetGame().GetTime();
+        float nowMs = g_Game.GetTime();
         float elapsed = nowMs - m_LastRPCSendMs;
         if (elapsed < LFPG_INSPECT_RPC_COOLDOWN_MS)
             return;

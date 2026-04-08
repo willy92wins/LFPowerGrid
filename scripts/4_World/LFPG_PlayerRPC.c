@@ -36,7 +36,7 @@ modded class PlayerBase
         m_LFPG_SkipOnSelectPlayer = skip;
 
         #ifndef SERVER
-        MissionBaseWorld mission = MissionBaseWorld.Cast(GetGame().GetMission());
+        MissionBaseWorld mission = MissionBaseWorld.Cast(g_Game.GetMission());
         if (mission)
         {
             mission.LFPG_SetSkipResetGUI(skip);

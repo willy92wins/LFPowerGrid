@@ -191,14 +191,14 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         else
         {
             // Fallback: use engine surface Y (terrain only, no floors)
-            surfY = GetGame().SurfaceY(pos[0], pos[2]);
+            surfY = g_Game.SurfaceY(pos[0], pos[2]);
             spawnPos[1] = surfY;
         }
 
         // ---- Delete T1 (deferred — object persists in physics until end of frame) ----
-        GetGame().ObjectDelete(pump);
+        g_Game.ObjectDelete(pump);
 
-        EntityAI t2 = GetGame().CreateObjectEx("LFPG_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS);
+        EntityAI t2 = EntityAI.Cast(g_Game.CreateObjectEx("LFPG_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS));
         if (t2)
         {
             t2.SetPosition(spawnPos);
@@ -235,7 +235,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
 
         if (currentQty <= required)
         {
-            GetGame().ObjectDelete(item);
+            g_Game.ObjectDelete(item);
         }
         else
         {
@@ -245,7 +245,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             vector spawnPos = dropPos;
             spawnPos[1] = spawnPos[1] + 0.1;
 
-            EntityAI excess = GetGame().CreateObject(itemType, spawnPos, false);
+            EntityAI excess = EntityAI.Cast(g_Game.CreateObject(itemType, spawnPos, false));
             if (excess)
             {
                 ItemBase excessItem = ItemBase.Cast(excess);
@@ -255,7 +255,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
                 }
             }
 
-            GetGame().ObjectDelete(item);
+            g_Game.ObjectDelete(item);
         }
     }
 };

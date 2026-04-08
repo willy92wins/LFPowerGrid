@@ -218,14 +218,16 @@ class LFPG_PressurePad : LFPG_WireOwnerBase
     override void LFPG_OnInitDevice()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterPressurePad(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterPressurePad(this);
         #endif
     }
 
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterPressurePad(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterPressurePad(this);
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
         if (m_GateOpen) { m_GateOpen = false; dirty = true; }
@@ -236,7 +238,8 @@ class LFPG_PressurePad : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterPressurePad(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterPressurePad(this);
         #endif
     }
 

@@ -19,9 +19,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] + m_SwitchOn
 // =========================================================
 
-static const string LFPG_SWITCHV2_RVMAT_OFF    = "\\LFPowerGrid\\data\\switch_v2\\data\\led_off.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_GREEN   = "\\LFPowerGrid\\data\\switch_v2\\data\\led_green.rvmat";
-static const string LFPG_SWITCHV2_RVMAT_RED     = "\\LFPowerGrid\\data\\switch_v2\\data\\led_red.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_OFF    = "\LFPowerGrid\data\switch_v2\data\led_off.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_GREEN   = "\LFPowerGrid\data\switch_v2\data\led_green.rvmat";
+static const string LFPG_SWITCHV2_RVMAT_RED     = "\LFPowerGrid\data\switch_v2\data\led_red.rvmat";
 
 class LFPG_SwitchV2_Kit : LFPG_KitBase
 {
@@ -200,7 +200,8 @@ class LFPG_SwitchV2 : LFPG_WireOwnerBase
         togMsg = togMsg + m_DeviceId;
         LFPG_Util.Info(togMsg);
 
-        LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RequestPropagate(m_DeviceId);
         #endif
     }
 

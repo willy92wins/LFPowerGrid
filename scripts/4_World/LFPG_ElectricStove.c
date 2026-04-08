@@ -208,7 +208,8 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         string devId = LFPG_GetDeviceId();
         if (devId != "")
         {
-            LFPG_NetworkManager.Get().RequestPropagate(devId);
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(devId);
         }
 
         string msg = "[LFPG_ElectricStove] ToggleBurner idx=";
@@ -443,6 +444,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
 
     protected void LFPG_UpdateVisuals()
     {
+        #ifndef SERVER
         // hiddenSelections in config.cpp order:
         // [0] = stove_1, [1] = stove_2, [2] = stove_3, [3] = stove_4
         string rvmatOn = RVMAT_BURNER_ON;
@@ -486,6 +488,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
 
             i = i + 1;
         }
+        #endif
     }
 
     protected string LFPG_GetButtonName(int index)
@@ -520,7 +523,8 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         }
 
         #ifdef SERVER
-        LFPG_NetworkManager.Get().RegisterStove(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.RegisterStove(this);
         #endif
     }
 
@@ -534,14 +538,16 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         }
         // Terminate all cooking sounds
         LFPG_TerminateAllCookingSounds();
-        LFPG_NetworkManager.Get().UnregisterStove(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterStove(this);
         #endif
     }
 
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager.Get().UnregisterStove(this);
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (nm) nm.UnregisterStove(this);
         #endif
     }
 

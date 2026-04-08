@@ -118,7 +118,7 @@ class LFPG_Telemetry
     // ---- Called once per frame from render loop ----
     // Accumulates current frame metrics, dumps on interval, resets.
     // NOTE: caller (MissionInit, 5_Mission) must NOT call this on dedicated server.
-    // nowMs passed in to avoid GetGame() dependency in 3_Game layer.
+    // nowMs passed in to avoid g_Game dependency in 3_Game layer.
     static void Tick(float nowMs)
     {
         // Ensure metrics exist

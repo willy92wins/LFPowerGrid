@@ -115,7 +115,11 @@ class LFPG_PumpHelper
         if (devId == "")
             return false;
 
-        LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        if (!nm)
+            return false;
+
+        LFPG_ElecGraph graph = nm.GetGraph();
         if (!graph)
             return false;
 

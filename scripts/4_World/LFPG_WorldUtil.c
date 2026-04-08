@@ -75,7 +75,7 @@ class LFPG_WorldUtil
             p[2] = pz;
         }
 
-        float sy = GetGame().SurfaceY(px, pz);
+        float sy = g_Game.SurfaceY(px, pz);
         if (py < sy + minOffset)
             p[1] = sy + minOffset;
         return p;
@@ -96,7 +96,7 @@ class LFPG_WorldUtil
         {
             float t = i / fSamples;
             vector p = a + (b - a) * t;
-            float sy = GetGame().SurfaceY(p[0], p[2]);
+            float sy = g_Game.SurfaceY(p[0], p[2]);
             if (sy > maxY) maxY = sy;
         }
 
@@ -231,7 +231,7 @@ class LFPG_WorldUtil
         if (denom < 0.001 && denom > -0.001)
         {
             // Degenerate: both points at same depth. Return visible projection.
-            return GetGame().GetScreenPos(visibleWorld);
+            return g_Game.GetScreenPos(visibleWorld);
         }
 
         float t = (nearClip - dA) / denom;
@@ -240,7 +240,7 @@ class LFPG_WorldUtil
         // can produce NaN that passes through clamp (NaN comparisons are false).
         if (t != t)
         {
-            return GetGame().GetScreenPos(visibleWorld);
+            return g_Game.GetScreenPos(visibleWorld);
         }
 
         // Clamp t to [0,1] for safety
@@ -256,7 +256,7 @@ class LFPG_WorldUtil
         // Interpolate to get the clipped world point
         vector clipped = behindWorld + (visibleWorld - behindWorld) * t;
 
-        return GetGame().GetScreenPos(clipped);
+        return g_Game.GetScreenPos(clipped);
     }
 
     // =========================================================

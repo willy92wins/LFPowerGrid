@@ -110,18 +110,18 @@ class LFPG_CableHUD
         if (m_InitAttempted)
             return;
 
-        if (GetGame().IsDedicatedServer())
+        if (g_Game.IsDedicatedServer())
         {
             m_InitAttempted = true;
             return;
         }
 
         // Defer until player exists (UI guaranteed ready)
-        PlayerBase player = PlayerBase.Cast(GetGame().GetPlayer());
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
-        WorkspaceWidget ws = GetGame().GetWorkspace();
+        WorkspaceWidget ws = g_Game.GetWorkspace();
         if (!ws)
             return;
 
