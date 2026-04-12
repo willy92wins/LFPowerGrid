@@ -317,7 +317,17 @@ class LFPG_DeviceAPI
         // glitches and interfere with mod state machines.
         bool currentlyOn = em.IsSwitchedOn();
         if (powered && currentlyOn)
+        {
+            // v4.7: Even if switched on, vanilla CompEM may have drained
+            // its energy (IsSwitchedOn=true but IsWorking=false).
+            // Top up to keep CanWork() returning true.
+            float topUpEnergy = em.GetEnergy();
+            if (topUpEnergy < LFPG_VANILLA_ENERGY_POOL * 0.5)
+            {
+                em.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
+            }
             return;
+        }
         if (!powered && !currentlyOn)
             return;
 
@@ -325,22 +335,25 @@ class LFPG_DeviceAPI
 
         if (powered)
         {
-            // v0.7.4: respect vanilla/mod gating.
-            // Only switch on if the device can actually work
-            // (has fuel, correct attachments, etc.).
-            // Prevents bypassing battery/plug requirements from mods.
-            if (em.CanWork())
+            // v4.7: Inject energy into CompEM so vanilla CanWork() returns true.
+            // Vanilla CanWork() requires either internal energy OR a plugged source.
+            // LFPG cannot use PlugThisInto (crashes with cable/attachment logic),
+            // so we inject energy directly. The consumer thinks it has its own power.
+            // ValidateConsumerStates tops up periodically to prevent depletion.
+            float curEnergy = em.GetEnergy();
+            if (curEnergy < LFPG_VANILLA_ENERGY_POOL)
             {
-                em.SwitchOn();
+                em.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
+                LFPG_Util.Debug("[SetPowered] Injected energy for " + objType + " (" + curEnergy.ToString() + " -> " + LFPG_VANILLA_ENERGY_POOL.ToString() + ")");
             }
-            else
-            {
-                LFPG_Util.Debug("[SetPowered] Skipped SwitchOn for " + objType + " (CanWork=false)");
-            }
+            em.SwitchOn();
         }
         else
         {
             em.SwitchOff();
+            // v4.7: Drain injected energy on power-off.
+            // Prevents vanilla consumer from staying powered after disconnection.
+            em.SetEnergy(0);
         }
     }
 

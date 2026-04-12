@@ -2872,6 +2872,39 @@ class LFPG_ElecGraph
                 darkMsg = darkMsg + " totalFixes=" + m_ValidateFixCount.ToString();
                 LFPG_Util.Warn(darkMsg);
             }
+            else if (node.m_Powered && shouldBePowered)
+            {
+                // v4.7: Vanilla consumer energy maintenance.
+                // Vanilla CompEM drains energy over time. If not refilled,
+                // CanWork() fails and the device stops working even though
+                // the LFPG graph still considers it powered.
+                // Only applies to vanilla devices (ID starts with "vp:").
+                if (nodeId.IndexOf("vp:") == 0)
+                {
+                    EntityAI vanEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
+                    if (!vanEnt)
+                    {
+                        vanEnt = LFPG_DeviceAPI.ResolveVanillaDevice(nodeId);
+                    }
+                    if (vanEnt)
+                    {
+                        ComponentEnergyManager vanEm = vanEnt.GetCompEM();
+                        if (vanEm)
+                        {
+                            float vanEnergy = vanEm.GetEnergy();
+                            if (vanEnergy < LFPG_VANILLA_ENERGY_POOL * 0.5)
+                            {
+                                vanEm.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
+                            }
+                            // Safety: ensure still switched on (vanilla may auto-off on drain)
+                            if (!vanEm.IsSwitchedOn())
+                            {
+                                vanEm.SwitchOn();
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Wrap index for next invocation

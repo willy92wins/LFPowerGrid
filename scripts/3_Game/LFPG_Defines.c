@@ -186,6 +186,13 @@ static const float LFPG_LOAD_CRITICAL_THRESHOLD = 1.00;   // >= 100% = OVERLOADE
 static const float LFPG_DEFAULT_SOURCE_CAPACITY    = 50.0;  // units/s
 static const float LFPG_DEFAULT_CONSUMER_CONSUMPTION = 10.0; // units/s
 
+// v4.7: Energy pool injected into vanilla consumers' CompEM so CanWork() returns true.
+// Vanilla CanWork() requires either internal energy or a plugged source.
+// LFPG doesn't use PlugThisInto (crashes), so we inject energy directly.
+// 1000 units at 0.1 u/s (Spotlight drain) = ~10000s buffer between refills.
+// ValidateConsumerStates tops up periodically as safety net.
+static const float LFPG_VANILLA_ENERGY_POOL = 1000.0;
+
 // v0.7.33 (Fix #22): Default max throughput for PASSTHROUGH devices (splitters).
 // Caps how much power a passthrough can relay regardless of input.
 // Set to 4x source capacity — generous for splitting networks.

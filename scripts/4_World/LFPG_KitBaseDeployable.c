@@ -25,6 +25,17 @@
 class LFPG_KitBaseDeployable : DeployableContainer_Base
 {
     // ============================================
+    // Deferred delete: gives the client-side action
+    // time to complete OnEnd before the item vanishes.
+    // Prevents player getting stuck in FullBody command
+    // on dedicated servers (network latency window).
+    // ============================================
+    void LFPG_DeferredDelete()
+    {
+        g_Game.ObjectDelete(this);
+    }
+
+    // ============================================
     // Virtual: subclass MUST override
     // ============================================
     string LFPG_GetSpawnClassname()
@@ -139,7 +150,7 @@ class LFPG_KitBaseDeployable : DeployableContainer_Base
             okLog = okLog + finalPos.ToString();
             LFPG_Util.Info(okLog);
 
-            g_Game.ObjectDelete(this);
+            GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredDelete, 500, false);
         }
         else
         {

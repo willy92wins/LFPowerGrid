@@ -647,10 +647,15 @@ class LFPG_RPCServerHandler
         else
         {
             LFPG_NetworkManager.Get().BroadcastVanillaWires(srcRealId, srcObj);
-            // v0.7.33 (Fix #18): Mark vanilla store dirty for persistence.
-            // Was missing — CutWires and CutPort both call this but FinishWiring didn't.
-            // Without this, new vanilla wire is lost if server restarts before periodic flush.
+            // v4.7: Immediate flush for vanilla wire creation.
+            // v0.7.33 marked dirty but relied on the 30s periodic flush.
+            // If server crashes within that window, the wire is lost.
+            // LFPG device wires survive crashes (OnStoreSave on the entity)
+            // but vanilla wires only exist in the JSON file.
+            // Flush immediately to close the data-loss window.
+            // Cost: one JSON write per player wire action — negligible.
             LFPG_NetworkManager.Get().MarkVanillaDirty();
+            LFPG_NetworkManager.Get().FlushVanillaIfDirty();
         }
 
         // Propagate power to all consumers (LFPG and vanilla via SetPowered)

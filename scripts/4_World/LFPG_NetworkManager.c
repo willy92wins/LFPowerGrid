@@ -107,6 +107,11 @@ class LFPG_NetworkManager
     protected int m_VanillaLoadedVer = 0;
     protected bool m_VanillaReadOnly = false;
 
+    // v4.7: Deferred vanilla wire pruning flag.
+    // Pruning is deferred to 35s post-init to allow late-loading entities
+    // to be resolved before wires are permanently removed.
+    protected bool m_DeferredPruneScheduled = false;
+
     // v0.8.0: Centralized solar timer cached state.
     // Single timer reads GetDate() once per tick, updates all panels atomically.
     // Eliminates N per-panel CallLater timers and prevents race conditions.
@@ -2746,18 +2751,26 @@ class LFPG_NetworkManager
         RebuildReverseIdx();
         RecountAllPlayerWires();
 
-        // v0.7.4: prune vanilla wires whose owner or target can't be resolved.
-        // Devices that were moved/destroyed leave orphaned wires in the
-        // central store. Persist the pruned state on next flush.
-        PruneUnresolvableVanillaWires();
-
-        // v0.7.32 (Audit P2): Flush vanilla immediately after prune.
-        // Self-heal runs once at startup and after critical failures.
-        // If server crashes before the periodic timer flush (30s),
-        // stale wires reappear on next restart → repeat prune cycle.
-        if (m_VanillaDirty)
+        // v4.7: DEFERRED vanilla wire pruning.
+        // Previously pruned immediately at 5s. But DayZ doesn't guarantee all
+        // entities are loaded/positioned within 5s, especially on large servers.
+        // Late-loading vanilla devices (Spotlights, PowerGenerators) would have
+        // their wires permanently deleted because ResolveVanillaDevice fails.
+        //
+        // Fix: skip pruning here. Schedule DeferredVanillaPruneAndRebuild at
+        // 35s post-init (30s after initial validation). By then, all entities
+        // should be loaded. The graph will have "hollow" edges to unresolved
+        // targets during the 5s-35s window (acceptable: they just won't power
+        // anything yet). At 35s, re-resolve + prune + rebuild = clean state.
+        //
+        // Old behavior: PruneUnresolvableVanillaWires(); FlushVanillaIfDirty();
+        // New behavior: defer to DeferredVanillaPruneAndRebuild (35s)
+        if (!m_DeferredPruneScheduled)
         {
-            FlushVanillaIfDirty();
+            m_DeferredPruneScheduled = true;
+            bool bDeferFalse = false;
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DeferredVanillaPruneAndRebuild, 30000, bDeferFalse);
+            LFPG_Util.Info("[SelfHeal] Vanilla wire pruning deferred to 35s post-init");
         }
 
         // Sprint 4.1→4.2: rebuild electrical graph from wire data,
@@ -2904,6 +2917,129 @@ class LFPG_NetworkManager
         #endif
     }
 
+    // v4.7: Deferred vanilla wire prune + rebuild.
+    // Fires ~35s post-init (30s after initial validation at 5s).
+    // Re-resolves ALL vanilla wire endpoints, prunes truly dead wires,
+    // and rebuilds the graph with the clean state.
+    // Reason: At 5s post-init, DayZ may not have loaded all entities yet.
+    // Pruning at 5s permanently deletes wires to late-loading devices.
+    // By 35s, all entities should be positioned and resolvable.
+    protected void DeferredVanillaPruneAndRebuild()
+    {
+        #ifdef SERVER
+        LFPG_Util.Info("[DeferredPrune] Starting deferred vanilla wire validation...");
+
+        // Step 1: Re-resolve all vanilla wire endpoints (same as Step 1 in ValidateAllWiresAndPropagate)
+        int vr;
+        for (vr = 0; vr < m_VanillaWires.Count(); vr = vr + 1)
+        {
+            string vrOwnerId = m_VanillaWires.GetKey(vr);
+            if (!LFPG_DeviceRegistry.Get().FindById(vrOwnerId))
+            {
+                LFPG_DeviceAPI.ResolveVanillaDevice(vrOwnerId);
+            }
+            ref array<ref LFPG_WireData> vrWires = m_VanillaWires.GetElement(vr);
+            if (vrWires)
+            {
+                int vrw;
+                for (vrw = 0; vrw < vrWires.Count(); vrw = vrw + 1)
+                {
+                    LFPG_WireData vrWd = vrWires[vrw];
+                    if (vrWd && vrWd.m_TargetDeviceId != "")
+                    {
+                        if (!LFPG_DeviceRegistry.Get().FindById(vrWd.m_TargetDeviceId))
+                        {
+                            LFPG_DeviceAPI.ResolveVanillaDevice(vrWd.m_TargetDeviceId);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also re-resolve LFPG device wire targets that are vanilla
+        array<EntityAI> allDev = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allDev);
+        int pa;
+        for (pa = 0; pa < allDev.Count(); pa = pa + 1)
+        {
+            ref array<ref LFPG_WireData> lfWires = LFPG_DeviceAPI.GetDeviceWires(allDev[pa]);
+            if (!lfWires) continue;
+            int lw;
+            for (lw = 0; lw < lfWires.Count(); lw = lw + 1)
+            {
+                LFPG_WireData lwd = lfWires[lw];
+                if (!lwd) continue;
+                string tid = lwd.m_TargetDeviceId;
+                if (tid.IndexOf("vp:") == 0)
+                {
+                    if (!LFPG_DeviceRegistry.Get().FindById(tid))
+                    {
+                        LFPG_DeviceAPI.ResolveVanillaDevice(tid);
+                    }
+                }
+            }
+        }
+
+        // Step 2: Now prune — entities that STILL can't be resolved are truly gone
+        PruneUnresolvableVanillaWires();
+
+        // Step 3: Also prune LFPG device wires targeting unresolvable vanilla devices
+        LFPG_DeviceRegistry.Get().PruneNullEntries();
+        array<EntityAI> allAfterPrune = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAll(allAfterPrune);
+
+        m_CachedValidIds = new map<string, bool>;
+        int vi;
+        for (vi = 0; vi < allAfterPrune.Count(); vi = vi + 1)
+        {
+            string did = LFPG_DeviceAPI.GetOrCreateDeviceId(allAfterPrune[vi]);
+            if (did != "")
+            {
+                m_CachedValidIds[did] = true;
+            }
+        }
+
+        int pruneCount = 0;
+        int pi;
+        for (pi = 0; pi < allAfterPrune.Count(); pi = pi + 1)
+        {
+            if (!LFPG_DeviceAPI.HasWireStore(allAfterPrune[pi])) continue;
+            bool changed = LFPG_DeviceAPI.PruneDeviceMissingTargets(allAfterPrune[pi]);
+            if (changed)
+            {
+                pruneCount = pruneCount + 1;
+                BroadcastOwnerWires(allAfterPrune[pi]);
+            }
+        }
+        m_CachedValidIds = null;
+
+        // Step 4: Flush vanilla wires if anything changed
+        if (m_VanillaDirty)
+        {
+            FlushVanillaIfDirty();
+        }
+
+        // Step 5: Rebuild graph with clean state (includes newly-resolved vanilla devices)
+        if (m_Graph)
+        {
+            m_Graph.RebuildFromWires(this);
+            m_Graph.PopulateAllNodeElecStates();
+            m_Graph.MarkSourcesDirty();
+
+            int flushBudget = LFPG_PROPAGATE_WARMUP_BUDGET;
+            int flushEdge = LFPG_PROPAGATE_EDGE_WARMUP_BUDGET;
+            m_Graph.ProcessDirtyQueue(flushBudget, flushEdge);
+        }
+
+        // Step 6: Rebuild indexes
+        RebuildReverseIdx();
+        RebuildTrackedDevices();
+
+        string doneMsg = "[DeferredPrune] Complete. LFPG owners pruned=" + pruneCount.ToString();
+        LFPG_Util.Info(doneMsg);
+        #endif
+    }
+
     // v0.7.26 (Audit 4): Remove stale entries from m_LastKnownPos.
     // Called during self-heal. Only keeps entries for devices currently
     // registered. Prevents unbounded map growth on long-running servers
@@ -2961,7 +3097,9 @@ class LFPG_NetworkManager
 
     // Periodic callback: flush to disk only if dirty.
     // Called every LFPG_VANILLA_FLUSH_S seconds (default 30s).
-    protected void FlushVanillaIfDirty()
+    // v4.7: Promoted from protected to public — also called from
+    // RPCServerHandler.HandleFinishWiring for immediate vanilla persistence.
+    void FlushVanillaIfDirty()
     {
         #ifdef SERVER
         if (!m_VanillaDirty)
