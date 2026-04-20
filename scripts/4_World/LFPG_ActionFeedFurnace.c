@@ -263,6 +263,8 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
             return true;
         if (typeName == "LFPG_CeilingLight_Kit")
             return true;
+        if (typeName == "LFPG_WallLamp_Kit")
+            return true;
         if (typeName == "LFPG_SolarPanel_Kit")
             return true;
         if (typeName == "LFPG_Combiner_Kit")

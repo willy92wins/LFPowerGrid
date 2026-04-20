@@ -58,9 +58,6 @@ static const int LFPG_BTC_ERR_INVALID         = 9;   // generic validation failu
 static const int LFPG_BTC_ERR_NO_CASH         = 10;  // player has no EUR bills
 static const int LFPG_BTC_ERR_NO_BALANCE_PROVIDER = 11;  // no balance provider active
 
-// ---- BTC ATM: Safety cap for greedy change ----
-static const int LFPG_BTC_MAX_CHANGE_ITEMS = 500;
-
 // ---- BTC ATM: Client-side data holder (Sprint BTC-3) ----
 // Populated by client RPC handlers, read by UI (Sprint BTC-4).
 class LFPG_BTCAtmClientData

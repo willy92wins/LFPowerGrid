@@ -193,6 +193,19 @@ static const float LFPG_DEFAULT_CONSUMER_CONSUMPTION = 10.0; // units/s
 // ValidateConsumerStates tops up periodically as safety net.
 static const float LFPG_VANILLA_ENERGY_POOL = 1000.0;
 
+// v5.3: Charge rate (units/s) for car batteries inside a vanilla BatteryCharger.
+// Vanilla BatteryCharger requires HasElectricitySource() (PlugThisInto crashes),
+// so LFPG charges the battery directly via ValidateConsumerStates.
+// Uses AddEnergy (not SetEnergy) — this triggers the full vanilla event chain:
+//   AddEnergy → OnEnergyAdded → ConvertEnergyToQuantity → SetQuantityNormalized
+//   → SetVariableMask(VARIABLE_QUANTITY). The inventory bar reads m_VarQuantity,
+//   NOT m_EM.m_Energy. SetEnergy only writes m_Energy without any events.
+// Delta-time via m_ChargerLastChargeSec, capped at 10s.
+// Matches vanilla ChargeEnergyPerSecond = 1.0 (config.cpp BatteryCharger).
+// CarBattery energyMax = 500 → full charge ~500s (~8.3 min).
+// TruckBattery energyMax = 1500 → full charge ~1500s (~25 min).
+static const float LFPG_CHARGER_ENERGY_PER_SEC = 1.0;
+
 // v0.7.33 (Fix #22): Default max throughput for PASSTHROUGH devices (splitters).
 // Caps how much power a passthrough can relay regardless of input.
 // Set to 4x source capacity — generous for splitting networks.
@@ -314,7 +327,6 @@ static const int LFPG_SORTER_PREVIEW_CAP    = 50;     // max items in preview RP
 static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres)
 static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
-static const float LFPG_SENSOR_FOV_COS      = 0.5;    // cos(60°) — half of 120° total FOV cone
 static const float LFPG_SENSOR_HOLD_SEC     = 5.0;    // gate hold time after last detection (seconds)
 static const float LFPG_SENSOR_LOS_MARGIN   = 0.3;    // LOS clearance margin (metres, linear)
 static const float LFPG_SENSOR_TARGET_HIGH  = 1.0;    // LOS target height: standing torso
@@ -703,14 +715,14 @@ static const float LFPG_BATTERY_SMALL_EFFICIENCY      = 0.92;     // charge roun
 static const float LFPG_BATTERY_SMALL_MAX_OUTPUT      = 60.0;     // max throughput (u/s)
 
 // Tier 2: Medium (base standard)
-static const float LFPG_BATTERY_MEDIUM_CAPACITY       = 10000.0;
+static const float LFPG_BATTERY_MEDIUM_CAPACITY       = 20000.0;
 static const float LFPG_BATTERY_MEDIUM_CHARGE_RATE    = 50.0;
 static const float LFPG_BATTERY_MEDIUM_DISCHARGE_RATE = 70.0;
 static const float LFPG_BATTERY_MEDIUM_EFFICIENCY     = 0.90;
 static const float LFPG_BATTERY_MEDIUM_MAX_OUTPUT     = 120.0;
 
 // Tier 3: Large (industrial grid bank)
-static const float LFPG_BATTERY_LARGE_CAPACITY        = 50000.0;
+static const float LFPG_BATTERY_LARGE_CAPACITY        = 100000.0;
 static const float LFPG_BATTERY_LARGE_CHARGE_RATE     = 80.0;
 static const float LFPG_BATTERY_LARGE_DISCHARGE_RATE  = 120.0;
 static const float LFPG_BATTERY_LARGE_EFFICIENCY      = 0.88;

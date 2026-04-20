@@ -25,8 +25,8 @@
 // =========================================================
 
 // ---- BTC ATM rvmat paths (static const, no per-call alloc) ----
-static const string LFPG_BTC_RVMAT_SCREEN_ON  = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat";
-static const string LFPG_BTC_RVMAT_SCREEN_OFF = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_screen_off.rvmat";
+// Screen uses the "HideScreen" animation (translation) to reveal/cover the
+// baked emission face underneath — NOT a material swap. See model.cfg.
 static const string LFPG_BTC_RVMAT_LED_ON     = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat";
 static const string LFPG_BTC_RVMAT_LED_OFF    = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat";
 
@@ -349,21 +349,23 @@ class LFPG_BTCAtm : LFPG_BTCAtmBase
 
     // ============================================
     // Visual sync (client-side)
+    // Screen: animation phase hides the "black cover" face to reveal the
+    // baked emission underneath. LED: material swap (red/green rvmat).
     // ============================================
     override void LFPG_OnVarSync()
     {
         #ifndef SERVER
-        int idxScreen = 0;
-        int idxLed    = 1;
+        int idxLed = 0;
+        string animScreen = "HideScreen";
 
         if (m_PoweredNet)
         {
-            SetObjectMaterial(idxScreen, LFPG_BTC_RVMAT_SCREEN_ON);
+            SetAnimationPhase(animScreen, 1.0);
             SetObjectMaterial(idxLed, LFPG_BTC_RVMAT_LED_ON);
         }
         else
         {
-            SetObjectMaterial(idxScreen, LFPG_BTC_RVMAT_SCREEN_OFF);
+            SetAnimationPhase(animScreen, 0.0);
             SetObjectMaterial(idxLed, LFPG_BTC_RVMAT_LED_OFF);
         }
         #endif

@@ -81,11 +81,13 @@ modded class PlayerBase
     static void LFPG_SendClientMsg(PlayerBase target, string msg)
     {
         if (!target) return;
+        PlayerIdentity ident = target.GetIdentity();
+        if (!ident) return;
 
         ScriptRPC rpc = new ScriptRPC();
         int subWriteId = LFPG_RPC_SubId.CLIENT_MSG;
         rpc.Write(subWriteId);
         rpc.Write(msg);
-        rpc.Send(target, LFPG_RPC_CHANNEL, true, null);
+        rpc.Send(null, LFPG_RPC_CHANNEL, true, ident);
     }
 };

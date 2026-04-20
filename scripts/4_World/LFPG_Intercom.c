@@ -89,9 +89,10 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected int  m_FrequencyIndex  = 0;
     protected bool m_Overloaded      = false;
 
-    // ---- Sound event SyncVar ----
+    // ---- Sound event SyncVars ----
     protected int m_SoundEvent      = 0;
-    protected int m_SoundEventPrev  = 0;
+    protected int m_SoundEventSeq   = 0;   // incremental counter — guarantees SyncVar change
+    protected int m_SoundEventSeqPrev = 0; // client-only: last seen sequence
 
     // ---- RF toggle state (not SyncVars) ----
     protected bool m_PrevToggleInput   = false;
@@ -130,6 +131,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         RegisterNetSyncVariableInt(varFreq);
         RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableInt("m_SoundEvent", 0, 15);
+        RegisterNetSyncVariableInt("m_SoundEventSeq", 0, 255);
     }
 
     // ============================================
@@ -363,9 +365,9 @@ class LFPG_Intercom : LFPG_DeviceBase
         #ifndef SERVER
         LFPG_UpdateVisuals();
 
-        if (m_SoundEvent != m_SoundEventPrev)
+        if (m_SoundEventSeq != m_SoundEventSeqPrev)
         {
-            m_SoundEventPrev = m_SoundEvent;
+            m_SoundEventSeqPrev = m_SoundEventSeq;
             if (m_SoundEvent == LFPG_SND_KNOB_CLICK)
                 SEffectManager.PlaySound(LFPG_INTERCOM_SND_KNOB_CLICK, GetPosition());
             else if (m_SoundEvent == LFPG_SND_RF_BEEP)
@@ -550,6 +552,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_NetworkManager.Get().RequestPropagate(m_DeviceId);
 
         m_SoundEvent = LFPG_SND_KNOB_CLICK;
+        m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
+        SetSynchDirty();
         #endif
     }
 
@@ -632,6 +636,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_Util.Info(rfMsg);
 
         m_SoundEvent = LFPG_SND_RF_BEEP;
+        m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
+        SetSynchDirty();
         #endif
     }
 
@@ -889,6 +895,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         if (m_BroadcastEnabled)
         {
             m_SoundEvent = LFPG_SND_STATIC_BURST;
+            m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
+            SetSynchDirty();
         }
         #endif
     }
@@ -919,6 +927,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_Util.Info(freqMsg);
 
         m_SoundEvent = LFPG_SND_KNOB_CLICK;
+        m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
+        SetSynchDirty();
         #endif
     }
 };

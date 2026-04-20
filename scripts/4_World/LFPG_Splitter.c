@@ -67,6 +67,7 @@ class LFPG_Splitter : LFPG_WireOwnerBase
 
     override int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
     override float LFPG_GetConsumption() { return 0.0; }
+    override float LFPG_GetCapacity() { return LFPG_DEFAULT_PASSTHROUGH_CAPACITY; }
     override bool LFPG_IsSource() { return true; }
     override bool LFPG_GetSourceOn() { return m_PoweredNet; }
     override bool LFPG_IsPowered() { return m_PoweredNet; }

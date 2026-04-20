@@ -101,6 +101,15 @@ class CfgSoundShaders
         range = 10;
         rangeCurve[] = {{ 0, 1 }, { 5, 0.4 }, { 10, 0 }};
     };
+    // v5.x: Sprinkler loop (ambient spray hiss while m_SprinklerActive)
+    class LFPG_Sprinkler_Loop_Shader
+    {
+        samples[] = {{ "\LFPowerGrid\data\sprinkler\sprinkler_loop", 1 }};
+        volume = 0.4;
+        range = 12;
+        loop = 1;
+        rangeCurve[] = {{ 0, 1 }, { 6, 0.5 }, { 12, 0 }};
+    };
 };
 
 class CfgSoundSets
@@ -161,13 +170,21 @@ class CfgSoundSets
         frequencyFactor = 1;
         spatial = 1;
     };
+    // v5.x: Sprinkler loop — spatial 3D, played while m_SprinklerActive
+    class LFPG_Sprinkler_Loop_SoundSet
+    {
+        soundShaders[] = { "LFPG_Sprinkler_Loop_Shader" };
+        volumeFactor = 1;
+        frequencyFactor = 1;
+        spatial = 1;
+    };
 };
 
 class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LFPG_CableReel", "LFPG_Generator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin", "LFPG_RemoteController", "LFPG_Speaker_Kit", "LFPG_Speaker", "LFPG_GhostPASReceiver"};
+        units[] = { "LFPG_CableReel", "LFPG_Generator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_WallLamp_Kit", "LFPG_WallLamp", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin", "LFPG_RemoteController", "LFPG_Speaker_Kit", "LFPG_Speaker", "LFPG_GhostPASReceiver"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio", "DZ_Gear_Cooking"};
@@ -319,6 +336,41 @@ class CfgVehicles
         hiddenSelections[] = {"light_emit"};
         hiddenSelectionsTextures[] = {""};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\ceiling_light\lf_ceiling_light.rvmat"};
+    };
+
+    // ---- WallLamp Kit (holdable, deployable on wall or floor) ----
+    class LFPG_WallLamp_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Wall Lamp Kit";
+        descriptionShort = "A wall-mounted lamp. Place on wall or floor.";
+        model = "\LFPowerGrid\data\wall_lamp\lf_wall_lamp.p3d";
+        weight = 2000;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        isDeployable = 1;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        slopeTolerance = 0.0;
+        yawPitchRollLimit[] = {90, 90, 90};
+    };
+
+    // ---- WallLamp (placed device) ----
+    class LFPG_WallLamp : Inventory_Base
+    {
+        scope = 2;
+        displayName = "Wall Lamp";
+        descriptionShort = "Wall-mounted light. Consumes 10 u/s, passes power downstream.";
+        model = "\LFPowerGrid\data\wall_lamp\lf_wall_lamp.p3d";
+        weight = 3000;
+        itemSize[] = {2, 2};
+        rotationFlags = 17;
+        carveNavmesh = 1;
+        physLayer = "item_large";
+        isDeployable = 0;
+        hiddenSelections[] = {"light_emit"};
+        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\wall_lamp\lf_wall_lamp.rvmat"};
     };
 
     // =========================================================
@@ -1138,6 +1190,7 @@ class CfgVehicles
         displayName = "$STR_LFPG_PressurePadKit";
         descriptionShort = "$STR_LFPG_PressurePadKit_Desc";
         model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
+        autocenter = 0;
         weight = 500;
         itemSize[] = {2, 2};
         rotationFlags = 17;
@@ -1160,6 +1213,7 @@ class CfgVehicles
         displayName = "$STR_LFPG_PressurePad";
         descriptionShort = "$STR_LFPG_PressurePad_Desc";
         model = "\LFPowerGrid\data\pressure_pad\pressure_pad.p3d";
+        autocenter = 0;
         weight = 800;
         itemSize[] = {0, 0};
         itemBehaviour = 0;
@@ -1518,7 +1572,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        varQuantityMax = 10000;
+        varQuantityMax = 20000;
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
@@ -1572,10 +1626,10 @@ class CfgVehicles
 
         // EnergyManager: drives vanilla inventory white charge bar.
         // All actual energy logic is handled by LFPG timer + SyncCompEM().
-        // energyStorageMax MUST match LFPG_BATTERY_MEDIUM_CAPACITY (10000).
+        // energyStorageMax MUST match LFPG_BATTERY_MEDIUM_CAPACITY (20000).
         class EnergyManager
         {
-            energyStorageMax = 10000;
+            energyStorageMax = 20000;
             energyAtSpawn = 0;
             convertEnergyToQuantity = 1;
             updateInterval = 0;
@@ -1621,7 +1675,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        varQuantityMax = 50000;
+        varQuantityMax = 100000;
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
@@ -1675,10 +1729,10 @@ class CfgVehicles
 
         // EnergyManager: drives vanilla inventory white charge bar.
         // All actual energy logic is handled by LFPG timer + SyncCompEM().
-        // energyStorageMax MUST match LFPG_BATTERY_LARGE_CAPACITY (50000).
+        // energyStorageMax MUST match LFPG_BATTERY_LARGE_CAPACITY (100000).
         class EnergyManager
         {
-            energyStorageMax = 50000;
+            energyStorageMax = 100000;
             energyAtSpawn = 0;
             convertEnergyToQuantity = 1;
             updateInterval = 0;
@@ -2237,8 +2291,8 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"HideScreen", "light_led_0"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_screen_off.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat"};
+        hiddenSelections[] = {"light_led_0"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat"};
 
         class AnimationSources
         {
@@ -2295,15 +2349,15 @@ class CfgVehicles
         physLayer = "item_large";
         isDeployable = 0;
         storageCategory = 1;
-        hiddenSelections[] = {"HideScreen", "light_led_0"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat", "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat"};
+        hiddenSelections[] = {"light_led_0"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat"};
 
         class AnimationSources
         {
             class HideScreen
             {
                 source = "user";
-                initPhase = 0;
+                initPhase = 1;
                 animPeriod = 0.3;
             };
         };

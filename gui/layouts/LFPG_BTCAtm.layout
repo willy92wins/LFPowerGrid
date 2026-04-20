@@ -18,7 +18,7 @@ FrameWidgetClass BTCAtmRoot {
 			halign left_ref
 			valign top_ref
 			position 0 0
-			size 420 424
+			size 420 434
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -27,7 +27,7 @@ FrameWidgetClass BTCAtmRoot {
 			{
 				ImageWidgetClass PanelBg {
 					position 0 0
-					size 420 424
+					size 420 434
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -266,15 +266,15 @@ FrameWidgetClass BTCAtmRoot {
 				}
 				TextWidgetClass BalanceText {
 					position 220 68
-					size 81 20
+					size 91 20
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
 					vexactsize 1
 					ignorepointer 1
 					text "---"
-					font "gui/fonts/Metron"
-					"text halign" left
+					font "gui/fonts/MetronBook"
+					"text halign" right
 					"text valign" center
 					{
 					}
@@ -338,7 +338,7 @@ FrameWidgetClass BTCAtmRoot {
 				}
 				TextWidgetClass PriceChangeText {
 					position 18 95
-					size 180 10
+					size 180 15
 					hexactpos 1
 					vexactpos 1
 					hexactsize 1
@@ -352,7 +352,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass AmountBg {
-					position 12 102
+					position 12 112
 					size 396 82
 					hexactpos 1
 					vexactpos 1
@@ -364,7 +364,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass AmountLabel {
-					position 22 108
+					position 22 118
 					size 100 14
 					hexactpos 1
 					vexactpos 1
@@ -379,7 +379,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass BtcLabel {
-					position 22 126
+					position 22 136
 					size 50 14
 					hexactpos 1
 					vexactpos 1
@@ -394,7 +394,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass EditBtcBorder {
-					position 22 142
+					position 22 152
 					size 168 28
 					hexactpos 1
 					vexactpos 1
@@ -406,7 +406,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass EditBtcBg {
-					position 23 143
+					position 23 153
 					size 166 26
 					hexactpos 1
 					vexactpos 1
@@ -418,7 +418,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				EditBoxWidgetClass EditBtcAmount {
-					position 26 144
+					position 26 154
 					size 160 24
 					hexactpos 1
 					vexactpos 1
@@ -431,7 +431,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass ArrowLabel {
-					position 196 148
+					position 196 158
 					size 24 20
 					hexactpos 1
 					vexactpos 1
@@ -446,7 +446,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass EurLabel {
-					position 226 126
+					position 226 136
 					size 60 14
 					hexactpos 1
 					vexactpos 1
@@ -461,7 +461,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass EditEurBorder {
-					position 226 142
+					position 226 152
 					size 170 28
 					hexactpos 1
 					vexactpos 1
@@ -473,7 +473,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass EditEurBg {
-					position 227 143
+					position 227 153
 					size 168 26
 					hexactpos 1
 					vexactpos 1
@@ -485,7 +485,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				EditBoxWidgetClass EditEurAmount {
-					position 230 144
+					position 230 154
 					size 162 24
 					hexactpos 1
 					vexactpos 1
@@ -498,7 +498,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass TabCash {
-					position 12 192
+					position 12 202
 					size 196 20
 					hexactpos 1
 					vexactpos 1
@@ -535,7 +535,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass TabAccount {
-					position 214 192
+					position 214 202
 					size 196 20
 					hexactpos 1
 					vexactpos 1
@@ -572,7 +572,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnBuyBtc {
-					position 12 214
+					position 12 224
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -624,7 +624,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnSellBtc {
-					position 216 214
+					position 216 224
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -676,7 +676,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass SepBuySell {
-					position 12 256
+					position 12 266
 					size 396 1
 					hexactpos 1
 					vexactpos 1
@@ -688,7 +688,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnWithdrawEur {
-					position 12 262
+					position 12 272
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -740,7 +740,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnDepositEur {
-					position 216 262
+					position 216 272
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -792,7 +792,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnWithdrawBtc {
-					position 12 308
+					position 12 318
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -844,7 +844,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ButtonWidgetClass BtnDepositBtc {
-					position 216 308
+					position 216 318
 					size 192 38
 					hexactpos 1
 					vexactpos 1
@@ -896,7 +896,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass StatusBg {
-					position 12 354
+					position 12 364
 					size 396 30
 					hexactpos 1
 					vexactpos 1
@@ -908,7 +908,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass StatusText {
-					position 24 354
+					position 24 364
 					size 372 30
 					hexactpos 1
 					vexactpos 1
@@ -923,7 +923,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass FooterSep {
-					position 0 392
+					position 0 402
 					size 420 1
 					hexactpos 1
 					vexactpos 1
@@ -935,7 +935,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				ImageWidgetClass FooterBg {
-					position 0 393
+					position 0 403
 					size 420 31
 					hexactpos 1
 					vexactpos 1
@@ -947,7 +947,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass FooterEscHint {
-					position 208 393
+					position 208 403
 					size 200 31
 					hexactpos 1
 					vexactpos 1
@@ -962,7 +962,7 @@ FrameWidgetClass BTCAtmRoot {
 					}
 				}
 				TextWidgetClass FooterBrand {
-					position 300 393
+					position 300 403
 					size 108 31
 					hexactpos 1
 					vexactpos 1

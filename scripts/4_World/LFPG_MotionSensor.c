@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Motion Sensor (v4.1 Audit Fix)
+// LF_PowerGrid - Motion Sensor (v4.2)
 //
 // LFPG_MotionSensor_Kit: Holdable, deployable (same-model pattern).
 // LFPG_MotionSensor:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
@@ -11,12 +11,16 @@
 //   but LFPG ports are input_1/output_1.
 //
 // v4.1 (Audit Fix):
-//   - FOV cone check (120°, dome +Z in model space)
 //   - Dual-ray LOS (standing 1.0m + crouching 0.4m)
 //   - Linear LOS margin (0.3m fixed, was 3mm@15m)
 //   - Gate hold timer (5s anti-flicker)
 //   - SyncVar int range (0-2 for DetectMode)
 //   - LBmaster_Groups guard on persistence load
+//
+// v4.2:
+//   - 360° omnidirectional detection (removed 120° FOV cone)
+//   - Walls and objects block LOS via raycast
+//   - Pipeline: Range sphere → Group filter → LOS raycast
 //
 // Behavior:
 //   Centralized tick in NetworkManager scans nearby players.
@@ -424,38 +428,14 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // Dome forward direction in world space (unit vector).
-    // Glass is on the +Z face of the p3d model.
-    // After placement rotation this becomes:
-    //   Floor:   +Z (forward)
-    //   Wall:    -Y (down, via pitch -90°)
-    //   Ceiling: -Z (into room, via pitch 180°)
-    // ============================================
-    protected vector LFPG_GetDomeForward()
-    {
-        vector sPos = GetPosition();
-        vector localFwd = Vector(0, 0, 1);
-        vector worldFwd = ModelToWorld(localFwd);
-        float fx = worldFwd[0] - sPos[0];
-        float fy = worldFwd[1] - sPos[1];
-        float fz = worldFwd[2] - sPos[2];
-        float fLenSq = fx * fx + fy * fy + fz * fz;
-        if (fLenSq < 0.0001)
-        {
-            return Vector(0, 0, 1);
-        }
-        float fInv = 1.0 / Math.Sqrt(fLenSq);
-        return Vector(fx * fInv, fy * fInv, fz * fInv);
-    }
-
-    // ============================================
     // Detection evaluation (called by NM tick, server only)
     //
-    // Pipeline per player:
+    // Pipeline per player (360° omnidirectional):
     //   1. Range sphere (15m)
-    //   2. FOV cone (120°, centered on dome +Z)
-    //   3. Group filter (ALL / TEAM / ENEMY)
-    //   4. LOS raycast (dual height: standing + crouching)
+    //   2. Group filter (ALL / TEAM / ENEMY)
+    //   3. LOS raycast (dual height: standing + crouching)
+    //
+    // Walls and objects block LOS naturally via raycast.
     //
     // Gate hold timer: once opened, stays open for
     // LFPG_SENSOR_HOLD_SEC even if no player detected,
@@ -513,10 +493,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             sensorEye[1] = sensorEye[1] + 0.5;
         }
 
-        // ---- Dome forward for FOV cone check ----
-        vector domeFwd = LFPG_GetDomeForward();
-
-        // ---- Scan players ----
+        // ---- Scan players (360° omnidirectional) ----
         bool detected = false;
         float nowSec = g_Game.GetTickTime();
 
@@ -526,12 +503,6 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         PlayerBase pb;
         vector playerPos;
         float distSq;
-        float toX;
-        float toY;
-        float toZ;
-        float toLenSq;
-        float toInv;
-        float dot;
         bool passesFilter;
         vector targetHigh;
         vector targetLow;
@@ -553,41 +524,18 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             if (!pb)
                 continue;
 
-            // 1. Range sphere
+            // 1. Range sphere (15m)
             playerPos = pb.GetPosition();
             distSq = LFPG_WorldUtil.DistSq(sensorPos, playerPos);
             if (distSq > LFPG_SENSOR_RANGE_SQ)
                 continue;
 
-            // 2. FOV cone (120° total → cos(60°) = 0.5)
-            toX = playerPos[0] - sensorPos[0];
-            toY = playerPos[1] - sensorPos[1];
-            toZ = playerPos[2] - sensorPos[2];
-            toLenSq = toX * toX + toY * toY + toZ * toZ;
-            if (toLenSq < 0.01)
-            {
-                // Player on top of sensor — always in cone, but still check group
-                passesFilter = LFPG_CheckGroupFilter(pb);
-                if (passesFilter)
-                {
-                    detected = true;
-                }
-                continue;
-            }
-            toInv = 1.0 / Math.Sqrt(toLenSq);
-            toX = toX * toInv;
-            toY = toY * toInv;
-            toZ = toZ * toInv;
-            dot = domeFwd[0] * toX + domeFwd[1] * toY + domeFwd[2] * toZ;
-            if (dot < LFPG_SENSOR_FOV_COS)
-                continue;
-
-            // 3. Group filter
+            // 2. Group filter
             passesFilter = LFPG_CheckGroupFilter(pb);
             if (!passesFilter)
                 continue;
 
-            // 4. LOS dual-ray (standing torso + crouching center)
+            // 3. LOS dual-ray (standing torso + crouching center)
             targetHigh = playerPos;
             targetHigh[1] = targetHigh[1] + LFPG_SENSOR_TARGET_HIGH;
             hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh);

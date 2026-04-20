@@ -247,6 +247,21 @@ class LFPG_DeviceAPI
         if (devId != "")
             return false;
 
+        // v4.9 (BugFix): Exclude BatteryCharger BEFORE the PowerGenerator check.
+        // BatteryCharger inherits from PowerGenerator in vanilla DayZ, so
+        // IsKindOf("PowerGenerator") returns true for it. Must exclude first.
+        // BatteryCharger is a consumer (charges car batteries), not a source.
+        string battChargerCls = "BatteryCharger";
+        if (e.IsKindOf(battChargerCls))
+            return false;
+
+        // v5.2: RaG_BaseItems solar panel is a source. It doesn't inherit
+        // PowerGenerator (extends rag_baseitems_container_base) so neither
+        // Method 1 nor Method 2 below would catch it. Capacity is set in
+        // GetCapacity().
+        if (e.IsKindOf("rag_baseitems_solarpanel"))
+            return true;
+
         // Method 1: class hierarchy check (most reliable)
         // PowerGenerator is the DayZ base class for all generators
         if (e.IsKindOf("PowerGenerator"))
@@ -269,13 +284,11 @@ class LFPG_DeviceAPI
 
     // ----- Power delivery -----
 
-    // Set powered state on any device (LFPG or vanilla consumer).
+    // Set powered state on any device (LFPG or vanilla/mod consumer).
     // LFPG devices: calls LFPG_SetPowered via dynamic dispatch.
-    // Vanilla consumers: uses CompEM SwitchOn/Off directly.
+    // Vanilla / mod consumers: inject energy + SwitchOn/Off on CompEM.
     // NOTE: PlugThisInto/UnplugThis crash due to internal cable/attachment logic,
-    //       so we control CompEM state manually.
-    // v0.7.4: guards against redundant SwitchOn/Off calls and
-    //         respects vanilla CanWork() gating for mod compatibility.
+    //       so we control CompEM state manually (energy + switch toggle).
     static void SetPowered(Object obj, bool powered)
     {
         if (!obj)
@@ -307,59 +320,58 @@ class LFPG_DeviceAPI
             return;
         }
 
-        // Vanilla consumer: direct CompEM control
+        // Vanilla / mod consumer: direct CompEM control
         ComponentEnergyManager em = e.GetCompEM();
         if (!em)
             return;
 
-        // v0.7.4: skip if already in desired state.
-        // Avoids redundant SwitchOn/Off that can cause animation/sound
-        // glitches and interfere with mod state machines.
-        bool currentlyOn = em.IsSwitchedOn();
-        if (powered && currentlyOn)
-        {
-            // v4.7: Even if switched on, vanilla CompEM may have drained
-            // its energy (IsSwitchedOn=true but IsWorking=false).
-            // Top up to keep CanWork() returning true.
-            float topUpEnergy = em.GetEnergy();
-            if (topUpEnergy < LFPG_VANILLA_ENERGY_POOL * 0.5)
-            {
-                em.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
-            }
-            return;
-        }
-        if (!powered && !currentlyOn)
-            return;
-
-        LFPG_Util.Debug("[SetPowered] Vanilla path for " + objType + " powered=" + powered.ToString());
+        // v5.2: Active on/off for vanilla + mod CompEM consumers.
+        //
+        // LFPG doesn't use PlugThisInto (crashes), so em.IsPlugged()
+        // stays false. Mods that auto-switch via OnIsPlugged (RaG,
+        // Expansion, etc.) never fire; their IsPowerAvailable() checks
+        // IsPlugged() and fails, so the device never calls SwitchOn
+        // even though LFPG has injected energy. To make wired devices
+        // actually work, LFPG toggles the switch explicitly.
+        //
+        // Consequence: LFPG is authoritative over the wired device's
+        // on/off state. Players should use LFPG's switches (SwitchV2,
+        // PushButton, RemoteController) for granular control — a manual
+        // SwitchOff on a wired device will be undone on the next grid
+        // propagation.
 
         if (powered)
         {
-            // v4.7: Inject energy into CompEM so vanilla CanWork() returns true.
-            // Vanilla CanWork() requires either internal energy OR a plugged source.
-            // LFPG cannot use PlugThisInto (crashes with cable/attachment logic),
-            // so we inject energy directly. The consumer thinks it has its own power.
-            // ValidateConsumerStates tops up periodically to prevent depletion.
             float curEnergy = em.GetEnergy();
-            if (curEnergy < LFPG_VANILLA_ENERGY_POOL)
+            if (curEnergy < LFPG_VANILLA_ENERGY_POOL * 0.5)
             {
                 em.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
                 LFPG_Util.Debug("[SetPowered] Injected energy for " + objType + " (" + curEnergy.ToString() + " -> " + LFPG_VANILLA_ENERGY_POOL.ToString() + ")");
             }
-            em.SwitchOn();
+
+            if (!em.IsSwitchedOn() && em.CanSwitchOn())
+            {
+                em.SwitchOn();
+                LFPG_Util.Debug("[SetPowered] SwitchOn for " + objType);
+            }
         }
         else
         {
-            em.SwitchOff();
-            // v4.7: Drain injected energy on power-off.
-            // Prevents vanilla consumer from staying powered after disconnection.
-            em.SetEnergy(0);
+            if (em.IsSwitchedOn())
+            {
+                em.SwitchOff();
+                LFPG_Util.Debug("[SetPowered] SwitchOff for " + objType);
+            }
         }
     }
 
-    // Check if a device is a vanilla consumer (has CompEM, no LFPG device ID)
-    // v4.6: Vanilla Compat — accepts any entity with CompEM.GetEnergyUsage() > 0
-    // unless blacklisted. Spotlight always accepted (bypass blacklist).
+    // Check if a device is a vanilla consumer (has CompEM, no LFPG device ID).
+    // v5.2: Dropped the GetEnergyUsage()>0 gate. Many mod items
+    //       (e.g. RaG_BaseItems) declare energyUsagePerSecond=0 and consume
+    //       via script/events, so requiring a positive idle draw blocks them.
+    //       Now any non-source, non-blacklisted CompEM entity is accepted;
+    //       consumption resolves via GetVanillaConsumption fallback.
+    // v4.6: Vanilla Compat — Spotlight always accepted (bypass blacklist).
     // When VanillaCompatEnabled=false, falls back to Spotlight-only (legacy).
     static bool IsVanillaConsumer(EntityAI e)
     {
@@ -376,18 +388,25 @@ class LFPG_DeviceAPI
         if (e.IsKindOf(spotlightCls))
             return true;
 
+        // v4.9: BatteryCharger always accepted (bypass blacklist / fast path).
+        string battChargerCls = "BatteryCharger";
+        if (e.IsKindOf(battChargerCls))
+            return true;
+
         // v4.6: Extended vanilla compat
         LFPG_ServerSettings st = LFPG_Settings.Get();
         if (!st.VanillaCompatEnabled)
             return false;
 
-        // Must have CompEM with positive energy usage
+        // Must have CompEM
         ComponentEnergyManager em = e.GetCompEM();
         if (!em)
             return false;
 
-        float usage = em.GetEnergyUsage();
-        if (usage <= 0.0)
+        // v5.2: Exclude sources (PowerGenerator + mod generators caught by
+        // the IsVanillaSource fallback) so generators are never classified
+        // as consumers.
+        if (IsVanillaSource(e))
             return false;
 
         // Check blacklist (cached per typename)
@@ -653,7 +672,7 @@ class LFPG_DeviceAPI
 
     // Get consumption rate (units/s) for a consumer device.
     // LFPG devices: LFPG_GetConsumption().
-    // Vanilla devices: v4.6 settings-based resolution (custom > CompEM > default).
+    // Vanilla devices: v4.9 settings-based resolution (custom > VanillaDefaultConsumption).
     // Returns 0 for sources or devices without consumption.
     static float GetConsumption(EntityAI e)
     {
@@ -677,9 +696,19 @@ class LFPG_DeviceAPI
         if (devTypeGuard == LFPG_DeviceType.PASSTHROUGH)
             return 0.0;
 
-        // v4.6: Vanilla-compat consumer — settings-based resolution
-        // Priority: custom entry > CompEM.GetEnergyUsage > VanillaDefaultConsumption
+        // v4.9: Vanilla-compat consumer — settings-based resolution
+        // Priority: custom entry > VanillaDefaultConsumption
         if (IsEnergyConsumer(e))
+            return LFPG_Settings.GetVanillaConsumption(e);
+
+        // v4.8: Fallback for wired vanilla devices with 0 CompEM usage
+        // (e.g., BatteryCharger). IsEnergyConsumer returns false because
+        // GetEnergyUsage=0, but if the device has CompEM and is being
+        // queried (i.e., it's wired to the grid), resolve via settings.
+        // GetVanillaConsumption returns VanillaDefaultConsumption when
+        // CompEM usage is 0 and no custom entry matches.
+        ComponentEnergyManager emFallback = e.GetCompEM();
+        if (emFallback)
             return LFPG_Settings.GetVanillaConsumption(e);
 
         return 0.0;
@@ -703,9 +732,17 @@ class LFPG_DeviceAPI
         if (val >= 0.0)
             return val;
 
-        // Vanilla source: use default capacity
+        // Vanilla source: per-type capacity override, else default
         if (IsEnergySource(e))
+        {
+            // v5.2: RaG solar panel — nominal capacity independent of
+            // sun/shelter state (the solar panel's own charge logic still
+            // runs in parallel for its attached TruckBattery).
+            if (e.IsKindOf("rag_baseitems_solarpanel"))
+                return 15.0;
+
             return LFPG_DEFAULT_SOURCE_CAPACITY;
+        }
 
         return 0.0;
     }

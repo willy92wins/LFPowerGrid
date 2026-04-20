@@ -29,7 +29,7 @@ class LFPG_PressurePad_Kit : LFPG_KitBase
 
     override float LFPG_GetFloorYOffset()
     {
-        return 0.025;
+        return 0.0;
     }
 
     override bool LFPG_AdaptsToTerrain()

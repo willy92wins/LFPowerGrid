@@ -51,7 +51,14 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     protected bool  m_PoweredNet       = false;
     protected bool  m_Overloaded       = false;
     protected bool  m_OutputEnabled    = true;
-    protected float m_StoredEnergy     = 0.0;
+    // v4.5: Stored as int (×10) for reliable SyncVar delivery — same
+    // pattern as m_ChargeRateX10. See Bohemia ticket T198078 (two
+    // RegisterNetSyncVariableFloat calls with mismatched bit-widths on the
+    // same entity class corrupt the second float on the client). Keeping
+    // zero floats in the SyncVar bitstream eliminates the bug by
+    // construction. 0.1 u resolution; storage up to 100000 u × 10 fits in
+    // int32 by 4 orders of magnitude.
+    protected int   m_StoredEnergyX10  = 0;
     protected int   m_ChargeRateX10    = 0;
 
     // ---- Battery state (persisted, not SyncVars) ----
@@ -79,19 +86,24 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         string varPowered     = "m_PoweredNet";
         string varOverloaded  = "m_Overloaded";
         string varOutput      = "m_OutputEnabled";
-        string varStored      = "m_StoredEnergy";
+        string varStored      = "m_StoredEnergyX10";
         string varChargeRate  = "m_ChargeRateX10";
 
         RegisterNetSyncVariableBool(varPowered);
         RegisterNetSyncVariableBool(varOverloaded);
         RegisterNetSyncVariableBool(varOutput);
-        RegisterNetSyncVariableFloat(varStored, 0.0, 100000.0, 12);
-        // v4.4: Changed from Float(10bit) to Int. The 10-bit quantized float
-        // arrived corrupted on the client (bit alignment bug in engine when
-        // two floats of different bit widths share the SyncVar bitstream).
-        // Int SyncVar is bullet-proof. Stores rate * 10 for 0.1 u/s resolution.
-        // SAVE WIPE required (SyncVar layout change).
-        RegisterNetSyncVariableInt(varChargeRate);
+        // v4.5: Both stored energy and charge rate are Int SyncVars (×10).
+        // Ticket T198078: registering any Float SyncVar alongside another
+        // Float of different bit-width (e.g. vanilla Inventory_Base floats)
+        // corrupts the second float on the client. Using only Int+Bool
+        // SyncVars on this class removes the precondition entirely.
+        //
+        // v4.5.1: Explicit ranges required. Unranged RegisterNetSyncVariableInt
+        // defaults to a narrow bit-width (observed ~16 bits) → values above
+        // 65535 wrap (e.g. BatteryMedium at 60% stored = 120000 X10, wraps to
+        // 54464, displays as 27%). Large battery X10 max = 1_000_000.
+        RegisterNetSyncVariableInt(varStored, 0, 1500000);
+        RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 
     // ============================================
@@ -265,7 +277,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        ctx.Write(m_StoredEnergy);
+        // Disk format stays float for backward compat with existing saves.
+        float storedForSave = m_StoredEnergyX10 / 10.0;
+        ctx.Write(storedForSave);
         ctx.Write(m_DischargeEnabled);
         ctx.Write(m_OutputEnabled);
     }
@@ -274,12 +288,15 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     {
         m_LoadedFromPersistence = true;
 
-        if (!ctx.Read(m_StoredEnergy))
+        float storedFromSave = 0.0;
+        if (!ctx.Read(storedFromSave))
         {
             string errStored = "[LFPG_Battery] OnStoreLoad failed: m_StoredEnergy";
             LFPG_Util.Error(errStored);
             return false;
         }
+        int loadedX10 = storedFromSave * 10.0;
+        m_StoredEnergyX10 = loadedX10;
 
         if (!ctx.Read(m_DischargeEnabled))
         {
@@ -303,13 +320,16 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     float LFPG_GetStoredEnergy()
     {
-        return m_StoredEnergy;
+        float result = m_StoredEnergyX10;
+        result = result / 10.0;
+        return result;
     }
 
     void LFPG_SetStoredEnergy(float val)
     {
         #ifdef SERVER
-        m_StoredEnergy = val;
+        int newX10 = val * 10.0;
+        m_StoredEnergyX10 = newX10;
 
         LFPG_SyncCompEM();
 
@@ -363,7 +383,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         ComponentEnergyManager em = GetCompEM();
         if (em)
         {
-            em.SetEnergy(m_StoredEnergy);
+            em.SetEnergy(LFPG_GetStoredEnergy());
         }
         #endif
     }
@@ -438,7 +458,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
 
     void LFPG_InitFreshSpawn()
     {
-        m_StoredEnergy = 0.0;
+        m_StoredEnergyX10 = 0;
         SetSynchDirty();
     }
 
@@ -509,10 +529,11 @@ class LFPG_BatteryMedium : LFPG_BatteryBase
         }
 
         float maxStored = LFPG_GetMaxStoredEnergy();
+        float storedFloat = LFPG_GetStoredEnergy();
         float ratio = 0.0;
         if (maxStored > 0.1)
         {
-            ratio = m_StoredEnergy / maxStored;
+            ratio = storedFloat / maxStored;
         }
         if (ratio > 1.0)
         {
@@ -525,7 +546,7 @@ class LFPG_BatteryMedium : LFPG_BatteryBase
         {
             numLit = 0;
         }
-        if (numLit < 1 && m_StoredEnergy > 0.1)
+        if (numLit < 1 && storedFloat > 0.1)
         {
             numLit = 1;
         }
@@ -610,10 +631,11 @@ class LFPG_BatteryLarge : LFPG_BatteryBase
         }
 
         float maxStored = LFPG_GetMaxStoredEnergy();
+        float storedFloat = LFPG_GetStoredEnergy();
         float ratio = 0.0;
         if (maxStored > 0.1)
         {
-            ratio = m_StoredEnergy / maxStored;
+            ratio = storedFloat / maxStored;
         }
         if (ratio > 1.0)
         {
@@ -626,7 +648,7 @@ class LFPG_BatteryLarge : LFPG_BatteryBase
         {
             numLit = 0;
         }
-        if (numLit < 1 && m_StoredEnergy > 0.1)
+        if (numLit < 1 && storedFloat > 0.1)
         {
             numLit = 1;
         }

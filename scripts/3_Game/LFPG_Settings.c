@@ -98,7 +98,7 @@ class LFPG_ServerSettings
     float VanillaDefaultConsumption = 20.0;
 
     // Per-class consumption overrides. Matched via IsKindOf (inheritance).
-    // Example: Spotlight=10, BatteryCharger=15
+    // Example: Spotlight=20, BatteryCharger=15
     ref array<ref LFPG_VanillaConsumptionEntry> VanillaCustomConsumption;
 
     // Blacklist patterns. Prefix: "BBP_*" blocks any type starting
@@ -144,16 +144,18 @@ class LFPG_ServerSettings
         VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
         VanillaBlacklist = new array<ref LFPG_VanillaBlacklistEntry>;
 
-        // Default custom consumption: Spotlight keeps legacy 10 u/s
+        // Default custom consumption: Spotlight at VanillaDefaultConsumption rate
         ref LFPG_VanillaConsumptionEntry spotEntry = new LFPG_VanillaConsumptionEntry();
         string spotClass = "Spotlight";
         spotEntry.classname = spotClass;
-        spotEntry.consumption = 10.0;
+        spotEntry.consumption = 20.0;
         VanillaCustomConsumption.Insert(spotEntry);
 
         // Default blacklist: handheld/unsuitable vanilla items
+        // v4.9: Use "Flashlight" exact (IsKindOf catches all children
+        // like Flashlight_Red, Flashlight_Green, etc.)
         ref LFPG_VanillaBlacklistEntry e0 = new LFPG_VanillaBlacklistEntry();
-        e0.pattern = "Flashlight_*";
+        e0.pattern = "Flashlight";
         VanillaBlacklist.Insert(e0);
 
         ref LFPG_VanillaBlacklistEntry e1 = new LFPG_VanillaBlacklistEntry();
@@ -793,10 +795,18 @@ class LFPG_Settings
     }
 
     // Get consumption for a vanilla-compat device. Priority:
-    // 1. Custom entry match (IsKindOf) → use configured value
-    // 2. CompEM.GetEnergyUsage() > 0 → use engine value
-    // 3. VanillaDefaultConsumption fallback
+    // 1. Custom entry match in LF_PowerGrid.json (IsKindOf) → admin override
+    // 2. CfgVehicles EnergyManager energyUsagePerSecond → vanilla config value
+    // 3. VanillaDefaultConsumption fallback → admin-configured default
     // Result cached per typename.
+    //
+    // v5.1: Added CfgVehicles lookup as Step 2.
+    // v4.9: Removed direct CompEM.GetEnergyUsage() call (old Step 2).
+    // Vanilla energyUsagePerSecond values (e.g. 0.1 for Spotlight) are
+    // internal engine drain rates. CfgVehicles lookup is still useful for
+    // mod consumers that declare meaningful consumption values.
+    // Devices with energyUsagePerSecond=0 (e.g. BatteryCharger) fall through
+    // to VanillaDefaultConsumption.
     static float GetVanillaConsumption(EntityAI e)
     {
         if (!e)
@@ -821,9 +831,9 @@ class LFPG_Settings
 
         LFPG_ServerSettings st = Get();
         float result = st.VanillaDefaultConsumption;
-        bool hadCustomMatch = false;
+        bool customMatch = false;
 
-        // Step 1: Check custom entries (IsKindOf for inheritance)
+        // Step 1: Custom entries from LF_PowerGrid.json (admin override, highest priority)
         if (st.VanillaCustomConsumption)
         {
             int ci;
@@ -837,27 +847,30 @@ class LFPG_Settings
                 if (e.IsKindOf(entry.classname))
                 {
                     result = entry.consumption;
-                    hadCustomMatch = true;
+                    customMatch = true;
                     break;
                 }
             }
         }
 
-        // Step 2: No custom match → try CompEM native usage
-        if (!hadCustomMatch)
+        // Step 2: CfgVehicles energyUsagePerSecond (only if no custom match)
+        // Reads the vanilla/mod config value for this device type.
+        // Devices with energyUsagePerSecond=0 (BatteryCharger) skip this step.
+        if (!customMatch)
         {
-            ComponentEnergyManager em = e.GetCompEM();
-            if (em)
+            string cfgPath = "CfgVehicles " + typeName + " EnergyManager energyUsagePerSecond";
+            bool cfgExists = GetGame().ConfigIsExisting(cfgPath);
+            if (cfgExists)
             {
-                float emUsage = em.GetEnergyUsage();
-                if (emUsage > 0.0)
+                float cfgUsage = GetGame().ConfigGetFloat(cfgPath);
+                if (cfgUsage > 0.0)
                 {
-                    result = emUsage;
+                    result = cfgUsage;
                 }
             }
         }
 
-        // Step 3: result is already VanillaDefaultConsumption if neither matched
+        // Step 3: result is VanillaDefaultConsumption if no custom match and no CfgVehicles value
 
         s_ConsumptionCache.Set(typeName, result);
         return result;

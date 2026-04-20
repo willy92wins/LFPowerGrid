@@ -59,7 +59,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     // ---- SyncVars ----
     protected bool  m_PoweredNet        = false;
     protected bool  m_Overloaded        = false;
-    protected float m_StoredEnergy      = 0.0;
+    // v4.5: Int SyncVar (×10) — see T198078 note in LFPG_Battery.c.
+    protected int   m_StoredEnergyX10   = 0;
     protected int   m_ChargeRateX10    = 0;
 
     // ---- Internal state (server-only, not synced) ----
@@ -90,14 +91,16 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 
         string varPowered    = "m_PoweredNet";
         string varOverloaded = "m_Overloaded";
-        string varStored     = "m_StoredEnergy";
+        string varStored     = "m_StoredEnergyX10";
         string varChargeRate = "m_ChargeRateX10";
 
         RegisterNetSyncVariableBool(varPowered);
         RegisterNetSyncVariableBool(varOverloaded);
-        RegisterNetSyncVariableFloat(varStored, 0.0, 10000.0, 12);
-        // v4.4: Int SyncVar replaces quantized float (engine bit-alignment bug).
-        RegisterNetSyncVariableInt(varChargeRate);
+        // v4.5: Both Int SyncVars (×10). See T198078 note in LFPG_Battery.c.
+        // v4.5.1: Explicit ranges to avoid narrow-default bit-width wrap.
+        // Adapter max ≈ truck battery 30000 × 2 (factor) × 10 = 600000 worst.
+        RegisterNetSyncVariableInt(varStored, 0, 1000000);
+        RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 
     // ============================================
@@ -307,7 +310,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 
         m_AttachedBattery = null;
         m_BatteryType = 0;
-        m_StoredEnergy = 0.0;
+        m_StoredEnergyX10 = 0;
         m_ChargeRateX10 = 0;
         m_LastSyncedStored = -1.0;
         m_DischargeEnabled = true;
@@ -418,7 +421,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         #ifdef SERVER
         if (!m_AttachedBattery)
         {
-            m_StoredEnergy = 0.0;
+            m_StoredEnergyX10 = 0;
             SetSynchDirty();
             return;
         }
@@ -426,14 +429,16 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         ComponentEnergyManager em = m_AttachedBattery.GetCompEM();
         if (!em)
         {
-            m_StoredEnergy = 0.0;
+            m_StoredEnergyX10 = 0;
             SetSynchDirty();
             return;
         }
 
         float compemEnergy = em.GetEnergy();
-        m_StoredEnergy = compemEnergy * LFPG_ADAPTER_FACTOR;
-        m_LastSyncedStored = m_StoredEnergy;
+        float lfpgEnergy = compemEnergy * LFPG_ADAPTER_FACTOR;
+        int refreshedX10 = lfpgEnergy * 10.0;
+        m_StoredEnergyX10 = refreshedX10;
+        m_LastSyncedStored = lfpgEnergy;
         SetSynchDirty();
         #endif
     }
@@ -477,7 +482,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         LFPG_WriteToCompEM(val);
 
         // Update SyncVar for client display
-        m_StoredEnergy = val;
+        int newX10 = val * 10.0;
+        m_StoredEnergyX10 = newX10;
 
         float maxStored = LFPG_GetMaxStoredEnergy();
         float threshold = maxStored * LFPG_BATTERY_SYNC_THRESHOLD_PCT;
