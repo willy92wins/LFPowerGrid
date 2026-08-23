@@ -8,7 +8,7 @@
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   FIX: Per-instance CallLater(30s) replaced with RegisterFurnace/
-//   UnregisterFurnace in NM. BurnTick now checks m_BurnNextMs timing
+//   UnregisterFurnace in NM. BurnTick now checks m_BurnNextSec timing
 //   (NM polls every 5s, burn fires every 30s).
 //
 // Memory point: port_output_1 (matches base pattern, no override needed).
@@ -53,8 +53,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
     // ---- Burn timing (server-only, not persisted) ----
     // NM ticks every 5s, burn fires every 30s.
-    // BurnTick checks: if now < m_BurnNextMs, skip.
-    protected int m_BurnNextMs = 0;
+    // GetTime() is a signed millisecond counter and eventually wraps. An
+    // absolute int deadline can therefore strand an already-running furnace
+    // in generation mode without ever consuming fuel. GetTickTime() gives us
+    // a mission-scoped float clock that is safe for this short interval.
+    protected float m_BurnNextSec = 0.0;
 
     // ---- Client: sound + particle ----
 #ifndef SERVER
@@ -247,8 +250,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (m_SourceOn && m_FuelCurrent > 0)
         {
-            int now = g_Game.GetTime();
-            m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
+            float nowSec = g_Game.GetTickTime();
+            m_BurnNextSec = nowSec + (LFPG_FURNACE_BURN_INTERVAL_MS / 1000.0);
             if (nm) nm.RegisterFurnace(this);
         }
 
@@ -258,8 +261,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             bool restoreConsumed = LFPG_AutoConsumeLargestItem();
             if (restoreConsumed)
             {
-                int now2 = g_Game.GetTime();
-                m_BurnNextMs = now2 + LFPG_FURNACE_BURN_INTERVAL_MS;
+                float nowSec2 = g_Game.GetTickTime();
+                m_BurnNextSec = nowSec2 + (LFPG_FURNACE_BURN_INTERVAL_MS / 1000.0);
                 if (nm) nm.RegisterFurnace(this);
             }
             else
@@ -446,11 +449,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             return;
 
         // Timing gate: NM polls every 5s, but burn happens every 30s
-        int now = g_Game.GetTime();
-        if (now < m_BurnNextMs)
+        float nowSec = g_Game.GetTickTime();
+        if (nowSec < m_BurnNextSec)
             return;
 
-        m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
+        m_BurnNextSec = nowSec + (LFPG_FURNACE_BURN_INTERVAL_MS / 1000.0);
 
         if (m_FuelCurrent > 0)
         {
@@ -526,8 +529,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (canIgnite)
             {
                 m_SourceOn = true;
-                int now = g_Game.GetTime();
-                m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
+                float nowSec = g_Game.GetTickTime();
+                m_BurnNextSec = nowSec + (LFPG_FURNACE_BURN_INTERVAL_MS / 1000.0);
                 LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
                 if (nm2) nm2.RegisterFurnace(this);
                 SetSynchDirty();
@@ -590,7 +593,23 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             }
         }
 
-        fuel = w * h * qty;
+        // Valid inventory items from other mods do not always declare an
+        // itemSize. Treat them as a minimum 1x1 fuel item instead of returning
+        // zero and making the furnace reject them.
+        if (w <= 0)
+            w = 1;
+        if (h <= 0)
+            h = 1;
+
+        int squares = w * h;
+        if (qty > LFPG_FURNACE_MAX_FUEL / squares)
+        {
+            fuel = LFPG_FURNACE_MAX_FUEL;
+        }
+        else
+        {
+            fuel = squares * qty;
+        }
 
         GameInventory inv = item.GetInventory();
         if (!inv) return fuel;
@@ -602,7 +621,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             for (ci = 0; ci < cargoCount; ci = ci + 1)
             {
                 EntityAI cargoItem = cargo.GetItem(ci);
-                fuel = fuel + LFPG_CalcFuelRecursive(cargoItem);
+                int cargoFuel = LFPG_CalcFuelRecursive(cargoItem);
+                if (cargoFuel >= LFPG_FURNACE_MAX_FUEL - fuel)
+                    fuel = LFPG_FURNACE_MAX_FUEL;
+                else
+                    fuel = fuel + cargoFuel;
             }
         }
 
@@ -611,7 +634,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         for (ai = 0; ai < attCount; ai = ai + 1)
         {
             EntityAI att = item.GetInventory().GetAttachmentFromIndex(ai);
-            fuel = fuel + LFPG_CalcFuelRecursive(att);
+            int attachmentFuel = LFPG_CalcFuelRecursive(att);
+            if (attachmentFuel >= LFPG_FURNACE_MAX_FUEL - fuel)
+                fuel = LFPG_FURNACE_MAX_FUEL;
+            else
+                fuel = fuel + attachmentFuel;
         }
 
         return fuel;
@@ -655,26 +682,35 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         return fuel;
     }
 
-    void LFPG_AddFuel(int amount)
+    int LFPG_AddFuel(int amount)
     {
         #ifdef SERVER
         if (amount <= 0)
-            return;
+            return 0;
 
-        m_FuelCurrent = m_FuelCurrent + amount;
-        if (m_FuelCurrent > LFPG_FURNACE_MAX_FUEL)
-        {
-            m_FuelCurrent = LFPG_FURNACE_MAX_FUEL;
-        }
+        int remaining = LFPG_FURNACE_MAX_FUEL - m_FuelCurrent;
+        if (remaining <= 0)
+            return 0;
+
+        int accepted = amount;
+        if (accepted > remaining)
+            accepted = remaining;
+
+        m_FuelCurrent = m_FuelCurrent + accepted;
         SetSynchDirty();
 
         string fuelMsg = "[LFPG_Furnace] Fuel added: +";
+        fuelMsg = fuelMsg + accepted.ToString();
+        fuelMsg = fuelMsg + "/";
         fuelMsg = fuelMsg + amount.ToString();
         fuelMsg = fuelMsg + " total=";
         fuelMsg = fuelMsg + m_FuelCurrent.ToString();
         fuelMsg = fuelMsg + " id=";
         fuelMsg = fuelMsg + m_DeviceId;
         LFPG_Util.Info(fuelMsg);
+        return accepted;
+        #else
+        return 0;
         #endif
     }
 

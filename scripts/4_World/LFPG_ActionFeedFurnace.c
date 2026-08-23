@@ -18,10 +18,14 @@
 //
 // Filtered items (ActionCondition rejects):
 //   - Empty hands (no item)
-//   - Ruined items
 //   - LFPG_CableReel (wiring tool, not fuel)
 //   - Any LFPG kit class (deployment kits)
-//   - Items with itemSize 0 in either dimension
+//
+// Fuel valuation and capacity clamping are authoritative on the server.
+// Ruined and modded items without itemSize remain valid incinerator input;
+// fuel that exceeds capacity is discarded rather than rejecting the item.
+// This also avoids client/server divergence because the full furnace
+// whitelist is intentionally not synchronized to clients.
 //
 // IMPORTANTE: Registrar en ActionConstructor.RegisterActions()
 //   via actions.Insert(LFPG_ActionFeedFurnace).
@@ -56,10 +60,6 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (!handItem)
             return false;
 
-        // Must not be ruined (manual check — replaces CCINonRuined)
-        if (handItem.IsRuined())
-            return false;
-
         Object targetObj = target.GetObject();
         if (!targetObj)
             return false;
@@ -84,79 +84,27 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (LFPG_IsLFPGKit(itemType))
             return false;
 
-        // Filter: items with zero-size in either dimension (system items)
-        string cfgPath = "CfgVehicles ";
-        cfgPath = cfgPath + itemType;
-        cfgPath = cfgPath + " itemSize";
-        if (g_Game.ConfigIsExisting(cfgPath))
-        {
-            TIntArray sizeArr = new TIntArray;
-            g_Game.ConfigGetIntArray(cfgPath, sizeArr);
-            int w = 0;
-            int h = 0;
-            if (sizeArr.Count() >= 2)
-            {
-                w = sizeArr[0];
-                h = sizeArr[1];
-            }
-            if (w <= 0 || h <= 0)
-                return false;
-        }
-        else
-        {
-            // No itemSize config = not a valid item
-            return false;
-        }
-
-        // v4.7: Check whitelist mode for dynamic text
-        LFPG_ServerSettings st = LFPG_Settings.Get();
-        bool whitelistMode = st.FurnaceFuelWhitelistOnly;
-        bool isWhitelisted = false;
-
-        if (whitelistMode)
-        {
-            int burnSec = LFPG_Settings.GetWhitelistFuelSec(itemType);
-            if (burnSec > 0)
-            {
-                isWhitelisted = true;
-            }
-        }
-
+        // The server owns whitelist evaluation. Clients receive neither the
+        // whitelist nor its per-item burn values, so using local settings here
+        // made the action disappear for items the server would accept.
         int fuelCur = furnace.LFPG_GetFuelCurrent();
         int fuelMax = LFPG_FURNACE_MAX_FUEL;
-
-        // Non-whitelisted items in whitelist mode: always allowed (burn for nothing)
-        // Whitelisted items and normal mode: check fuel full
-        if (whitelistMode && !isWhitelisted)
+        float feedPctF = 0.0;
+        if (fuelMax > 0)
         {
-            // Show "Burn Item (no fuel)" text
-            string burnLabel = Widget.TranslateString("#STR_LFPG_ACTION_BURN_ITEM_NO_FUEL");
-            m_Text = burnLabel;
+            feedPctF = (fuelCur * 100.0) / fuelMax;
         }
-        else
+        int feedPctWhole = Math.Floor(feedPctF);
+        float feedPctFrac = feedPctF - feedPctWhole;
+        int feedPctTenths = Math.Round(feedPctFrac * 10.0);
+        if (feedPctTenths >= 10)
         {
-            // Furnace must not be full for items that give fuel
-            if (fuelCur >= fuelMax)
-                return false;
-
-            // Dynamic text: show fuel percentage
-            float feedPctF = 0.0;
-            if (fuelMax > 0)
-            {
-                feedPctF = (fuelCur * 100.0) / fuelMax;
-            }
-            int feedPctWhole = Math.Floor(feedPctF);
-            float feedPctFrac = feedPctF - feedPctWhole;
-            int feedPctTenths = Math.Round(feedPctFrac * 10.0);
-            if (feedPctTenths >= 10)
-            {
-                feedPctWhole = feedPctWhole + 1;
-                feedPctTenths = 0;
-            }
-            string feedLabel = Widget.TranslateString("#STR_LFPG_ACTION_FEED_FURNACE");
-            string feedPct = " (" + feedPctWhole.ToString() + "." + feedPctTenths.ToString() + "%)";
-            m_Text = feedLabel + feedPct;
+            feedPctWhole = feedPctWhole + 1;
+            feedPctTenths = 0;
         }
+        string feedLabel = Widget.TranslateString("#STR_LFPG_ACTION_FEED_FURNACE");
+        string feedPct = " (" + feedPctWhole.ToString() + "." + feedPctTenths.ToString() + "%)";
+        m_Text = feedLabel + feedPct;
 
         return true;
     }
@@ -189,10 +137,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (!feedItem)
             return;
 
-        // Re-validate: item could have changed between condition check and execute
-        if (feedItem.IsRuined())
-            return;
-
+        // Re-validate protected items: hands can change between condition and execute.
         if (feedItem.IsKindOf("LFPG_CableReel"))
             return;
         string revalType = feedItem.GetType();
@@ -221,19 +166,12 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
             return;
         }
 
-        // If item gives fuel, check overflow
+        int fuelAccepted = 0;
         if (fuelToAdd > 0)
         {
-            int fuelCur = furnace.LFPG_GetFuelCurrent();
-            int fuelAfter = fuelCur + fuelToAdd;
-            if (fuelAfter > LFPG_FURNACE_MAX_FUEL)
-            {
-                string fullMsg = "[LFPG] Furnace fuel full. Item preserved.";
-                pb.MessageStatus(fullMsg);
-                return;
-            }
-
-            furnace.LFPG_AddFuel(fuelToAdd);
+            // Saturating addition: an incinerator consumes the item even when
+            // only part (or none) of its fuel value fits in the reservoir.
+            fuelAccepted = furnace.LFPG_AddFuel(fuelToAdd);
         }
 
         // Destroy item (+ all contents recursively via engine)
@@ -249,6 +187,8 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         string logMsg = "[ActionFeedFurnace] Player=";
         logMsg = logMsg + playerName;
         logMsg = logMsg + " fed +";
+        logMsg = logMsg + fuelAccepted.ToString();
+        logMsg = logMsg + "/";
         logMsg = logMsg + fuelToAdd.ToString();
         logMsg = logMsg + " fuel. total=";
         logMsg = logMsg + furnace.LFPG_GetFuelCurrent().ToString();
