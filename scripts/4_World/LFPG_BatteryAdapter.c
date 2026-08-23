@@ -6,9 +6,10 @@
 // LFPG_BatteryAdapter:  PASSTHROUGH (1 IN + 1 OUT) with energy storage
 //                     proxied through vanilla battery CompEM.
 //
-// Accepts CarBattery (500 CompEM → 1000 LFPG) or
-//         TruckBattery (1500 CompEM → 3000 LFPG) as attachment.
-// Factor: CompEM × 2.0 = LFPG energy.
+// Accepts CarBattery (500 CompEM → 260000 LFPG) or
+//         TruckBattery (1500 CompEM → 780000 LFPG) as attachment.
+// Factor: CompEM × 520.0 = LFPG energy. At 10 J/u this models an
+// average 12 V 60 Ah car battery and 12 V 180 Ah truck battery.
 //
 // When NM TickBatteries writes energy back, it's divided by
 // factor and written to the vanilla battery's CompEM.
@@ -21,16 +22,16 @@
 // ---------------------------------------------------------
 // Constants
 // ---------------------------------------------------------
-static const float LFPG_ADAPTER_FACTOR             = 2.0;
+static const float LFPG_ADAPTER_FACTOR             = 520.0;
 static const float LFPG_ADAPTER_EFFICIENCY          = 0.92;
 static const float LFPG_ADAPTER_SELF_DISCHARGE      = 0.0005;
 
-// CarBattery (500 CompEM → 1000 LFPG)
+// CarBattery (500 CompEM → 260000 LFPG)
 static const float LFPG_ADAPTER_CAR_CHARGE_RATE     = 15.0;
 static const float LFPG_ADAPTER_CAR_DISCHARGE_RATE  = 20.0;
 static const float LFPG_ADAPTER_CAR_MAX_OUTPUT      = 40.0;
 
-// TruckBattery (1500 CompEM → 3000 LFPG)
+// TruckBattery (1500 CompEM → 780000 LFPG)
 static const float LFPG_ADAPTER_TRUCK_CHARGE_RATE   = 25.0;
 static const float LFPG_ADAPTER_TRUCK_DISCHARGE_RATE = 35.0;
 static const float LFPG_ADAPTER_TRUCK_MAX_OUTPUT    = 60.0;
@@ -99,8 +100,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         RegisterNetSyncVariableBool(varOverloaded);
         // v4.5: Both Int SyncVars (×10). See T198078 note in LFPG_Battery.c.
         // v4.5.1: Explicit ranges to avoid narrow-default bit-width wrap.
-        // Adapter max ≈ truck battery 30000 × 2 (factor) × 10 = 600000 worst.
-        RegisterNetSyncVariableInt(varStored, 0, 1000000);
+        // Known maximum: TruckBattery 1500 × 520 × 10 = 7,800,000.
+        RegisterNetSyncVariableInt(varStored, 0, 10000000);
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 

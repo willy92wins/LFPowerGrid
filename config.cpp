@@ -1589,7 +1589,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        varQuantityMax = 20000;
+        varQuantityMax = 720000;
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
@@ -1643,10 +1643,10 @@ class CfgVehicles
 
         // EnergyManager: drives vanilla inventory white charge bar.
         // All actual energy logic is handled by LFPG timer + SyncCompEM().
-        // energyStorageMax MUST match LFPG_BATTERY_MEDIUM_CAPACITY (20000).
+        // energyStorageMax MUST match LFPG_BATTERY_MEDIUM_CAPACITY (720000).
         class EnergyManager
         {
-            energyStorageMax = 20000;
+            energyStorageMax = 720000;
             energyAtSpawn = 0;
             convertEnergyToQuantity = 1;
             updateInterval = 0;
@@ -1692,7 +1692,7 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
-        varQuantityMax = 100000;
+        varQuantityMax = 3600000;
         quantityBar = 1;
         destroyOnEmpty = 0;
         varQuantityDestroyOnMin = 0;
@@ -1746,10 +1746,10 @@ class CfgVehicles
 
         // EnergyManager: drives vanilla inventory white charge bar.
         // All actual energy logic is handled by LFPG timer + SyncCompEM().
-        // energyStorageMax MUST match LFPG_BATTERY_LARGE_CAPACITY (100000).
+        // energyStorageMax MUST match LFPG_BATTERY_LARGE_CAPACITY (3600000).
         class EnergyManager
         {
-            energyStorageMax = 100000;
+            energyStorageMax = 3600000;
             energyAtSpawn = 0;
             convertEnergyToQuantity = 1;
             updateInterval = 0;

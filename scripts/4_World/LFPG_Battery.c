@@ -17,8 +17,8 @@
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
 //
-// LFPG_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
-// LFPG_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
+// LFPG_BatteryMedium:  720,000 u capacity, 50 chg, 70 dis, 90% eff
+// LFPG_BatteryLarge: 3,600,000 u capacity, 80 chg, 120 dis, 88% eff
 // =========================================================
 
 // ---------------------------------------------------------
@@ -56,8 +56,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // RegisterNetSyncVariableFloat calls with mismatched bit-widths on the
     // same entity class corrupt the second float on the client). Keeping
     // zero floats in the SyncVar bitstream eliminates the bug by
-    // construction. 0.1 u resolution; storage up to 100000 u × 10 fits in
-    // int32 by 4 orders of magnitude.
+    // construction. 0.1 u resolution; storage up to 3600000 u × 10 fits in
+    // int32 with ample headroom.
     protected int   m_StoredEnergyX10  = 0;
     protected int   m_ChargeRateX10    = 0;
     protected int   m_PerfDiagChargeRateDirtyCount = 0;
@@ -101,9 +101,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         //
         // v4.5.1: Explicit ranges required. Unranged RegisterNetSyncVariableInt
         // defaults to a narrow bit-width (observed ~16 bits) → values above
-        // 65535 wrap (e.g. BatteryMedium at 60% stored = 120000 X10, wraps to
-        // 54464, displays as 27%). Large battery X10 max = 1_000_000.
-        RegisterNetSyncVariableInt(varStored, 0, 1500000);
+        // 65535 wrap (e.g. BatteryMedium at 60% stored = 1_200_000 X10).
+        // Large battery X10 max = 36_000_000.
+        RegisterNetSyncVariableInt(varStored, 0, 50000000);
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 
