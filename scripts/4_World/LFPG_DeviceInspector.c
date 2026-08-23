@@ -573,6 +573,18 @@ class LFPG_DeviceInspector
             {
                 inst.RequestServerData(player, deviceId, target);
             }
+            else if (inst.m_HasServerData)
+            {
+                // Allocated wire power is authoritative server state, not a
+                // client SyncVar. Refresh it while the same device remains in
+                // view so connection flow and PASSTHROUGH Total Load do not
+                // stay frozen until the player looks away and back.
+                float sinceServerRefresh = nowMs - inst.m_LastRPCSendMs;
+                if (sinceServerRefresh >= LFPG_INSPECT_RPC_COOLDOWN_MS)
+                {
+                    inst.RequestServerData(player, deviceId, target);
+                }
+            }
         }
 
         // ---- Update floating position every frame ----
