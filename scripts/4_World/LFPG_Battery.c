@@ -67,6 +67,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
 
     // ---- Sync tracking (server-only, not persisted) ----
     protected float m_LastSyncedStored = -1.0;
+    protected float m_LastStoredSyncSec = -1.0;
 
     // ---- Fresh spawn detection ----
     protected bool m_LoadedFromPersistence = false;
@@ -337,6 +338,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         float maxStored = LFPG_GetMaxStoredEnergy();
         float threshold = maxStored * LFPG_BATTERY_SYNC_THRESHOLD_PCT;
         bool needsSync = false;
+        float nowSyncSec = g_Game.GetTickTime();
 
         if (m_LastSyncedStored < 0.0)
         {
@@ -350,6 +352,15 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
                 cumDelta = -cumDelta;
             }
             if (cumDelta > threshold)
+            {
+                needsSync = true;
+            }
+
+            // The percentage threshold scales with capacity. After the 10x
+            // capacity increase it could leave the inspector stale for minutes,
+            // so publish changing energy at least once per accounting tick.
+            float sinceStoredSyncSec = nowSyncSec - m_LastStoredSyncSec;
+            if (cumDelta > LFPG_PROPAGATION_EPSILON && sinceStoredSyncSec >= LFPG_BATTERY_STATUS_SYNC_INTERVAL_S)
             {
                 needsSync = true;
             }
@@ -368,6 +379,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         if (needsSync)
         {
             m_LastSyncedStored = val;
+            m_LastStoredSyncSec = nowSyncSec;
             SetSynchDirty();
             // v4.2: Sync quantity bar alongside SyncVars.
             // With isPassiveDevice=1 + canWork=0, vanilla CompEM never

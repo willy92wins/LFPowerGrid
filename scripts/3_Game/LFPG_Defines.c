@@ -655,7 +655,7 @@ static const float LFPG_MOVE_DETECT_THRESHOLD_SQ = 0.09;   // 0.3² pre-computed
 static const string LFPG_CABLE_REEL_TYPE = "LFPG_CableReel";
 
 // ---- Device Inspector UI (Sprint 5, v0.8.0) ----
-static const float LFPG_INSPECT_PANEL_W          = 300.0;   // panel width (px)
+static const float LFPG_INSPECT_PANEL_W          = 350.0;   // panel width (px)
 static const float LFPG_INSPECT_PANEL_BASE_H     = 115.0;   // base height without wires
 static const float LFPG_INSPECT_WIRE_ROW_H       = 16.0;    // height per wire slot
 static const float LFPG_INSPECT_PANEL_PAD         = 12.0;    // bottom padding
@@ -755,6 +755,9 @@ static const float LFPG_BATTERY_DISCHARGE_OFF_PCT     = 0.01;     // 1% — disa
 static const float LFPG_BATTERY_DISCHARGE_ON_PCT      = 0.05;     // 5% — re-enable discharge above this
 static const float LFPG_BATTERY_SELF_DISCHARGE_RATE   = 0.0005;   // 0.05% per hour idle drain
 static const float LFPG_BATTERY_SYNC_THRESHOLD_PCT    = 0.01;     // 1% delta for SyncVar update
+// Large-capacity batteries can take several minutes to move by 1%. Keep the
+// inspector useful without syncing faster than the 5s battery accounting tick.
+static const float LFPG_BATTERY_STATUS_SYNC_INTERVAL_S = 5.0;
 
 // Tier 1: Small (portable backup)
 static const float LFPG_BATTERY_SMALL_CAPACITY        = 2000.0;   // max stored energy (u)
