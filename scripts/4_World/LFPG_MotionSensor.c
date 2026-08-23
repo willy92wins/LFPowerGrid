@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Motion Sensor (v4.2)
+// LF_PowerGrid - Motion Sensor (v4.3)
 //
 // LFPG_MotionSensor_Kit: Holdable, deployable (same-model pattern).
 // LFPG_MotionSensor:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
@@ -21,6 +21,12 @@
 //   - 360° omnidirectional detection (removed 120° FOV cone)
 //   - Walls and objects block LOS via raycast
 //   - Pipeline: Range sphere → Group filter → LOS raycast
+//
+// v4.3:
+//   - Detection state is independent from transient graph power state.
+//   - Power loss no longer silently closes the gate inside LFPG_SetPowered.
+//   - Detection continues while unpowered; the graph still blocks physical
+//     output until the sensor receives its self-consumption power.
 //
 // Behavior:
 //   Centralized tick in NetworkManager scans nearby players.
@@ -209,12 +215,6 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             return;
 
         m_PoweredNet = powered;
-
-        if (!powered && m_GateOpen)
-        {
-            m_GateOpen = false;
-            m_GateHoldUntil = 0.0;
-        }
 
         SetSynchDirty();
 
@@ -446,18 +446,6 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     bool LFPG_EvaluateDetection(array<Man> players)
     {
         #ifdef SERVER
-        if (!m_PoweredNet)
-        {
-            if (m_GateOpen)
-            {
-                m_GateOpen = false;
-                m_GateHoldUntil = 0.0;
-                SetSynchDirty();
-                return true;
-            }
-            return false;
-        }
-
         vector sensorPos = GetPosition();
 
         // ---- Compute sensorEye (raycast origin in open space) ----
@@ -534,12 +522,12 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             // 3. LOS dual-ray (standing torso + crouching center)
             targetHigh = playerPos;
             targetHigh[1] = targetHigh[1] + LFPG_SENSOR_TARGET_HIGH;
-            hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh);
+            hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh, pb);
             if (!hasLOS)
             {
                 targetLow = playerPos;
                 targetLow[1] = targetLow[1] + LFPG_SENSOR_TARGET_LOW;
-                hasLOS = LFPG_CheckLineOfSight(sensorEye, targetLow);
+                hasLOS = LFPG_CheckLineOfSight(sensorEye, targetLow, pb);
             }
             if (!hasLOS)
                 continue;
@@ -620,7 +608,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     // ============================================
     // LOS raycast check
     // ============================================
-    protected bool LFPG_CheckLineOfSight(vector from, vector to)
+    protected bool LFPG_CheckLineOfSight(vector from, vector to, EntityAI targetEntity)
     {
         #ifdef SERVER
         vector hitPos;
@@ -637,6 +625,29 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         if (!hit)
         {
             return true;
+        }
+
+        // A ray that hits the player (or an attached hierarchy entity such as
+        // clothing/equipment) has reached its intended target. The former
+        // distance-only test could classify the player's own collision shell
+        // as an obstruction depending on stance and orientation.
+        if (hitWith && targetEntity)
+        {
+            if (hitWith == targetEntity)
+            {
+                return true;
+            }
+
+            EntityAI hitEntity = EntityAI.Cast(hitWith);
+            if (hitEntity)
+            {
+                EntityAI hitRoot = hitEntity.GetHierarchyRoot();
+                EntityAI targetRoot = targetEntity.GetHierarchyRoot();
+                if (hitRoot && targetRoot && hitRoot == targetRoot)
+                {
+                    return true;
+                }
+            }
         }
 
         // v4.1: Linear margin (fixed 0.3m regardless of distance).
