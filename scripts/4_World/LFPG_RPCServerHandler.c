@@ -461,6 +461,13 @@ class LFPG_RPCServerHandler
         bool srcIsLFPG = (LFPG_DeviceAPI.GetDeviceId(srcObj) != "");
         bool dstIsLFPG = (LFPG_DeviceAPI.GetDeviceId(dstObj) != "");
 
+        if (!srcIsLFPG && LFPG_NetworkManager.Get().IsVanillaStoreReadOnly())
+        {
+            LFPG_Util.Warn("[FinishWiring-Server] denied: vanilla wire store is read-only");
+            PlayerBase.LFPG_SendClientMsg(player, "Vanilla wiring is temporarily read-only. Check the server log.");
+            return;
+        }
+
         if (srcIsLFPG)
         {
             if (!LFPG_DeviceAPI.HasPort(srcObj, srcPort, LFPG_PortDir.OUT))

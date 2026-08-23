@@ -25,6 +25,15 @@ class LFPG_DeviceRegistry
         return s_Instance;
     }
 
+    static void Reset()
+    {
+        if (s_Instance)
+        {
+            s_Instance.m_ById.Clear();
+            s_Instance = null;
+        }
+    }
+
     void Register(EntityAI obj, string deviceId)
     {
         if (!obj || deviceId == "")

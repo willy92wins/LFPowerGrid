@@ -64,10 +64,10 @@ class LFPG_DeviceBase : Inventory_Base
     // ---- Persistence version range accepted by OnStoreLoad ----
     // Bump the value returned by LFPG_GetDevicePersistVersion() when
     // changing the format of LFPG_OnStoreSaveExtra. Old saves whose
-    // deviceVer falls outside [MIN, MAX_ACCEPTED] are discarded cleanly
+    // deviceVer falls outside [MIN, LFPG_GetDevicePersistVersion()] is
+    // rejected cleanly
     // to avoid engine "String CORRUPTED" noise from legacy formats.
     static const int LFPG_DEVICE_PERSIST_VER_MIN = 1;
-    static const int LFPG_DEVICE_PERSIST_VER_MAX_ACCEPTED = 999;
 
     // ============================================
     // Constructor
@@ -386,14 +386,17 @@ class LFPG_DeviceBase : Inventory_Base
             return false;
         }
 
-        bool verOutOfRange = (deviceVer < LFPG_DEVICE_PERSIST_VER_MIN) || (deviceVer > LFPG_DEVICE_PERSIST_VER_MAX_ACCEPTED);
+        int currentDeviceVer = LFPG_GetDevicePersistVersion();
+        bool verOutOfRange = (deviceVer < LFPG_DEVICE_PERSIST_VER_MIN) || (deviceVer > currentDeviceVer);
         if (verOutOfRange)
         {
             string errBadVer = "[LFPG_DeviceBase] OnStoreLoad: unknown deviceVer=";
             errBadVer = errBadVer + deviceVer.ToString();
             errBadVer = errBadVer + " on ";
             errBadVer = errBadVer + GetType();
-            errBadVer = errBadVer + " (likely pre-v4.0 legacy save) - discarding entity";
+            errBadVer = errBadVer + " current=";
+            errBadVer = errBadVer + currentDeviceVer.ToString();
+            errBadVer = errBadVer + " - refusing incompatible persisted payload";
             LFPG_Util.Warn(errBadVer);
             return false;
         }

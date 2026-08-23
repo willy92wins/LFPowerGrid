@@ -194,6 +194,7 @@ class LFPG_NetworkManager
     // Pruning is deferred to 35s post-init to allow late-loading entities
     // to be resolved before wires are permanently removed.
     protected bool m_DeferredPruneScheduled = false;
+    protected bool m_DeferredPruneCompleted = false;
 
     // v0.8.0: Centralized solar timer cached state.
     // Single timer reads GetDate() once per tick, updates all panels atomically.
@@ -278,8 +279,8 @@ class LFPG_NetworkManager
     protected ref array<int> m_RegisteredSprinklerPhases;
     protected int m_NextSprinklerPhase = 0;
 
-    // v4.1/T2: one 300ms timer evaluates every laser, pads every second
-    // callback, sensors every tenth, and maintains laser beams round-robin.
+    // v4.1/T2: one 300ms timer evaluates every laser, with pads and sensors
+    // on bounded sub-cadences, and maintains laser beams round-robin.
     protected int m_PlayerDetectCounter;
 
     // T2: one coarse player-cell index per detection tick, plus rotating cursors.
@@ -553,7 +554,7 @@ class LFPG_NetworkManager
 
         // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
 
-        // v4.1: Consolidated player detection tick (lasers 300ms + pads 600ms + sensors 3s).
+        // v4.1: Consolidated player detection tick (lasers 300ms + pads/sensors 600ms).
         // Replaces 4 separate timers. Sub-counters gate slower devices.
         m_PlayerDetectCounter = 0;
 
@@ -613,6 +614,44 @@ class LFPG_NetworkManager
         return s_Instance;
     }
 
+    // Release all mission-scoped state after MissionServer has finished its
+    // shutdown sequence. Keeping this singleton across a soft mission restart
+    // retains stale entity refs, graph nodes, registries, and pending work.
+    static void Reset()
+    {
+        if (s_Instance)
+        {
+            s_Instance.Shutdown();
+            s_Instance = null;
+        }
+    }
+
+    void Shutdown()
+    {
+        #ifdef SERVER
+        StopServerScheduler();
+
+        if (g_Game)
+        {
+            ScriptCallQueue systemQueue = g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM);
+            if (systemQueue)
+            {
+                systemQueue.Remove(ValidateAllWiresAndPropagate);
+                systemQueue.Remove(DoGlobalSelfHeal);
+                systemQueue.Remove(DeferredVanillaPruneAndRebuild);
+                systemQueue.Remove(PostBulkRebuildAndPropagate);
+            }
+        }
+
+        m_ValidationActive = false;
+        m_ValidationRerunRequested = false;
+        m_SelfHealQueued = false;
+        m_DeferredPruneScheduled = false;
+        m_DeferredPruneCompleted = false;
+        m_CutGraphRebuildQueued = false;
+        #endif
+    }
+
     LFPG_ControlSessionRegistry GetControlSessionRegistry()
     {
         return m_ControlSessions;
@@ -655,6 +694,36 @@ class LFPG_NetworkManager
             m_ServerScheduler.Stop();
             m_ServerScheduler = null;
             LFPG_Util.Info("[Scheduler] stop");
+        }
+        #endif
+    }
+
+    // Called by LFPG_WireOwnerBase after identity/registry initialization.
+    // Broadcasts client state and guarantees that an owner arriving after a
+    // validation snapshot is eventually represented in the server graph.
+    void RegisterInitializedWireOwner(EntityAI owner)
+    {
+        #ifdef SERVER
+        if (!owner)
+            return;
+
+        string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
+        if (ownerId == "")
+            return;
+
+        TrackDeviceForPolling(ownerId);
+        BroadcastOwnerWires(owner);
+
+        m_GraphFullRebuildRequired = true;
+        if (m_ValidationActive)
+        {
+            m_ValidationRerunRequested = true;
+            return;
+        }
+
+        if (m_StartupValidationDone)
+        {
+            RequestGlobalSelfHeal();
         }
         #endif
     }
@@ -907,10 +976,21 @@ class LFPG_NetworkManager
     {
         return m_ValidationActive;
     }
+
+    bool IsVanillaStoreReadOnly()
+    {
+        return m_VanillaReadOnly;
+    }
+
     bool AddVanillaWire(string ownerDeviceId, LFPG_WireData wd)
     {
         if (ownerDeviceId == "" || !wd)
             return false;
+        if (m_VanillaReadOnly)
+        {
+            LFPG_Util.Warn("[VanillaWires] Add rejected while persisted store is read-only");
+            return false;
+        }
 
         if (wd.m_SourcePort == "")
             wd.m_SourcePort = "output_1";
@@ -3933,6 +4013,19 @@ class LFPG_NetworkManager
 
     protected void LFPG_ValidationPruneLFPGOwners()
     {
+        // Phased validation starts about five seconds after mission init and
+        // may rerun as late owners arrive. Until the dedicated delayed prune
+        // completes, absence from any one registry snapshot is not proof of
+        // deletion.
+        if (!m_DeferredPruneCompleted)
+        {
+            m_CachedValidIds = null;
+            m_ValidationCursor = 0;
+            m_ValidationPhase = LFPG_VALIDATE_INDEX_REBUILD;
+            LFPG_Util.Info("[SelfHeal] Initial LFPG owner pruning deferred for late-loading targets");
+            return;
+        }
+
         int end = Math.Min(m_ValidationCursor + LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK, m_ValidationDevices.Count());
         int di;
         for (di = m_ValidationCursor; di < end; di = di + 1)
@@ -4345,6 +4438,7 @@ class LFPG_NetworkManager
             }
         }
         m_CachedValidIds = null;
+        m_DeferredPruneCompleted = true;
 
         bool vanillaDirtyBeforeFlush = m_VanillaDirty;
         bool needsDeferredRebuild = false;
@@ -4516,7 +4610,10 @@ class LFPG_NetworkManager
         {
             string saveBlockMsg = "[VanillaWires] SAVE BLOCKED: loaded from schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Upgrade the mod to save changes.";
             LFPG_Util.Warn(saveBlockMsg);
-            return true;
+            // Failure keeps m_VanillaDirty set. Returning success here falsely
+            // acknowledged data that was never written and suppressed shutdown
+            // warnings/retries.
+            return false;
         }
 
         if (!FileExist(VANILLA_WIRES_DIR))
@@ -4613,6 +4710,10 @@ class LFPG_NetworkManager
             string vSchemaMsg = "[VanillaWires] Schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Entering READ-ONLY mode to protect data. Upgrade the mod.";
             LFPG_Util.Warn(vSchemaMsg);
         }
+        else
+        {
+            m_VanillaLoadedVer = LFPG_Migrators.MigrateVanillaStore(store);
+        }
 
         int loaded = 0;
         int discarded = 0;
@@ -4621,8 +4722,20 @@ class LFPG_NetworkManager
         // v0.7.16 H3: Map-based O(N) dedup per owner instead of O(N²) IsDuplicate
         ref map<string, ref map<string, bool>> dedupByOwner = new map<string, ref map<string, bool>>;
 
+        int storedEntryCount = store.entries.Count();
+        int loadEntryCount = storedEntryCount;
+        if (loadEntryCount > LFPG_VANILLA_PERSIST_MAX_ENTRIES)
+        {
+            loadEntryCount = LFPG_VANILLA_PERSIST_MAX_ENTRIES;
+            m_VanillaReadOnly = true;
+            string capWarn = "[VanillaWires] Entry cap applied: file=" + storedEntryCount.ToString();
+            capWarn = capWarn + " cap=" + LFPG_VANILLA_PERSIST_MAX_ENTRIES.ToString();
+            capWarn = capWarn + ". Store is read-only to prevent truncating the profile file.";
+            LFPG_Util.Warn(capWarn);
+        }
+
         int i;
-        for (i = 0; i < store.entries.Count(); i = i + 1)
+        for (i = 0; i < loadEntryCount; i = i + 1)
         {
             LFPG_VanillaWireEntry entry = store.entries[i];
             if (!entry) continue;
@@ -4686,7 +4799,7 @@ class LFPG_NetworkManager
             loaded = loaded + 1;
         }
 
-        string loadMsg = "[VanillaWires] Loaded " + loaded.ToString() + " entries from " + store.entries.Count().ToString();
+        string loadMsg = "[VanillaWires] Loaded " + loaded.ToString() + " entries from " + storedEntryCount.ToString();
         if (discarded > 0)
         {
             loadMsg = loadMsg + " (discarded " + discarded.ToString() + " corrupt)";
@@ -6977,7 +7090,7 @@ class LFPG_NetworkManager
     // v4.1: Consolidated Player Detection Tick
     // ===========================
     // One 300ms callback builds a coarse player index once, then evaluates
-    // every due device (pads every 600ms, sensors every 3s).
+    // every due device (pads and sensors every 600ms).
     // Beam transforms refresh immediately; maintenance uses a bounded full cycle.
     protected void LFPG_RebuildPlayerCells()
     {
@@ -7168,7 +7281,7 @@ class LFPG_NetworkManager
         sensorDue = false;
         if (padMod == 0 && totalPads > 0)
             padDue = true;
-        if (m_PlayerDetectCounter >= 10)
+        if (m_PlayerDetectCounter >= LFPG_SENSOR_SCAN_TICK_DIVISOR)
         {
             m_PlayerDetectCounter = 0;
             if (totalSensors > 0)

@@ -37,8 +37,8 @@ modded class MissionServer
         LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm)
         {
-            nm.StopServerScheduler();
             nm.FlushVanillaOnShutdown();
+            nm.Shutdown();
         }
         LFPG_BalanceProvider activeBalance = LFPG_BalanceRegistry.GetActive();
         if (activeBalance && activeBalance.GetName() == "Native")
@@ -47,6 +47,9 @@ modded class MissionServer
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_RunOrphanSweep);
         LFPG_BalanceProvider_Native.ResetMissionClaimState();
         super.OnMissionFinish();
+        LFPG_NetworkManager.Reset();
+        LFPG_DeviceRegistry.Reset();
+        LFPG_Sorter.LFPG_ResetContainerRegistry();
     }
 
     override LFPG_ElecGraph LFPG_CreateElecGraph() { return new LFPG_ElecGraphImpl(); }

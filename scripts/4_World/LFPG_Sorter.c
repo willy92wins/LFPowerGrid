@@ -47,6 +47,13 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     // ---- Container uniqueness (static, server-side) ----
     protected static ref map<string, EntityAI> s_ContainerMap;
 
+    static void LFPG_ResetContainerRegistry()
+    {
+        if (s_ContainerMap)
+            s_ContainerMap.Clear();
+        s_ContainerMap = null;
+    }
+
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
@@ -259,6 +266,12 @@ class LFPG_Sorter : LFPG_WireOwnerBase
                 }
             }
         }
+        else
+        {
+            // New persistence deliberately restores an unlinked sentinel;
+            // establish a fresh session-local link from world proximity.
+            LFPG_LinkNearestContainer(GetPosition());
+        }
         #endif
     }
 
@@ -319,8 +332,13 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     // ============================================
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        ctx.Write(m_LinkedContainerLow);
-        ctx.Write(m_LinkedContainerHigh);
+        // Network IDs are session-scoped and must not cross restarts. Preserve
+        // the binary field layout for compatibility, but persist an unlinked
+        // sentinel so LFPG_OnInitDevice performs authoritative proximity relink.
+        int persistedContainerLow = 0;
+        int persistedContainerHigh = 0;
+        ctx.Write(persistedContainerLow);
+        ctx.Write(persistedContainerHigh);
         ctx.Write(m_FilterJSON);
     }
 
@@ -339,6 +357,11 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             LFPG_Util.Error(errHigh);
             return false;
         }
+
+        // Older saves contain session-only NetworkIDs. Never resolve them in a
+        // new mission because the same pair may now identify another entity.
+        m_LinkedContainerLow = 0;
+        m_LinkedContainerHigh = 0;
 
         if (!ctx.Read(m_FilterJSON))
         {

@@ -237,7 +237,7 @@ class LFPG_ElecNode
     //
     // m_SoftDemand: charge absorption want (W).
     //   Added to demand signal but NEVER causes overload.
-    //   AllocateOutput Pass 3 distributes surplus proportionally.
+    //   AllocateOutput distributes final surplus proportionally.
     //   Set to 0 when battery is full or discharge-only mode.
     //
     // m_SoftDemandRatio: fraction of m_LastStableOutput that is soft.

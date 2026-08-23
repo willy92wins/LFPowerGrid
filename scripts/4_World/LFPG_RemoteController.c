@@ -36,6 +36,7 @@ static const int   LFPG_REMOTE_COOLDOWN_MS       = 1000;
 static const int   LFPG_REMOTE_LED_DURATION_MS   = 2000;
 static const int   LFPG_REMOTE_BTN_DURATION_MS   = 300;
 static const int   LFPG_REMOTE_PERSIST_VER       = 1;
+static const int   LFPG_REMOTE_PERSIST_MAX_ENTRIES = 256;
 static const int   LFPG_REMOTE_SYNC_DELAY_MS     = 2000;
 
 // hiddenSelections indices
@@ -97,6 +98,23 @@ class LFPG_RemoteController : Inventory_Base
         m_LastPairEvictedOldest = false;
         m_PruneEvictedIds = new array<string>;
         m_PairOrderBuffer = new array<ref LFPG_PairedEntry>;
+    }
+
+    override void EEDelete(EntityAI parent)
+    {
+        if (g_Game)
+        {
+            ScriptCallQueue systemQueue = g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM);
+            if (systemQueue)
+            {
+                systemQueue.Remove(LFPG_ResetLED1);
+                systemQueue.Remove(LFPG_ResetBtn1);
+                systemQueue.Remove(LFPG_ResetLED2);
+                systemQueue.Remove(LFPG_ResetBtn2);
+                systemQueue.Remove(LFPG_SyncToOwner);
+            }
+        }
+        super.EEDelete(parent);
     }
 
     // ============================================
@@ -619,12 +637,22 @@ class LFPG_RemoteController : Inventory_Base
             LFPG_Util.Error(errVer);
             return false;
         }
+        if (persistVer < 1 || persistVer > LFPG_REMOTE_PERSIST_VER)
+        {
+            LFPG_Util.Error("[LFPG_RemoteController] OnStoreLoad rejected incompatible persistVer=" + persistVer.ToString());
+            return false;
+        }
 
         int count;
         if (!ctx.Read(count))
         {
             string errCount = "[LFPG_RemoteController] OnStoreLoad failed: count";
             LFPG_Util.Error(errCount);
+            return false;
+        }
+        if (count < 0 || count > LFPG_REMOTE_PERSIST_MAX_ENTRIES)
+        {
+            LFPG_Util.Error("[LFPG_RemoteController] OnStoreLoad rejected invalid count=" + count.ToString());
             return false;
         }
 

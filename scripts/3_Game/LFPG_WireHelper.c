@@ -318,7 +318,8 @@ class LFPG_WireHelper
     // Deserialize JSON into wire array (clears existing contents).
     // v0.7.15: Exhaustive per-wire validation.
     // v0.7.16: H1 fix migration log, H3 map-based O(N) dedup.
-    // v0.7.34: Removed migrator chain (no production saves exist pre-v3).
+    // Persistence blobs are migrated before validation so older supported
+    // schemas follow the declared compatibility chain.
     static void DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
     {
         if (!wires)
@@ -336,6 +337,8 @@ class LFPG_WireHelper
             LFPG_Util.Info("[" + debugLabel + "] Deserialize wires failed: " + err);
             return;
         }
+
+        LFPG_Migrators.MigrateBlob(blob);
 
         if (!blob.wires)
             return;

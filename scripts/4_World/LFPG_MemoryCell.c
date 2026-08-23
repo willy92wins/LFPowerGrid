@@ -270,6 +270,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
+        if (g_Game)
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_DeferredRouting);
         if (m_PoweredNet)
         {
             m_PoweredNet = false;
@@ -278,9 +280,17 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         #endif
     }
 
+    override void LFPG_OnDeleted()
+    {
+        if (g_Game)
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_DeferredRouting);
+    }
+
     override void LFPG_OnWiresCut()
     {
         #ifdef SERVER
+        if (g_Game)
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_DeferredRouting);
         bool dirty = false;
         if (m_PoweredNet) { m_PoweredNet = false; dirty = true; }
         if (dirty) { SetSynchDirty(); }

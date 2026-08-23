@@ -71,7 +71,7 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     {
         #ifdef SERVER
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
-        if (nm) nm.BroadcastOwnerWires(this);
+        if (nm) nm.RegisterInitializedWireOwner(this);
         #endif
 
         LFPG_OnInitDevice();

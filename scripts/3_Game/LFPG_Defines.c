@@ -248,6 +248,9 @@ static const float LFPG_OCC_FORCED_RECHECK_MS = 300.0;  // v0.7.38: 800→300 (l
 // See LFPG_Migrators.c for migration chain and compatibility strategy.
 static const int   LFPG_PERSIST_VER = 3;  // v4.0: DeviceBase refactor, per-device version — WIPE REQUIRED
 static const int   LFPG_VANILLA_PERSIST_VER = 2;
+// Defensive bound for profile JSON. Runtime component/device limits are much
+// smaller, so accepting more entries only increases load time and memory risk.
+static const int   LFPG_VANILLA_PERSIST_MAX_ENTRIES = 16384;
 static const float LFPG_VANILLA_FLUSH_S = 5.0;
 static const int   LFPG_FULLSYNC_SENDS_PER_TICK = 4;
 static const int   LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK = 16;
@@ -353,7 +356,10 @@ static const float LFPG_SORTER_PREVIEW_DEBOUNCE_S = 0.6; // coalesce rapid live-
 static const float LFPG_SORTER_PREVIEW_INFLIGHT_TIMEOUT_S = 3.0; // recover when a rejected request has no response
 
 // ---- Motion Sensor constants (v1.5.0) ----
-// Tick interval removed in v4.1 (absorbed into LFPG_TickPlayerDetection).
+// LFPG_TickPlayerDetection runs every 300ms. Evaluate motion sensors every
+// second detection tick (600ms) so brief crossings are not routinely missed
+// while keeping LOS raycast cost bounded.
+static const int LFPG_SENSOR_SCAN_TICK_DIVISOR = 2;
 static const float LFPG_SENSOR_RANGE_M      = 15.0;   // detection range (metres)
 static const float LFPG_SENSOR_RANGE_SQ     = 225.0;  // 15.0² pre-computed (avoids multiply per player)
 static const float LFPG_SENSOR_CONSUMPTION  = 5.0;    // self-consumption (u/s)
