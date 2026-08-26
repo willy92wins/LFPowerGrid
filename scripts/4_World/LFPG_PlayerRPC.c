@@ -29,6 +29,10 @@ modded class MissionBaseWorld
 
     // Vanilla missionbaseworld.c:3-6 uses a base factory for mission-owned services.
     LFPG_ElecGraph LFPG_CreateElecGraph() { return null; }
+
+    // Server RPC handlers live in the mission arena; the World arena only
+    // carries this seam. Base is a no-op so a client mission drops silently.
+    void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx) { }
 };
 
 modded class PlayerBase

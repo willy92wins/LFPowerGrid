@@ -50,6 +50,11 @@ modded class MissionServer
     }
 
     override LFPG_ElecGraph LFPG_CreateElecGraph() { return new LFPG_ElecGraphImpl(); }
+
+    override void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx)
+    {
+        LFPG_RPCServerHandlerImpl.Dispatch(player, sender, subId, ctx);
+    }
 };
 
 #ifndef SERVER
