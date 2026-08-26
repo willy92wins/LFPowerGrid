@@ -11,8 +11,12 @@
 
 class LFPG_RPCServerHandler
 {
+    #ifndef SERVER
     protected static int s_PerfDiagDeviceSyncBatchCount;
+    #endif
+    #ifndef SERVER
     protected static int s_PerfDiagPreviewResponseCount;
+    #endif
     // =========================================================
     // Dispatch: routes subId to individual server handlers.
     // Called from modded PlayerBase.OnRPC inside #ifdef SERVER.
@@ -2116,6 +2120,7 @@ class LFPG_RPCServerHandler
             highs.Insert(netHigh);
         }
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             s_PerfDiagDeviceSyncBatchCount = s_PerfDiagDeviceSyncBatchCount + 1;
@@ -2127,6 +2132,7 @@ class LFPG_RPCServerHandler
             perfBatch = perfBatch + sender.GetPlainId();
             Print(perfBatch);
         }
+        #endif
 
         ref map<string, bool> sentDeviceIds = new map<string, bool>;
         ref map<string, bool> sentOwners = new map<string, bool>;
@@ -2158,6 +2164,7 @@ class LFPG_RPCServerHandler
             }
         }
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             string perfDirty = "LFPG_PERFDIAG resync_batch_dirty count=";
@@ -2166,6 +2173,7 @@ class LFPG_RPCServerHandler
             perfDirty = perfDirty + sender.GetPlainId();
             Print(perfDirty);
         }
+        #endif
     }
 
     static void HandleDiagClientLog(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
@@ -2186,8 +2194,11 @@ class LFPG_RPCServerHandler
         if (msg.Length() > 512)
             msg = msg.Substring(0, 512);
 
-        string sanitized = SanitizeDiagClientLog(msg);
-        LFPG_Util.Info("[CLI-ECHO] " + sanitized);
+        if (LFPG_LOG_LEVEL >= 1)
+        {
+            string sanitized = SanitizeDiagClientLog(msg);
+            LFPG_Util.Info("[CLI-ECHO] " + sanitized);
+        }
     }
 
     // B-23: drop control by range. ToAscii is first-char ASCII (enstring.c). Cap already applied.
@@ -2248,7 +2259,7 @@ class LFPG_RPCServerHandler
         // Re-register only after the server-side identity is authorized.
         LFPG_DeviceRegistry.Get().Register(resolvedTarget, serverDeviceId);
 
-        ref array<ref LFPG_InspectWireEntry> entries = new array<ref LFPG_InspectWireEntry>;
+        ref TManagedRefArray entries = new TManagedRefArray;
         LFPG_InspectWireEntry entry;
 
         LFPG_ElecGraph graph = LFPG_NetworkManager.Get().GetGraph();
@@ -2317,6 +2328,33 @@ class LFPG_RPCServerHandler
             }
         }
 
+        // Prefilter valid wire entries BEFORE writing wireCount.
+        // Client (LFPG_RPCClientHandler) reads exactly wireCount x 5 fields for
+        // INSPECT_RESPONSE; skipping a row after the count desyncs the payload.
+        // Use TManagedRefArray (not array<ref LFPG_InspectWireEntry>) — G13.
+        ref TManagedRefArray validEntries = new TManagedRefArray;
+        int rawCount = entries.Count();
+        int discarded = 0;
+        int fi;
+        for (fi = 0; fi < rawCount; fi = fi + 1)
+        {
+            LFPG_InspectWireEntry candidate = LFPG_InspectWireEntry.Cast(entries[fi]);
+            if (!candidate)
+            {
+                discarded = discarded + 1;
+                continue;
+            }
+            validEntries.Insert(candidate);
+        }
+        if (discarded > 0)
+        {
+            string discardMsg = "[SERVER] InspectDevice: discarded ";
+            discardMsg = discardMsg + discarded.ToString();
+            discardMsg = discardMsg + " invalid wire entries for ";
+            discardMsg = discardMsg + clientDeviceId;
+            LFPG_Util.Warn(discardMsg);
+        }
+
         // Send response with CLIENT's deviceId as correlation key
         // (client uses this to detect stale responses)
         ScriptRPC rpc = new ScriptRPC();
@@ -2324,13 +2362,15 @@ class LFPG_RPCServerHandler
         rpc.Write(LFPG_InspectWireEntry.SCHEMA_VERSION);
         rpc.Write(clientDeviceId);
 
-        int wireCount = entries.Count();
+        int wireCount = validEntries.Count();
         rpc.Write(wireCount);
 
         int wi;
         for (wi = 0; wi < wireCount; wi = wi + 1)
         {
-            LFPG_InspectWireEntry we = entries[wi];
+            LFPG_InspectWireEntry we = LFPG_InspectWireEntry.Cast(validEntries[wi]);
+            // Prefilter inserted only successful Casts; re-Cast is defensive.
+            // Do NOT continue here — wireCount already committed to the payload.
             rpc.Write(we.m_Direction);
             rpc.Write(we.m_LocalPort);
             rpc.Write(we.m_RemoteTypeName);
@@ -2926,6 +2966,7 @@ class LFPG_RPCServerHandler
         bool bRpcGuaranteed = true;
         rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, sender);
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             s_PerfDiagPreviewResponseCount = s_PerfDiagPreviewResponseCount + 1;
@@ -2944,6 +2985,7 @@ class LFPG_RPCServerHandler
             perfPreview = perfPreview + sentCount.ToString();
             Print(perfPreview);
         }
+        #endif
 
         string logMsg = "[SorterPreviewRequest] output=";
         logMsg = logMsg + selectedOutput.ToString();

@@ -78,6 +78,7 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -116,6 +117,7 @@ class LFPG_ActionOperateSearchlight : ActionInteractBase
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data) {}
 };

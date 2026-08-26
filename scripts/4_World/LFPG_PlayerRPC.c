@@ -16,12 +16,16 @@
 // PlayerBase.LFPG_SetSkipOnSelectPlayer propagates flag here.
 modded class MissionBaseWorld
 {
+    #ifndef SERVER
     protected bool m_LFPG_SkipResetGUI = false;
+    #endif
 
+    #ifndef SERVER
     void LFPG_SetSkipResetGUI(bool skip)
     {
         m_LFPG_SkipResetGUI = skip;
     }
+    #endif
 
     // Vanilla missionbaseworld.c:3-6 uses a base factory for mission-owned services.
     LFPG_ElecGraph LFPG_CreateElecGraph() { return null; }

@@ -78,11 +78,14 @@ class LFPG_SwitchV2Remote : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string pwrMsg = "[LFPG_SwitchV2Remote] SetPowered(";
-        pwrMsg = pwrMsg + powered.ToString();
-        pwrMsg = pwrMsg + ") id=";
-        pwrMsg = pwrMsg + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pwrMsg = "[LFPG_SwitchV2Remote] SetPowered(";
+            pwrMsg = pwrMsg + powered.ToString();
+            pwrMsg = pwrMsg + ") id=";
+            pwrMsg = pwrMsg + m_DeviceId;
+            LFPG_Util.Debug(pwrMsg);
+        }
         #endif
     }
 

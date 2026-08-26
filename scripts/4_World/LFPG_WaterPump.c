@@ -129,11 +129,14 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_WaterPump] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_WaterPump] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
 
         string noRemoved = "";
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
@@ -346,7 +349,9 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     protected bool  m_Overloaded             = false;
     protected float m_TankLevel              = 0.0;
     protected int   m_TankLiquidType         = 0;
+    #ifndef SERVER
     protected int   m_PerfDiagTankDirtyCount = 0;
+    #endif
     protected int   m_ConnectedSprinklerCount = 0;
 
     // ---- Server-only ----
@@ -463,11 +468,14 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_WaterPump_T2] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_WaterPump_T2] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
 
         string noRemoved = "";
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
@@ -671,6 +679,7 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         m_TankLevel = clampedLevel;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagTankDirtyCount = m_PerfDiagTankDirtyCount + 1;
@@ -682,6 +691,7 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
             perfLevel = perfLevel + clampedLevel.ToString();
             Print(perfLevel);
         }
+        #endif
         #endif
     }
 
@@ -699,6 +709,7 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         m_TankLiquidType = liqType;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagTankDirtyCount = m_PerfDiagTankDirtyCount + 1;
@@ -710,6 +721,7 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
             perfType = perfType + liqType.ToString();
             Print(perfType);
         }
+        #endif
         #endif
     }
 

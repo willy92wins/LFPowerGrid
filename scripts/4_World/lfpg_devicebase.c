@@ -39,10 +39,12 @@ class LFPG_DeviceBase : Inventory_Base
     // ---- Local derived state ----
     protected string m_DeviceId      = "";
     protected bool   m_LFPG_Deleting = false;
+    #ifndef SERVER
     protected int    m_PerfDiagSyncReceiveCount = 0;
+    #endif
 
     // ---- Port system ----
-    protected ref array<ref LFPG_PortDef> m_Ports;
+    protected ref TManagedRefArray m_Ports;
 
     // ---- Hologram projection guard (v4.4) ----
     // Static flag: set by HologramMod.ProjectionBasedOnParent() just before
@@ -79,7 +81,7 @@ class LFPG_DeviceBase : Inventory_Base
         RegisterNetSyncVariableInt(varLow);
         RegisterNetSyncVariableInt(varHigh);
 
-        m_Ports = new array<ref LFPG_PortDef>;
+        m_Ports = new TManagedRefArray;
     }
 
     // ============================================
@@ -103,21 +105,36 @@ class LFPG_DeviceBase : Inventory_Base
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return "";
-        return m_Ports[idx].m_Name;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return "";
+
+        return pd.m_Name;
     }
 
     int LFPG_GetPortDir(int idx)
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return -1;
-        return m_Ports[idx].m_Dir;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return -1;
+
+        return pd.m_Dir;
     }
 
     string LFPG_GetPortLabel(int idx)
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return "";
-        return m_Ports[idx].m_Label;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return "";
+
+        return pd.m_Label;
     }
 
     bool LFPG_HasPort(string name, int dir)
@@ -125,8 +142,8 @@ class LFPG_DeviceBase : Inventory_Base
         int i;
         for (i = 0; i < m_Ports.Count(); i = i + 1)
         {
-            LFPG_PortDef pd = m_Ports[i];
-            if (pd.m_Name == name && pd.m_Dir == dir)
+            LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[i]);
+            if (pd && pd.m_Name == name && pd.m_Dir == dir)
                 return true;
         }
         return false;
@@ -311,6 +328,7 @@ class LFPG_DeviceBase : Inventory_Base
     // OnVariablesSynchronized
     // RequestDeviceSync at this level because ALL devices need it.
     // ============================================
+    #ifndef SERVER
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
@@ -345,6 +363,7 @@ class LFPG_DeviceBase : Inventory_Base
 
         LFPG_OnVarSync();
     }
+    #endif
 
     // ============================================
     // Persistence (v3 format with per-device version)

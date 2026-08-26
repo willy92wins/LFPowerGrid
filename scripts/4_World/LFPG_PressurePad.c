@@ -48,7 +48,9 @@ class LFPG_PressurePad : LFPG_WireOwnerBase
     protected bool m_Overloaded = false;
 
     // Client-side edge detection for sound
+    #ifndef SERVER
     protected bool m_PrevGateOpen = false;
+    #endif
 
     void LFPG_PressurePad()
     {
@@ -87,11 +89,14 @@ class LFPG_PressurePad : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string pwrMsg = "[LFPG_PressurePad] SetPowered(";
-        pwrMsg = pwrMsg + powered.ToString();
-        pwrMsg = pwrMsg + ") id=";
-        pwrMsg = pwrMsg + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pwrMsg = "[LFPG_PressurePad] SetPowered(";
+            pwrMsg = pwrMsg + powered.ToString();
+            pwrMsg = pwrMsg + ") id=";
+            pwrMsg = pwrMsg + m_DeviceId;
+            LFPG_Util.Debug(pwrMsg);
+        }
         #endif
     }
 

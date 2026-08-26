@@ -44,7 +44,9 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected bool m_LatchState = false;
 
     // ---- Client visual cache ----
+    #ifndef SERVER
     protected int m_LastVisualState = -1;
+    #endif
 
     void LFPG_MemoryCell()
     {
@@ -86,7 +88,9 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     override bool LFPG_GetOverloaded() { return m_Overloaded; }
 
     // Public getter for DeviceInspector UI
+    #ifndef SERVER
     bool LFPG_GetCellActive() { return m_CellActive; }
+    #endif
 
     override void LFPG_SetOverloaded(bool val)
     {
@@ -186,8 +190,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         }
 
         // Diagnostic log, gated so the multi-part string is not built when logging is
-        // below Info (level 1). Behavior-identical to the prior unconditional call.
-        if (LFPG_LOG_LEVEL >= 1)
+        // below Debug (level 2). Behavior-identical to the prior unconditional call.
+        if (LFPG_LOG_LEVEL >= 2)
         {
             string dLog = "[MemoryCell] SetPowered v3.1: pw=";
             dLog = dLog + powered.ToString();
@@ -207,7 +211,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             dLog = dLog + stateChanged.ToString();
             dLog = dLog + " id=";
             dLog = dLog + m_DeviceId;
-            LFPG_Util.Info(dLog);
+            LFPG_Util.Debug(dLog);
         }
         #endif
     }

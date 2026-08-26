@@ -397,7 +397,7 @@ static const float LFPG_TELEM_INTERVAL_MS = 5000.0;
 // ---- Logging ----
 static const string LFPG_LOG_PREFIX = "[LF_PowerGrid] ";
 static const bool   LFPG_LOG_ENABLED  = true;
-static const int    LFPG_LOG_LEVEL    = 2;
+static const int    LFPG_LOG_LEVEL    = 1;
 // v0.7.33 (A4-2/3): Default to false in production. Set true only for debug.
 // When false, ServerEcho calls (~15 in CableRenderer hot path) are no-ops.
 // Controlled at compile-time — no runtime branch cost when false.

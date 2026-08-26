@@ -11,11 +11,11 @@ class LFPG_DeviceRegistry
 {
     protected static ref LFPG_DeviceRegistry s_Instance;
 
-    protected ref map<string, EntityAI> m_ById;
+    protected ref TStringManagedMap m_ById;
 
     void LFPG_DeviceRegistry()
     {
-        m_ById = new map<string, EntityAI>;
+        m_ById = new TStringManagedMap;
     }
 
     static LFPG_DeviceRegistry Get()
@@ -38,9 +38,10 @@ class LFPG_DeviceRegistry
         if (deviceId == "")
             return;
 
-        EntityAI current;
-        if (m_ById.Find(deviceId, current))
+        Managed currentRaw;
+        if (m_ById.Find(deviceId, currentRaw))
         {
+            EntityAI current = EntityAI.Cast(currentRaw);
             if (!objExpected || objExpected == current)
                 m_ById.Remove(deviceId);
         }
@@ -53,9 +54,10 @@ class LFPG_DeviceRegistry
     // One null-check per lookup — zero overhead for valid refs.
     EntityAI FindById(string deviceId)
     {
-        EntityAI obj;
-        if (m_ById.Find(deviceId, obj))
+        Managed objRaw;
+        if (m_ById.Find(deviceId, objRaw))
         {
+            EntityAI obj = EntityAI.Cast(objRaw);
             if (!obj)
             {
                 m_ById.Remove(deviceId);
@@ -84,16 +86,15 @@ class LFPG_DeviceRegistry
         // O(n^2) outArr.Find() scan. Object-keyed maps are a vanilla pattern
         // (scripts/4_world/classes/useractionscomponent/actiontargets.c:4
         // map<Object,Object>). Output order and contents are unchanged.
-        map<EntityAI, bool> seen = new map<EntityAI, bool>;
-        bool alreadySeen;
+        ref map<Object, Object> seen = new map<Object, Object>;
 
         int i;
         for (i = 0; i < m_ById.Count(); i = i + 1)
         {
-            EntityAI ent = m_ById.GetElement(i);
+            EntityAI ent = EntityAI.Cast(m_ById.GetElement(i));
             if (!ent) continue;
 
-            if (seen.Find(ent, alreadySeen))
+            if (seen.Contains(ent))
             {
                 // Log the duplicate key for debugging
                 string dupKey = m_ById.GetKey(i);
@@ -105,7 +106,7 @@ class LFPG_DeviceRegistry
                 continue;
             }
 
-            seen.Set(ent, true);
+            seen.Set(ent, ent);
             outArr.Insert(ent);
         }
     }
@@ -120,7 +121,7 @@ class LFPG_DeviceRegistry
         int i;
         for (i = 0; i < m_ById.Count(); i = i + 1)
         {
-            EntityAI ent = m_ById.GetElement(i);
+            EntityAI ent = EntityAI.Cast(m_ById.GetElement(i));
             if (!ent)
             {
                 nullKeys.Insert(m_ById.GetKey(i));

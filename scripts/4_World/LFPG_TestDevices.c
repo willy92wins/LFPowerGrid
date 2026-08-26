@@ -434,6 +434,7 @@ class LFPG_Generator : PowerGenerator
         #endif
     }
 
+    #ifndef SERVER
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
@@ -483,6 +484,7 @@ class LFPG_Generator : PowerGenerator
         }
         #endif
     }
+    #endif
 
     protected void LFPG_UpdateDeviceIdString()
     {
@@ -1062,6 +1064,7 @@ class LF_TestLamp : Spotlight
         super.EEKilled(killer);
     }
 
+    #ifndef SERVER
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
@@ -1069,8 +1072,11 @@ class LF_TestLamp : Spotlight
 
         #ifndef SERVER
         bool hasLight = (m_LFPG_Light != null);
-        string vsMsg = "[LF_TestLamp] OnVarSync powered=" + m_PoweredNet.ToString() + " id=" + m_DeviceId + " hasLight=" + hasLight.ToString();
-        LFPG_Util.Debug(vsMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string vsMsg = "[LF_TestLamp] OnVarSync powered=" + m_PoweredNet.ToString() + " id=" + m_DeviceId + " hasLight=" + hasLight.ToString();
+            LFPG_Util.Debug(vsMsg);
+        }
 
         if (m_PoweredNet)
         {
@@ -1094,6 +1100,7 @@ class LF_TestLamp : Spotlight
         }
         #endif
     }
+    #endif
 
     protected void LFPG_UpdateDeviceIdString()
     {
@@ -1189,8 +1196,11 @@ class LF_TestLamp : Spotlight
     void LFPG_SetPowered(bool powered)
     {
         #ifdef SERVER
-        string spMsg = "[LF_TestLamp] LFPG_SetPowered(" + powered.ToString() + ") current=" + m_PoweredNet.ToString() + " id=" + m_DeviceId;
-        LFPG_Util.Debug(spMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string spMsg = "[LF_TestLamp] LFPG_SetPowered(" + powered.ToString() + ") current=" + m_PoweredNet.ToString() + " id=" + m_DeviceId;
+            LFPG_Util.Debug(spMsg);
+        }
 
         if (m_PoweredNet == powered)
             return;
@@ -1198,8 +1208,11 @@ class LF_TestLamp : Spotlight
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string pnMsg = "[LF_TestLamp] m_PoweredNet set to " + m_PoweredNet.ToString();
-        LFPG_Util.Debug(pnMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pnMsg = "[LF_TestLamp] m_PoweredNet set to " + m_PoweredNet.ToString();
+            LFPG_Util.Debug(pnMsg);
+        }
         #endif
     }
 

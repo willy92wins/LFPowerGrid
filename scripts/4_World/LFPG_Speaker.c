@@ -153,11 +153,14 @@ class LFPG_Speaker : LFPG_DeviceBase
 
         LFPG_UpdateGhostPAS();
 
-        string pwrMsg = "[LFPG_Speaker] SetPowered(";
-        pwrMsg = pwrMsg + powered.ToString();
-        pwrMsg = pwrMsg + ") id=";
-        pwrMsg = pwrMsg + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pwrMsg = "[LFPG_Speaker] SetPowered(";
+            pwrMsg = pwrMsg + powered.ToString();
+            pwrMsg = pwrMsg + ") id=";
+            pwrMsg = pwrMsg + m_DeviceId;
+            LFPG_Util.Debug(pwrMsg);
+        }
         #endif
     }
 
@@ -363,6 +366,7 @@ class LFPG_Speaker : LFPG_DeviceBase
     {
         ctx.Write(m_SpeakerOn);
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             string saveMsg = "[LFPG_Speaker] Saved id=";
@@ -371,6 +375,7 @@ class LFPG_Speaker : LFPG_DeviceBase
             saveMsg = saveMsg + m_SpeakerOn.ToString();
             LFPG_Util.Info(saveMsg);
         }
+        #endif
     }
 
     override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver)

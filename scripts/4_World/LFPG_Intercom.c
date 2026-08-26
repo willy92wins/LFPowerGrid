@@ -92,8 +92,12 @@ class LFPG_Intercom : LFPG_DeviceBase
     // ---- Sound event SyncVars ----
     protected int m_SoundEvent      = 0;
     protected int m_SoundEventSeq   = 0;   // incremental counter — guarantees SyncVar change
+    #ifndef SERVER
     protected int m_SoundEventSeqPrev = 0; // client-only: last seen sequence
+    #endif
+    #ifndef SERVER
     protected int m_PerfDiagActionDirtyCount = 0;
+    #endif
 
     // ---- RF toggle state (not SyncVars) ----
     protected bool m_PrevToggleInput   = false;
@@ -252,11 +256,14 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_UpdateGhostRadio();
         LFPG_UpdateGhostPAS();
 
-        string pwrMsg = "[LFPG_Intercom] SetPowered(";
-        pwrMsg = pwrMsg + powered.ToString();
-        pwrMsg = pwrMsg + ") id=";
-        pwrMsg = pwrMsg + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pwrMsg = "[LFPG_Intercom] SetPowered(";
+            pwrMsg = pwrMsg + powered.ToString();
+            pwrMsg = pwrMsg + ") id=";
+            pwrMsg = pwrMsg + m_DeviceId;
+            LFPG_Util.Debug(pwrMsg);
+        }
         #endif
     }
 
@@ -554,6 +561,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
@@ -563,6 +571,7 @@ class LFPG_Intercom : LFPG_DeviceBase
             perfToggle = perfToggle + m_DeviceId;
             Print(perfToggle);
         }
+        #endif
         #endif
     }
 
@@ -638,11 +647,14 @@ class LFPG_Intercom : LFPG_DeviceBase
             }
         }
 
-        string rfMsg = "[LFPG_Intercom] RF toggle executed: ";
-        rfMsg = rfMsg + toggled.ToString();
-        rfMsg = rfMsg + " devices toggled, id=";
-        rfMsg = rfMsg + m_DeviceId;
-        LFPG_Util.Info(rfMsg);
+        if (LFPG_LOG_LEVEL >= 1)
+        {
+            string rfMsg = "[LFPG_Intercom] RF toggle executed: ";
+            rfMsg = rfMsg + toggled.ToString();
+            rfMsg = rfMsg + " devices toggled, id=";
+            rfMsg = rfMsg + m_DeviceId;
+            LFPG_Util.Info(rfMsg);
+        }
 
         m_SoundEvent = LFPG_SND_RF_BEEP;
         m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
@@ -692,9 +704,12 @@ class LFPG_Intercom : LFPG_DeviceBase
 
         if (currentInput && !m_PrevToggleInput)
         {
-            string edgeMsg = "[LFPG_Intercom] Toggle input rising edge detected, id=";
-            edgeMsg = edgeMsg + m_DeviceId;
-            LFPG_Util.Info(edgeMsg);
+            if (LFPG_LOG_LEVEL >= 1)
+            {
+                string edgeMsg = "[LFPG_Intercom] Toggle input rising edge detected, id=";
+                edgeMsg = edgeMsg + m_DeviceId;
+                LFPG_Util.Info(edgeMsg);
+            }
             LFPG_ExecuteRFToggle();
         }
 
@@ -734,13 +749,16 @@ class LFPG_Intercom : LFPG_DeviceBase
         m_GhostRadio.SetFrequencyByIndex(m_FrequencyIndex);
         m_GhostRadio.SetSynchDirty();
 
-        string spawnMsg = "[LFPG_Intercom] GhostRadio spawned at ";
-        spawnMsg = spawnMsg + pos.ToString();
-        spawnMsg = spawnMsg + " freq=";
-        spawnMsg = spawnMsg + m_FrequencyIndex.ToString();
-        spawnMsg = spawnMsg + " id=";
-        spawnMsg = spawnMsg + m_DeviceId;
-        LFPG_Util.Info(spawnMsg);
+        if (LFPG_LOG_LEVEL >= 1)
+        {
+            string spawnMsg = "[LFPG_Intercom] GhostRadio spawned at ";
+            spawnMsg = spawnMsg + pos.ToString();
+            spawnMsg = spawnMsg + " freq=";
+            spawnMsg = spawnMsg + m_FrequencyIndex.ToString();
+            spawnMsg = spawnMsg + " id=";
+            spawnMsg = spawnMsg + m_DeviceId;
+            LFPG_Util.Info(spawnMsg);
+        }
         #endif
     }
 
@@ -752,9 +770,12 @@ class LFPG_Intercom : LFPG_DeviceBase
             g_Game.ObjectDelete(m_GhostRadio);
             m_GhostRadio = null;
 
-            string destroyMsg = "[LFPG_Intercom] GhostRadio destroyed, id=";
-            destroyMsg = destroyMsg + m_DeviceId;
-            LFPG_Util.Info(destroyMsg);
+            if (LFPG_LOG_LEVEL >= 1)
+            {
+                string destroyMsg = "[LFPG_Intercom] GhostRadio destroyed, id=";
+                destroyMsg = destroyMsg + m_DeviceId;
+                LFPG_Util.Info(destroyMsg);
+            }
         }
         #endif
     }
@@ -807,11 +828,14 @@ class LFPG_Intercom : LFPG_DeviceBase
             pasCEM.SwitchOn();
         }
 
-        string pasSpawnMsg = "[LFPG_Intercom] GhostPASBroadcaster spawned at ";
-        pasSpawnMsg = pasSpawnMsg + pasPos.ToString();
-        pasSpawnMsg = pasSpawnMsg + " id=";
-        pasSpawnMsg = pasSpawnMsg + m_DeviceId;
-        LFPG_Util.Info(pasSpawnMsg);
+        if (LFPG_LOG_LEVEL >= 1)
+        {
+            string pasSpawnMsg = "[LFPG_Intercom] GhostPASBroadcaster spawned at ";
+            pasSpawnMsg = pasSpawnMsg + pasPos.ToString();
+            pasSpawnMsg = pasSpawnMsg + " id=";
+            pasSpawnMsg = pasSpawnMsg + m_DeviceId;
+            LFPG_Util.Info(pasSpawnMsg);
+        }
         #endif
     }
 
@@ -823,9 +847,12 @@ class LFPG_Intercom : LFPG_DeviceBase
             g_Game.ObjectDelete(m_GhostPAS);
             m_GhostPAS = null;
 
-            string pasDestroyMsg = "[LFPG_Intercom] GhostPASBroadcaster destroyed, id=";
-            pasDestroyMsg = pasDestroyMsg + m_DeviceId;
-            LFPG_Util.Info(pasDestroyMsg);
+            if (LFPG_LOG_LEVEL >= 1)
+            {
+                string pasDestroyMsg = "[LFPG_Intercom] GhostPASBroadcaster destroyed, id=";
+                pasDestroyMsg = pasDestroyMsg + m_DeviceId;
+                LFPG_Util.Info(pasDestroyMsg);
+            }
         }
         #endif
     }
@@ -906,6 +933,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         }
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
@@ -915,6 +943,7 @@ class LFPG_Intercom : LFPG_DeviceBase
             perfBroadcast = perfBroadcast + m_DeviceId;
             Print(perfBroadcast);
         }
+        #endif
         #endif
     }
 
@@ -945,6 +974,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
@@ -954,6 +984,7 @@ class LFPG_Intercom : LFPG_DeviceBase
             perfFrequency = perfFrequency + m_DeviceId;
             Print(perfFrequency);
         }
+        #endif
         #endif
     }
 };

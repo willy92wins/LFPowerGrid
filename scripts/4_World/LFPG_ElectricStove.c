@@ -50,8 +50,12 @@ class LFPG_ElectricStove : LFPG_DeviceBase
     static const float  STOVE_HEAT_MULTIPLIER       = 2.0;  // x2 faster than gas stove (helps cold maps)
 
     // ---- Rvmat paths (assigned to local vars before use) ----
+    #ifndef SERVER
     static const string RVMAT_BURNER_ON  = "\LFPowerGrid\data\electric_stove\electric_stove_burner_on.rvmat";
+    #endif
+    #ifndef SERVER
     static const string RVMAT_BURNER_OFF = "\LFPowerGrid\data\electric_stove\electric_stove.rvmat";
+    #endif
 
     // ---- SyncVars ----
     protected bool m_PoweredNet   = false;
@@ -545,6 +549,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
         #endif
     }
 
+    #ifndef SERVER
     protected string LFPG_GetButtonName(int index)
     {
         if (index == 0)
@@ -557,6 +562,7 @@ class LFPG_ElectricStove : LFPG_DeviceBase
             return "button_4";
         return "";
     }
+    #endif
 
     // ============================================
     // Lifecycle hooks

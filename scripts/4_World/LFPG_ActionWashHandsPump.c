@@ -165,6 +165,7 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
         }
     }
 
+    #ifndef SERVER
     override void OnFinishProgressClient(ActionData action_data)
     {
         // SEffectManager is client-side only
@@ -181,4 +182,5 @@ class LFPG_ActionWashHandsPump : ActionContinuousBase
             }
         }
     }
+    #endif
 };

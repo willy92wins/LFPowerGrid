@@ -29,36 +29,68 @@
 modded class Hologram
 {
     // ---- Tuning constants ----
+    #ifndef SERVER
     static const float LFPG_HOLO_MAX_RANGE         = 4.0;   // max ray distance (m)
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_SURFACE_OFFSET     = 0.03;  // offset from wall/ceiling surface (m)
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_FLOOR_GROUND_SNAP  = 0.05;  // Y offset above ground for floor mode (m)
+    #endif
 
     // Hysteresis thresholds for surface classification.
     // ENTER = threshold to ENTER wall mode from floor/ceiling.
     // EXIT  = threshold to EXIT wall mode back to floor/ceiling.
     // EXIT > ENTER prevents flickering at the boundary.
+    #ifndef SERVER
     static const float LFPG_HOLO_ENTER_WALL_THRESHOLD = 0.45;
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_EXIT_WALL_THRESHOLD  = 0.55;
+    #endif
 
     // Smoothing factors (higher = snappier, lower = smoother).
     // Applied as: lerp(previous, target, FACTOR * timeslice)
+    #ifndef SERVER
     static const float LFPG_HOLO_POS_SMOOTH  = 20.0;
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_ORI_SMOOTH  = 12.0;
+    #endif
 
     // Vertical ray range for ground-snap
+    #ifndef SERVER
     static const float LFPG_HOLO_GROUND_RAY_UP   = 2.0;
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_GROUND_RAY_DOWN  = 4.0;
+    #endif
 
     // Minimum horizontal length of hit normal to trust its direction.
     // Below this, the normal is nearly vertical (edge geometry hit)
     // and Atan2 becomes unstable => fall back to camera direction.
+    #ifndef SERVER
     static const float LFPG_HOLO_MIN_HORIZ_NORMAL = 0.2;
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_GROUND_CACHE_MOVE_SQ = 0.0025;
+    #endif
+    #ifndef SERVER
     static const float LFPG_HOLO_GROUND_CACHE_TTL_MS = 100.0;
+    #endif
+    #ifndef SERVER
     static const int LFPG_HOLO_SURFACE_MISS = 1;
+    #endif
+    #ifndef SERVER
     static const int LFPG_HOLO_SURFACE_SKY = 2;
+    #endif
+    #ifndef SERVER
     static const int LFPG_HOLO_SURFACE_CEILING_FALLBACK = 3;
+    #endif
+    #ifndef SERVER
     static const int LFPG_HOLO_SURFACE_WALL_FALLBACK = 4;
+    #endif
 
     // Surface classes reported by the placement diagnostics.
     static const int LFPG_HOLO_CLASS_FLOOR   = 10;
@@ -79,25 +111,45 @@ modded class Hologram
 
     // Cached kit reference: set once per frame in UpdateHologram,
     // used by all helpers to avoid redundant Cast calls (~8x/frame).
+    #ifndef SERVER
     protected LFPG_KitBase m_LFPG_CachedSameKit;
+    #endif
 
     // Smoothing state
+    #ifndef SERVER
     protected vector m_LFPG_SmoothedPos;
+    #endif
+    #ifndef SERVER
     protected vector m_LFPG_SmoothedOri;
+    #endif
+    #ifndef SERVER
     protected bool   m_LFPG_HasPreviousState;
+    #endif
 
     // Hysteresis: tracks whether we were in wall mode last frame
+    #ifndef SERVER
     protected bool m_LFPG_WasWallMode;
+    #endif
 
     // Diagnostics: last surface class written to the log (-1 = none yet).
     protected int m_LFPG_LastLoggedClass;
 
     // Secondary vertical-ray cache (per hologram instance).
+    #ifndef SERVER
     protected bool m_LFPG_GroundCacheValid;
+    #endif
+    #ifndef SERVER
     protected vector m_LFPG_GroundCacheInput;
+    #endif
+    #ifndef SERVER
     protected vector m_LFPG_GroundCacheResult;
+    #endif
+    #ifndef SERVER
     protected int m_LFPG_GroundCacheSurfaceClass;
+    #endif
+    #ifndef SERVER
     protected float m_LFPG_GroundCacheTimeMs;
+    #endif
 
     // ============================================
     // Constructor: safety-clear hologram flag (v4.4)
@@ -237,6 +289,7 @@ modded class Hologram
         return false;
     }
 
+#ifndef SERVER
     protected bool LFPG_IsDifferentModelKit()
     {
         if (!m_Parent)
@@ -910,6 +963,7 @@ modded class Hologram
         RefreshVisual();
         projection.OnHologramBeingPlaced(m_Player);
     }
+#endif
 
     // ============================================
     // Collision/validation overrides

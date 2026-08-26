@@ -142,11 +142,14 @@ class LFPG_DoorController : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_DoorController] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_DoorController] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
 
         LFPG_ApplyDoorState();
         #endif
@@ -664,6 +667,7 @@ class LFPG_DoorController : LFPG_DeviceBase
             pairMsg = pairMsg + m_DeviceId;
             LFPG_Util.Info(pairMsg);
 
+            #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
             {
                 int pairLatencyMs = nowMs - m_SearchWakeMs;
@@ -675,12 +679,14 @@ class LFPG_DoorController : LFPG_DeviceBase
                 pairDiag = pairDiag + count.ToString();
                 Print(pairDiag);
             }
+            #endif
 
             LFPG_ApplyDoorState();
         }
         else
         {
             m_NextSearchMs = nowMs + m_SearchBackoffMs;
+            #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
             {
                 string retryDiag = "LFPG_PERFDIAG door_pair miss attempts=";
@@ -691,6 +697,7 @@ class LFPG_DoorController : LFPG_DeviceBase
                 retryDiag = retryDiag + count.ToString();
                 Print(retryDiag);
             }
+            #endif
             m_SearchBackoffMs = m_SearchBackoffMs * 2;
             if (m_SearchBackoffMs > LFPG_DC_BACKOFF_MAX_MS)
                 m_SearchBackoffMs = LFPG_DC_BACKOFF_MAX_MS;

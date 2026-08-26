@@ -95,6 +95,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
     // de interact termina. La respuesta CAMERA_LIST_RESPONSE llega cuando la
     // action ya no esta activa, evitando el crash nativo al llamar
     // Camera.SetActive(true) durante el procesamiento del ActionManager.
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -121,6 +122,7 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data) {}
 };

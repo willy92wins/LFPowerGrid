@@ -38,6 +38,7 @@ class LFPG_WorldUtil
     // --------------------------
     // Cable rendering helpers
     // --------------------------
+    #ifndef SERVER
     static vector ClampAboveSurface(vector p, float minOffset = 0.05)
     {
         // v0.7.9: Guard against NaN/infinite coordinates from corrupted persistence.
@@ -80,12 +81,14 @@ class LFPG_WorldUtil
             p[1] = sy + minOffset;
         return p;
     }
+    #endif
 
     // For straight wires (no waypoints): generate a midpoint that clears terrain.
     // This avoids "wire under the ground" when endpoints are near/below the surface or terrain is between them.
     // v0.7.38 (M8): Increased default samples from 6 to 10 for better
     // hill detection. Replaced (float) cast with explicit float division.
     // Only called at build time (not per-frame), so extra samples are free.
+#ifndef SERVER
     static vector AutoMidpointAboveTerrain(vector a, vector b, float lift = 0.25, int samples = 10)
     {
         float maxY = -10000.0;
@@ -108,6 +111,7 @@ class LFPG_WorldUtil
 
         return mid;
     }
+#endif
 
     // v0.7.10: Squared distance between two points.
     // Use for all threshold comparisons (distSq < threshSq) to avoid
@@ -128,6 +132,7 @@ class LFPG_WorldUtil
     // Only called for segments that passed through Cohen-Sutherland
     // (outsideA || outsideB), so the typical cost is 0 per segment.
     // Cost when called: 8 comparisons + 1 division.
+#ifndef SERVER
     static float ComputeEdgeFade(float sx1, float sy1, float sx2, float sy2,
                                   float screenW, float screenH, float fadeWidth)
     {
@@ -385,4 +390,5 @@ class LFPG_WorldUtil
         // Not drawing a marginal segment is safer than drawing garbage.
         return false;
     }
+#endif
 };

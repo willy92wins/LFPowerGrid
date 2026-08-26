@@ -192,8 +192,11 @@ class LFPG_BTCPriceFetcher
         // Don't overlap requests
         if (m_FetchInProgress)
         {
-            string busyMsg = "[LFPG_BTCPrice] Skipping tick (request in progress)";
-            LFPG_Util.Debug(busyMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string busyMsg = "[LFPG_BTCPrice] Skipping tick (request in progress)";
+                LFPG_Util.Debug(busyMsg);
+            }
             return;
         }
 
@@ -222,9 +225,12 @@ class LFPG_BTCPriceFetcher
         string path = LFPG_BTCConfig.GetApiPath();
         m_FetchInProgress = true;
 
-        string fetchMsg = "[LFPG_BTCPrice] Fetching: ";
-        fetchMsg = fetchMsg + path;
-        LFPG_Util.Debug(fetchMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string fetchMsg = "[LFPG_BTCPrice] Fetching: ";
+            fetchMsg = fetchMsg + path;
+            LFPG_Util.Debug(fetchMsg);
+        }
 
         m_RestCtx.GET(m_Callback, path);
         #endif

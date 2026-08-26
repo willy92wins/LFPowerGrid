@@ -66,6 +66,7 @@ class LFPG_ActionOpenBTCAtm : ActionInteractBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -104,6 +105,7 @@ class LFPG_ActionOpenBTCAtm : ActionInteractBase
         logMsg = logMsg + netHigh.ToString();
         LFPG_Util.Info(logMsg);
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data)
     {

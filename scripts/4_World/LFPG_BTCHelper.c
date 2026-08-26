@@ -590,7 +590,7 @@ class LFPG_BTCHelper
         int intAmount = (int)eurAmount;
         float fractional = eurAmount - intAmount;
 
-        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        auto currencies = LFPG_BTCConfig.GetCurrencies();
         if (!currencies)
             return eurAmount;
 
@@ -682,7 +682,7 @@ class LFPG_BTCHelper
     static int CountPlayerCash(PlayerBase player)
     {
         int total = 0;
-        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        auto currencies = LFPG_BTCConfig.GetCurrencies();
         if (!currencies)
             return 0;
 
@@ -1879,7 +1879,7 @@ class LFPG_BTCHelper
     static int DestroyPlayerCash(PlayerBase player, int eurAmount)
     {
         int remaining = eurAmount;
-        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        auto currencies = LFPG_BTCConfig.GetCurrencies();
         int cCount = currencies.Count();
         int ci;
         for (ci = 0; ci < cCount; ci = ci + 1)

@@ -79,6 +79,7 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
 
     // RPC in OnExecuteClient (after animation completes, same pattern
     // as LFPG_ActionWatchMonitor v0.9.6 crash fix).
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -105,6 +106,7 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data) {}
 };

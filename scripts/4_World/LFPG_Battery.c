@@ -60,7 +60,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // int32 by 4 orders of magnitude.
     protected int   m_StoredEnergyX10  = 0;
     protected int   m_ChargeRateX10    = 0;
+    #ifndef SERVER
     protected int   m_PerfDiagChargeRateDirtyCount = 0;
+    #endif
 
     // ---- Battery state (persisted, not SyncVars) ----
     protected bool m_DischargeEnabled = true;
@@ -459,6 +461,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         m_ChargeRateX10 = rateX10;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagChargeRateDirtyCount = m_PerfDiagChargeRateDirtyCount + 1;
@@ -470,6 +473,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             perfDiag = perfDiag + rateX10.ToString();
             Print(perfDiag);
         }
+        #endif
         #endif
     }
 
