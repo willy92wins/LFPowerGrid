@@ -303,7 +303,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterFurnace(this);
         LFPG_SetHeatActive(false);
         #endif

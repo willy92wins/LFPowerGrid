@@ -260,6 +260,29 @@ class LFPG_FileUtil
             {
                 CopyFile(bakPath, targetPath);
             }
+            if (!FileExist(targetPath))
+            {
+                // Nothing was restored: the first save on a fresh install, or both
+                // backups gone. The recovery guard in EnsureBalancesFileOrRestore only
+                // fires while a target is ALIVE, so a lone .tmp would be promoted on
+                // the next boot even though the caller is about to roll this mutation
+                // back. Reaching this line means the failure WAS reported upstream, so
+                // the snapshot must lose the auto-promotable name. A crash inside the
+                // delete/copy window never gets here, which is why that case still
+                // promotes: nothing was reported to anyone.
+                PreserveOrphanTmpEvidence(tmpPath);
+                if (FileExist(tmpPath))
+                {
+                    // Last resort. If this also fails there is nothing else the code
+                    // can do about the file, so make the state loud: this is the only
+                    // remaining path where a rolled-back balance can come back after
+                    // a restart, and it needs three consecutive I/O failures to reach.
+                    if (!DeleteFile(tmpPath))
+                    {
+                        LFPG_Util.Error("[FileUtil] AtomicSaveBalances: rejected .tmp could neither be preserved NOR deleted. Next boot WILL promote a balance the runtime rolled back. Admin: delete it by hand before restarting: " + tmpPath);
+                    }
+                }
+            }
             return false;
         }
 
@@ -545,6 +568,22 @@ class LFPG_FileUtil
 
         if (FileExist(tmpPath))
         {
+            // Balances are the only typed store whose caller rolls the mutation back
+            // when the save reports failure (LFPG_BalanceProvider_Native.c AddBalance
+            // logs "balance snapshot was not durable" and returns 0). A .tmp sitting
+            // next to a LIVE target is therefore a transaction the runtime already
+            // told the player was rejected, and promoting it would resurrect it.
+            // Promotion stays correct when the target is ABSENT: that is a crash
+            // inside the DeleteFile/CopyFile window, where the save was never
+            // reported to anyone. Vanilla wires and settings keep promoting in both
+            // cases on purpose - their callers only log and keep the new state.
+            if (FileExist(targetPath))
+            {
+                LFPG_Util.Error("[FileUtil] Orphan .tmp beside a live balances target: NOT promoting, the caller rolled this mutation back. Preserving as evidence: " + tmpPath);
+                PreserveOrphanTmpEvidence(tmpPath);
+                return true;
+            }
+
             LFPG_BalanceData probe = new LFPG_BalanceData();
             string parseErr;
             if (JsonFileLoader<LFPG_BalanceData>.LoadFile(tmpPath, probe, parseErr))

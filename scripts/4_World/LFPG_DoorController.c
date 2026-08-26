@@ -234,7 +234,7 @@ class LFPG_DoorController : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterDoorController(this);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SearchAndPairDoor);
         m_SearchInProgress = false;

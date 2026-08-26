@@ -227,11 +227,11 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterSprinkler(this);
         if (m_WaterSourceId != "")
         {
-            LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
+            LFPG_NetworkManager nm2 = LFPG_NetworkManager.GetExisting();
             if (nm2) nm2.LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
         }
         #endif

@@ -888,13 +888,24 @@ class LFPG_CameraViewport
 
             // Re-enable HIC BEFORE RPC roundtrip.
             // Prevents 0x54 crash when SelectPlayer re-activates player cam.
+            // The vital-state auto-exit above enters phase 1 precisely when
+            // m_PlayerRef is null, so the local-player fallback of DoExitCleanup
+            // is required here too; without it input stays disabled until the
+            // confirmation RPC or the 5s timeout.
+            HumanInputController phase1Hic = null;
             if (m_PlayerRef)
             {
-                HumanInputController phase1Hic = m_PlayerRef.GetInputController();
-                if (phase1Hic)
-                {
-                    phase1Hic.SetDisabled(false);
-                }
+                phase1Hic = m_PlayerRef.GetInputController();
+            }
+            else
+            {
+                Human phase1Player = g_Game.GetPlayer();
+                if (phase1Player)
+                    phase1Hic = phase1Player.GetInputController();
+            }
+            if (phase1Hic)
+            {
+                phase1Hic.SetDisabled(false);
             }
 
             // Camera STAYS ACTIVE — deactivated in DoExitCleanup after

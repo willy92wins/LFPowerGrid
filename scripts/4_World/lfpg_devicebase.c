@@ -278,6 +278,10 @@ class LFPG_DeviceBase : Inventory_Base
         }
 
         m_LFPG_Deleting = true;
+        // LFPG_OnDeleted runs FIRST. Its overrides must reach the network manager
+        // through GetExisting(): the creating factory here materialises the manager
+        // mid-teardown and makes the GetExisting() in OnDeviceDeleted below pointless,
+        // since it would always find the instance this line just built.
         LFPG_OnDeleted();
         // Future: LFPG_SpatialGrid.Get().Remove(this)
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);

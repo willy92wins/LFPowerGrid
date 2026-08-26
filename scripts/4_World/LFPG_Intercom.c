@@ -330,7 +330,7 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_DestroyGhostPAS();
 
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterIntercom(this);
         #endif
     }

@@ -255,12 +255,11 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
     // ============================================
     override void LFPG_OnInit()
     {
-        #ifdef SERVER
-        // The config value is a global floor applied in
-        // LFPG_IsWithdrawOnly under SERVER. It is not written
-        // into persisted ATM state. A per-ATM off cannot
-        // override the floor while the floor is active.
-        #endif
+        // Deliberately empty. The config value is a global floor applied in
+        // LFPG_IsWithdrawOnly under SERVER; it is not written into persisted ATM
+        // state, and a per-ATM off cannot override the floor while it is active.
+        // The #ifdef SERVER that used to wrap these comments was removed: a guard
+        // whose body holds no statements segfaults (pitfalls-advanced.md:66-77).
     }
 
     // ============================================

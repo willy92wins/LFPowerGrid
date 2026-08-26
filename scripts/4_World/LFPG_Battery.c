@@ -246,7 +246,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterBattery(this);
         #endif
     }
@@ -296,6 +296,14 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             LFPG_Util.Error(errStored);
             return false;
         }
+        // Non-finite persisted energy survives the cast as garbage; reset to
+        // empty instead. Same policy as the persisted aim guard in LFPG_Searchlight.
+        if (LFPG_Searchlight.LFPG_IsInvalidAimValue(storedFromSave))
+        {
+            LFPG_Util.Warn("[LFPG_Battery] Non-finite persisted energy reset to zero");
+            storedFromSave = 0.0;
+        }
+
         int loadedX10 = storedFromSave * 10.0;
         m_StoredEnergyX10 = loadedX10;
 

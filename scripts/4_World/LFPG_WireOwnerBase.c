@@ -123,8 +123,8 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
             errJson = errJson + ". Preserving entity with empty wires; device-specific state defaults applied (cursor misaligned, downstream Reads skipped).";
             LFPG_Util.Error(errJson);
             m_Wires = new array<ref LFPG_WireData>;
-        m_WireJSONCache = "";
-        m_WireJSONCacheGeneration = -1;
+            m_WireJSONCache = "";
+            m_WireJSONCacheGeneration = -1;
             return true;
         }
 

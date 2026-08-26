@@ -56,15 +56,27 @@ class LFPG_DeviceLifecycle
     static void OnDeviceDeleted(EntityAI device, string deviceId)
 	{
 		#ifdef SERVER
+		// GetExisting, not Get: Get() builds the manager when absent, and its
+		// constructor installs the graph or a degraded fallback, loads vanilla wires,
+		// schedules validation and starts the scheduler. A manager that does not
+		// exist holds no wires to cut and no graph node to drop.
 		if (device && deviceId != "")
 		{
-			LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+			LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
 			if (nm) nm.CutAllWiresFromDevice(device, deviceId);
 		}
+
+		// Inside the guard now: NotifyGraphDeviceRemoved is server-only in its
+		// entirety (LFPG_NetworkManager.c:1200-1208), so on the client this built a
+		// whole manager to call a no-op.
+		LFPG_NetworkManager nmGraph = LFPG_NetworkManager.GetExisting();
+		if (nmGraph) nmGraph.NotifyGraphDeviceRemoved(deviceId);
 		#endif
 
-		LFPG_NetworkManager nmGraph = LFPG_NetworkManager.Get();
-		if (nmGraph) nmGraph.NotifyGraphDeviceRemoved(deviceId);
+		// Outside the guard, creating factory kept: the registry is read on the
+		// client too (LFPG_CableRenderer.c:1005, :1069), it is a bare map with no
+		// side effects, and Unregister already refuses to drop an entry whose entity
+		// is not the expected one (LFPG_DeviceRegistry.c:44).
 		LFPG_DeviceRegistry.Get().Unregister(deviceId, device);
 	}
 

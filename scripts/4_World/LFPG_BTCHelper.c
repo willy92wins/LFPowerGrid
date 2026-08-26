@@ -913,7 +913,13 @@ class LFPG_BTCHelper
         if (btcAmount > maxBtcOp)
         {
             int errLargeB = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errLargeB, atm.LFPG_GetBtcStock(), 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            LFPG_BalanceProvider capBp = LFPG_BalanceRegistry.GetActive();
+            int capBal = 0;
+            if (capBp)
+            {
+                capBal = capBp.GetBalance(player);
+            }
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errLargeB, atm.LFPG_GetBtcStock(), capBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             string warnLargeB = "[BTCBuy] amount rejected (> cap): requested=";
             warnLargeB = warnLargeB + btcAmount.ToString();
             warnLargeB = warnLargeB + " cap=";
