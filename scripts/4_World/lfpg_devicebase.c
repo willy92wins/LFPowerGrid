@@ -573,6 +573,11 @@ class LFPG_DeviceBase : Inventory_Base
     // Hooks (empty — subclass overrides)
     // ============================================
     void LFPG_OnInit() {}
+
+    // F6 B1: re-registration seam. Overridden by every device that
+    // registers with the network manager; the MissionServer.OnInit sweep
+    // calls it once the mission-backed manager exists.
+    void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm) { }
     void LFPG_OnKilled() {}
     void LFPG_OnDeleted() {}
     void LFPG_OnVarSync() {}

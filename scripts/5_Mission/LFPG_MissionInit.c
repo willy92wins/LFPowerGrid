@@ -19,6 +19,20 @@ modded class MissionServer
         LFPG_AtmStock.DrainPendingReconcile(this);
         LFPG_NetworkManager initNm = LFPG_NetworkManager.Get();
         if (initNm) initNm.StartServerScheduler();
+        // F6 B1: devices restored during super.OnInit() registered while
+        // Get() returned the inert fallback. Re-register every known device
+        // now that the mission-backed manager exists (RegisterX is idempotent).
+        if (initNm)
+        {
+            array<EntityAI> lfpgBootDevices = new array<EntityAI>;
+            LFPG_DeviceRegistry.Get().GetAll(lfpgBootDevices);
+            int lfpgBootIdx;
+            for (lfpgBootIdx = 0; lfpgBootIdx < lfpgBootDevices.Count(); lfpgBootIdx = lfpgBootIdx + 1)
+            {
+                LFPG_DeviceBase lfpgBootDev = LFPG_DeviceBase.Cast(lfpgBootDevices[lfpgBootIdx]);
+                if (lfpgBootDev) lfpgBootDev.LFPG_RegisterWithNetworkManager(initNm);
+            }
+        }
         Print(LFPG_LOG_PREFIX + "MissionServer OnInit (v" + LFPG_VERSION_STR + ")");
     }
 

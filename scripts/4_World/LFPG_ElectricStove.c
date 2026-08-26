@@ -42,6 +42,15 @@ class LFPG_ElectricStove_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_ElectricStove : LFPG_DeviceBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterStove(this);
+    }
+
     // ---- Constants ----
     static const int    STOVE_BURNER_COUNT          = 4;
     static const float  STOVE_CONSUMPTION_PER_BURNER = 10.0;

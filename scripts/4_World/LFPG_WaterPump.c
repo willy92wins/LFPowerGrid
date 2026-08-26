@@ -30,6 +30,15 @@ class LFPG_WaterPump_Kit : LFPG_KitBaseDeployable
 // ---------------------------------------------------------
 class LFPG_WaterPump : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterT1Pump(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet        = false;
     protected bool m_Overloaded        = false;
@@ -344,6 +353,15 @@ class LFPG_WaterPump : LFPG_WireOwnerBase
 // ---------------------------------------------------------
 class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterT2Pump(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool  m_PoweredNet             = false;
     protected bool  m_Overloaded             = false;

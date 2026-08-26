@@ -44,6 +44,15 @@ class LFPG_Sprinkler_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_Sprinkler : LFPG_DeviceBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterSprinkler(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet      = false;
     protected bool m_SprinklerActive = false;
