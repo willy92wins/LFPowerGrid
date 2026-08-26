@@ -63,9 +63,13 @@ class LFPG_NetworkManager
         }
         if (s_Instance)
             return s_Instance;
-        LFPG_Util.Error("[LFPG_NetworkManager] Mission factory unavailable - inert manager for this call");
         if (!s_Fallback)
+        {
+            // Logged on creation only: every Get() would otherwise emit a line,
+            // and each handler reaches Get() twice via Sessions().
+            LFPG_Util.Error("[LFPG_NetworkManager] Mission factory unavailable - inert manager from here on");
             s_Fallback = new LFPG_NetworkManager();
+        }
         return s_Fallback;
     }
 
