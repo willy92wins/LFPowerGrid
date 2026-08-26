@@ -1330,10 +1330,19 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         // once LBmaster_Core compiles), crediting s_Balances would resurrect
         // EUR into a ledger the active UI does not read. Hold the claim PENDING
         // so an admin can migrate it, rather than hide the money.
+        // Fail closed: refund to the Native ledger only when the active
+        // provider is provably Native. A non-Native provider (migration) OR an
+        // indeterminate one (GetActive() is documented nullable) both hold the
+        // claim PENDING rather than resurrect EUR into a ledger the live UI may
+        // not read. The claim keeps claim.debit; a later boot with Native
+        // active, or an admin migration, resolves it.
         LFPG_BalanceProvider activeProvider = LFPG_BalanceRegistry.GetActive();
-        if (activeProvider && activeProvider.GetName() != "Native")
+        if (!activeProvider || activeProvider.GetName() != "Native")
         {
-            LogClaimError("[LFPG_Balance_Native] Orphan claim refund held: active provider is " + activeProvider.GetName() + ", not Native; claim remains PENDING for admin migration uid=" + claim.uid, claim.uid, claim.deviceId);
+            string heldProvider = "none";
+            if (activeProvider)
+                heldProvider = activeProvider.GetName();
+            LogClaimError("[LFPG_Balance_Native] Orphan claim refund held: active provider is " + heldProvider + ", not Native; claim remains PENDING for admin migration uid=" + claim.uid, claim.uid, claim.deviceId);
             return false;
         }
 
