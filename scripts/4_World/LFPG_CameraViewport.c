@@ -64,6 +64,7 @@ static const int   LFPG_KC_ESCAPE = 1;
 static const int   LFPG_KC_W      = 17;
 static const int   LFPG_KC_Q      = 16;
 static const int   LFPG_KC_E      = 18;
+static const int   LFPG_KC_R      = 19;
 static const int   LFPG_KC_A      = 30;
 static const int   LFPG_KC_S      = 31;
 static const int   LFPG_KC_D      = 32;
@@ -71,8 +72,6 @@ static const int   LFPG_KC_SPACE  = 57;
 
 // Camera pan: slow pan speed, limited angles from base orientation
 static const float LFPG_CCTV_PAN_SPEED     = 30.0;   // degrees per second
-static const float LFPG_CCTV_YAW_LIMIT     = 90.0;   // +/- degrees horizontal
-static const float LFPG_CCTV_PITCH_LIMIT   = 45.0;   // +/- degrees vertical
 
 static const string LFPG_CCTV_LAYOUT = "LFPowerGrid/gui/layouts/LFPG_CCTVMenu.layout";
 
@@ -128,6 +127,8 @@ class LFPG_CameraViewport
     protected bool      m_KeyA;
     protected bool      m_KeyS;
     protected bool      m_KeyD;
+    protected bool      m_AimDirty;
+    protected int       m_AimReapplyFrames;
 
     // ---- Two-phase exit (COT pattern) ----
     // ---- Two-phase exit + server confirmation (COT pattern) ----
@@ -180,6 +181,8 @@ class LFPG_CameraViewport
         m_KeyA           = false;
         m_KeyS           = false;
         m_KeyD           = false;
+        m_AimDirty       = false;
+        m_AimReapplyFrames = 0;
         m_ExitPhase      = 0;
         m_ExitWaitTimer  = 0.0;
         m_ExitCooldown   = 0;
@@ -467,7 +470,7 @@ class LFPG_CameraViewport
             enterMsg = enterMsg + m_CameraLabel;
             enterMsg = enterMsg + " (1/";
             enterMsg = enterMsg + totalStr;
-            enterMsg = enterMsg + ")  SPACE=Salir  Q/E=Ciclar";
+            enterMsg = enterMsg + ")  SPACE=Salir  Q/E=Ciclar  R=Centrar";
             m_PlayerRef.MessageStatus(enterMsg);
         }
 
@@ -500,11 +503,27 @@ class LFPG_CameraViewport
         vector camOri = entry.m_Ori;
         m_CameraLabel = entry.m_Label;
 
+        m_BaseOrientation = camOri;
+        m_YawOffset = entry.m_YawOffset;
+        m_PitchOffset = entry.m_PitchOffset;
+        if (m_YawOffset > LFPG_CCTV_YAW_LIMIT)
+            m_YawOffset = LFPG_CCTV_YAW_LIMIT;
+        if (m_YawOffset < -LFPG_CCTV_YAW_LIMIT)
+            m_YawOffset = -LFPG_CCTV_YAW_LIMIT;
+        if (m_PitchOffset > LFPG_CCTV_PITCH_LIMIT)
+            m_PitchOffset = LFPG_CCTV_PITCH_LIMIT;
+        if (m_PitchOffset < -LFPG_CCTV_PITCH_LIMIT)
+            m_PitchOffset = -LFPG_CCTV_PITCH_LIMIT;
+
+        float viewYaw = camOri[0] + m_YawOffset;
+        float viewPitch = camOri[1] + m_PitchOffset;
+        vector viewOri = Vector(viewYaw, viewPitch, camOri[2]);
+
         // Offset position forward along camera look direction
         // to prevent the lens model from appearing in front of the view.
         // camOri already has the +90 yaw correction (server-side) so
         // yaw=0 means looking North(+Z). Forward = (sin(yaw), 0, cos(yaw)).
-        float yawRad = camOri[0] * Math.DEG2RAD;
+        float yawRad = viewYaw * Math.DEG2RAD;
         float fwdX = Math.Sin(yawRad) * LFPG_CCTV_LENS_OFFSET_M;
         float fwdZ = Math.Cos(yawRad) * LFPG_CCTV_LENS_OFFSET_M;
         float oX = camPos[0] + fwdX;
@@ -512,21 +531,22 @@ class LFPG_CameraViewport
         float oZ = camPos[2] + fwdZ;
         vector viewPos = Vector(oX, oY, oZ);
 
-        // Reset pan offsets for new camera view
-        m_BaseOrientation = camOri;
-        m_YawOffset   = 0.0;
-        m_PitchOffset = 0.0;
         m_KeyW = false;
         m_KeyA = false;
         m_KeyS = false;
         m_KeyD = false;
+        m_AimDirty = false;
 
         // Reusar objeto existente (cycling intra-sesión)
         if (m_ViewCamObj)
         {
             m_ViewCamObj.SetPosition(viewPos);
-            m_ViewCamObj.SetOrientation(camOri);
+            m_ViewCamObj.SetOrientation(viewOri);
             m_CameraIndex = index;
+            // The engine can restore the static camera's spawn orientation
+            // after this input/RPC callback. Reapply from normal update once
+            // that transition has settled so stored PTZ is visible at once.
+            m_AimReapplyFrames = 2;
             LFPG_Util.Debug("[CameraViewport] DIAG: Reused existing camera object");
             return true;
         }
@@ -545,17 +565,57 @@ class LFPG_CameraViewport
 
         currentCam.SetActive(true);
         currentCam.SetPosition(viewPos);
-        currentCam.SetOrientation(camOri);
+        currentCam.SetOrientation(viewOri);
         LFPG_Util.Debug("[CameraViewport] DIAG: Engine camera acquired + positioned OK");
 
         m_ViewCamObj  = currentCam;
         m_CameraIndex = index;
+        m_AimReapplyFrames = 2;
         return true;
+    }
+
+    protected void ApplyCurrentAim()
+    {
+        if (!m_ViewCamObj)
+            return;
+
+        float viewYaw = m_BaseOrientation[0] + m_YawOffset;
+        float viewPitch = m_BaseOrientation[1] + m_PitchOffset;
+        vector viewOri = Vector(viewYaw, viewPitch, m_BaseOrientation[2]);
+        m_ViewCamObj.SetOrientation(viewOri);
+    }
+
+    protected void CommitCurrentAim(bool forceCommit)
+    {
+        if (!m_CameraList || m_CameraIndex < 0 || m_CameraIndex >= m_CameraList.Count())
+            return;
+        if (!forceCommit && !m_AimDirty)
+            return;
+
+        LFPG_CameraListEntry entry = m_CameraList[m_CameraIndex];
+        if (!entry || (entry.m_NetLow == 0 && entry.m_NetHigh == 0))
+            return;
+
+        entry.m_YawOffset = m_YawOffset;
+        entry.m_PitchOffset = m_PitchOffset;
+
+        if (m_PlayerRef)
+        {
+            ScriptRPC aimRpc = new ScriptRPC();
+            aimRpc.Write((int)LFPG_RPC_SubId.CCTV_AIM);
+            aimRpc.Write(entry.m_NetLow);
+            aimRpc.Write(entry.m_NetHigh);
+            aimRpc.Write(m_YawOffset);
+            aimRpc.Write(m_PitchOffset);
+            aimRpc.Send(m_PlayerRef, LFPG_RPC_CHANNEL, true, null);
+        }
+
+        m_AimDirty = false;
     }
 
     // =========================================================
     // HandleKeyDown — desde MissionGameplay.OnKeyPress.
-    // WASD sets held flags. Q/E cycle. SPACE/ESC exit.
+    // WASD sets held flags. Q/E cycle. R centers. SPACE/ESC exits.
     // =========================================================
     bool HandleKeyDown(int key)
     {
@@ -578,6 +638,18 @@ class LFPG_CameraViewport
         if (key == LFPG_KC_Q)
         {
             CyclePrev();
+            return true;
+        }
+
+        if (key == LFPG_KC_R)
+        {
+            m_YawOffset = 0.0;
+            m_PitchOffset = 0.0;
+            m_AimDirty = true;
+            ApplyCurrentAim();
+            CommitCurrentAim(true);
+            if (m_PlayerRef)
+                m_PlayerRef.MessageStatus("[LFPG] Camera centrada.");
             return true;
         }
 
@@ -612,22 +684,30 @@ class LFPG_CameraViewport
     // =========================================================
     void HandleKeyUp(int key)
     {
+        bool releasedPanKey = false;
         if (key == LFPG_KC_W)
         {
             m_KeyW = false;
+            releasedPanKey = true;
         }
         if (key == LFPG_KC_A)
         {
             m_KeyA = false;
+            releasedPanKey = true;
         }
         if (key == LFPG_KC_S)
         {
             m_KeyS = false;
+            releasedPanKey = true;
         }
         if (key == LFPG_KC_D)
         {
             m_KeyD = false;
+            releasedPanKey = true;
         }
+
+        if (releasedPanKey)
+            CommitCurrentAim(false);
     }
 
     // =========================================================
@@ -639,6 +719,8 @@ class LFPG_CameraViewport
             return;
         if (m_CameraTotal <= 1)
             return;
+
+        CommitCurrentAim(false);
 
         int nextIdx = m_CameraIndex + 1;
         if (nextIdx >= m_CameraTotal)
@@ -658,6 +740,8 @@ class LFPG_CameraViewport
             return;
         if (m_CameraTotal <= 1)
             return;
+
+        CommitCurrentAim(false);
 
         int prevIdx = m_CameraIndex - 1;
         if (prevIdx < 0)
@@ -706,6 +790,8 @@ class LFPG_CameraViewport
         m_KeyA = false;
         m_KeyS = false;
         m_KeyD = false;
+        m_AimDirty = false;
+        m_AimReapplyFrames = 0;
 
         if (m_ViewCamObj)
         {
@@ -807,6 +893,8 @@ class LFPG_CameraViewport
         m_KeyA = false;
         m_KeyS = false;
         m_KeyD = false;
+        m_AimDirty = false;
+        m_AimReapplyFrames = 0;
         m_CameraList = null;
         m_CameraIndex = 0;
         m_CameraTotal = 0;
@@ -867,6 +955,10 @@ class LFPG_CameraViewport
         {
             LFPG_Util.Debug("[CameraViewport] DIAG: Phase 1 — m_Active=false + RPC EXIT_REQUEST");
 
+            // Final reliable commit before the session is ended and the
+            // camera list is released. This is a no-op when aim is unchanged.
+            CommitCurrentAim(false);
+
             m_Active       = false;
             m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
 
@@ -882,6 +974,8 @@ class LFPG_CameraViewport
             m_KeyA = false;
             m_KeyS = false;
             m_KeyD = false;
+            m_AimDirty = false;
+            m_AimReapplyFrames = 0;
             m_CameraList     = null;
             m_CameraIndex    = 0;
             m_CameraTotal    = 0;
@@ -924,6 +1018,15 @@ class LFPG_CameraViewport
 
         if (!m_Active)
             return;
+
+        // SelectSpectator/staticcamera may overwrite SetOrientation after
+        // EnterCamera returns. A short deferred reapply avoids showing center
+        // until the first pan input without adding a permanent per-frame set.
+        if (m_AimReapplyFrames > 0)
+        {
+            ApplyCurrentAim();
+            m_AimReapplyFrames = m_AimReapplyFrames - 1;
+        }
 
         // ---- Timeout ----
         m_ActiveDuration = m_ActiveDuration + timeslice;
@@ -994,6 +1097,8 @@ class LFPG_CameraViewport
         if (anyPan && m_ViewCamObj)
         {
             float panStep = LFPG_CCTV_PAN_SPEED * timeslice;
+            float oldYawOffset = m_YawOffset;
+            float oldPitchOffset = m_PitchOffset;
 
             // A/D = yaw (horizontal). A=left(-yaw), D=right(+yaw)
             if (m_KeyA)
@@ -1033,13 +1138,11 @@ class LFPG_CameraViewport
                 m_PitchOffset = -LFPG_CCTV_PITCH_LIMIT;
             }
 
-            // Apply: base orientation + offsets
-            // DayZ orientation vector: [yaw, pitch, roll]
-            float newYaw   = m_BaseOrientation[0] + m_YawOffset;
-            float newPitch = m_BaseOrientation[1] + m_PitchOffset;
-            float newRoll  = m_BaseOrientation[2];
-            vector panOri  = Vector(newYaw, newPitch, newRoll);
-            m_ViewCamObj.SetOrientation(panOri);
+            if (m_YawOffset != oldYawOffset || m_PitchOffset != oldPitchOffset)
+            {
+                m_AimDirty = true;
+                ApplyCurrentAim();
+            }
         }
 
         // ---- Scanlines advance ----

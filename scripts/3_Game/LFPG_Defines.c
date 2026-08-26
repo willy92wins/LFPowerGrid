@@ -332,7 +332,8 @@ enum LFPG_RPC_SubId
     REQUEST_DEVICE_SYNC_BATCH  = 71,  // v1.2.3: client->server coalesced missing/stale cable resync
     SYNC_OWNER_WIRES_DELTA      = 72,  // v1.2.3: server->client generation-checked wire mutation delta
     SYNC_OWNER_WIRES_V2         = 73,  // v1.2.3: server->client owner snapshot with explicit generation
-    SEARCHLIGHT_EXIT_V2         = 74   // v1.2.3: client->server final aim plus searchlight exit
+    SEARCHLIGHT_EXIT_V2         = 74,  // v1.2.3: client->server final aim plus searchlight exit
+    CCTV_AIM                    = 75   // Client->Server: committed camera PTZ offsets
 };
 
 enum LFPG_WireDeltaOp
@@ -743,6 +744,9 @@ static const float LFPG_SEARCHLIGHT_AIM_COOLDOWN_S    = 0.120;
 // Caps cached CCTV list re-send. Identification stays free (STOP-SESSION-01);
 // the client does not auto-retry, so 1 s does not block recovery.
 static const float LFPG_CCTV_REPLAY_COOLDOWN_S        = 1.0;
+static const float LFPG_CCTV_AIM_COOLDOWN_S           = 0.050;
+static const float LFPG_CCTV_YAW_LIMIT                = 90.0;
+static const float LFPG_CCTV_PITCH_LIMIT              = 45.0;
 static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // server raycast range
 static const float LFPG_SEARCHLIGHT_SHADOW_MAX_M      = 60.0;
 static const float LFPG_SEARCHLIGHT_FULL_M            = 120.0;

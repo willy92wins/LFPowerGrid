@@ -48,6 +48,8 @@ class LFPG_RPCGuard
             return POLICY_CCTV_SESSION;
         if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
             return POLICY_CCTV_SESSION;
+        if (subId == LFPG_RPC_SubId.CCTV_AIM)
+            return POLICY_CCTV_SESSION;
 
         if (subId == LFPG_RPC_SubId.SORTER_CONFIG_REQUEST)
             return POLICY_SORTER_DOSSIER_FROZEN;

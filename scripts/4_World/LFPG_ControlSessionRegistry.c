@@ -36,6 +36,11 @@ class LFPG_ControlSessionRecord
     ref array<vector> m_CameraPositions;
     ref array<vector> m_CameraOrientations;
     ref array<string> m_CameraLabels;
+    ref array<int> m_CameraNetLows;
+    ref array<int> m_CameraNetHighs;
+    ref array<string> m_CameraDeviceIds;
+    ref array<float> m_CameraYaws;
+    ref array<float> m_CameraPitches;
 
     float m_SearchlightYaw;
     float m_SearchlightPitch;
@@ -84,7 +89,7 @@ class LFPG_ControlSessionRegistry
         return true;
     }
 
-    LFPG_ControlSessionRecord BeginCCTV(PlayerIdentity identity, PlayerBase player, LFPG_Monitor monitor, int deviceNetLow, int deviceNetHigh, int cameraCount, array<vector> cameraPositions, array<vector> cameraOrientations, array<string> cameraLabels)
+    LFPG_ControlSessionRecord BeginCCTV(PlayerIdentity identity, PlayerBase player, LFPG_Monitor monitor, int deviceNetLow, int deviceNetHigh, int cameraCount, array<vector> cameraPositions, array<vector> cameraOrientations, array<string> cameraLabels, array<int> cameraNetLows, array<int> cameraNetHighs, array<string> cameraDeviceIds, array<float> cameraYaws, array<float> cameraPitches)
     {
         if (!identity || !player || !monitor)
             return null;
@@ -107,6 +112,12 @@ class LFPG_ControlSessionRegistry
         record.m_CameraPositions = cameraPositions;
         record.m_CameraOrientations = cameraOrientations;
         record.m_CameraLabels = cameraLabels;
+        record.m_CameraNetLows = cameraNetLows;
+        record.m_CameraNetHighs = cameraNetHighs;
+        record.m_CameraDeviceIds = cameraDeviceIds;
+        record.m_CameraYaws = cameraYaws;
+        record.m_CameraPitches = cameraPitches;
+        record.m_AimLimiter = new LFPG_RateLimiter();
         record.m_ReplayLimiter = new LFPG_RateLimiter();
         m_ByUID.Set(uid, record);
         return record;
@@ -157,6 +168,68 @@ class LFPG_ControlSessionRegistry
         return record.m_ReplayLimiter.Allow(nowSeconds, LFPG_CCTV_REPLAY_COOLDOWN_S);
     }
 
+    bool AllowCCTVAim(LFPG_ControlSessionRecord record, float nowSeconds)
+    {
+        if (!record || !record.m_AimLimiter)
+            return false;
+
+        return record.m_AimLimiter.Allow(nowSeconds, LFPG_CCTV_AIM_COOLDOWN_S);
+    }
+
+    int FindCCTVCameraIndex(LFPG_ControlSessionRecord record, int cameraNetLow, int cameraNetHigh)
+    {
+        if (!record || record.m_Kind != LFPG_CONTROL_KIND_CCTV)
+            return -1;
+        if (record.m_State != LFPG_CONTROL_STATE_ENTERING && record.m_State != LFPG_CONTROL_STATE_ACTIVE)
+            return -1;
+        if (!record.m_CameraNetLows || !record.m_CameraNetHighs)
+            return -1;
+
+        int cameraIndex = 0;
+        while (cameraIndex < record.m_CameraCount)
+        {
+            if (cameraIndex >= record.m_CameraNetLows.Count() || cameraIndex >= record.m_CameraNetHighs.Count())
+                return -1;
+            if (record.m_CameraNetLows[cameraIndex] == cameraNetLow && record.m_CameraNetHighs[cameraIndex] == cameraNetHigh)
+                return cameraIndex;
+            cameraIndex = cameraIndex + 1;
+        }
+        return -1;
+    }
+
+    string GetCCTVCameraDeviceId(LFPG_ControlSessionRecord record, int cameraIndex)
+    {
+        if (!record || !record.m_CameraDeviceIds)
+            return "";
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraDeviceIds.Count())
+            return "";
+        return record.m_CameraDeviceIds[cameraIndex];
+    }
+
+    void UpdateCCTVAimCache(LFPG_ControlSessionRecord record, int cameraIndex, float yaw, float pitch)
+    {
+        if (!record || !record.m_CameraYaws || !record.m_CameraPitches)
+            return;
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraYaws.Count() || cameraIndex >= record.m_CameraPitches.Count())
+            return;
+
+        record.m_CameraYaws[cameraIndex] = yaw;
+        record.m_CameraPitches[cameraIndex] = pitch;
+    }
+
+    void UpdateAllCCTVAimCaches(int cameraNetLow, int cameraNetHigh, float yaw, float pitch)
+    {
+        int sessionIndex = 0;
+        while (sessionIndex < m_ByUID.Count())
+        {
+            LFPG_ControlSessionRecord record = m_ByUID.GetElement(sessionIndex);
+            int cameraIndex = FindCCTVCameraIndex(record, cameraNetLow, cameraNetHigh);
+            if (cameraIndex >= 0)
+                UpdateCCTVAimCache(record, cameraIndex, yaw, pitch);
+            sessionIndex = sessionIndex + 1;
+        }
+    }
+
     void MarkActive(LFPG_ControlSessionRecord record)
     {
         if (!record)
@@ -185,6 +258,8 @@ class LFPG_ControlSessionRegistry
             return false;
         if (!record.m_CameraPositions || !record.m_CameraOrientations || !record.m_CameraLabels)
             return false;
+        if (!record.m_CameraNetLows || !record.m_CameraNetHighs || !record.m_CameraDeviceIds || !record.m_CameraYaws || !record.m_CameraPitches)
+            return false;
         if (record.m_CameraCount <= 0)
             return false;
         if (record.m_CameraPositions.Count() < record.m_CameraCount)
@@ -192,6 +267,16 @@ class LFPG_ControlSessionRegistry
         if (record.m_CameraOrientations.Count() < record.m_CameraCount)
             return false;
         if (record.m_CameraLabels.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraNetLows.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraNetHighs.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraDeviceIds.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraYaws.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraPitches.Count() < record.m_CameraCount)
             return false;
 
         ScriptRPC rpc = new ScriptRPC();
@@ -220,6 +305,10 @@ class LFPG_ControlSessionRegistry
             writeFloat = writeOri[2];
             rpc.Write(writeFloat);
             rpc.Write(record.m_CameraLabels[cameraIndex]);
+            rpc.Write(record.m_CameraNetLows[cameraIndex]);
+            rpc.Write(record.m_CameraNetHighs[cameraIndex]);
+            rpc.Write(record.m_CameraYaws[cameraIndex]);
+            rpc.Write(record.m_CameraPitches[cameraIndex]);
             cameraIndex = cameraIndex + 1;
         }
 

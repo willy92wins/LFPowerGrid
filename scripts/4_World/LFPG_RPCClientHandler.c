@@ -227,7 +227,8 @@ class LFPG_RPCClientHandler
 
         ref array<ref LFPG_CameraListEntry> entries = new array<ref LFPG_CameraListEntry>;
 
-        // Read per-camera data: 3 floats pos + 3 floats ori + 1 string label
+        // Read per-camera data: position, base orientation, label, entity
+        // NetworkID, and the entity-owned persisted PTZ offsets.
         float readPx = 0.0;
         float readPy = 0.0;
         float readPz = 0.0;
@@ -235,6 +236,10 @@ class LFPG_RPCClientHandler
         float readOy = 0.0;
         float readOz = 0.0;
         string readLabel = "";
+        int readNetLow = 0;
+        int readNetHigh = 0;
+        float readYawOffset = 0.0;
+        float readPitchOffset = 0.0;
         vector assembledPos = "0 0 0";
         vector assembledOri = "0 0 0";
         int ri = 0;
@@ -255,6 +260,14 @@ class LFPG_RPCClientHandler
                 break;
             if (!ctx.Read(readLabel))
                 break;
+            if (!ctx.Read(readNetLow))
+                break;
+            if (!ctx.Read(readNetHigh))
+                break;
+            if (!ctx.Read(readYawOffset))
+                break;
+            if (!ctx.Read(readPitchOffset))
+                break;
 
             assembledPos[0] = readPx;
             assembledPos[1] = readPy;
@@ -267,6 +280,10 @@ class LFPG_RPCClientHandler
             entry.m_Pos   = assembledPos;
             entry.m_Ori   = assembledOri;
             entry.m_Label = readLabel;
+            entry.m_NetLow = readNetLow;
+            entry.m_NetHigh = readNetHigh;
+            entry.m_YawOffset = readYawOffset;
+            entry.m_PitchOffset = readPitchOffset;
             entries.Insert(entry);
 
             ri = ri + 1;

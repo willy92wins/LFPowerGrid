@@ -47,6 +47,15 @@ class LFPG_RPCServerHandler
             return;
         }
 
+        // CCTV aim remains routable while SelectPlayer(null) detaches the
+        // identity from its PlayerBase. Authorization comes exclusively from
+        // the server-owned CCTV session camera allowlist.
+        if (subId == LFPG_RPC_SubId.CCTV_AIM)
+        {
+            HandleCCTVAim(sender, ctx);
+            return;
+        }
+
         PlayerBase realPlayer = PlayerBase.Cast(sender.GetPlayer());
         if (!realPlayer)
         {
@@ -1107,6 +1116,11 @@ class LFPG_RPCServerHandler
         ref array<vector> camPositions = new array<vector>;
         ref array<vector> camOrientations = new array<vector>;
         ref array<string> camLabels = new array<string>;
+        ref array<int> camNetLows = new array<int>;
+        ref array<int> camNetHighs = new array<int>;
+        ref array<string> camDeviceIds = new array<string>;
+        ref array<float> camYaws = new array<float>;
+        ref array<float> camPitches = new array<float>;
 
         EntityAI camEnt = null;
         LFPG_Camera cam = null;
@@ -1117,6 +1131,8 @@ class LFPG_RPCServerHandler
         vector rawOri = "0 0 0";
         float adjYaw = 0.0;
         vector adjOri = "0 0 0";
+        int camNetLow = 0;
+        int camNetHigh = 0;
 
         while (wi < wires.Count())
         {
@@ -1143,6 +1159,15 @@ class LFPG_RPCServerHandler
             if (!cam)
                 continue;
 
+            camNetLow = 0;
+            camNetHigh = 0;
+            cam.GetNetworkID(camNetLow, camNetHigh);
+            if (camNetLow == 0 && camNetHigh == 0)
+            {
+                LFPG_Util.Warn("[RequestCameraList] camera has invalid NetworkID: " + camDevId);
+                continue;
+            }
+
             // Build label: CAM-XXXXXX (last 6 chars of deviceId)
             idLen = camDevId.Length();
             if (idLen > 6)
@@ -1163,6 +1188,11 @@ class LFPG_RPCServerHandler
             adjOri = Vector(adjYaw, rawOri[1], rawOri[2]);
             camOrientations.Insert(adjOri);
             camLabels.Insert(camLabel);
+            camNetLows.Insert(camNetLow);
+            camNetHighs.Insert(camNetHigh);
+            camDeviceIds.Insert(camDevId);
+            camYaws.Insert(cam.LFPG_GetPTZYaw());
+            camPitches.Insert(cam.LFPG_GetPTZPitch());
             camCount = camCount + 1;
 
             if (camCount >= LFPG_MONITOR_MAX_CAMERAS)
@@ -1178,7 +1208,7 @@ class LFPG_RPCServerHandler
             return;
         }
 
-        LFPG_ControlSessionRecord cameraSession = sessions.BeginCCTV(sender, player, monitor, monNetLow, monNetHigh, camCount, camPositions, camOrientations, camLabels);
+        LFPG_ControlSessionRecord cameraSession = sessions.BeginCCTV(sender, player, monitor, monNetLow, monNetHigh, camCount, camPositions, camOrientations, camLabels, camNetLows, camNetHighs, camDeviceIds, camYaws, camPitches);
         if (!cameraSession)
         {
             LFPG_Util.Warn("[RequestCameraList] control session registration failed");
@@ -1256,6 +1286,71 @@ class LFPG_RPCServerHandler
         string logMsg = "[CCTV_EXIT] SelectPlayer + confirm sent for ";
         logMsg = logMsg + sender.GetName();
         LFPG_Util.Info(logMsg);
+    }
+
+    static void HandleCCTVAim(PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        if (!sender)
+            return;
+
+        int cameraNetLow = 0;
+        int cameraNetHigh = 0;
+        float aimYaw = 0.0;
+        float aimPitch = 0.0;
+        if (!ctx.Read(cameraNetLow))
+            return;
+        if (!ctx.Read(cameraNetHigh))
+            return;
+        if (!ctx.Read(aimYaw))
+            return;
+        if (!ctx.Read(aimPitch))
+            return;
+
+        if (LFPG_Camera.LFPG_IsInvalidPTZValue(aimYaw) || LFPG_Camera.LFPG_IsInvalidPTZValue(aimPitch))
+        {
+            LFPG_Util.RateLimitedWarn(sender, "cctv_non_finite_aim", "[CCTV_AIM] Rejected non-finite PTZ input");
+            return;
+        }
+
+        if (aimYaw > LFPG_CCTV_YAW_LIMIT)
+            aimYaw = LFPG_CCTV_YAW_LIMIT;
+        if (aimYaw < -LFPG_CCTV_YAW_LIMIT)
+            aimYaw = -LFPG_CCTV_YAW_LIMIT;
+        if (aimPitch > LFPG_CCTV_PITCH_LIMIT)
+            aimPitch = LFPG_CCTV_PITCH_LIMIT;
+        if (aimPitch < -LFPG_CCTV_PITCH_LIMIT)
+            aimPitch = -LFPG_CCTV_PITCH_LIMIT;
+
+        LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
+        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        if (!sessions)
+            return;
+
+        LFPG_ControlSessionRecord record = sessions.Get(sender);
+        int cameraIndex = sessions.FindCCTVCameraIndex(record, cameraNetLow, cameraNetHigh);
+        if (cameraIndex < 0)
+        {
+            manager.AllowPlayerAction(sender);
+            LFPG_Util.RateLimitedWarn(sender, "cctv_aim_camera_denied", "[CCTV_AIM] Camera is not in sender's active CCTV session");
+            return;
+        }
+
+        float nowSeconds = g_Game.GetTime() * 0.001;
+        if (!sessions.AllowCCTVAim(record, nowSeconds))
+            return;
+
+        Object cameraObject = g_Game.GetObjectByNetworkId(cameraNetLow, cameraNetHigh);
+        LFPG_Camera camera = LFPG_Camera.Cast(cameraObject);
+        if (!camera || camera.IsRuined())
+            return;
+        if (camera.LFPG_GetDeviceId() != sessions.GetCCTVCameraDeviceId(record, cameraIndex))
+        {
+            LFPG_Util.RateLimitedWarn(sender, "cctv_aim_camera_reused", "[CCTV_AIM] Camera NetworkID no longer matches the active session");
+            return;
+        }
+
+        camera.LFPG_SetPTZ(aimYaw, aimPitch);
+        sessions.UpdateAllCCTVAimCaches(cameraNetLow, cameraNetHigh, aimYaw, aimPitch);
     }
 
     static bool RefreshSearchlightSplash(LFPG_Searchlight sl, float aimYaw, float aimPitch, bool forceRefresh)
