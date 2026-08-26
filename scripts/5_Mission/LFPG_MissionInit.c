@@ -14,6 +14,9 @@ modded class MissionServer
     override void OnInit()
     {
         super.OnInit();
+        // Entities restored inside super.OnInit() can reconcile before the
+        // mission is reachable; this drains anything that had to wait.
+        LFPG_AtmStock.DrainPendingReconcile(this);
         LFPG_NetworkManager initNm = LFPG_NetworkManager.Get();
         if (initNm) initNm.StartServerScheduler();
         Print(LFPG_LOG_PREFIX + "MissionServer OnInit (v" + LFPG_VERSION_STR + ")");
@@ -21,7 +24,7 @@ modded class MissionServer
 
     void LFPG_RunOrphanSweep()
     {
-        LFPG_BalanceProvider_Native.SweepOrphanClaims();
+        LFPG_BalanceProvider_NativeImpl.SweepOrphanClaims();
     }
 
     override void OnMissionStart()
@@ -29,7 +32,7 @@ modded class MissionServer
         super.OnMissionStart();
         // This one-shot entry point owns no handler state or staged references.
         // BTC handlers remain synchronous; their IN_FLIGHT assumption is unchanged.
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_RunOrphanSweep, LFPG_BalanceProvider_Native.LFPG_BTC_ORPHAN_SWEEP_DELAY_MS, false);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_RunOrphanSweep, LFPG_BalanceProvider_NativeImpl.LFPG_BTC_ORPHAN_SWEEP_DELAY_MS, false);
     }
 
     override void OnMissionFinish()
@@ -42,10 +45,10 @@ modded class MissionServer
         }
         LFPG_BalanceProvider activeBalance = LFPG_BalanceRegistry.GetActive();
         if (activeBalance && activeBalance.GetName() == "Native")
-            LFPG_BalanceProvider_Native.FlushBalanceOnShutdown();
+            LFPG_BalanceProvider_NativeImpl.FlushBalanceOnShutdown();
         if (GetGame())
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_RunOrphanSweep);
-        LFPG_BalanceProvider_Native.ResetMissionClaimState();
+        LFPG_BalanceProvider_NativeImpl.ResetMissionClaimState();
         super.OnMissionFinish();
     }
 
@@ -56,6 +59,31 @@ modded class MissionServer
     override void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx)
     {
         LFPG_RPCServerHandlerImpl.Dispatch(player, sender, subId, ctx);
+    }
+
+    override bool LFPG_AtmCanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+    {
+        return LFPG_BalanceProvider_NativeImpl.CanPrepareStockMutation(deviceId, stockBefore, stockTarget);
+    }
+
+    override bool LFPG_AtmPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+    {
+        return LFPG_BalanceProvider_NativeImpl.PrepareStockMutation(deviceId, stockBefore, stockTarget);
+    }
+
+    override void LFPG_AtmReconcileLoaded(LFPG_BTCAtmBase atm)
+    {
+        LFPG_BalanceProvider_NativeImpl.ReconcileLoadedAtm(atm);
+    }
+
+    override int LFPG_NativeGetPlayerBalance(string uid)
+    {
+        return LFPG_BalanceProvider_NativeImpl.ReadPlayerBalance(uid);
+    }
+
+    override bool LFPG_NativeSetPlayerBalance(string uid, int balance)
+    {
+        return LFPG_BalanceProvider_NativeImpl.WritePlayerBalance(uid, balance);
     }
 };
 

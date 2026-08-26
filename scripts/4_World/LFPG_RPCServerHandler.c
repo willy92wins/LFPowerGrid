@@ -4,7 +4,8 @@
 // Handler bodies are hosted by the mission layer; this facade only
 // forwards the single dispatch seam so the World arena carries the
 // entry point, not the ~3k lines of handlers.
-// Mirrors the LFPG_ElecGraph factory idiom (LFPG_NetworkManager.c:559).
+// Mirrors the LFPG_ElecGraph MissionBaseWorld seam (LFPG_CreateElecGraph
+// declared in LFPG_PlayerRPC.c; server override in LFPG_MissionInit.c).
 // =========================================================
 
 class LFPG_RPCServerHandler

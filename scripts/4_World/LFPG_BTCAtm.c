@@ -89,7 +89,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         if (stock == m_BtcStock)
             return;
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, stock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, stock))
             return;
 
         m_BtcStock = stock;
@@ -108,7 +108,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
             return false;
         int newStock = m_BtcStock + count;
         string deviceId = LFPG_GetDeviceId();
-        return LFPG_BalanceProvider_Native.CanPrepareStockMutation(deviceId, m_BtcStock, newStock);
+        return LFPG_AtmStock.CanPrepareStockMutation(deviceId, m_BtcStock, newStock);
         #else
         return false;
         #endif
@@ -128,7 +128,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         newStock = newStock + amount;
 
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, newStock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, newStock))
             return false;
 
         m_BtcStock = newStock;
@@ -150,7 +150,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
 
         int newStock = m_BtcStock - amount;
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, newStock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, newStock))
             return false;
 
         m_BtcStock = newStock;
@@ -319,7 +319,11 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
     override void AfterStoreLoad()
     {
         super.AfterStoreLoad();
-        LFPG_BalanceProvider_Native.ReconcileLoadedAtm(this);
+        // Reconcile is a server persistence concern; the client VM must not
+        // feed the pre-mission queue (nothing drains it there).
+        #ifdef SERVER
+        LFPG_AtmStock.ReconcileLoadedAtm(this);
+        #endif
     }
 
     // ============================================

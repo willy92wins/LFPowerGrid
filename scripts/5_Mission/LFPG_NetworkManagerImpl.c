@@ -534,7 +534,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_BTCConfig.Load();
 
         // v5.1: Balance provider registry
-        LFPG_BalanceProvider_Native nativeProv = new LFPG_BalanceProvider_Native();
+        LFPG_BalanceProvider_NativeImpl nativeProv = new LFPG_BalanceProvider_NativeImpl();
         LFPG_BalanceRegistry.Register(nativeProv);
         #ifdef LBmaster_Core
         LFPG_BalanceProvider_LBmaster lbProv = new LFPG_BalanceProvider_LBmaster();

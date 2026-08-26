@@ -37,6 +37,18 @@ modded class MissionBaseWorld
     // Server RPC handlers live in the mission arena; the World arena only
     // carries this seam. Base is a no-op so a client mission drops silently.
     void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx) { }
+
+    // ATM stock belongs to the native balance implementation, which lives in the
+    // mission arena. Routed here and NOT through LFPG_BalanceRegistry: the active
+    // balance provider answers who holds the player EUR, which is a different
+    // question and is LBmaster on servers that run it.
+    bool LFPG_AtmCanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
+    bool LFPG_AtmPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
+    void LFPG_AtmReconcileLoaded(LFPG_BTCAtmBase atm) { }
+
+    // Published to external mods from the World arena; implemented in Mission.
+    int LFPG_NativeGetPlayerBalance(string uid) { return 0; }
+    bool LFPG_NativeSetPlayerBalance(string uid, int balance) { return false; }
 };
 
 modded class PlayerBase

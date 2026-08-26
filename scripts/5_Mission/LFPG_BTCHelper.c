@@ -1034,7 +1034,7 @@ class LFPG_BTCHelper
             int stockTarget = currentStock + btcAmount;
             int claimedDebit = 0;
             string deviceId = atm.LFPG_GetDeviceId();
-            bool claimSaved = LFPG_BalanceProvider_Native.DebitWithStockClaim(player, deviceId, serverSessionLow, serverSessionHigh, sequence, costInt, currentStock, stockTarget, claimedDebit);
+            bool claimSaved = LFPG_BalanceProvider_NativeImpl.DebitWithStockClaim(player, deviceId, serverSessionLow, serverSessionHigh, sequence, costInt, currentStock, stockTarget, claimedDebit);
             if (!claimSaved || claimedDebit != costInt)
             {
                 int claimBalance = atmEarly.GetBalance(player);
@@ -1048,7 +1048,7 @@ class LFPG_BTCHelper
                 stockApplied = false;
             if (!stockApplied)
             {
-                LFPG_BalanceProvider_Native.MarkStockClaimApplyFailed(deviceId);
+                LFPG_BalanceProvider_NativeImpl.MarkStockClaimApplyFailed(deviceId);
                 int applyBalance = atmEarly.GetBalance(player);
                 int errApply = LFPG_BTC_ERR_INVALID;
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errApply, atm.LFPG_GetBtcStock(), applyBalance, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
@@ -1331,7 +1331,18 @@ class LFPG_BTCHelper
         LFPG_BTCInventoryPlan sellCashPlan = new LFPG_BTCInventoryPlan();
         float nextCashDecimalRemainder = 0.0;
         bool nativeAccountRoomKnown = (atmEarlyS.GetName() == "Native");
-        if (toAccount && nativeAccountRoomKnown && !LFPG_BalanceProvider_Native.IsClaimStoreWritable())
+        // Mirror of the account-buy gate: account credit is implemented only
+        // by Native. A sell requested "to account" with an external provider
+        // fails closed before any reservation or destruction instead of
+        // silently degrading to a cash payout.
+        if (toAccount && !nativeAccountRoomKnown)
+        {
+            int errProviderSell = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL, errProviderSell, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            LFPG_Util.Error("[BTCSell] non-Native provider; account Sell rejected before reservation/destruction");
+            return;
+        }
+        if (toAccount && nativeAccountRoomKnown && !LFPG_BalanceProvider_NativeImpl.IsClaimStoreWritable())
         {
             int errNativeStore = LFPG_BTC_ERR_INVALID;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL, errNativeStore, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
@@ -1359,7 +1370,7 @@ class LFPG_BTCHelper
             float combinedExpectedRemainder = storedRemainderExpected + fractionalExpected;
             expectedCarry = (int)combinedExpectedRemainder;
             nextDecimalRemainder = combinedExpectedRemainder - expectedCarry;
-            if (eurIntExpected > LFPG_BalanceProvider_Native.GetBalanceCap() - expectedCarry)
+            if (eurIntExpected > LFPG_BalanceProvider_NativeImpl.GetBalanceCap() - expectedCarry)
             {
                 int errCarryOverflow = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL, errCarryOverflow, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
@@ -1368,7 +1379,7 @@ class LFPG_BTCHelper
             expectedIntegerPayout = eurIntExpected + expectedCarry;
             if (nativeAccountRoomKnown)
             {
-                accountRoom = LFPG_BalanceProvider_Native.GetBalanceCap() - earlyBalS;
+                accountRoom = LFPG_BalanceProvider_NativeImpl.GetBalanceCap() - earlyBalS;
                 if (accountRoom < 0)
                     accountRoom = 0;
                 if (accountRoom > expectedIntegerPayout)
@@ -1828,10 +1839,14 @@ class LFPG_BTCHelper
             return;
         }
 
-        bool stockAddedDep = atm.LFPG_AddBtcStock(destroyed);
-        // INSTRUMENTACION TEST-ONLY 2026-05-17 — REVERTIR ANTES DE COMMIT
+        // Permanent QA hook: the forced failure must SKIP the real mutation.
+        // Forcing the flag after LFPG_AddBtcStock ran would leave the stock
+        // incremented while the refund branch restores the items (BTC dupe).
+        bool stockAddedDep;
         if (LFPG_DebugForceAddStockFail)
             stockAddedDep = false;
+        else
+            stockAddedDep = atm.LFPG_AddBtcStock(destroyed);
         if (!stockAddedDep)
         {
             // Race after pre-check. Restore destroyed items best-effort.
