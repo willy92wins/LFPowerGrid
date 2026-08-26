@@ -3,6 +3,17 @@
 
 class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 {
+    // Call sites hold the facade type, but the session registry only exists
+    // on the implementation. Returns null rather than throwing when no
+    // mission could build the manager; every caller already guards on null.
+    static LFPG_ControlSessionRegistry Sessions()
+    {
+        LFPG_NetworkManagerImpl impl = LFPG_NetworkManagerImpl.Cast(LFPG_NetworkManager.Get());
+        if (!impl)
+            return null;
+        return impl.GetControlSessionRegistry();
+    }
+
     protected ref LFPG_ControlSessionRegistry m_ControlSessions;
 
     // Per-player anti-spam
@@ -376,7 +387,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected ref map<string, int>    m_TrackedDeviceIndex;
     protected int                     m_TrackCursor;
 
-    void LFPG_NetworkManager()
+    void LFPG_NetworkManagerImpl()
     {
         m_RateByPlayer = new TStringManagedRefMap;
         m_RateWindowStart = new map<string, float>;

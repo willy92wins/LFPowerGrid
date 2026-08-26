@@ -44,20 +44,29 @@ class LFPG_OwnerBroadcastSnapshot
 class LFPG_NetworkManager
 {
     protected static ref LFPG_NetworkManager s_Instance;
+    // Inert stand-in handed out while no mission can build the real manager.
+    // Deliberately NOT stored in s_Instance: caching it there would pin every
+    // later Get() to the dead facade for the rest of the session, including
+    // after a real mission appears. MissionMainMenu reaches MissionBaseWorld
+    // without the factory override, so that path is reachable from the menu.
+    protected static ref LFPG_NetworkManager s_Fallback;
+
     static LFPG_NetworkManager Get()
     {
-        if (!s_Instance)
+        if (s_Instance)
+            return s_Instance;
+        if (g_Game)
         {
             MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
             if (mw)
                 s_Instance = mw.LFPG_CreateNetworkManager();
-            if (!s_Instance)
-            {
-                LFPG_Util.Error("[LFPG_NetworkManager] Mission factory unavailable - fallback base manager (sim degraded)");
-                s_Instance = new LFPG_NetworkManager();
-            }
         }
-        return s_Instance;
+        if (s_Instance)
+            return s_Instance;
+        LFPG_Util.Error("[LFPG_NetworkManager] Mission factory unavailable - inert manager for this call");
+        if (!s_Fallback)
+            s_Fallback = new LFPG_NetworkManager();
+        return s_Fallback;
     }
 
     static LFPG_NetworkManager GetExisting()
