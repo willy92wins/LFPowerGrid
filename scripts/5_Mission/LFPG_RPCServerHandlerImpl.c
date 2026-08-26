@@ -1020,7 +1020,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1226,7 +1226,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1249,7 +1249,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1314,7 +1314,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1465,7 +1465,7 @@ class LFPG_RPCServerHandlerImpl
             aimPitch = LFPG_SEARCHLIGHT_PITCH_MAX;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1534,7 +1534,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 
@@ -1566,7 +1566,7 @@ class LFPG_RPCServerHandlerImpl
             return;
 
         LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
-        LFPG_ControlSessionRegistry sessions = manager.GetControlSessionRegistry();
+        LFPG_ControlSessionRegistry sessions = LFPG_NetworkManagerImpl.Cast(manager).GetControlSessionRegistry();
         if (!sessions)
             return;
 

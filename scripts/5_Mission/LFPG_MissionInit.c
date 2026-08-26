@@ -51,6 +51,8 @@ modded class MissionServer
 
     override LFPG_ElecGraph LFPG_CreateElecGraph() { return new LFPG_ElecGraphImpl(); }
 
+    override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
+
     override void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx)
     {
         LFPG_RPCServerHandlerImpl.Dispatch(player, sender, subId, ctx);
@@ -60,6 +62,8 @@ modded class MissionServer
 #ifndef SERVER
 modded class MissionGameplay
 {
+    override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
+
     protected bool m_LFPG_WasActive      = false;
     protected bool m_LFPG_SyncRequested   = false;
     protected bool m_LFPG_WidgetsCreated  = false;
