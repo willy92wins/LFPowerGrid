@@ -711,7 +711,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (!ident) return false;
 
-        string pid = ident.GetPlainId();
+        // Log-safe id: this key only indexes in-process rate-limit maps and
+        // is printed in the sliding-window warning below.
+        string pid = ident.GetId();
         LFPG_ServerSettings st = LFPG_Settings.Get();
         float now = g_Game.GetTime() * 0.001;
 

@@ -111,7 +111,7 @@ class LFPG_BTCSessionRegistry
         if (!identity)
             return null;
 
-        string uid = identity.GetPlainId();
+        string uid = identity.GetId();
         if (uid == "")
             return null;
         return m_ByUID.Get(uid);
@@ -122,7 +122,9 @@ class LFPG_BTCSessionRegistry
         if (!identity)
             return null;
 
-        string uid = identity.GetPlainId();
+        // Log-safe id: m_UID reaches LFPG_Util.Warn below, and this registry
+        // is process-lifetime state that is never persisted.
+        string uid = identity.GetId();
         if (uid == "")
             return null;
 
