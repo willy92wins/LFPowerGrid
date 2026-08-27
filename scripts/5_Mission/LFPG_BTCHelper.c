@@ -548,15 +548,20 @@ class LFPG_BTCHelper
         if (groundDrops > 0)
         {
             // Ground drops are unowned and takeable by anyone nearby. Warn level
-            // with uid and position so a theft claim can be traced offline; the
+            // with id and position so a theft claim can be traced offline; the
             // client message names the count so the recipient reacts at once.
+            // GetId (hashed) is the log-safe identifier: gameplay.c:369-370
+            // states GetPlainId cannot be used in logs.
+            // Staging-time report: a caller that aborts afterwards deletes these
+            // objects through LFPG_BTCInventoryPlan.AbortOutputs, so the line is
+            // labelled staged and is not by itself proof of a delivered drop.
             string dropUid = "unknown";
             PlayerIdentity dropIdentity = player.GetIdentity();
             if (dropIdentity)
-                dropUid = dropIdentity.GetPlainId();
+                dropUid = dropIdentity.GetId();
             string dropMsg = "[BTC] ";
             dropMsg = dropMsg + groundDrops.ToString();
-            dropMsg = dropMsg + " stacks dropped on ground (inventory full) cls=";
+            dropMsg = dropMsg + " stacks staged on ground (inventory full; may be rolled back by the caller) cls=";
             dropMsg = dropMsg + classname;
             dropMsg = dropMsg + " uid=";
             dropMsg = dropMsg + dropUid;
