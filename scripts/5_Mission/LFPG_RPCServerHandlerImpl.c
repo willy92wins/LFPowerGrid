@@ -62,13 +62,13 @@ class LFPG_RPCServerHandlerImpl
                 HandleCameraListReplayOnly(sender, ctx);
                 return;
             }
-            string nullMsg = "[LFPG_RPC] Dispatch: sender.GetPlayer() null, dropping subId=" + subId.ToString() + " sender=" + sender.GetPlainId();
+            string nullMsg = "[LFPG_RPC] Dispatch: sender.GetPlayer() null, dropping subId=" + subId.ToString() + " sender=" + sender.GetId();
             LFPG_Util.RateLimitedWarn(sender, "rpc_null_player", nullMsg);
             return;
         }
         if (player != realPlayer)
         {
-            string mismatchMsg = "[LFPG_RPC] target mismatch from " + sender.GetPlainId() + " subId=" + subId.ToString() + " â€” rebinding to realPlayer";
+            string mismatchMsg = "[LFPG_RPC] target mismatch from " + sender.GetId() + " subId=" + subId.ToString() + " â€” rebinding to realPlayer";
             LFPG_Util.RateLimitedWarn(sender, "rpc_target_mismatch", mismatchMsg);
             player = realPlayer;
         }
@@ -223,7 +223,7 @@ class LFPG_RPCServerHandlerImpl
     {
         if (!sender) return;
 
-        LFPG_Util.Debug("[FinishWiring-Server] RPC received from pid=" + sender.GetPlainId());
+        LFPG_Util.Debug("[FinishWiring-Server] RPC received from pid=" + sender.GetId());
 
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
@@ -1944,7 +1944,7 @@ class LFPG_RPCServerHandlerImpl
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
             return;
 
-        LFPG_Util.Info("FullSync requested by pid=" + sender.GetPlainId());
+        LFPG_Util.Info("FullSync requested by pid=" + sender.GetId());
         
         LFPG_NetworkManager.Get().SendFullSyncTo(player);
 
@@ -2129,7 +2129,7 @@ class LFPG_RPCServerHandlerImpl
             perfBatch = perfBatch + " devices=";
             perfBatch = perfBatch + requestCount.ToString();
             perfBatch = perfBatch + " pid=";
-            perfBatch = perfBatch + sender.GetPlainId();
+            perfBatch = perfBatch + sender.GetId();
             Print(perfBatch);
         }
         #endif
@@ -2170,7 +2170,7 @@ class LFPG_RPCServerHandlerImpl
             string perfDirty = "LFPG_PERFDIAG resync_batch_dirty count=";
             perfDirty = perfDirty + dirtyCount.ToString();
             perfDirty = perfDirty + " pid=";
-            perfDirty = perfDirty + sender.GetPlainId();
+            perfDirty = perfDirty + sender.GetId();
             Print(perfDirty);
         }
         #endif
@@ -2232,19 +2232,19 @@ class LFPG_RPCServerHandlerImpl
         int netLow = 0;
         if (!ctx.Read(netLow))
         {
-            LFPG_Util.Warn("[SERVER] InspectDevice: read netLow FAIL pid=" + sender.GetPlainId());
+            LFPG_Util.Warn("[SERVER] InspectDevice: read netLow FAIL pid=" + sender.GetId());
             return;
         }
         int netHigh = 0;
         if (!ctx.Read(netHigh))
         {
-            LFPG_Util.Warn("[SERVER] InspectDevice: read netHigh FAIL pid=" + sender.GetPlainId());
+            LFPG_Util.Warn("[SERVER] InspectDevice: read netHigh FAIL pid=" + sender.GetId());
             return;
         }
         string clientDeviceId = "";
         if (!ctx.Read(clientDeviceId))
         {
-            LFPG_Util.Warn("[SERVER] InspectDevice: read clientDeviceId FAIL pid=" + sender.GetPlainId());
+            LFPG_Util.Warn("[SERVER] InspectDevice: read clientDeviceId FAIL pid=" + sender.GetId());
             return;
         }
 

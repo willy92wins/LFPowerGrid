@@ -2334,7 +2334,7 @@ class LFPG_BTCHelper
                 if (restitutionResidual > 0.0)
                 {
                     string restitutionError = "[BTCDepositCash] restitution incomplete uid=";
-                    restitutionError = restitutionError + sender.GetPlainId();
+                    restitutionError = restitutionError + sender.GetId();
                     restitutionError = restitutionError + " requestedRestitution=";
                     restitutionError = restitutionError + restitutionAmount.ToString();
                     restitutionError = restitutionError + " residual=";
