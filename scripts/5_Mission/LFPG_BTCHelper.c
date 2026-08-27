@@ -431,10 +431,12 @@ class LFPG_BTCHelper
 
     // Spawn entity on ground near player with random scatter.
     // Returns null on failure.
+    // Scatter stays inside the recipient's own footprint: a ground drop carries
+    // no ownership, so any nearby player can take it first.
     static EntityAI SpawnOnGroundNear(string classname, vector basePos)
     {
-        basePos[0] = basePos[0] + Math.RandomFloat(-0.5, 0.5);
-        basePos[2] = basePos[2] + Math.RandomFloat(-0.5, 0.5);
+        basePos[0] = basePos[0] + Math.RandomFloat(-0.15, 0.15);
+        basePos[2] = basePos[2] + Math.RandomFloat(-0.15, 0.15);
         Object obj = g_Game.CreateObjectEx(classname, basePos, ECE_CREATEPHYSICS);
         return EntityAI.Cast(obj);
     }
@@ -545,11 +547,26 @@ class LFPG_BTCHelper
 
         if (groundDrops > 0)
         {
+            // Ground drops are unowned and takeable by anyone nearby. Warn level
+            // with uid and position so a theft claim can be traced offline; the
+            // client message names the count so the recipient reacts at once.
+            string dropUid = "unknown";
+            PlayerIdentity dropIdentity = player.GetIdentity();
+            if (dropIdentity)
+                dropUid = dropIdentity.GetPlainId();
             string dropMsg = "[BTC] ";
             dropMsg = dropMsg + groundDrops.ToString();
-            dropMsg = dropMsg + " stacks dropped on ground (inventory full)";
-            LFPG_Util.Info(dropMsg);
-            PlayerBase.LFPG_SendClientMsg(player, "Some items were dropped on the ground.");
+            dropMsg = dropMsg + " stacks dropped on ground (inventory full) cls=";
+            dropMsg = dropMsg + classname;
+            dropMsg = dropMsg + " uid=";
+            dropMsg = dropMsg + dropUid;
+            dropMsg = dropMsg + " pos=";
+            dropMsg = dropMsg + playerPos.ToString(false);
+            LFPG_Util.Warn(dropMsg);
+            string dropClientMsg = "Inventory full: ";
+            dropClientMsg = dropClientMsg + groundDrops.ToString();
+            dropClientMsg = dropClientMsg + " stack(s) dropped at your feet. Pick them up now, anyone nearby can take them.";
+            PlayerBase.LFPG_SendClientMsg(player, dropClientMsg);
         }
 
         float tEnd = g_Game.GetTime();
