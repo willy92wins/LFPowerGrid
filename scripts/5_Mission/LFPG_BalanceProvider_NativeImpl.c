@@ -351,7 +351,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 continue;
             msg = msg + " [";
             msg = msg + "uid=";
-            msg = msg + claim.uid;
+            msg = msg + LFPG_Util.LogUid(claim.uid);
             msg = msg + " ";
             msg = msg + claim.stockBefore.ToString();
             msg = msg + "->";
@@ -420,7 +420,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         if (pendingPurchaseCount >= LFPG_BTC_MAX_CLAIMS_PER_DEVICE)
         {
             if (AllowClaimErrorLog(uid, deviceId))
-                LFPG_Util.Error("[LFPG_Balance_Native] Account Buy claim denied: per-device pending claim cap reached uid=" + uid + " deviceId=" + deviceId);
+                LFPG_Util.Error("[LFPG_Balance_Native] Account Buy claim denied: per-device pending claim cap reached uid=" + LFPG_Util.LogUid(uid) + " deviceId=" + deviceId);
             return false;
         }
 
@@ -758,7 +758,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 currentBalance = s_Balances.Get(refundUid);
             if (currentBalance < 0 || refundAmount <= 0 || refundAmount > LFPG_NATIVE_BALANCE_CAP - currentBalance)
             {
-                LogClaimError("[LFPG_Balance_Native] Ambiguous multi-claim refund deferred: exact Native room unavailable uid=" + refundUid, refundUid, deviceId);
+                LogClaimError("[LFPG_Balance_Native] Ambiguous multi-claim refund deferred: exact Native room unavailable uid=" + LFPG_Util.LogUid(refundUid), refundUid, deviceId);
                 PersistAmbiguousObservation(deviceId, timeline, previousValues, dirtyBefore);
                 return false;
             }
@@ -817,7 +817,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         {
             if (uidList != "")
                 uidList = uidList + ",";
-            uidList = uidList + refundUids[refundIndex];
+            uidList = uidList + LFPG_Util.LogUid(refundUids[refundIndex]);
         }
         if (uidList == "")
             uidList = "<none>";
@@ -1311,7 +1311,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             current = s_Balances.Get(claim.uid);
         if (current < 0 || current > LFPG_NATIVE_BALANCE_CAP)
         {
-            LogClaimError("[LFPG_Balance_Native] Orphan claim refund rejected: stored balance outside Native bounds uid=" + claim.uid, claim.uid, claim.deviceId);
+            LogClaimError("[LFPG_Balance_Native] Orphan claim refund rejected: stored balance outside Native bounds uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
 
@@ -1321,7 +1321,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             refunded = room;
         if (refunded != claim.debit)
         {
-            LogClaimError("[LFPG_Balance_Native] Orphan claim refund was not exact; claim remains PENDING uid=" + claim.uid, claim.uid, claim.deviceId);
+            LogClaimError("[LFPG_Balance_Native] Orphan claim refund was not exact; claim remains PENDING uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
 
@@ -1342,7 +1342,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             string heldProvider = "none";
             if (activeProvider)
                 heldProvider = activeProvider.GetName();
-            LogClaimError("[LFPG_Balance_Native] Orphan claim refund held: active provider is " + heldProvider + ", not Native; claim remains PENDING for admin migration uid=" + claim.uid, claim.uid, claim.deviceId);
+            LogClaimError("[LFPG_Balance_Native] Orphan claim refund held: active provider is " + heldProvider + ", not Native; claim remains PENDING for admin migration uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
 
@@ -1361,12 +1361,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             claim.state = previousState;
             claim.bootsSinceRefund = previousBoots;
             s_CompoundActionDirty = dirtyBefore;
-            LogClaimError("[LFPG_Balance_Native] Orphan claim refund save failed; claim remains PENDING uid=" + claim.uid, claim.uid, claim.deviceId);
+            LogClaimError("[LFPG_Balance_Native] Orphan claim refund save failed; claim remains PENDING uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
 
         s_CompoundActionDirty = dirtyBefore;
-        LFPG_Util.Warn("[LFPG_Balance_Native] Orphan ATM claim refunded and tombstoned uid=" + claim.uid + " deviceId=" + claim.deviceId);
+        LFPG_Util.Warn("[LFPG_Balance_Native] Orphan ATM claim refunded and tombstoned uid=" + LFPG_Util.LogUid(claim.uid) + " deviceId=" + claim.deviceId);
         return true;
     }
 
@@ -1755,7 +1755,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
 
         string logMsg = "[LFPG_Balance_Native] Add uid=";
-        logMsg = logMsg + uid;
+        logMsg = logMsg + LFPG_Util.LogUid(uid);
         logMsg = logMsg + " +";
         logMsg = logMsg + toAdd.ToString();
         logMsg = logMsg + " -> ";
@@ -1812,7 +1812,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
 
         string logMsg = "[LFPG_Balance_Native] Remove uid=";
-        logMsg = logMsg + uid;
+        logMsg = logMsg + LFPG_Util.LogUid(uid);
         logMsg = logMsg + " -";
         logMsg = logMsg + toRemove.ToString();
         logMsg = logMsg + " -> ";
@@ -2037,7 +2037,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             if (loadedBalance != entry.balance)
             {
                 string clampMsg = "[LFPG_Balance_Native] Clamped loaded balance uid=";
-                clampMsg = clampMsg + entry.uid;
+                clampMsg = clampMsg + LFPG_Util.LogUid(entry.uid);
                 clampMsg = clampMsg + " from ";
                 clampMsg = clampMsg + entry.balance.ToString();
                 clampMsg = clampMsg + " to ";
