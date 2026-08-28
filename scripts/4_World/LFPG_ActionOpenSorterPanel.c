@@ -72,6 +72,8 @@ class LFPG_ActionOpenSorterPanel : ActionInteractBase
 #ifndef SERVER
         if (LFPG_SorterView.IsOpen())
             return false;
+        if (LFPG_SorterView_TEST.IsOpen())
+            return false;
 #endif
 
         // v2.4 Bug B: Only show if container is linked

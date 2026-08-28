@@ -45,11 +45,6 @@
 //   M5: ClampPanelPos helper — DPI-safe clamp shared between
 //       CenterPanel and drag, eliminates 45 lines of duplication.
 //
-// v2.5 changes:
-//   B1-B3: UIScaler — resolution-proportional scaling via
-//          Capture(design values) + Apply(scale) on every Open.
-//          Dynamic items (tags, preview rows) scaled in SetData.
-//
 // v2.4 changes:
 //   Bug A: ESC via MissionGameplay.OnKeyPress (LocalPress blocked by ChangeGameFocus)
 //   Bug C: UnpairedOverlay when no container linked
@@ -113,8 +108,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // N3: Tracks whether controls are enabled (unpaired = false).
     // Set from Controller via static setter; read by OnMouseEnter.
     protected bool m_ControlsEnabled;
-    // P3: Track first Tint pass (LoadImageFile only needed once)
-    protected bool m_ColorsInitialized;
     // M2: Track first AssignButtonIDs pass (UserIDs don't change)
     protected bool m_ButtonIDsAssigned;
 
@@ -260,7 +253,7 @@ class LFPG_SorterView_TEST extends ScriptView
     // v3: Footer ESC (P-V)
     TextWidget FooterEscHint;
 
-    static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
+    static const bool S1_PROBE = true;
 
     // ── LFPG Palette v2 (ARGB) — DayZ-adjusted (RGB×1.35 bg, ×1.30 btn, alpha×1.40) ──
     static const int COL_BG_DEEP      = 0xFF131C2B;
@@ -984,18 +977,12 @@ class LFPG_SorterView_TEST extends ScriptView
         {
             FooterEscHint.SetColor(COL_TEXT_DIM);
         }
-        m_ColorsInitialized = true;
     }
 
     protected void Tint(ImageWidget img, int color)
     {
         if (!img)
             return;
-        // P3: LoadImageFile only on first pass — subsequent calls just SetColor
-        if (!m_ColorsInitialized)
-        {
-            img.LoadImageFile(0, PROC_WHITE);
-        }
         img.SetColor(color);
         // Cache for hover system (v2.2)
         CacheColorLocal(img, color);
@@ -1508,13 +1495,6 @@ class LFPG_SorterView_TEST extends ScriptView
             root.Show(false);
             root.SetSort(50000);
         }
-        // v2.5 B1: Capture design-time widget values for resolution scaling.
-        // Must happen AFTER ScriptView creates widgets (constructor) and
-        // BEFORE any Apply call. SorterPanel and all children are captured.
-        if (s_Instance.SorterPanel)
-        {
-            LFPG_UIScaler.Capture(s_Instance.SorterPanel);
-        }
         #endif
     }
 
@@ -1522,6 +1502,12 @@ class LFPG_SorterView_TEST extends ScriptView
     static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         #ifndef SERVER
+        if (LFPG_SorterView.IsOpen())
+        {
+            string dualOpenMsg = "[LFPG_Sorter_TEST] Open blocked: production sorter is already open";
+            Print(dualOpenMsg);
+            return;
+        }
         bool constructedNow = false;
         if (!s_Instance)
         {
@@ -1544,7 +1530,7 @@ class LFPG_SorterView_TEST extends ScriptView
             {
                 sorterId = LFPG_DeviceAPI.GetDeviceId(sorterEntity);
             }
-            string perfView = "LFPG_PERFDIAG t=";
+            string perfView = "[LFPG_Sorter_TEST] LFPG_PERFDIAG t=";
             perfView = perfView + g_Game.GetTickTime().ToString();
             perfView = perfView + " deviceId=";
             perfView = perfView + sorterId;
@@ -1620,9 +1606,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // g_Game null guard for safe shutdown.
     static void Cleanup()
     {
-        // v2.5 B3: Release scaler arrays before destroying widgets
-        LFPG_UIScaler.Reset();
-
         if (s_Instance)
         {
             s_Instance.m_IsOpen = false;
@@ -1716,11 +1699,6 @@ class LFPG_SorterView_TEST extends ScriptView
         }
 
 
-        // v2.5 B3: Apply resolution scaling BEFORE centering.
-        // Apply reads from captured design values (never accumulates error).
-        // CenterPanel then reads the scaled SorterPanel size to center correctly.
-        float uiScale = LFPG_UIScaler.ComputeScale();
-        LFPG_UIScaler.Apply(uiScale);
         CenterPanel();
 
         // Fade-in (v2.2)
@@ -1776,9 +1754,119 @@ class LFPG_SorterView_TEST extends ScriptView
         // v3: Initial hint visibility
         RefreshEditHints();
 
+        if (S1_PROBE)
+        {
+            RunS1Probe();
+        }
+
         string openMsg = "[SorterView] Opened for: ";
         openMsg = openMsg + containerName;
         LFPG_Util.Info(openMsg);
+    }
+
+    // S1 instrumented probe: layout metrics, SetSize units, SetColor without texture.
+    protected static void RunS1Probe()
+    {
+        if (!s_Instance)
+            return;
+
+        string line;
+        float szW = 0.0;
+        float szH = 0.0;
+        float posX = 0.0;
+        float posY = 0.0;
+        float scrW = 0.0;
+        float scrH = 0.0;
+        float scrX = 0.0;
+        float scrY = 0.0;
+        float origW = 0.0;
+        float origH = 0.0;
+        float afterW = 0.0;
+        float afterH = 0.0;
+        float restW = 0.0;
+        float restH = 0.0;
+
+        Widget panel = s_Instance.SorterPanel;
+        if (panel)
+        {
+            panel.GetSize(szW, szH);
+            panel.GetPos(posX, posY);
+            panel.GetScreenSize(scrW, scrH);
+            panel.GetScreenPos(scrX, scrY);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_size_w=%1", szW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_size_h=%1", szH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_pos_x=%1", posX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_pos_y=%1", posY);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screensize_w=%1", scrW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screensize_h=%1", scrH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screenpos_x=%1", scrX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screenpos_y=%1", scrY);
+            Print(line);
+        }
+
+        Widget col = s_Instance.OutputRailBg;
+        if (col)
+        {
+            col.GetSize(szW, szH);
+            col.GetPos(posX, posY);
+            col.GetScreenSize(scrW, scrH);
+            col.GetScreenPos(scrX, scrY);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_size_w=%1", szW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_size_h=%1", szH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_pos_x=%1", posX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_pos_y=%1", posY);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screensize_w=%1", scrW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screensize_h=%1", scrH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screenpos_x=%1", scrX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screenpos_y=%1", scrY);
+            Print(line);
+        }
+
+        Widget probeSizeW = s_Instance.FooterEscHint;
+        if (probeSizeW)
+        {
+            probeSizeW.GetSize(origW, origH);
+            line = "[LFPG_Sorter_TEST][S1Probe] setsize_widget=FooterEscHint";
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_before_w=%1", origW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_before_h=%1", origH);
+            Print(line);
+            probeSizeW.SetSize(0.5, 0.5);
+            probeSizeW.GetSize(afterW, afterH);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_after_w=%1", afterW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_after_h=%1", afterH);
+            Print(line);
+            probeSizeW.SetSize(origW, origH);
+            probeSizeW.GetSize(restW, restH);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_restored_w=%1", restW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_restored_h=%1", restH);
+            Print(line);
+        }
+
+        ImageWidget probeColorW = s_Instance.AccentLine;
+        if (probeColorW)
+        {
+            probeColorW.SetColor(ARGB(255, 255, 0, 255));
+            line = "[LFPG_Sorter_TEST][S1Probe] setcolor_notex_widget=AccentLine";
+            Print(line);
+        }
     }
 
     protected void DoClose()

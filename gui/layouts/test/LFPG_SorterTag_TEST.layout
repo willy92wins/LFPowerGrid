@@ -5,8 +5,7 @@
 //
 // FIX L2: All children now use pixel positioning (hexactpos/size 1).
 // Eliminates fragile pixel/proportional mix that could cause
-// text-button overlap at extreme resolutions. UIScaler handles
-// resolution adaptation uniformly post-creation.
+// text-button overlap at extreme resolutions.
 // =========================================================
 FrameWidgetClass TagRoot {
 	size 1 28

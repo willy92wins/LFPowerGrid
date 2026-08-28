@@ -70,6 +70,10 @@ class LFPG_SorterController_TEST extends ViewController
     // redundant requests. Reset on the corresponding Ack handler.
     protected bool m_SaveInFlight;
     protected bool m_SortInFlight;
+    protected bool m_PreviewInFlight;
+    protected float m_PreviewInFlightSince;
+    protected bool m_PreviewPending;
+    protected float m_PreviewDebounce;
 
     // ── Pairing state (Bug #5/#6) ──
     protected bool m_IsPaired;
@@ -91,12 +95,6 @@ class LFPG_SorterController_TEST extends ViewController
     protected ref array<Widget>      m_BuilderSltWidgets_TEST;
     protected TextWidget             m_RulesSublabel_TEST;
     protected bool                   m_V4CacheBuilt_TEST;
-    // P3: Track first TintBg pass (LoadImageFile only needed once)
-    protected bool m_BgInitialized;
-    // F4-A: Track first StatusDot/TabDot/ViewTabIndicator LoadImageFile
-    protected bool m_StatusDotLoaded;
-    protected bool m_TabDotsLoaded;
-    protected bool m_ViewTabIndLoaded;
     // F4-B: Track first EnsureBindings array resolution
     protected bool m_ArraysResolved;
     protected string m_ContainerDisplayName;
@@ -170,8 +168,6 @@ class LFPG_SorterController_TEST extends ViewController
     TextWidget PreviewEmptyIcon;
     TextWidget PreviewEmptyHint;
 
-    // E3: PROC constant removed — use LFPG_SorterView_TEST.PROC_WHITE instead
-
     // =========================================================
     void LFPG_SorterController_TEST()
     {
@@ -214,6 +210,10 @@ class LFPG_SorterController_TEST extends ViewController
         m_FeedbackTimer = 0.0;
         m_SaveInFlight = false;
         m_SortInFlight = false;
+        m_PreviewInFlight = false;
+        m_PreviewInFlightSince = 0.0;
+        m_PreviewPending = false;
+        m_PreviewDebounce = 0.0;
         m_SorterNetLow = 0;
         m_SorterNetHigh = 0;
         m_IsPaired = false;
@@ -548,6 +548,10 @@ class LFPG_SorterController_TEST extends ViewController
         // may have been left set by a previous session that closed mid-RPC.
         m_SaveInFlight = false;
         m_SortInFlight = false;
+        m_PreviewInFlight = false;
+        m_PreviewInFlightSince = 0.0;
+        m_PreviewPending = false;
+        m_PreviewDebounce = 0.0;
         // F3-B: Fresh open — no preview data yet
         m_LastMatchedItems = -1;
         m_Dests.Set(0, d0); m_Dests.Set(1, d1); m_Dests.Set(2, d2);
@@ -620,7 +624,6 @@ class LFPG_SorterController_TEST extends ViewController
         ApplyInitialColors();
         ApplyInitialLabels();
         RefreshAll();
-        m_BgInitialized = true;
     }
 
     // =========================================================
@@ -811,12 +814,6 @@ class LFPG_SorterController_TEST extends ViewController
         }
         if (StatusDot)
         {
-            // F4-A: LoadImageFile only once
-            if (!m_StatusDotLoaded)
-            {
-                StatusDot.LoadImageFile(0, LFPG_SorterView_TEST.PROC_WHITE);
-                m_StatusDotLoaded = true;
-            }
             StatusDot.SetColor(col);
         }
     }
@@ -902,6 +899,27 @@ class LFPG_SorterController_TEST extends ViewController
                 string resetLabel = "Reset All";
                 if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
                 TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_RED_BTN);
+            }
+        }
+
+        float previewNow = 0.0;
+        if (m_PreviewInFlight && g_Game)
+        {
+            previewNow = g_Game.GetTickTime();
+            if ((previewNow - m_PreviewInFlightSince) > LFPG_SORTER_PREVIEW_INFLIGHT_TIMEOUT_S)
+            {
+                m_PreviewInFlight = false;
+                m_PreviewInFlightSince = 0.0;
+            }
+        }
+
+        if (m_PreviewPending && !m_PreviewInFlight)
+        {
+            m_PreviewDebounce = m_PreviewDebounce - dt;
+            if (m_PreviewDebounce <= 0.0)
+            {
+                m_PreviewDebounce = 0.0;
+                SendPreviewNow();
             }
         }
     }
@@ -1402,11 +1420,6 @@ class LFPG_SorterController_TEST extends ViewController
             ImageWidget dot = GetTabDot(i);
             if (dot)
             {
-                // F4-A: LoadImageFile only on first pass
-                if (!m_TabDotsLoaded)
-                {
-                    dot.LoadImageFile(0, LFPG_SorterView_TEST.PROC_WHITE);
-                }
                 if (tabHasContent && !isSel)
                 {
                     dot.Show(true);
@@ -1431,11 +1444,9 @@ class LFPG_SorterController_TEST extends ViewController
                 }
             }
         }
-        // F4-A: Tab dots loaded after first full pass
-        m_TabDotsLoaded = true;
 
         // Position active-tab indicator under selected tab.
-        // v2.8: Read actual tab button position (UIScaler-compatible).
+        // v2.8: Read actual tab button position.
         if (TabIndicator)
         {
             float indCurX = 0.0;
@@ -1494,12 +1505,6 @@ class LFPG_SorterController_TEST extends ViewController
         // v3: Position ViewTabIndicator under active view tab
         if (ViewTabIndicator)
         {
-            // F4-A: LoadImageFile only on first pass
-            if (!m_ViewTabIndLoaded)
-            {
-                ViewTabIndicator.LoadImageFile(0, LFPG_SorterView_TEST.PROC_WHITE);
-                m_ViewTabIndLoaded = true;
-            }
             ViewTabIndicator.SetColor(LFPG_SorterView_TEST.COL_BLUE);
             ImageWidget activeViewBg = TabRulesBg;
             if (!m_ShowRules)
@@ -1806,30 +1811,44 @@ class LFPG_SorterController_TEST extends ViewController
             return;
         }
         #ifndef SERVER
+        m_PreviewPending = true;
+        m_PreviewDebounce = LFPG_SORTER_PREVIEW_DEBOUNCE_S;
+        #endif
+    }
+
+    protected void SendPreviewNow()
+    {
         if (!g_Game)
             return;
         PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (player)
-        {
-            ScriptRPC rpc = new ScriptRPC();
-            int subId = LFPG_RPC_SubId.SORTER_TEST_PREVIEW_REQUEST;
-            rpc.Write(subId);
-            rpc.Write(m_SorterNetLow);
-            rpc.Write(m_SorterNetHigh);
-            rpc.Write(m_SelectedOutput);
-            // v4.1: Send current UI config so preview evaluates live rules
-            // (not the persisted m_FilterJSON which requires SAVE first)
-            string previewJSON = m_Config.ToJSON();
-            rpc.Write(previewJSON);
-            rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        }
-        #endif
+        if (!player)
+            return;
+
+        // per-send allocation (not per-frame), mirrors production RequestPreview; reuse of ScriptRPC is not a verified engine API
+        ScriptRPC rpc = new ScriptRPC();
+        int subId = LFPG_RPC_SubId.SORTER_TEST_PREVIEW_REQUEST;
+        rpc.Write(subId);
+        rpc.Write(m_SorterNetLow);
+        rpc.Write(m_SorterNetHigh);
+        rpc.Write(m_SelectedOutput);
+        // v4.1: Send current UI config so preview evaluates live rules
+        // (not the persisted m_FilterJSON which requires SAVE first)
+        string previewJSON = m_Config.ToJSON();
+        rpc.Write(previewJSON);
+
+        m_PreviewPending = false;
+        m_PreviewInFlight = true;
+        m_PreviewInFlightSince = g_Game.GetTickTime();
+        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
     }
 
     // Called from View.OnPreviewData (static delegate from PlayerRPC)
     // v4.3: slots changed from array<int> to array<string> (formatted "WxH" / "WxH xQ")
     void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<string> infos)
     {
+        m_PreviewInFlight = false;
+        m_PreviewInFlightSince = 0.0;
+
         // Guard: if user switched output tab while RPC was in flight, ignore
         if (outputIdx != m_SelectedOutput)
             return;
@@ -1951,11 +1970,6 @@ class LFPG_SorterController_TEST extends ViewController
     protected void TintBg(ImageWidget bg, int color)
     {
         if (!bg) return;
-        // P3: LoadImageFile only on first pass — subsequent calls just SetColor
-        if (!m_BgInitialized)
-        {
-            bg.LoadImageFile(0, LFPG_SorterView_TEST.PROC_WHITE);
-        }
         bg.SetColor(color);
         // Cache in View for hover system (v2.2)
         LFPG_SorterView_TEST.CacheColor(bg, color);
@@ -1973,6 +1987,11 @@ class LFPG_SorterController_TEST extends ViewController
     // v4.2: m_PreviewPool removed (same Dabs re-parenting fix as tags).
     void ClearCollections()
     {
+        m_PreviewInFlight = false;
+        m_PreviewInFlightSince = 0.0;
+        m_PreviewPending = false;
+        m_PreviewDebounce = 0.0;
+
         if (TagsList)
         {
             TagsList.Clear();

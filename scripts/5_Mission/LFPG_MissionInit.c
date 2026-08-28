@@ -182,6 +182,15 @@ modded class MissionGameplay
             return;
         }
 
+        if (LFPG_SorterView_TEST.IsOpen())
+        {
+            if (key == 1)
+            {
+                LFPG_SorterView_TEST.HandleEscKey();
+            }
+            return;
+        }
+
         // BTC ATM UI: same pattern as Sorter
         if (LFPG_BTCAtmView.IsOpen())
         {
@@ -219,6 +228,10 @@ modded class MissionGameplay
                 return;
             if (LFPG_SorterView.IsEscCooldown())
                 return;
+            if (LFPG_SorterView_TEST.IsOpen())
+                return;
+            if (LFPG_SorterView_TEST.IsEscCooldown())
+                return;
         }
 
         super.OnKeyRelease(key);
@@ -253,6 +266,36 @@ modded class MissionGameplay
             if (shouldClose)
             {
                 LFPG_SorterView.Close();
+            }
+        }
+
+        if (LFPG_SorterView_TEST.IsOpen())
+        {
+            // Dual-open overlap can only come from the action-RPC race; TEST yields.
+            if (LFPG_SorterView.IsOpen())
+            {
+                LFPG_SorterView_TEST.Close();
+            }
+            else
+            {
+                PlayerBase sorterTestPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+                bool sorterTestShouldClose = false;
+                if (!sorterTestPlayer)
+                {
+                    sorterTestShouldClose = true;
+                }
+                else if (!sorterTestPlayer.IsAlive())
+                {
+                    sorterTestShouldClose = true;
+                }
+                else if (sorterTestPlayer.IsUnconscious())
+                {
+                    sorterTestShouldClose = true;
+                }
+                if (sorterTestShouldClose)
+                {
+                    LFPG_SorterView_TEST.Close();
+                }
             }
         }
 

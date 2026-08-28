@@ -3,7 +3,6 @@
 // =========================================================
 // LF_PowerGrid — Sorter Preview Row (Dabs MVC prefab, v2.6)
 //
-// v2.6: m_Scaled guard for pool-safe reuse (future).
 // Bug 9 fix: separator alpha 0x14→0x30 (via shared constant)
 // Bug 14 fix: hardcoded colors replaced with shared constants
 //
@@ -31,8 +30,6 @@ class LFPG_SorterPreviewRow_TEST extends ScriptView
     TextWidget CatIcon;
     TextWidget ItemName;
     TextWidget SlotText;
-    protected bool m_Scaled;
-    protected bool m_ImagesLoaded;
 
     override string GetLayoutFile()
     {
@@ -66,37 +63,6 @@ class LFPG_SorterPreviewRow_TEST extends ScriptView
         string propST = "SlotText";
         ctrl.NotifyPropertyChanged(propST);
 
-        // Style — shared constants (Bug #14)
-        // F4-A: LoadImageFile only on first SetData (1× per instance)
-        if (!m_ImagesLoaded)
-        {
-            string procWhite = LFPG_SorterView_TEST.PROC_WHITE;
-            if (CatBadge)
-            {
-                CatBadge.LoadImageFile(0, procWhite);
-            }
-            if (SlotBadgeBg)
-            {
-                SlotBadgeBg.LoadImageFile(0, procWhite);
-            }
-            if (RowSep)
-            {
-                RowSep.LoadImageFile(0, procWhite);
-            }
-            m_ImagesLoaded = true;
-        }
-        if (CatBadge)
-        {
-            CatBadge.SetColor(LFPG_SorterView_TEST.COL_GREEN_BORDER);
-        }
-        if (SlotBadgeBg)
-        {
-            SlotBadgeBg.SetColor(LFPG_SorterView_TEST.COL_BTN);
-        }
-        if (RowSep)
-        {
-            RowSep.SetColor(LFPG_SorterView_TEST.COL_SEPARATOR);
-        }
         if (CatIcon)
         {
             CatIcon.SetColor(LFPG_SorterView_TEST.COL_GREEN);
@@ -108,15 +74,6 @@ class LFPG_SorterPreviewRow_TEST extends ScriptView
         if (SlotText)
         {
             SlotText.SetColor(LFPG_SorterView_TEST.COL_TEXT_MID);
-        }
-
-        // v2.6: Scale only on first use (pool-safe for future reuse).
-        if (!m_Scaled)
-        {
-            Widget rowRoot = GetLayoutRoot();
-            float rowScale = LFPG_UIScaler.ComputeScale();
-            LFPG_UIScaler.ScaleWidget(rowRoot, rowScale);
-            m_Scaled = true;
         }
     }
 
