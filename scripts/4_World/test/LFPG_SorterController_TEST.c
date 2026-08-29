@@ -67,6 +67,7 @@ class LFPG_SorterController_TEST extends ViewController
 
     // D2 (S2 reflow): client-side power state for the read-only guard
     protected bool m_IsPowered;
+    protected string m_LastStatus;
     // ClearOut two-click confirm (mirrors the ResetAll pattern)
     protected bool m_ClearConfirmActive;
     protected float m_ClearTimer;
@@ -192,6 +193,7 @@ class LFPG_SorterController_TEST extends ViewController
         m_ResetConfirmActive = false;
         m_ResetTimer = 0.0;
         m_IsPowered = false;
+        m_LastStatus = "";
         m_ClearConfirmActive = false;
         m_ClearTimer = 0.0;
         m_PowerPollTimer = 0.0;
@@ -762,6 +764,7 @@ class LFPG_SorterController_TEST extends ViewController
 
     protected void SetStatus(string st)
     {
+        m_LastStatus = st;
         int col = GetStatusColor(st);
         if (StatusLabel)
         {
@@ -2234,6 +2237,40 @@ class LFPG_SorterController_TEST extends ViewController
         m_BuilderCtxLabel_TEST = TextWidget.Cast(m_LayoutRoot.FindAnyWidget(nm));
 
         m_V4CacheBuilt_TEST = true;
+    }
+
+    bool McpCanEdit()
+    {
+        return CanEdit();
+    }
+
+    int McpCategoryCount()
+    {
+        if (!m_CatValues)
+        {
+            return 0;
+        }
+        return m_CatValues.Count();
+    }
+
+    void McpCollectState(out bool paired, out bool powered, out string status, out bool catchAll, out int ruleCount)
+    {
+        paired = m_IsPaired;
+        powered = m_IsPowered;
+        status = m_LastStatus;
+        catchAll = false;
+        ruleCount = 0;
+        if (!m_Config)
+        {
+            return;
+        }
+        LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
+        if (!outCfg)
+        {
+            return;
+        }
+        catchAll = outCfg.m_IsCatchAll;
+        ruleCount = outCfg.GetRuleCount();
     }
 
 };

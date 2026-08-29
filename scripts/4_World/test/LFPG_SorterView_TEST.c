@@ -114,6 +114,12 @@ class LFPG_SorterView_TEST extends ScriptView
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
     protected bool m_FadingIn;
+    // MCP TEST command hook. Separate layout so ui_reload_layout
+    // preview cannot hijack the name. Polled from Update because
+    // DispatchUiSetText calls SetText and never runs OnClick.
+    protected EditBoxWidget m_McpCmd;
+    protected bool m_McpCmdOwned;
+    protected bool m_McpCmdCreateFailed;
 
     // Widget refs for ApplyColors ONLY (no dupes with Controller)
     // ModalOverlay REMOVED (Bug #1)
@@ -368,6 +374,13 @@ class LFPG_SorterView_TEST extends ScriptView
         {
             ctrl.TickTimers(dt);
         }
+
+        // Read LFPG_MCP_SorterCmd here. ui_set_text writes the widget
+        // directly; routing this through OnClick would hit the five guards.
+        if (m_McpCmd)
+        {
+            PollMcpSorterCmd();
+        }
     }
 
     void LFPG_SorterView_TEST()
@@ -380,6 +393,9 @@ class LFPG_SorterView_TEST extends ScriptView
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
+        m_McpCmd = null;
+        m_McpCmdOwned = false;
+        m_McpCmdCreateFailed = false;
         m_ColorDataRefs = new array<ref LFPG_ColorData_TEST>();
         m_TintedWidgets = new array<Widget>();
     }
@@ -387,6 +403,7 @@ class LFPG_SorterView_TEST extends ScriptView
     // S1 fix: destructor releases input lock if destroyed while open
     void ~LFPG_SorterView_TEST()
     {
+        DestroyMcpCmdWidget();
         if (g_Game)
         {
             // v2.4 Bug D: Restore player actions on destruction
@@ -1520,6 +1537,8 @@ class LFPG_SorterView_TEST extends ScriptView
         EnsureViewBindings();
         // M2: Assign int IDs to buttons (only first open)
         AssignButtonIDs();
+        m_McpCmdCreateFailed = false;
+        EnsureMcpCmdWidget();
         LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
         if (ctrl)
         {
@@ -1632,6 +1651,10 @@ class LFPG_SorterView_TEST extends ScriptView
         m_Dragging = false;
         m_FadingIn = false;
         m_HoveredBg = null;
+        if (m_McpCmd)
+        {
+            m_McpCmd.Show(false);
+        }
 
         // FIX 2: Release tag/preview views now (breaks circular refs).
         // Without this, views survive until next Open or full Cleanup.
@@ -1865,6 +1888,268 @@ class LFPG_SorterView_TEST extends ScriptView
         }
 
         return false;
+    }
+
+
+    // MCP TEST command hook. Lives in LFPG_MCP_SorterCmd.layout, not the
+    // panel layout. Polled from Update because ui_set_text calls SetText
+    // directly (MCPClientBridge.c DispatchUiSetText) and never OnClick.
+    protected void EnsureMcpCmdWidget()
+    {
+        if (m_McpCmd)
+        {
+            m_McpCmd.Show(true);
+            return;
+        }
+        if (m_McpCmdCreateFailed)
+        {
+            return;
+        }
+        string mcpFail = "[SorterView] MCP cmd hook create failed";
+        if (!g_Game)
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+            return;
+        }
+        WorkspaceWidget ws = g_Game.GetWorkspace();
+        if (!ws)
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+            return;
+        }
+        string hookName = "LFPG_MCP_SorterCmd";
+        Widget existing = ws.FindAnyWidget(hookName);
+        if (existing)
+        {
+            m_McpCmd = EditBoxWidget.Cast(existing);
+            if (m_McpCmd)
+            {
+                m_McpCmdOwned = false;
+                m_McpCmd.Show(true);
+                return;
+            }
+        }
+        string layoutPath = "LFPowerGrid/gui/layouts/test/LFPG_MCP_SorterCmd.layout";
+        Widget created = ws.CreateWidgets(layoutPath);
+        m_McpCmd = EditBoxWidget.Cast(created);
+        if (!m_McpCmd)
+        {
+            if (created)
+            {
+                m_McpCmd = EditBoxWidget.Cast(created.FindAnyWidget(hookName));
+            }
+        }
+        if (m_McpCmd)
+        {
+            m_McpCmdOwned = true;
+            m_McpCmd.Show(true);
+            string emptyText = "";
+            m_McpCmd.SetText(emptyText);
+        }
+        else
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+        }
+    }
+
+    protected void DestroyMcpCmdWidget()
+    {
+        if (!m_McpCmd)
+        {
+            return;
+        }
+        if (m_McpCmdOwned)
+        {
+            if (g_Game)
+            {
+                m_McpCmd.Unlink();
+            }
+        }
+        m_McpCmd = null;
+        m_McpCmdOwned = false;
+    }
+
+    protected void PollMcpSorterCmd()
+    {
+        if (!m_McpCmd)
+        {
+            return;
+        }
+        string cmd = m_McpCmd.GetText();
+        cmd.TrimInPlace();
+        if (cmd == "")
+        {
+            return;
+        }
+        string emptyText = "";
+        m_McpCmd.SetText(emptyText);
+        bool ok = DispatchMcpCommand(cmd);
+        WriteMcpDump(cmd, ok);
+    }
+
+    protected bool DispatchMcpCommand(string cmd)
+    {
+        LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
+        if (cmd == "dump")
+        {
+            return true;
+        }
+        if (cmd == "close")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            ctrl.BtnCloseX();
+            return true;
+        }
+        if (cmd == "catch_all")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            if (!ctrl.McpCanEdit())
+            {
+                return false;
+            }
+            ctrl.BtnCatchAll();
+            return true;
+        }
+        if (cmd == "tab_preview")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            ctrl.TabPreview();
+            return true;
+        }
+        if (cmd.IndexOf("cat:") == 0)
+        {
+            int cmdLen = cmd.Length();
+            if (cmdLen <= 4)
+            {
+                return false;
+            }
+            string rest = cmd.Substring(4, cmdLen - 4);
+            int idx = rest.ToInt();
+            string idxText = idx.ToString();
+            if (idxText != rest)
+            {
+                return false;
+            }
+            if (!ctrl)
+            {
+                return false;
+            }
+            if (!ctrl.McpCanEdit())
+            {
+                return false;
+            }
+            int catCount = ctrl.McpCategoryCount();
+            if (idx < 0 || idx >= catCount)
+            {
+                return false;
+            }
+            ctrl.ToggleCategoryByIdx(idx);
+            return true;
+        }
+        return false;
+    }
+
+    protected string McpJsonBool(bool v)
+    {
+        if (v)
+        {
+            return "true";
+        }
+        return "false";
+    }
+
+    // Escapes are built by CONCATENATING single-escape literals, never written as
+    // one literal that holds two escape sequences. A lone escaped backslash and a
+    // lone escaped quote each compile (vanilla ships both); a literal carrying two
+    // of them does not. The client died on this with CParser: quoted string not
+    // closed, and took the whole World module with it. Vanilla's own JSON writer
+    // uses this same concatenation (scripts/3_game/tools/jsonobject.c:54-55).
+    // Deliberately phrased without the offending character sequences: a comment is
+    // supposed to be lexed before string literals, and that assumption is exactly
+    // what cost a boot here, so it is not worth re-testing in production code.
+    protected string McpJsonEscape(string s)
+    {
+        string bs = "\\";
+        string quote = "\"";
+        string outStr = s;
+        outStr.Replace(bs, bs + bs);
+        outStr.Replace(quote, bs + quote);
+        outStr.Replace("\n", bs + "n");
+        outStr.Replace("\r", bs + "r");
+        outStr.Replace("\t", bs + "t");
+        return outStr;
+    }
+
+    protected void WriteMcpDump(string cmd, bool ok)
+    {
+        bool openFlag = m_IsOpen;
+        bool paired = false;
+        bool powered = false;
+        string status = "";
+        bool catchAll = false;
+        int ruleCount = 0;
+        int closeUid = 0;
+
+        Widget root = GetLayoutRoot();
+        if (root)
+        {
+            string closeName = "BtnCloseX";
+            Widget closeW = root.FindAnyWidget(closeName);
+            if (closeW)
+            {
+                closeUid = closeW.GetUserID();
+            }
+        }
+
+        LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
+        if (ctrl)
+        {
+            ctrl.McpCollectState(paired, powered, status, catchAll, ruleCount);
+        }
+
+        string json = "{";
+        json = json + "\"cmd\":\"";
+        json = json + McpJsonEscape(cmd);
+        json = json + "\",\"ok\":";
+        json = json + McpJsonBool(ok);
+        json = json + ",\"open\":";
+        json = json + McpJsonBool(openFlag);
+        json = json + ",\"powered\":";
+        json = json + McpJsonBool(powered);
+        json = json + ",\"paired\":";
+        json = json + McpJsonBool(paired);
+        json = json + ",\"status\":\"";
+        json = json + McpJsonEscape(status);
+        json = json + "\",\"close_x_uid\":";
+        json = json + closeUid.ToString();
+        json = json + ",\"catch_all\":";
+        json = json + McpJsonBool(catchAll);
+        json = json + ",\"rule_count\":";
+        json = json + ruleCount.ToString();
+        json = json + "}";
+
+        string dumpPath = "$profile:lfpg_sorter_mcp.json";
+        FileHandle file = OpenFile(dumpPath, FileMode.WRITE);
+        if (file == 0)
+        {
+            string dumpFail = "[SorterView] MCP dump OpenFile failed";
+            LFPG_Util.Warn(dumpFail);
+            return;
+        }
+        FPrint(file, json);
+        CloseFile(file);
     }
 
     LFPG_SorterController_TEST GetSorterController()
