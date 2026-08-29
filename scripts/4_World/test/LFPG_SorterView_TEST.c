@@ -15,7 +15,7 @@
 //                the 4 filter sections is visible.
 //   Sprint 3  ✓ Active Rules header (column 3)
 //                — Step ③ circle + title + sublabel "ON OUT N - ...".
-//                Legacy LblActiveRules hidden at runtime.
+//                Legacy header label removed with the old layout.
 //   Sprint 4  ✓ Polish — BtnClearOut ghost variant; sublabel uppercase.
 //
 // Sprint 5+ TODO (deferred until in-game testing feedback):
@@ -26,8 +26,8 @@
 //   - Header redesign: SORT NOW button + POWERED dot + linked badge
 //   - Tag chip restyle: per-rule-type colored prefix (CAT blue, PFX
 //     amber, CON purple, SLT green) + color border-left
-//   - Remove legacy LblActiveRules + horizontal TabBar widgets from
-//     the layout XML entirely (currently runtime-hidden, harmless)
+//   - Legacy header label + horizontal tab bar widgets are gone
+//     from the new S2 layout entirely
 //   - Hoist new array<string> allocations in RefreshBuilderTab_TEST
 //     to member fields (avoids 4 allocs per refresh)
 //
@@ -125,15 +125,9 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget PanelBg;
     ImageWidget AccentLine;
     ImageWidget HeaderBg;
-    ImageWidget TabBarBg;
-    ImageWidget TabSep;
-    ImageWidget TabIndicator;
     ImageWidget ColumnSep;
     ImageWidget RulesPanelBg;
     ImageWidget PreviewPanelBg;
-    ImageWidget FooterBg;
-    ImageWidget FooterSep;
-    ImageWidget FooterMidSep;
     ImageWidget EditPrefixBg;
     ImageWidget EditContainsBg;
     ImageWidget EditSlotMinBg;
@@ -142,7 +136,6 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget EditContainsBorder;
     ImageWidget EditSlotMinBorder;
     ImageWidget EditSlotMaxBorder;
-    ImageWidget DestIndicatorBg;
     ImageWidget MatchFooterBg;
     ImageWidget BtnCloseXBg;
     TextWidget BtnCloseXText;
@@ -235,23 +228,11 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget AccentLineBottom;
     // v3: Drag handle (P-II)
     TextWidget DragHandle;
-    // v3: Section cards (A)
-    ImageWidget CatSectionBg;
-    ImageWidget CatSectionAccent;
-    ImageWidget PrefixSectionBg;
-    ImageWidget PrefixSectionAccent;
-    ImageWidget ContainsSectionBg;
-    ImageWidget ContainsSectionAccent;
-    ImageWidget SlotSectionBg;
-    ImageWidget SlotSectionAccent;
-    ImageWidget CatchAllCardBg;
     // v3: Edit hints (E)
     TextWidget EditPrefixHint;
     TextWidget EditContainsHint;
     TextWidget EditSlotMinHint;
     TextWidget EditSlotMaxHint;
-    // v3: Footer ESC (P-V)
-    TextWidget FooterEscHint;
 
     static const bool S1_PROBE = true;
 
@@ -292,11 +273,20 @@ class LFPG_SorterView_TEST extends ScriptView
     static const int COL_CATCHALL_BG     = 0x26FBBF24;
     static const int COL_PURPLE          = 0xFFA78BFA;
 
+    // S2 premixes (spec): opaque static-chrome colors, painted by the layout
+    static const int COL_S2_BG_SECTION   = 0xFF162036;
+    static const int COL_S2_HEADER       = 0xFF0F172B;
+    static const int COL_S2_SEPARATOR    = 0xFF424C62;
+    static const int COL_S2_CATCHALL_BG  = 0xFF242A35;
+    static const int COL_S2_RULEROW_BG   = 0xFF1D273C;
+    static const int COL_S2_GREENBTN_HDR = 0xFF14313A;
+    static const int COL_S2_GREENBTN_SEC = 0xFF1A3944;
+    static const int COL_S2_GREENBTN_PAN = 0xFF173644;
+    static const int COL_S2_REDBTN_BG    = 0xFF2D283C;
+
     // ── M2: Button UserID ranges (int dispatch replaces string comparison) ──
-    // 100+i: output tabs, 110-111: view tabs, 200+i: categories,
+    // 111: preview toggle, 200+i: categories,
     // 300+i: slots, 400-402: adds, 500+: actions
-    static const int UID_TAB_OUT_BASE  = 100;
-    static const int UID_TAB_RULES     = 110;
     static const int UID_TAB_PREVIEW   = 111;
     static const int UID_CAT_BASE      = 200;
     static const int UID_SLOT_BASE     = 300;
@@ -307,8 +297,6 @@ class LFPG_SorterView_TEST extends ScriptView
     static const int UID_CLEAR_OUT     = 501;
     static const int UID_RESET_ALL     = 502;
     static const int UID_SAVE          = 503;
-    static const int UID_SORT          = 504;
-    static const int UID_CLOSE         = 505;
     static const int UID_CLOSE_X       = 506;
     static const int UID_SORT_HEADER   = 507;
     // v4.3: Tag BtnRemove — UID = 600 + outIdx*10 + (ruleIdx+1)
@@ -456,24 +444,12 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!AccentLine) { AccentLine = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "HeaderBg";
         if (!HeaderBg) { HeaderBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabBarBg";
-        if (!TabBarBg) { TabBarBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabSep";
-        if (!TabSep) { TabSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabIndicator";
-        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "ColumnSep";
         if (!ColumnSep) { ColumnSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "RulesPanelBg";
         if (!RulesPanelBg) { RulesPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "PreviewPanelBg";
         if (!PreviewPanelBg) { PreviewPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterBg";
-        if (!FooterBg) { FooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterSep";
-        if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterMidSep";
-        if (!FooterMidSep) { FooterMidSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditPrefixBg";
         if (!EditPrefixBg) { EditPrefixBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditContainsBg";
@@ -490,8 +466,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!EditSlotMinBorder) { EditSlotMinBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditSlotMaxBorder";
         if (!EditSlotMaxBorder) { EditSlotMaxBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "DestIndicatorBg";
-        if (!DestIndicatorBg) { DestIndicatorBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "MatchFooterBg";
         if (!MatchFooterBg) { MatchFooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
 
@@ -631,24 +605,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!AccentLineBottom) { AccentLineBottom = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "DragHandle";
         if (!DragHandle) { DragHandle = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatSectionBg";
-        if (!CatSectionBg) { CatSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatSectionAccent";
-        if (!CatSectionAccent) { CatSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PrefixSectionBg";
-        if (!PrefixSectionBg) { PrefixSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PrefixSectionAccent";
-        if (!PrefixSectionAccent) { PrefixSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ContainsSectionBg";
-        if (!ContainsSectionBg) { ContainsSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ContainsSectionAccent";
-        if (!ContainsSectionAccent) { ContainsSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SlotSectionBg";
-        if (!SlotSectionBg) { SlotSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SlotSectionAccent";
-        if (!SlotSectionAccent) { SlotSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatchAllCardBg";
-        if (!CatchAllCardBg) { CatchAllCardBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditPrefixHint";
         if (!EditPrefixHint) { EditPrefixHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditContainsHint";
@@ -657,8 +613,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!EditSlotMinHint) { EditSlotMinHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditSlotMaxHint";
         if (!EditSlotMaxHint) { EditSlotMaxHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterEscHint";
-        if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
     }
 
     // =========================================================
@@ -675,29 +629,7 @@ class LFPG_SorterView_TEST extends ScriptView
         string wn = "";
         Widget btn = null;
 
-        // Output tabs (100+i)
-        int ti = 0;
-        string tabPrefix = "TabOut";
-        for (ti = 0; ti < 6; ti = ti + 1)
-        {
-            wn = tabPrefix;
-            wn = wn + ti.ToString();
-            btn = root.FindAnyWidget(wn);
-            if (btn)
-            {
-                int tabId = UID_TAB_OUT_BASE;
-                tabId = tabId + ti;
-                btn.SetUserID(tabId);
-            }
-        }
 
-        // View tabs
-        wn = "TabRules";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_TAB_RULES); }
-        wn = "TabPreview";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_TAB_PREVIEW); }
 
         // Category buttons (200+i)
         int ci = 0;
@@ -755,12 +687,9 @@ class LFPG_SorterView_TEST extends ScriptView
         wn = "BtnSave";
         btn = root.FindAnyWidget(wn);
         if (btn) { btn.SetUserID(UID_SAVE); }
-        wn = "BtnSort";
+        wn = "BtnPreview";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_SORT); }
-        wn = "BtnClose";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_CLOSE); }
+        if (btn) { btn.SetUserID(UID_TAB_PREVIEW); }
         wn = "BtnCloseX";
         btn = root.FindAnyWidget(wn);
         if (btn) { btn.SetUserID(UID_CLOSE_X); }
@@ -808,79 +737,13 @@ class LFPG_SorterView_TEST extends ScriptView
         // objects alive. Without Clear(), each Open accumulates ~130 objects.
         m_ColorDataRefs.Clear();
 
-        // Bug #1: ModalOverlay removed
-        Tint(PanelBg, COL_BG_PANEL);
-        Tint(AccentLine, COL_GREEN);
-        Tint(HeaderBg, COL_HEADER);
-        Tint(TabBarBg, COL_BG_DEEP);
-        Tint(TabSep, COL_SEPARATOR);
-        Tint(TabIndicator, COL_GREEN);
-        Tint(ColumnSep, COL_SEPARATOR);
-        Tint(RulesPanelBg, COL_BG_RULES_PANEL);
-        Tint(PreviewPanelBg, COL_BG_RULES_PANEL);
-        Tint(FooterBg, COL_BG_PANEL);
-        Tint(FooterSep, COL_SEPARATOR);
-        Tint(FooterMidSep, COL_SEPARATOR);
-        Tint(EditPrefixBg, COL_BG_INPUT);
-        Tint(EditContainsBg, COL_BG_INPUT);
-        Tint(EditSlotMinBg, COL_BG_INPUT);
-        Tint(EditSlotMaxBg, COL_BG_INPUT);
-        Tint(EditPrefixBorder, COL_INPUT_BORDER);
-        Tint(EditContainsBorder, COL_INPUT_BORDER);
-        Tint(EditSlotMinBorder, COL_INPUT_BORDER);
-        Tint(EditSlotMaxBorder, COL_INPUT_BORDER);
-        Tint(DestIndicatorBg, COL_GREEN_DIM);
-        Tint(MatchFooterBg, COL_SEPARATOR);
-
-        // === Sprint 1 (2026-04-26): rail tinting ===
-        Tint(OutputRailBg, COL_BG_SECTION_CARD);
-        Tint(OutputRailBorder, COL_SEPARATOR);
-        Tint(Step1Circle, COL_GREEN);
-        if (Step1Number) { Step1Number.SetColor(COL_BG_PANEL); }
-        if (Step1Title) { Step1Title.SetColor(COL_TEXT); }
-        // Each row: bg dim, indicator transparent (highlighted by Refresh)
-        Tint(OutputRow0Bg, COL_BG_PANEL);
-        Tint(OutputRow1Bg, COL_BG_PANEL);
-        Tint(OutputRow2Bg, COL_BG_PANEL);
-        Tint(OutputRow3Bg, COL_BG_PANEL);
-        Tint(OutputRow4Bg, COL_BG_PANEL);
-        Tint(OutputRow5Bg, COL_BG_PANEL);
-        // Catch-all has its own amber tint
-        Tint(CatchAllRowBg, COL_CATCHALL_BG);
-        Tint(CatchAllRowIndicator, COL_AMBER);
-        if (CatchAllRowLabel) { CatchAllRowLabel.SetColor(COL_AMBER); }
-        if (CatchAllRowSublabel) { CatchAllRowSublabel.SetColor(COL_TEXT_DIM); }
-
-        // === Sprint 2 (2026-04-26): builder tab bar tinting (base) ===
-        Tint(BuilderTabBg, COL_BG_PANEL);
-        Tint(BuilderTabBorder, COL_SEPARATOR);
-        Tint(BuilderTabCategoryBg, COL_BG_PANEL);
-        Tint(BuilderTabPrefixBg, COL_BG_PANEL);
-        Tint(BuilderTabContainsBg, COL_BG_PANEL);
-        Tint(BuilderTabSlotBg, COL_BG_PANEL);
-        // Underline starts transparent — RefreshBuilderTab paints active.
-        Tint(BuilderTabCategoryUnderline, 0x00000000);
-        Tint(BuilderTabPrefixUnderline, 0x00000000);
-        Tint(BuilderTabContainsUnderline, 0x00000000);
-        Tint(BuilderTabSlotUnderline, 0x00000000);
-        if (BuilderTabCategoryText) { BuilderTabCategoryText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabPrefixText)   { BuilderTabPrefixText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabContainsText) { BuilderTabContainsText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabSlotText)     { BuilderTabSlotText.SetColor(COL_TEXT_DIM); }
-
-        // === Sprint 3 (2026-04-26): Step 3 + sublabel tinting ===
-        Tint(Step3Circle, COL_AMBER);
-        if (Step3Number) { Step3Number.SetColor(COL_BG_PANEL); }
-        if (Step3Title) { Step3Title.SetColor(COL_TEXT); }
-        if (RulesSublabel) { RulesSublabel.SetColor(COL_TEXT_DIM); }
-
-
-        // BtnCloseX default color
-        Tint(BtnCloseXBg, COL_BTN);
+        // BtnCloseX default color (static chrome is painted by the layout)
+        Tint(BtnCloseXBg, COL_S2_HEADER);
         if (BtnCloseXText)
         {
             BtnCloseXText.SetColor(COL_TEXT_DIM);
         }
+
         // Pairing badge default (unpaired)
         Tint(PairingBadgeBg, COL_PAIRING_ERR);
         if (PairingBadgeText)
@@ -890,11 +753,7 @@ class LFPG_SorterView_TEST extends ScriptView
             PairingBadgeText.SetColor(COL_RED);
         }
 
-        // v2.4 Bug C: Unpaired overlay (v3: updated hex)
-        if (UnpairedOverlayBg)
-        {
-            Tint(UnpairedOverlayBg, 0xCC0E1423);
-        }
+        // v2.4 Bug C: Unpaired overlay labels (overlay bg painted by the layout)
         if (UnpairedLabel)
         {
             UnpairedLabel.SetColor(COL_RED);
@@ -934,48 +793,6 @@ class LFPG_SorterView_TEST extends ScriptView
             {
                 ebMax.SetColor(COL_TEXT);
             }
-        }
-
-        // v3: Panel frame
-        Tint(PanelBorderLeft, COL_SEPARATOR);
-        Tint(PanelBorderRight, COL_SEPARATOR);
-        Tint(AccentLineBottom, COL_GREEN);
-        // v3: Drag handle
-        if (DragHandle)
-        {
-            DragHandle.SetColor(COL_TEXT_DIM);
-        }
-        // v3: Section cards
-        Tint(CatSectionBg, COL_BG_SECTION_CARD);
-        Tint(CatSectionAccent, COL_GREEN);
-        Tint(PrefixSectionBg, COL_BG_SECTION_CARD);
-        Tint(PrefixSectionAccent, COL_BLUE);
-        Tint(ContainsSectionBg, COL_BG_SECTION_CARD);
-        Tint(ContainsSectionAccent, COL_AMBER);
-        Tint(SlotSectionBg, COL_BG_SECTION_CARD);
-        Tint(SlotSectionAccent, COL_PURPLE);
-        Tint(CatchAllCardBg, COL_CATCHALL_BG);
-        // v3: Edit hints
-        if (EditPrefixHint)
-        {
-            EditPrefixHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditContainsHint)
-        {
-            EditContainsHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditSlotMinHint)
-        {
-            EditSlotMinHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditSlotMaxHint)
-        {
-            EditSlotMaxHint.SetColor(COL_TEXT_DIM);
-        }
-        // v3: Footer ESC hint
-        if (FooterEscHint)
-        {
-            FooterEscHint.SetColor(COL_TEXT_DIM);
         }
     }
 
@@ -1171,13 +988,6 @@ class LFPG_SorterView_TEST extends ScriptView
         // M2: Dispatch by UserID (int) — no string comparisons
         int uid = btn.GetUserID();
 
-        // Output tabs: 100..105
-        if (uid >= UID_TAB_OUT_BASE && uid < UID_TAB_OUT_BASE + 6)
-        {
-            int tabIdx = uid - UID_TAB_OUT_BASE;
-            ctrl.SelectOutput(tabIdx);
-            return true;
-        }
         // Sprint 1 (2026-04-26): vertical rail rows -> same SelectOutput
         if (uid >= UID_RAIL_ROW_BASE && uid < UID_RAIL_ROW_BASE + 6)
         {
@@ -1199,9 +1009,8 @@ class LFPG_SorterView_TEST extends ScriptView
             ctrl.SelectBuilderTab_TEST(builderIdx);
             return true;
         }
-        // View tabs
-        if (uid == UID_TAB_RULES)   { ctrl.TabRules();   return true; }
-        if (uid == UID_TAB_PREVIEW) { ctrl.TabPreview();  return true; }
+        // Preview toggle
+        if (uid == UID_TAB_PREVIEW) { ctrl.TogglePreview_TEST(); return true; }
         // Category buttons: 200..207
         if (uid >= UID_CAT_BASE && uid < UID_CAT_BASE + 8)
         {
@@ -1225,8 +1034,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (uid == UID_CLEAR_OUT)    { ctrl.BtnClearOut();    return true; }
         if (uid == UID_RESET_ALL)    { ctrl.BtnResetAll();    return true; }
         if (uid == UID_SAVE)         { ctrl.BtnSave();        return true; }
-        if (uid == UID_SORT)         { ctrl.BtnSort();        return true; }
-        if (uid == UID_CLOSE)        { ctrl.BtnClose();       return true; }
         if (uid == UID_CLOSE_X)      { ctrl.BtnCloseX();      return true; }
         if (uid == UID_SORT_HEADER)  { ctrl.BtnSortHeader();  return true; }
 
@@ -1676,27 +1483,6 @@ class LFPG_SorterView_TEST extends ScriptView
         m_ControlsEnabled = true;
         root.Show(true);
 
-        // === Sprint 3 (2026-04-26): hide legacy LblActiveRules ===
-        // Step3Title replaces it with the new step-numbered header.
-        Widget legacyLbl = root.FindAnyWidget("LblActiveRules");
-        if (legacyLbl) { legacyLbl.Show(false); }
-
-        // === Sprint 1 (2026-04-26): hide V3 horizontal tab bar ===
-        // The vertical rail visually replaces it; but we keep the tab bar
-        // widgets in the layout so existing controller bindings (TabOut0Bg
-        // etc.) can stay alive without crashing on null. We just hide the
-        // ButtonWidget container so they don't render or accept clicks.
-        Widget v3TabBar = root.FindAnyWidget("TabBarBg");
-        if (v3TabBar) { v3TabBar.Show(false); }
-        int hi = 0;
-        string hideName;
-        Widget hideW;
-        for (hi = 0; hi < 6; hi = hi + 1)
-        {
-            hideName = "TabOut" + hi.ToString();
-            hideW = root.FindAnyWidget(hideName);
-            if (hideW) { hideW.Show(false); }
-        }
 
 
         CenterPanel();
@@ -1836,37 +1622,6 @@ class LFPG_SorterView_TEST extends ScriptView
             Print(line);
         }
 
-        Widget probeSizeW = s_Instance.FooterEscHint;
-        if (probeSizeW)
-        {
-            probeSizeW.GetSize(origW, origH);
-            line = "[LFPG_Sorter_TEST][S1Probe] setsize_widget=FooterEscHint";
-            Print(line);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_before_w=%1", origW);
-            Print(line);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_before_h=%1", origH);
-            Print(line);
-            probeSizeW.SetSize(0.5, 0.5);
-            probeSizeW.GetSize(afterW, afterH);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_after_w=%1", afterW);
-            Print(line);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_after_h=%1", afterH);
-            Print(line);
-            probeSizeW.SetSize(origW, origH);
-            probeSizeW.GetSize(restW, restH);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_restored_w=%1", restW);
-            Print(line);
-            line = string.Format("[LFPG_Sorter_TEST][S1Probe] setsize_restored_h=%1", restH);
-            Print(line);
-        }
-
-        ImageWidget probeColorW = s_Instance.AccentLine;
-        if (probeColorW)
-        {
-            probeColorW.SetColor(ARGB(255, 255, 0, 255));
-            line = "[LFPG_Sorter_TEST][S1Probe] setcolor_notex_widget=AccentLine";
-            Print(line);
-        }
     }
 
     protected void DoClose()

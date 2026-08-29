@@ -1,14 +1,10 @@
 // =========================================================
-// LF_PowerGrid — Sorter Tag Chip prefab (Dabs MVC)
-// Used as item in ObservableCollection<ref LFPG_SorterTagView_TEST>
-// Renders inside WrapSpacerWidget "TagsList" (295px wide)
-//
-// FIX L2: All children now use pixel positioning (hexactpos/size 1).
-// Eliminates fragile pixel/proportional mix that could cause
-// text-button overlap at extreme resolutions.
+// S2 - Sorter V4 TEST tag row prefab -- replaces LFPG_SorterTag_TEST.layout
+// One rule row rendered inside WrapSpacerWidget "TagsList". Static ruleRowBg
+// card; left bar and type label are recolored by script in phase B. Dabs binding.
 // =========================================================
 FrameWidgetClass TagRoot {
-	size 1 28
+	size 1 30
 	hexactpos 0
 	vexactpos 0
 	hexactsize 0
@@ -24,22 +20,51 @@ FrameWidgetClass TagRoot {
 			vexactsize 0
 			stretch 1
 			ignorepointer 1
+			color 0.114 0.152 0.235 1
+			{
+			}
+		}
+		ImageWidgetClass TagLeftBar {
+			position 0 0
+			size 2 30
+			hexactpos 1
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			stretch 1
+			ignorepointer 1
+			color 0.376 0.647 0.980 1
+			{
+			}
+		}
+		TextWidgetClass TagTypeLabel {
+			position 10 0
+			size 56 30
+			hexactpos 1
+			vexactpos 1
+			hexactsize 1
+			vexactsize 1
+			font "gui/fonts/Metron12"
+			"text valign" center
+			color 0.376 0.647 0.980 1
+			ignorepointer 1
 			{
 			}
 		}
 		TextWidgetClass TagLabel {
 			scriptclass "ViewBinding"
-			position 8 0
-			size 250 28
+			position 70 0
+			size 160 30
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
-			font "gui/fonts/Metron"
+			font "gui/fonts/MetronBook14"
 			"text valign" center
+			color 0.945 0.961 0.976 1
 			ignorepointer 1
 			{
-				ScriptParamsClass {
+				ScriptParamsClass S2Binding {
 					Binding_Name "TagLabel"
 					{
 					}
@@ -47,7 +72,7 @@ FrameWidgetClass TagRoot {
 			}
 		}
 		ButtonWidgetClass BtnRemove {
-			position 265 4
+			position 238 5
 			size 18 20
 			hexactpos 1
 			vexactpos 1
@@ -61,10 +86,11 @@ FrameWidgetClass TagRoot {
 					vexactpos 0
 					hexactsize 0
 					vexactsize 0
-					font "gui/fonts/Metron"
+					font "gui/fonts/Metron12"
 					"text halign" center
 					"text valign" center
 					text "x"
+					color 0.478 0.541 0.608 1
 					ignorepointer 1
 					{
 					}

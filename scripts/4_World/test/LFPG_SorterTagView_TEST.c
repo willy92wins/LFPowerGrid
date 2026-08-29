@@ -25,6 +25,8 @@ class LFPG_SorterTagView_TEST extends ScriptView
 {
     ImageWidget TagBg;
     TextWidget TagLabel;
+    ImageWidget TagLeftBar;
+    TextWidget TagTypeLabel;
     protected int m_TagColor;
 
     override string GetLayoutFile()
@@ -54,7 +56,7 @@ class LFPG_SorterTagView_TEST extends ScriptView
     }
 
     // ownerCtrl passed directly from Controller.RefreshTagsList
-    void SetData(string label, int color, int ruleIndex, int outputIndex, LFPG_SorterController_TEST ownerCtrl)
+    void SetData(string label, int color, string typeTag, int ruleIndex, int outputIndex, LFPG_SorterController_TEST ownerCtrl)
     {
         m_TagColor = color;
 
@@ -69,11 +71,14 @@ class LFPG_SorterTagView_TEST extends ScriptView
             ctrl.NotifyPropertyChanged(propTL);
         }
 
-        if (TagBg)
+        if (TagLeftBar)
         {
-            // Bug #10 fix: alpha 0x12→0x26 for visibility
-            int bgColor = (color & 0x00FFFFFF) | 0x26000000;
-            TagBg.SetColor(bgColor);
+            TagLeftBar.SetColor(color);
+        }
+        if (TagTypeLabel)
+        {
+            TagTypeLabel.SetText(typeTag);
+            TagTypeLabel.SetColor(color);
         }
         // v4.3: Tag text uses COL_TEXT (light) for readability.
         // Was same color as bg tint → invisible. Color rule-type

@@ -1,7 +1,7 @@
 // =========================================================
-// LF_PowerGrid — Sorter Preview Row prefab (Dabs MVC)
-// Used as item in ObservableCollection<ref LFPG_SorterPreviewRow_TEST>
-// Renders inside GridSpacerWidget "PreviewItems"
+// S2 - Sorter V4 TEST preview row prefab -- replaces LFPG_SorterPreviewRow_TEST.layout
+// One match row rendered inside GridSpacerWidget "PreviewItems" (264 px width).
+// Same structure as the current prefab, re-anchored widths and numbered fonts.
 // =========================================================
 FrameWidgetClass PreviewRowRoot {
 	size 1 30
@@ -44,12 +44,12 @@ FrameWidgetClass PreviewRowRoot {
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
-			font "gui/fonts/Metron"
+			font "gui/fonts/Metron12"
 			"text halign" center
 			"text valign" center
 			ignorepointer 1
 			{
-				ScriptParamsClass {
+				ScriptParamsClass S2Binding {
 					Binding_Name "CatIcon"
 					{
 					}
@@ -59,16 +59,16 @@ FrameWidgetClass PreviewRowRoot {
 		TextWidgetClass ItemName {
 			scriptclass "ViewBinding"
 			position 40 0
-			size 195 30
+			size 162 30
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
-			font "gui/fonts/MetronBook"
+			font "gui/fonts/MetronBook14"
 			"text valign" center
 			ignorepointer 1
 			{
-				ScriptParamsClass {
+				ScriptParamsClass S2Binding {
 					Binding_Name "ItemName"
 					{
 					}
@@ -76,8 +76,8 @@ FrameWidgetClass PreviewRowRoot {
 			}
 		}
 		ImageWidgetClass SlotBadgeBg {
-			position 243 6
-			size 55 18
+			position 208 6
+			size 48 18
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
@@ -90,18 +90,18 @@ FrameWidgetClass PreviewRowRoot {
 		}
 		TextWidgetClass SlotText {
 			scriptclass "ViewBinding"
-			position 243 6
-			size 55 18
+			position 208 6
+			size 48 18
 			hexactpos 1
 			vexactpos 1
 			hexactsize 1
 			vexactsize 1
-			font "gui/fonts/Metron"
+			font "gui/fonts/Metron12"
 			"text halign" center
 			"text valign" center
 			ignorepointer 1
 			{
-				ScriptParamsClass {
+				ScriptParamsClass S2Binding {
 					Binding_Name "SlotText"
 					{
 					}

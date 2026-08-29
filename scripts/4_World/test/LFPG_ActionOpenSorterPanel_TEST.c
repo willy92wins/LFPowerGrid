@@ -7,7 +7,6 @@
 // Conditions:
 //   - No item in hand (CCINone)
 //   - Target is LFPG_Sorter_TEST
-//   - Target is powered
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
 //
@@ -56,9 +55,6 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         if (!sorter)
             return false;
 
-        // Must be powered
-        if (!sorter.LFPG_IsPowered())
-            return false;
 
         // Must not be ruined
         if (sorter.IsRuined())
@@ -72,9 +68,6 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
             return false;
 #endif
 
-        // v2.4 Bug B: Only show if container is linked
-        if (!sorter.LFPG_IsLinked())
-            return false;
 
         return true;
     }

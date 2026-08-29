@@ -19,7 +19,7 @@
 //   S6: Merged save/sort feedback timers into m_FeedbackTimer
 //   E1: String literals converted to local variables
 //   V2: Tab rule indicators (* on tabs with rules/catch-all)
-//   R4: g_Game null-guard in BtnSave/BtnSort
+//   R4: g_Game null-guard in BtnSave/BtnSortHeader
 //
 // v2.2 changes (Polish Sprint):
 //   - Visual disabled state when unpaired (IGNOREPOINTER + dim)
@@ -65,6 +65,14 @@ class LFPG_SorterController_TEST extends ViewController
     protected float m_ResetTimer;
     protected float m_FeedbackTimer;
 
+    // D2 (S2 reflow): client-side power state for the read-only guard
+    protected bool m_IsPowered;
+    // ClearOut two-click confirm (mirrors the ResetAll pattern)
+    protected bool m_ClearConfirmActive;
+    protected float m_ClearTimer;
+    // D2: cadence for the netsync power re-poll while the panel is open
+    protected float m_PowerPollTimer;
+
     // ── B2 (2026-04-26): in-flight throttling for Save/Sort RPCs ──
     // Prevents user from spamming the button and flooding the server with
     // redundant requests. Reset on the corresponding Ack handler.
@@ -89,10 +97,8 @@ class LFPG_SorterController_TEST extends ViewController
     protected ref array<TextWidget>  m_RailRowContainers_TEST;
     protected ref array<ImageWidget> m_BuilderTabUnderlines_TEST;  // [CAT, PFX, CON, SLT]
     protected ref array<TextWidget>  m_BuilderTabTexts_TEST;       // [CAT, PFX, CON, SLT]
-    protected ref array<Widget>      m_BuilderCatWidgets_TEST;
-    protected ref array<Widget>      m_BuilderPfxWidgets_TEST;
-    protected ref array<Widget>      m_BuilderConWidgets_TEST;
-    protected ref array<Widget>      m_BuilderSltWidgets_TEST;
+    protected ref array<Widget>      m_SectionRoots_TEST;         // [CAT, PFX, CON, SLT]
+    protected TextWidget             m_BuilderCtxLabel_TEST;
     protected TextWidget             m_RulesSublabel_TEST;
     protected bool                   m_V4CacheBuilt_TEST;
     // F4-B: Track first EnsureBindings array resolution
@@ -119,15 +125,6 @@ class LFPG_SorterController_TEST extends ViewController
     TextWidget StatusLabel;
     ImageWidget StatusDot;
 
-    // Output tabs — stored in arrays to prevent Dabs auto-bind from
-    // overwriting refs during NotifyPropertyChanged. Dabs only matches
-    // named Widget/ImageWidget/TextWidget fields, NOT array elements.
-    protected ref array<ImageWidget> m_TabBgs;
-    protected ref array<TextWidget> m_TabTexts;
-    // View tabs
-    ImageWidget TabRulesBg; ImageWidget TabPreviewBg;
-    TextWidget TabRulesText; TextWidget TabPreviewText;
-    ImageWidget TabIndicator;
     // Category — arrays prevent Dabs auto-bind corruption (same fix as F2 tabs)
     protected ref array<ImageWidget> m_CatBgs;
     protected ref array<TextWidget> m_CatTexts;
@@ -139,29 +136,25 @@ class LFPG_SorterController_TEST extends ViewController
     // m_LayoutRoot — inherited from ViewController (ScriptedWidgetEventHandler)
     // Catch-all
     ImageWidget BtnCatchAllBg; TextWidget BtnCatchAllText;
+    // Preview toggle button
+    ImageWidget BtnPreviewBg; TextWidget BtnPreviewText;
     // Footer + header button BGs
-    ImageWidget BtnSortBg; ImageWidget BtnSaveBg;
-    ImageWidget BtnResetAllBg; ImageWidget BtnClearOutBg; ImageWidget BtnCloseBg;
+    ImageWidget BtnSaveBg;
+    ImageWidget BtnResetAllBg; ImageWidget BtnClearOutBg;
     ImageWidget BtnPrefixAddBg; ImageWidget BtnContainsAddBg; ImageWidget BtnSlotAddBg;
     TextWidget BtnResetAllText;
-    TextWidget BtnSortText; TextWidget BtnSaveText;
-    TextWidget BtnClearOutText; TextWidget BtnCloseText;
+    TextWidget BtnSaveText;
+    TextWidget BtnClearOutText;
     // Header sort button
     ImageWidget BtnSortHeaderBg; TextWidget BtnSortHeaderText;
     // Label refs
     TextWidget LblCategory; TextWidget LblPrefix; TextWidget LblContains;
     TextWidget LblSlot; TextWidget LblSlotDash;
-    TextWidget LblActiveRules; TextWidget DestLabel;
     TextWidget LblPreview;
     // Panels
     Widget RulesPanel; Widget PreviewPanel;
-    Widget DestIndicator;
     TextWidget TagsEmpty; TextWidget PreviewEmpty;
 
-    // v3: Tab dots (array replaces TabDot0..5)
-    protected ref array<ImageWidget> m_TabDots;
-    // v3: View tab indicator (C)
-    ImageWidget ViewTabIndicator;
     // v3: Empty state extras (P-IV)
     TextWidget TagsEmptyIcon;
     TextWidget TagsEmptyHint;
@@ -174,15 +167,6 @@ class LFPG_SorterController_TEST extends ViewController
         TagsList = new ObservableCollection<ref LFPG_SorterTagView_TEST>(this);
         PreviewItems = new ObservableCollection<ref LFPG_SorterPreviewRow_TEST>(this);
         m_Config = new LFPG_SortConfig();
-        // v3.2: Tab widget arrays (6 outputs)
-        m_TabBgs = new array<ImageWidget>;
-        m_TabTexts = new array<TextWidget>;
-        int ti = 0;
-        for (ti = 0; ti < 6; ti = ti + 1)
-        {
-            m_TabBgs.Insert(null);
-            m_TabTexts.Insert(null);
-        }
         // v3.2: Category button arrays (8 categories) — Dabs-proof
         m_CatBgs = new array<ImageWidget>;
         m_CatTexts = new array<TextWidget>;
@@ -207,6 +191,10 @@ class LFPG_SorterController_TEST extends ViewController
         m_ShowRules = true;
         m_ResetConfirmActive = false;
         m_ResetTimer = 0.0;
+        m_IsPowered = false;
+        m_ClearConfirmActive = false;
+        m_ClearTimer = 0.0;
+        m_PowerPollTimer = 0.0;
         m_FeedbackTimer = 0.0;
         m_SaveInFlight = false;
         m_SortInFlight = false;
@@ -227,10 +215,7 @@ class LFPG_SorterController_TEST extends ViewController
         m_RailRowContainers_TEST  = new array<TextWidget>;
         m_BuilderTabUnderlines_TEST = new array<ImageWidget>;
         m_BuilderTabTexts_TEST      = new array<TextWidget>;
-        m_BuilderCatWidgets_TEST    = new array<Widget>;
-        m_BuilderPfxWidgets_TEST    = new array<Widget>;
-        m_BuilderConWidgets_TEST    = new array<Widget>;
-        m_BuilderSltWidgets_TEST    = new array<Widget>;
+        m_SectionRoots_TEST = new array<Widget>;
         m_V4CacheBuilt_TEST = false;
         m_LastMatchedItems = -1;
 
@@ -265,13 +250,6 @@ class LFPG_SorterController_TEST extends ViewController
             m_Dests.Insert(emptyDest);
         }
 
-        // M1: TabDot array
-        m_TabDots = new array<ImageWidget>;
-        int dti = 0;
-        for (dti = 0; dti < 6; dti = dti + 1)
-        {
-            m_TabDots.Insert(null);
-        }
     }
 
     // =========================================================
@@ -298,16 +276,6 @@ class LFPG_SorterController_TEST extends ViewController
         // Named fields below MUST re-resolve each open (Dabs may rebind them).
         if (!m_ArraysResolved)
         {
-            // ── Output tabs (child-walk → store in arrays, safe from Dabs rebind) ──
-            string tabName = "";
-            int tabIdx = 0;
-            for (tabIdx = 0; tabIdx < 6; tabIdx = tabIdx + 1)
-            {
-                tabName = "TabOut";
-                tabName = tabName + tabIdx.ToString();
-                m_TabBgs.Set(tabIdx, FindBtnChildBg(layoutRoot, tabName));
-                m_TabTexts.Set(tabIdx, FindBtnChildText(layoutRoot, tabName));
-            }
 
             // ── Category buttons (arrays — safe from Dabs rebind) ──
             string catName = "";
@@ -331,29 +299,14 @@ class LFPG_SorterController_TEST extends ViewController
                 m_SlotTexts.Set(slotIdx, FindBtnChildText(layoutRoot, slotName));
             }
 
-            // ── Tab dots (also array — same stability) ──
-            string dotPrefix = "TabDot";
-            int dotIdx = 0;
-            for (dotIdx = 0; dotIdx < 6; dotIdx = dotIdx + 1)
-            {
-                if (!m_TabDots.Get(dotIdx))
-                {
-                    string wdot = dotPrefix;
-                    wdot = wdot + dotIdx.ToString();
-                    m_TabDots.Set(dotIdx, ImageWidget.Cast(layoutRoot.FindAnyWidget(wdot)));
-                }
-            }
 
             m_ArraysResolved = true;
         }
 
-        // ── View tabs (re-resolve each open — Dabs may rebind) ──
-        bn = "TabRules";
-        TabRulesBg = FindBtnChildBg(layoutRoot, bn);
-        TabRulesText = FindBtnChildText(layoutRoot, bn);
-        bn = "TabPreview";
-        TabPreviewBg = FindBtnChildBg(layoutRoot, bn);
-        TabPreviewText = FindBtnChildText(layoutRoot, bn);
+        // Preview toggle button (re-resolve each open, Dabs may rebind)
+        bn = "BtnPreview";
+        BtnPreviewBg = FindBtnChildBg(layoutRoot, bn);
+        BtnPreviewText = FindBtnChildText(layoutRoot, bn);
 
         // ── Catch-all ──
         bn = "BtnCatchAll";
@@ -369,9 +322,6 @@ class LFPG_SorterController_TEST extends ViewController
         BtnSlotAddBg = FindBtnChildBg(layoutRoot, bn);
 
         // ── Footer buttons ──
-        bn = "BtnSort";
-        BtnSortBg = FindBtnChildBg(layoutRoot, bn);
-        BtnSortText = FindBtnChildText(layoutRoot, bn);
         bn = "BtnSave";
         BtnSaveBg = FindBtnChildBg(layoutRoot, bn);
         BtnSaveText = FindBtnChildText(layoutRoot, bn);
@@ -381,9 +331,6 @@ class LFPG_SorterController_TEST extends ViewController
         bn = "BtnClearOut";
         BtnClearOutBg = FindBtnChildBg(layoutRoot, bn);
         BtnClearOutText = FindBtnChildText(layoutRoot, bn);
-        bn = "BtnClose";
-        BtnCloseBg = FindBtnChildBg(layoutRoot, bn);
-        BtnCloseText = FindBtnChildText(layoutRoot, bn);
 
         // ── Header sort button ──
         bn = "BtnSortHeader";
@@ -396,8 +343,6 @@ class LFPG_SorterController_TEST extends ViewController
         // ══════════════════════════════════════════════════════
         string wn = "";
 
-        wn = "TabIndicator";
-        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
 
         wn = "StatusLabel";
         if (!StatusLabel) { StatusLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
@@ -414,10 +359,6 @@ class LFPG_SorterController_TEST extends ViewController
         if (!LblSlot) { LblSlot = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
         wn = "LblSlotDash";
         if (!LblSlotDash) { LblSlotDash = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "LblActiveRules";
-        if (!LblActiveRules) { LblActiveRules = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
-        wn = "DestLabel";
-        if (!DestLabel) { DestLabel = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
         wn = "LblPreview";
         if (!LblPreview) { LblPreview = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
         wn = "TagsEmpty";
@@ -429,13 +370,7 @@ class LFPG_SorterController_TEST extends ViewController
         if (!RulesPanel) { RulesPanel = layoutRoot.FindAnyWidget(wn); }
         wn = "PreviewPanel";
         if (!PreviewPanel) { PreviewPanel = layoutRoot.FindAnyWidget(wn); }
-        wn = "DestIndicator";
-        if (!DestIndicator) { DestIndicator = layoutRoot.FindAnyWidget(wn); }
 
-        // v3: Tab dots now resolved inside m_ArraysResolved guard above.
-        // v3: View tab indicator
-        wn = "ViewTabIndicator";
-        if (!ViewTabIndicator) { ViewTabIndicator = ImageWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
         // v3: Empty state extras
         wn = "TagsEmptyIcon";
         if (!TagsEmptyIcon) { TagsEmptyIcon = TextWidget.Cast(layoutRoot.FindAnyWidget(wn)); }
@@ -568,6 +503,19 @@ class LFPG_SorterController_TEST extends ViewController
             m_IsPaired = false;
         }
 
+        // D2: client-side power query (panel opens read-only without power).
+        // Fail-closed default: stays read-only if the entity cannot be resolved.
+        m_IsPowered = false;
+        if (g_Game)
+        {
+            EntityAI sorterEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
+            LFPG_Sorter sorterDev = LFPG_Sorter.Cast(sorterEnt);
+            if (sorterDev)
+            {
+                m_IsPowered = sorterDev.LFPG_IsPowered();
+            }
+        }
+
         // DIAG: Log pairing state and key binding results
         #ifdef LFPG_DEBUG
         string diagInit = "[SorterCtrl] InitFromRPC paired=";
@@ -581,16 +529,24 @@ class LFPG_SorterController_TEST extends ViewController
         diagBindings = diagBindings + " CatTxt0=";
         if (m_CatTexts.Get(0)) { diagBindings = diagBindings + "OK"; }
         else { diagBindings = diagBindings + "NULL"; }
-        diagBindings = diagBindings + " TabOut1Text=";
-        if (m_TabTexts.Get(1)) { diagBindings = diagBindings + "OK"; }
-        else { diagBindings = diagBindings + "NULL"; }
-        diagBindings = diagBindings + " TabOut3Text=";
-        if (m_TabTexts.Get(3)) { diagBindings = diagBindings + "OK"; }
-        else { diagBindings = diagBindings + "NULL"; }
-        diagBindings = diagBindings + " TabOut5Text=";
-        if (m_TabTexts.Get(5)) { diagBindings = diagBindings + "OK"; }
-        else { diagBindings = diagBindings + "NULL"; }
         LFPG_Util.Info(diagBindings);
+
+        if (g_Game)
+        {
+            EntityAI diagEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
+            LFPG_Sorter diagSorter = LFPG_Sorter.Cast(diagEnt);
+            string diagPower = "[SorterCtrl] InitFromRPC powered=";
+            diagPower = diagPower + m_IsPowered.ToString();
+            if (diagSorter)
+            {
+                diagPower = diagPower + " entity=OK";
+            }
+            else
+            {
+                diagPower = diagPower + " entity=NULL";
+            }
+            LFPG_Util.Info(diagPower);
+        }
         #endif
 
         if (configJSON != "")
@@ -611,15 +567,23 @@ class LFPG_SorterController_TEST extends ViewController
         // Re-resolve before ApplyInitialColors/Labels use them.
         ReBindButtons();
 
-        if (m_IsPaired)
+        if (!m_IsPowered)
         {
-            string stOnline = "ONLINE";
-            SetStatus(stOnline);
+            string stNoPower = "NO POWER";
+            SetStatus(stNoPower);
         }
         else
         {
-            string stNoLink = "NO LINK";
-            SetStatus(stNoLink);
+            if (m_IsPaired)
+            {
+                string stOnline = "ONLINE";
+                SetStatus(stOnline);
+            }
+            else
+            {
+                string stNoLink = "NO LINK";
+                SetStatus(stNoLink);
+            }
         }
         ApplyInitialColors();
         ApplyInitialLabels();
@@ -631,42 +595,35 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     protected void ApplyInitialColors()
     {
-        int V = LFPG_SorterView_TEST.COL_BTN;
-        int G = LFPG_SorterView_TEST.COL_GREEN_BTN;
-        int B = LFPG_SorterView_TEST.COL_BLUE_BTN;
-        int R = LFPG_SorterView_TEST.COL_RED_BTN;
         int DIM = LFPG_SorterView_TEST.COL_TEXT_DIM;
         int MID = LFPG_SorterView_TEST.COL_TEXT_MID;
         int GRN = LFPG_SorterView_TEST.COL_GREEN;
         int WHT = LFPG_SorterView_TEST.COL_TEXT;
 
-        // Footer buttons
-        TintBg(BtnSortBg, B);
-        TintBg(BtnSaveBg, G);
-        TintBg(BtnResetAllBg, R);
-        // Sprint 4 (2026-04-26): BtnClearOut downgraded from destructive
-        // red to ghost variant per V4 design — Reset all stays red as the
-        // primary destructive action. Clear out only affects 1 output.
-        int RS = LFPG_SorterView_TEST.COL_BG_PANEL;
-        TintBg(BtnClearOutBg, RS);
-        TintBg(BtnCloseBg, V);
+        // Footer buttons (S2 premixes, layout owns the rest of the chrome)
+        TintBg(BtnSaveBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_SEC);
+        TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_S2_REDBTN_BG);
+        // Sprint 4 (2026-04-26): BtnClearOut ghost variant (S2 rulerow premix).
+        TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_S2_RULEROW_BG);
 
         // Footer text colors
-        SetTxtCol(BtnSortText, WHT);
         SetTxtCol(BtnSaveText, GRN);
         SetTxtCol(BtnResetAllText, WHT);
-        // Sprint 4: ghost variant => dim text instead of red
+        // Sprint 4: ghost variant => dim text
         SetTxtCol(BtnClearOutText, DIM);
-        SetTxtCol(BtnCloseText, DIM);
 
-        // Header sort button (blue, like footer BtnSort)
-        TintBg(BtnSortHeaderBg, B);
-        SetTxtCol(BtnSortHeaderText, WHT);
+        // Header sort button (S2 green-header premix)
+        TintBg(BtnSortHeaderBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_HDR);
+        SetTxtCol(BtnSortHeaderText, GRN);
 
-        // Add buttons (green)
-        TintBg(BtnPrefixAddBg, G);
-        TintBg(BtnContainsAddBg, G);
-        TintBg(BtnSlotAddBg, G);
+        // Add buttons (S2 green-panel premix)
+        TintBg(BtnPrefixAddBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_PAN);
+        TintBg(BtnContainsAddBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_PAN);
+        TintBg(BtnSlotAddBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_PAN);
+
+        // Preview toggle button
+        TintBg(BtnPreviewBg, LFPG_SorterView_TEST.COL_BG_RULES_PANEL);
+        SetTxtCol(BtnPreviewText, MID);
 
         // Labels
         SetTxtCol(LblCategory, DIM);
@@ -674,16 +631,14 @@ class LFPG_SorterController_TEST extends ViewController
         SetTxtCol(LblContains, DIM);
         SetTxtCol(LblSlot, DIM);
         SetTxtCol(LblSlotDash, MID);
-        SetTxtCol(LblActiveRules, DIM);
-        SetTxtCol(DestLabel, DIM);
         SetTxtCol(LblPreview, DIM);
         SetTxtCol(TagsEmpty, DIM);
         SetTxtCol(PreviewEmpty, DIM);
 
-        // v3: Empty state extras
-        SetTxtCol(TagsEmptyIcon, LFPG_SorterView_TEST.COL_SEPARATOR);
+        // v3: Empty state extras (S2 separator premix)
+        SetTxtCol(TagsEmptyIcon, LFPG_SorterView_TEST.COL_S2_SEPARATOR);
         SetTxtCol(TagsEmptyHint, DIM);
-        SetTxtCol(PreviewEmptyIcon, LFPG_SorterView_TEST.COL_SEPARATOR);
+        SetTxtCol(PreviewEmptyIcon, LFPG_SorterView_TEST.COL_S2_SEPARATOR);
         SetTxtCol(PreviewEmptyHint, DIM);
     }
 
@@ -722,23 +677,19 @@ class LFPG_SorterController_TEST extends ViewController
         // Footer action buttons
         if (enabled)
         {
-            TintBg(BtnSortBg, LFPG_SorterView_TEST.COL_BLUE_BTN);
             // Sprint 4 (2026-04-26): ghost variant when enabled (was red soft)
-            TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_BG_PANEL);
+            TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_S2_RULEROW_BG);
             SetTxtCol(BtnClearOutText, LFPG_SorterView_TEST.COL_TEXT_DIM);
-            TintBg(BtnSaveBg, LFPG_SorterView_TEST.COL_GREEN_BTN);
-            SetTxtCol(BtnSortText, LFPG_SorterView_TEST.COL_TEXT);
+            TintBg(BtnSaveBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_SEC);
             SetTxtCol(BtnSaveText, LFPG_SorterView_TEST.COL_GREEN);
             // Header sort
-            TintBg(BtnSortHeaderBg, LFPG_SorterView_TEST.COL_BLUE_BTN);
-            SetTxtCol(BtnSortHeaderText, LFPG_SorterView_TEST.COL_TEXT);
+            TintBg(BtnSortHeaderBg, LFPG_SorterView_TEST.COL_S2_GREENBTN_HDR);
+            SetTxtCol(BtnSortHeaderText, LFPG_SorterView_TEST.COL_GREEN);
         }
         else
         {
-            TintBg(BtnSortBg, dimBg);
             TintBg(BtnClearOutBg, dimBg);
             TintBg(BtnSaveBg, dimBg);
-            SetTxtCol(BtnSortText, dimTxt);
             SetTxtCol(BtnClearOutText, dimTxt);
             SetTxtCol(BtnSaveText, dimTxt);
             // Header sort
@@ -780,11 +731,12 @@ class LFPG_SorterController_TEST extends ViewController
     // S5: Extracted from SetStatus — maps status text to ARGB color
     protected int GetStatusColor(string st)
     {
-        string stSaving = "SAVING...";
-        string stSorting = "SORTING...";
+        string stSaving = "SAVING";
+        string stSorting = "SORTING";
         string stError = "ERROR";
         string stNoLink = "NO LINK";
-        string stSortFail = "SORT FAILED";
+        string stFailed = "FAILED";
+        string stNoPower = "NO POWER";
         if (st == stSaving || st == stSorting)
         {
             return LFPG_SorterView_TEST.COL_AMBER;
@@ -797,9 +749,13 @@ class LFPG_SorterController_TEST extends ViewController
         {
             return LFPG_SorterView_TEST.COL_RED;
         }
-        if (st == stSortFail)
+        if (st == stFailed)
         {
             return LFPG_SorterView_TEST.COL_RED;
+        }
+        if (st == stNoPower)
+        {
+            return LFPG_SorterView_TEST.COL_AMBER;
         }
         return LFPG_SorterView_TEST.COL_GREEN;
     }
@@ -835,7 +791,7 @@ class LFPG_SorterController_TEST extends ViewController
             // (which re-runs InitFromRPC with the correct pairing state).
             // TODO: full fix is a server-push RPC on container unlink so the
             // unpaired overlay shows immediately without an action attempt.
-            string stErr = "FAILED - REOPEN";
+            string stErr = "FAILED";
             SetStatus(stErr);
         }
         m_FeedbackTimer = 2.5;
@@ -856,7 +812,7 @@ class LFPG_SorterController_TEST extends ViewController
         {
             // B1 (2026-04-26): see HandleSaveAck note. Most common reason
             // for sort failure is container unlinked server-side.
-            string stFail = "FAILED - REOPEN";
+            string stFail = "FAILED";
             SetStatus(stFail);
         }
         m_FeedbackTimer = 3.0;
@@ -875,15 +831,23 @@ class LFPG_SorterController_TEST extends ViewController
             if (m_FeedbackTimer <= 0.0)
             {
                 m_FeedbackTimer = 0.0;
-                if (m_IsPaired)
+                if (!m_IsPowered)
                 {
-                    string stOnline = "ONLINE";
-                    SetStatus(stOnline);
+                    string stNoPower = "NO POWER";
+                    SetStatus(stNoPower);
                 }
                 else
                 {
-                    string stNoLink = "NO LINK";
-                    SetStatus(stNoLink);
+                    if (m_IsPaired)
+                    {
+                        string stOnline = "ONLINE";
+                        SetStatus(stOnline);
+                    }
+                    else
+                    {
+                        string stNoLink = "NO LINK";
+                        SetStatus(stNoLink);
+                    }
                 }
             }
         }
@@ -892,14 +856,22 @@ class LFPG_SorterController_TEST extends ViewController
         if (m_ResetConfirmActive)
         {
             m_ResetTimer = m_ResetTimer - dt;
-            if (m_ResetTimer <= 0.0)
-            {
-                m_ResetConfirmActive = false;
-                m_ResetTimer = 0.0;
-                string resetLabel = "Reset All";
-                if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
-                TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_RED_BTN);
-            }
+            if (m_ResetTimer <= 0.0) { CancelResetConfirm(); }
+        }
+
+        // ClearOut confirmation timeout (mirrors ResetAll)
+        if (m_ClearConfirmActive)
+        {
+            m_ClearTimer = m_ClearTimer - dt;
+            if (m_ClearTimer <= 0.0) { CancelClearConfirm(); }
+        }
+
+        // D2 (R21-1): power can change while the panel is open
+        m_PowerPollTimer = m_PowerPollTimer - dt;
+        if (m_PowerPollTimer <= 0.0)
+        {
+            m_PowerPollTimer = 0.5;
+            RefreshPowerState();
         }
 
         float previewNow = 0.0;
@@ -937,7 +909,9 @@ class LFPG_SorterController_TEST extends ViewController
         if (idx < 0 || idx >= LFPG_SORT_MAX_OUTPUTS)
             return;
         m_SelectedOutput = idx;
-        m_ResetConfirmActive = false;
+        // R21-4: cancel BOTH pending confirms (label + color restored)
+        CancelResetConfirm();
+        CancelClearConfirm();
         // F3-B: Preview is stale for new output
         m_LastMatchedItems = -1;
         RefreshAll();
@@ -948,13 +922,88 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     void TabRules()  { m_ShowRules = true;  RefreshViewTabs(); }
     void TabPreview() { m_ShowRules = false; RefreshViewTabs(); RequestPreview(); }
+    // R21-2: re-resolve named button widgets before painting (same pattern as
+    // the mutation handlers; Dabs may have rebound them after the last NPC).
+    void TogglePreview_TEST() { ReBindButtons(); if (m_ShowRules) { TabPreview(); } else { TabRules(); } }
+
+    // D2: read-only guard (mutating actions need pairing AND power).
+    // Navigation (SelectOutput) and preview requests stay allowed.
+    protected bool CanEdit() { return m_IsPaired && m_IsPowered; }
+
+    // R21-4: cancel helpers restore label + color so a stale CONFIRM? can
+    // never survive an output switch, a rival confirm or a power drop.
+    protected void CancelResetConfirm()
+    {
+        m_ResetConfirmActive = false;
+        m_ResetTimer = 0.0;
+        string resetLabel = "RESET ALL";
+        if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
+        TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_S2_REDBTN_BG);
+    }
+
+    protected void CancelClearConfirm()
+    {
+        m_ClearConfirmActive = false;
+        m_ClearTimer = 0.0;
+        string clearLabel = "CLEAR OUT";
+        if (BtnClearOutText) { BtnClearOutText.SetText(clearLabel); }
+        TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_S2_RULEROW_BG);
+    }
+
+    // D2 (R21-1): re-poll netsync power so a cut while the panel is open drops
+    // to read-only. Fail-closed when the entity cannot be resolved. Keeps the
+    // status untouched while a feedback message is showing (TickTimers revert
+    // repaints the right idle state afterwards).
+    protected void RefreshPowerState()
+    {
+        bool wasPowered = m_IsPowered;
+        m_IsPowered = false;
+        if (g_Game)
+        {
+            EntityAI powEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(m_SorterNetLow, m_SorterNetHigh));
+            LFPG_Sorter powDev = LFPG_Sorter.Cast(powEnt);
+            if (powDev)
+            {
+                m_IsPowered = powDev.LFPG_IsPowered();
+            }
+        }
+        if (m_IsPowered == wasPowered)
+            return;
+        if (!CanEdit())
+        {
+            CancelResetConfirm();
+            CancelClearConfirm();
+        }
+        if (m_FeedbackTimer <= 0.0)
+        {
+            if (!m_IsPowered)
+            {
+                string stNoPower = "NO POWER";
+                SetStatus(stNoPower);
+            }
+            else
+            {
+                if (m_IsPaired)
+                {
+                    string stOnline = "ONLINE";
+                    SetStatus(stOnline);
+                }
+                else
+                {
+                    string stNoLink = "NO LINK";
+                    SetStatus(stNoLink);
+                }
+            }
+        }
+        SetControlsEnabled(CanEdit());
+    }
 
     // =========================================================
     // M1: Category toggle by index (replaces CatBtn0..7)
     // =========================================================
     void ToggleCategoryByIdx(int idx)
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         if (idx < 0 || idx >= m_CatValues.Count()) return;
         string catValue = m_CatValues.Get(idx);
         ToggleCategory(catValue);
@@ -978,7 +1027,7 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     void ToggleSlotByIdx(int idx)
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         if (idx < 0 || idx >= m_SlotValues.Count()) return;
         string slotValue = m_SlotValues.Get(idx);
         ToggleSlot(slotValue);
@@ -1002,7 +1051,7 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     void BtnPrefixAdd()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         if (EditPrefix == "") return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
@@ -1018,7 +1067,7 @@ class LFPG_SorterController_TEST extends ViewController
 
     void BtnContainsAdd()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         if (EditContains == "") return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
@@ -1034,7 +1083,7 @@ class LFPG_SorterController_TEST extends ViewController
 
     void BtnSlotAdd()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         if (EditSlotMin == "" || EditSlotMax == "") return;
         int minVal = EditSlotMin.ToInt();
         int maxVal = EditSlotMax.ToInt();
@@ -1064,7 +1113,7 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     void BtnCatchAll()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         if (outCfg.m_IsCatchAll) { outCfg.m_IsCatchAll = false; }
@@ -1077,10 +1126,27 @@ class LFPG_SorterController_TEST extends ViewController
 
     void BtnClearOut()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
+        // R21-4: arming or executing ClearOut disarms a pending ResetAll
+        CancelResetConfirm();
+        if (!m_ClearConfirmActive)
+        {
+            // Two-click confirm (mirrors BtnResetAll)
+            m_ClearConfirmActive = true;
+            m_ClearTimer = 3.0;
+            string confirmLabel = "CONFIRM?";
+            if (BtnClearOutText) { BtnClearOutText.SetText(confirmLabel); }
+            TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_AMBER);
+            return;
+        }
+        m_ClearConfirmActive = false;
+        m_ClearTimer = 0.0;
         outCfg.ClearRules();
+        string clearLabel = "CLEAR OUT";
+        if (BtnClearOutText) { BtnClearOutText.SetText(clearLabel); }
+        TintBg(BtnClearOutBg, LFPG_SorterView_TEST.COL_S2_RULEROW_BG);
         // P4: All filter buttons reset + rules cleared
         ReBindButtons();
         RefreshFilterButtons();
@@ -1089,28 +1155,30 @@ class LFPG_SorterController_TEST extends ViewController
 
     void BtnResetAll()
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
+        // R21-4: arming or executing ResetAll disarms a pending ClearOut
+        CancelClearConfirm();
         if (!m_ResetConfirmActive)
         {
             m_ResetConfirmActive = true;
             m_ResetTimer = 3.0;
-            string confirmLabel = "Confirm?";
+            string confirmLabel = "CONFIRM?";
             if (BtnResetAllText) { BtnResetAllText.SetText(confirmLabel); }
             TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_AMBER);
             return;
         }
         m_ResetConfirmActive = false;
         m_Config.ResetAll();
-        string resetLabel = "Reset All";
+        string resetLabel = "RESET ALL";
         if (BtnResetAllText) { BtnResetAllText.SetText(resetLabel); }
-        TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_RED_BTN);
+        TintBg(BtnResetAllBg, LFPG_SorterView_TEST.COL_S2_REDBTN_BG);
         RefreshAll();
     }
 
     void BtnSave()
     {
         // S8 fix: guard unpaired — all other action buttons check this
-        if (!m_IsPaired)
+        if (!CanEdit())
             return;
         // B2 (2026-04-26): drop click if a previous Save is still pending.
         // HandleSaveAck (success or failure) clears the flag.
@@ -1122,8 +1190,8 @@ class LFPG_SorterController_TEST extends ViewController
         string saveMsg = "[SorterCtrl] SAVE: ";
         saveMsg = saveMsg + json;
         LFPG_Util.Info(saveMsg);
-        string stSaving = "SAVING...";
-        SetStatus(stSaving);
+        string savingLabel = "SAVING";
+        SetStatus(savingLabel);
         #ifndef SERVER
         // R4: g_Game guard
         if (!g_Game)
@@ -1142,14 +1210,6 @@ class LFPG_SorterController_TEST extends ViewController
         #endif
     }
 
-    void BtnSort()
-    {
-        string label = "[SorterCtrl] REQUEST_SORT";
-        DoSort(label);
-    }
-
-    void BtnClose() { LFPG_SorterView_TEST.Close(); }
-
     // Bug #3: X close button in header
     void BtnCloseX() { LFPG_SorterView_TEST.Close(); }
 
@@ -1160,10 +1220,10 @@ class LFPG_SorterController_TEST extends ViewController
         DoSort(label);
     }
 
-    // N1: Shared sort logic (was duplicated in BtnSort + BtnSortHeader)
+    // N1: Shared sort logic (used by BtnSortHeader)
     protected void DoSort(string logLabel)
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         // B2 (2026-04-26): drop click if a previous Sort is still pending.
         // HandleSortAck (success or failure) clears the flag.
         if (m_SortInFlight)
@@ -1171,8 +1231,8 @@ class LFPG_SorterController_TEST extends ViewController
         m_SortInFlight = true;
 
         LFPG_Util.Info(logLabel);
-        string stSorting = "SORTING...";
-        SetStatus(stSorting);
+        string sortingLabel = "SORTING";
+        SetStatus(sortingLabel);
         // S6: Timeout timer — SORT_ACK will override with real result
         m_FeedbackTimer = 8.0;
         #ifndef SERVER
@@ -1197,7 +1257,7 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     void OnRemoveTag(int outputIdx, int ruleIdx)
     {
-        if (!m_IsPaired) return;
+        if (!CanEdit()) return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(outputIdx);
         if (!outCfg) return;
 
@@ -1269,9 +1329,6 @@ class LFPG_SorterController_TEST extends ViewController
         BtnContainsAddBg = FindBtnChildBg(m_LayoutRoot, bn);
         bn = "BtnSlotAdd";
         BtnSlotAddBg = FindBtnChildBg(m_LayoutRoot, bn);
-        bn = "BtnSort";
-        BtnSortBg = FindBtnChildBg(m_LayoutRoot, bn);
-        BtnSortText = FindBtnChildText(m_LayoutRoot, bn);
         bn = "BtnSave";
         BtnSaveBg = FindBtnChildBg(m_LayoutRoot, bn);
         BtnSaveText = FindBtnChildText(m_LayoutRoot, bn);
@@ -1281,18 +1338,12 @@ class LFPG_SorterController_TEST extends ViewController
         bn = "BtnClearOut";
         BtnClearOutBg = FindBtnChildBg(m_LayoutRoot, bn);
         BtnClearOutText = FindBtnChildText(m_LayoutRoot, bn);
-        bn = "BtnClose";
-        BtnCloseBg = FindBtnChildBg(m_LayoutRoot, bn);
-        BtnCloseText = FindBtnChildText(m_LayoutRoot, bn);
         bn = "BtnSortHeader";
         BtnSortHeaderBg = FindBtnChildBg(m_LayoutRoot, bn);
         BtnSortHeaderText = FindBtnChildText(m_LayoutRoot, bn);
-        bn = "TabRules";
-        TabRulesBg = FindBtnChildBg(m_LayoutRoot, bn);
-        TabRulesText = FindBtnChildText(m_LayoutRoot, bn);
-        bn = "TabPreview";
-        TabPreviewBg = FindBtnChildBg(m_LayoutRoot, bn);
-        TabPreviewText = FindBtnChildText(m_LayoutRoot, bn);
+        bn = "BtnPreview";
+        BtnPreviewBg = FindBtnChildBg(m_LayoutRoot, bn);
+        BtnPreviewText = FindBtnChildText(m_LayoutRoot, bn);
     }
 
     protected void RefreshAll()
@@ -1304,15 +1355,14 @@ class LFPG_SorterController_TEST extends ViewController
         // Sprint 3 (2026-04-26): keep Active Rules sublabel in sync.
         RefreshRulesHeader_TEST();
         ReBindButtons();
-        RefreshOutputTabs();
         RefreshViewTabs();
         RefreshFilterButtons();
         RefreshRulesDisplay();
-        RefreshDestIndicator();
+        RefreshHeaderLink();
         // v3: Refresh edit hints
         LFPG_SorterView_TEST.RefreshHints();
         // Apply disabled visual after all refreshes (v2.2)
-        SetControlsEnabled(m_IsPaired);
+        SetControlsEnabled(CanEdit());
     }
 
     // =========================================================
@@ -1345,185 +1395,24 @@ class LFPG_SorterController_TEST extends ViewController
         RefreshCatchAllButton();
     }
 
-    protected void RefreshOutputTabs()
+    protected void RefreshViewTabs()
     {
-        int i;
-        LFPG_SortOutputConfig tabCfg = null;
-        int tabRules = 0;
-        bool tabHasContent = false;
-        bool isSel = false;
-        int bgCol = 0;
-        int txtCol = 0;
-        int num = 0;
-        string numStr = "";
-        string prefix = "0";
-        string label = "";
-        string destName = "";
-        int destLen = 0;
-        int maxDestChars = 4;
-        TextWidget tt = null;
-        for (i = 0; i < 6; i = i + 1)
+        if (RulesPanel) { RulesPanel.Show(m_ShowRules); }
+        if (PreviewPanel) { PreviewPanel.Show(!m_ShowRules); }
+        TintBg(BtnPreviewBg, LFPG_SorterView_TEST.COL_BG_RULES_PANEL);
+        if (BtnPreviewText)
         {
-            isSel = (i == m_SelectedOutput);
-            bgCol = LFPG_SorterView_TEST.COL_BTN;
-            txtCol = LFPG_SorterView_TEST.COL_TEXT_MID;
-            if (isSel) { bgCol = LFPG_SorterView_TEST.COL_BG_ELEVATED; txtCol = LFPG_SorterView_TEST.COL_GREEN; }
-            num = i + 1;
-            numStr = num.ToString();
-            label = prefix;
-            label = label + numStr;
-            if (num >= 10) { label = numStr; }
-
-            // D5: Append truncated dest name when available
-            destName = GetDestName(i);
-            if (destName != "")
+            if (m_ShowRules)
             {
-                destLen = destName.Length();
-                if (destLen > maxDestChars)
-                {
-                    destLen = maxDestChars;
-                }
-                label = label + ":";
-                label = label + destName.Substring(0, destLen);
-            }
-
-            // V2: Check tabs with rules/catch-all
-            tabCfg = m_Config.GetOutput(i);
-            tabHasContent = false;
-            if (tabCfg)
-            {
-                tabRules = tabCfg.GetRuleCount();
-                if (tabRules > 0) { tabHasContent = true; }
-                if (tabCfg.m_IsCatchAll) { tabHasContent = true; }
-            }
-
-            TintBg(GetTabBg(i), bgCol);
-            tt = GetTabText(i);
-            if (tt)
-            {
-                tt.SetColor(txtCol);
-                tt.SetText(label);
+                string lblPrev = "PREVIEW";
+                BtnPreviewText.SetText(lblPrev);
+                BtnPreviewText.SetColor(LFPG_SorterView_TEST.COL_TEXT_MID);
             }
             else
             {
-                // DIAG: Log if TextWidget is null for this tab index
-                #ifdef LFPG_DEBUG
-                string diagTab = "[SorterCtrl] Tab ";
-                diagTab = diagTab + i.ToString();
-                diagTab = diagTab + " TextWidget NULL, label=";
-                diagTab = diagTab + label;
-                LFPG_Util.Warn(diagTab);
-                #endif
-            }
-
-            // v3: Tab dot indicator (replaces " *" suffix)
-            ImageWidget dot = GetTabDot(i);
-            if (dot)
-            {
-                if (tabHasContent && !isSel)
-                {
-                    dot.Show(true);
-                    int dotCol = LFPG_SorterView_TEST.COL_GREEN;
-                    bool onlyCatchAll = false;
-                    if (tabCfg)
-                    {
-                        if (tabRules == 0 && tabCfg.m_IsCatchAll)
-                        {
-                            onlyCatchAll = true;
-                        }
-                    }
-                    if (onlyCatchAll)
-                    {
-                        dotCol = LFPG_SorterView_TEST.COL_AMBER;
-                    }
-                    dot.SetColor(dotCol);
-                }
-                else
-                {
-                    dot.Show(false);
-                }
-            }
-        }
-
-        // Position active-tab indicator under selected tab.
-        // v2.8: Read actual tab button position.
-        if (TabIndicator)
-        {
-            float indCurX = 0.0;
-            float indCurY = 0.0;
-            TabIndicator.GetPos(indCurX, indCurY);
-            ImageWidget selBg = GetTabBg(m_SelectedOutput);
-            if (selBg)
-            {
-                Widget selBtn = selBg.GetParent();
-                if (selBtn)
-                {
-                    float btnPosX = 0.0;
-                    float btnPosY = 0.0;
-                    selBtn.GetPos(btnPosX, btnPosY);
-                    TabIndicator.SetPos(btnPosX, indCurY);
-                }
-            }
-        }
-    }
-
-    protected ImageWidget GetTabBg(int idx)
-    {
-        if (idx < 0) return null;
-        if (idx > 5) return null;
-        if (!m_TabBgs) return null;
-        return m_TabBgs.Get(idx);
-    }
-    protected TextWidget GetTabText(int idx)
-    {
-        if (idx < 0) return null;
-        if (idx > 5) return null;
-        if (!m_TabTexts) return null;
-        return m_TabTexts.Get(idx);
-    }
-
-    // v3: Tab dot accessor
-    protected ImageWidget GetTabDot(int idx)
-    {
-        if (idx < 0 || idx >= m_TabDots.Count())
-            return null;
-        return m_TabDots.Get(idx);
-    }
-
-    protected void RefreshViewTabs()
-    {
-        int rBg = LFPG_SorterView_TEST.COL_BTN; int rTxt = LFPG_SorterView_TEST.COL_TEXT_DIM;
-        int pBg = LFPG_SorterView_TEST.COL_BTN; int pTxt = LFPG_SorterView_TEST.COL_TEXT_DIM;
-        if (m_ShowRules) { rBg = LFPG_SorterView_TEST.COL_BG_ELEVATED; rTxt = LFPG_SorterView_TEST.COL_BLUE; }
-        else { pBg = LFPG_SorterView_TEST.COL_BG_ELEVATED; pTxt = LFPG_SorterView_TEST.COL_BLUE; }
-        TintBg(TabRulesBg, rBg); TintBg(TabPreviewBg, pBg);
-        if (TabRulesText) { TabRulesText.SetColor(rTxt); }
-        if (TabPreviewText) { TabPreviewText.SetColor(pTxt); }
-        if (RulesPanel) { RulesPanel.Show(m_ShowRules); }
-        if (PreviewPanel) { PreviewPanel.Show(!m_ShowRules); }
-
-        // v3: Position ViewTabIndicator under active view tab
-        if (ViewTabIndicator)
-        {
-            ViewTabIndicator.SetColor(LFPG_SorterView_TEST.COL_BLUE);
-            ImageWidget activeViewBg = TabRulesBg;
-            if (!m_ShowRules)
-            {
-                activeViewBg = TabPreviewBg;
-            }
-            if (activeViewBg)
-            {
-                Widget activeViewBtn = activeViewBg.GetParent();
-                if (activeViewBtn)
-                {
-                    float vx = 0.0;
-                    float vy = 0.0;
-                    activeViewBtn.GetPos(vx, vy);
-                    float ix = 0.0;
-                    float iy = 0.0;
-                    ViewTabIndicator.GetPos(ix, iy);
-                    ViewTabIndicator.SetPos(vx, iy);
-                }
+                string lblBack = "RULES";
+                BtnPreviewText.SetText(lblBack);
+                BtnPreviewText.SetColor(LFPG_SorterView_TEST.COL_BLUE);
             }
         }
     }
@@ -1533,8 +1422,8 @@ class LFPG_SorterController_TEST extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         int ci = 0;
-        int gbtn = LFPG_SorterView_TEST.COL_GREEN_BTN;
-        int gtxt = LFPG_SorterView_TEST.COL_GREEN;
+        int gbtn = LFPG_SorterView_TEST.COL_BLUE_BTN;
+        int gtxt = LFPG_SorterView_TEST.COL_BLUE;
         bool hasRule = false;
         string catVal = "";
         string catLbl = "";
@@ -1551,8 +1440,8 @@ class LFPG_SorterController_TEST extends ViewController
     {
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        int bbtn = LFPG_SorterView_TEST.COL_BLUE_BTN;
-        int btxt = LFPG_SorterView_TEST.COL_BLUE;
+        int bbtn = LFPG_SorterView_TEST.COL_GREEN_BTN;
+        int btxt = LFPG_SorterView_TEST.COL_GREEN;
         bool hasRule = false;
         string slotVal = "";
         int si = 0;
@@ -1591,14 +1480,15 @@ class LFPG_SorterController_TEST extends ViewController
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
         bool active = outCfg.m_IsCatchAll;
-        int bgCol = LFPG_SorterView_TEST.COL_BTN;
-        int txtCol = LFPG_SorterView_TEST.COL_TEXT_DIM;
-        string label = "CATCH-ALL";
+        int bgCol = LFPG_SorterView_TEST.COL_S2_CATCHALL_BG;
+        int txtCol = LFPG_SorterView_TEST.COL_AMBER;
+        string label = "CATCH-ALL SORTING: OFF";
         if (active)
         {
             bgCol = LFPG_SorterView_TEST.COL_AMBER;
             txtCol = LFPG_SorterView_TEST.COL_BG_DEEP;
-            label = "* CATCH-ALL";
+            string labelOn = "CATCH-ALL SORTING: ON";
+            label = labelOn;
         }
         TintBg(BtnCatchAllBg, bgCol);
         if (BtnCatchAllText) { BtnCatchAllText.SetColor(txtCol); BtnCatchAllText.SetText(label); }
@@ -1643,7 +1533,7 @@ class LFPG_SorterController_TEST extends ViewController
             label = rule.GetDisplayLabel();
             color = GetRuleColor(rule.m_Type);
             tag = new LFPG_SorterTagView_TEST();
-            tag.SetData(label, color, ri, m_SelectedOutput, this);
+            tag.SetData(label, color, GetRuleTypeTag(rule.m_Type), ri, m_SelectedOutput, this);
             TagsList.Insert(tag);
             inserted = inserted + 1;
         }
@@ -1651,9 +1541,10 @@ class LFPG_SorterController_TEST extends ViewController
         // Catch-all tag (always last)
         if (outCfg.m_IsCatchAll)
         {
-            string caLabel = "* CATCH-ALL";
+            string caLabel = "CATCH-ALL";
+            string caTag = "*";
             tag = new LFPG_SorterTagView_TEST();
-            tag.SetData(caLabel, LFPG_SorterView_TEST.COL_AMBER, -1, m_SelectedOutput, this);
+            tag.SetData(caLabel, LFPG_SorterView_TEST.COL_AMBER, caTag, -1, m_SelectedOutput, this);
             TagsList.Insert(tag);
             inserted = inserted + 1;
         }
@@ -1677,11 +1568,25 @@ class LFPG_SorterController_TEST extends ViewController
 
     protected int GetRuleColor(int ruleType)
     {
-        if (ruleType == LFPG_SORT_FILTER_CATEGORY) return LFPG_SorterView_TEST.COL_GREEN;
-        if (ruleType == LFPG_SORT_FILTER_PREFIX) return LFPG_SorterView_TEST.COL_BLUE;
-        if (ruleType == LFPG_SORT_FILTER_CONTAINS) return LFPG_SorterView_TEST.COL_AMBER;
-        if (ruleType == LFPG_SORT_FILTER_SLOT) return LFPG_SorterView_TEST.COL_PURPLE;
+        if (ruleType == LFPG_SORT_FILTER_CATEGORY) return LFPG_SorterView_TEST.COL_BLUE;
+        if (ruleType == LFPG_SORT_FILTER_PREFIX) return LFPG_SorterView_TEST.COL_AMBER;
+        if (ruleType == LFPG_SORT_FILTER_CONTAINS) return LFPG_SorterView_TEST.COL_PURPLE;
+        if (ruleType == LFPG_SORT_FILTER_SLOT) return LFPG_SorterView_TEST.COL_GREEN;
         return LFPG_SorterView_TEST.COL_TEXT;
+    }
+
+    protected string GetRuleTypeTag(int ruleType)
+    {
+        string tagCat = "CAT";
+        string tagPfx = "PFX";
+        string tagCon = "CON";
+        string tagSlt = "SLT";
+        string tagNone = "---";
+        if (ruleType == LFPG_SORT_FILTER_CATEGORY) return tagCat;
+        if (ruleType == LFPG_SORT_FILTER_PREFIX) return tagPfx;
+        if (ruleType == LFPG_SORT_FILTER_CONTAINS) return tagCon;
+        if (ruleType == LFPG_SORT_FILTER_SLOT) return tagSlt;
+        return tagNone;
     }
 
     protected void RefreshRuleCount()
@@ -1702,11 +1607,10 @@ class LFPG_SorterController_TEST extends ViewController
         NotifyPropertyChanged(propRC, false);
     }
 
-    protected void RefreshDestIndicator()
+    protected void RefreshHeaderLink()
     {
         string dest = GetDestName(m_SelectedOutput);
         bool hasDest = (dest != "");
-        if (DestIndicator) { DestIndicator.Show(hasDest); }
         string propDN = "DestName";
         string propHT = "HeaderTitle";
         if (hasDest)
@@ -2021,7 +1925,7 @@ class LFPG_SorterController_TEST extends ViewController
         int activeBg = LFPG_SorterView_TEST.COL_BG_ELEVATED;
         int activeIndicator = LFPG_SorterView_TEST.COL_GREEN;
         int activeLabelCol = LFPG_SorterView_TEST.COL_GREEN;
-        int dimBg = LFPG_SorterView_TEST.COL_BG_PANEL;
+        int dimBg = LFPG_SorterView_TEST.COL_S2_BG_SECTION;
         int dimIndicator = 0x00000000;
         int dimLabelCol = LFPG_SorterView_TEST.COL_TEXT;
 
@@ -2132,21 +2036,6 @@ class LFPG_SorterController_TEST extends ViewController
         RefreshBuilderTab_TEST();
     }
 
-    // IS1+IS3 (Sprint 4.5, 2026-04-26): show/hide via cached widget array.
-    // No more FindAnyWidget per name; no per-call array allocations.
-    protected void SetBuilderSectionVisible_TEST(array<Widget> widgets, bool show)
-    {
-        if (!widgets) return;
-        int ni = 0;
-        int nc = widgets.Count();
-        Widget w = null;
-        for (ni = 0; ni < nc; ni = ni + 1)
-        {
-            w = widgets[ni];
-            if (w) { w.Show(show); }
-        }
-    }
-
     // IS1+IS3 (Sprint 4.5, 2026-04-26): Refresh uses cached widget arrays.
     // Per-call cost was ~50 FindAnyWidget + 4 array allocs; now 0 of either.
     void RefreshBuilderTab_TEST()
@@ -2155,10 +2044,16 @@ class LFPG_SorterController_TEST extends ViewController
         if (!m_V4CacheBuilt_TEST) return;
         int activeIdx = m_ActiveBuilderTab_TEST;
 
-        SetBuilderSectionVisible_TEST(m_BuilderCatWidgets_TEST, activeIdx == 0);
-        SetBuilderSectionVisible_TEST(m_BuilderPfxWidgets_TEST, activeIdx == 1);
-        SetBuilderSectionVisible_TEST(m_BuilderConWidgets_TEST, activeIdx == 2);
-        SetBuilderSectionVisible_TEST(m_BuilderSltWidgets_TEST, activeIdx == 3);
+        // Show only the active section root (order: CAT/PFX/CON/SLT)
+        int secIdx = 0;
+        for (secIdx = 0; secIdx < m_SectionRoots_TEST.Count(); secIdx = secIdx + 1)
+        {
+            Widget secRoot = m_SectionRoots_TEST.Get(secIdx);
+            if (secRoot)
+            {
+                secRoot.Show(secIdx == activeIdx);
+            }
+        }
 
         // Tab visuals — cached underlines + texts (4 each)
         int colCat = LFPG_SorterView_TEST.COL_BLUE;
@@ -2209,7 +2104,6 @@ class LFPG_SorterController_TEST extends ViewController
     {
         EnsureV4Cache_TEST();
         if (!m_V4CacheBuilt_TEST) return;
-        if (!m_RulesSublabel_TEST) return;
 
         int activeIdx = m_SelectedOutput;
         string contName = "";
@@ -2218,22 +2112,45 @@ class LFPG_SorterController_TEST extends ViewController
             contName = m_Dests.Get(activeIdx);
         }
 
-        // Sprint 4: UPPERCASE per design spec.
-        string txt = "ON OUT ";
         int displayIdx = activeIdx + 1;
-        txt = txt + displayIdx.ToString();
-        if (contName != "")
+
+        // Sublabel: "ON OUT N - <CONTAINER>" / "ON OUT N - UNLINKED"
+        if (m_RulesSublabel_TEST)
         {
-            string upperCont = contName;
-            upperCont.ToUpper();
-            txt = txt + " - ";
-            txt = txt + upperCont;
+            string txt = "ON OUT ";
+            txt = txt + displayIdx.ToString();
+            if (contName != "")
+            {
+                string upperCont = contName;
+                upperCont.ToUpper();
+                txt = txt + " - ";
+                txt = txt + upperCont;
+            }
+            else
+            {
+                txt = txt + " - UNLINKED";
+            }
+            m_RulesSublabel_TEST.SetText(txt);
         }
-        else
+
+        // S2 ctx label: "(OUT N - <name>)" / "(OUT N - unlinked)"
+        if (m_BuilderCtxLabel_TEST)
         {
-            txt = txt + " - UNLINKED";
+            string ctx = "(OUT ";
+            ctx = ctx + displayIdx.ToString();
+            ctx = ctx + " - ";
+            if (contName != "")
+            {
+                ctx = ctx + contName;
+            }
+            else
+            {
+                string unlinked = "unlinked";
+                ctx = ctx + unlinked;
+            }
+            ctx = ctx + ")";
+            m_BuilderCtxLabel_TEST.SetText(ctx);
         }
-        m_RulesSublabel_TEST.SetText(txt);
     }
 
     // ============================================================
@@ -2298,84 +2215,26 @@ class LFPG_SorterController_TEST extends ViewController
         nm = "BuilderTabSlotText";
         m_BuilderTabTexts_TEST.Insert(TextWidget.Cast(m_LayoutRoot.FindAnyWidget(nm)));
 
-        // ---- 4 section widget arrays ----
-        BuildSectionCache_TEST(m_BuilderCatWidgets_TEST, 0);
-        BuildSectionCache_TEST(m_BuilderPfxWidgets_TEST, 1);
-        BuildSectionCache_TEST(m_BuilderConWidgets_TEST, 2);
-        BuildSectionCache_TEST(m_BuilderSltWidgets_TEST, 3);
+        // ---- 4 section roots (CAT/PFX/CON/SLT) ----
+        m_SectionRoots_TEST.Clear();
+        nm = "SectionCategory";
+        m_SectionRoots_TEST.Insert(m_LayoutRoot.FindAnyWidget(nm));
+        nm = "SectionPrefix";
+        m_SectionRoots_TEST.Insert(m_LayoutRoot.FindAnyWidget(nm));
+        nm = "SectionContains";
+        m_SectionRoots_TEST.Insert(m_LayoutRoot.FindAnyWidget(nm));
+        nm = "SectionSlot";
+        m_SectionRoots_TEST.Insert(m_LayoutRoot.FindAnyWidget(nm));
 
         // ---- single widgets ----
         // Enforce rule: assign string to local before passing as param.
         nm = "RulesSublabel";
         m_RulesSublabel_TEST = TextWidget.Cast(m_LayoutRoot.FindAnyWidget(nm));
+        nm = "BuilderCtxLabel";
+        m_BuilderCtxLabel_TEST = TextWidget.Cast(m_LayoutRoot.FindAnyWidget(nm));
 
         m_V4CacheBuilt_TEST = true;
     }
 
-    // Helper: populate widget array for one section (kind 0..3).
-    protected void BuildSectionCache_TEST(array<Widget> outArr, int kind)
-    {
-        if (!outArr) return;
-        if (!m_LayoutRoot) return;
-        outArr.Clear();
-
-        int j = 0;
-        string nm;
-
-        if (kind == 0)
-        {
-            // Section CATEGORY: 2 bg/accent + 8 buttons
-            nm = "CatSectionBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "CatSectionAccent"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            for (j = 0; j < 8; j = j + 1)
-            {
-                nm = "CatBtn"; nm = nm + j.ToString();
-                outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            }
-            return;
-        }
-        if (kind == 1)
-        {
-            nm = "PrefixSectionBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "PrefixSectionAccent"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditPrefixBg";        outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditPrefix";          outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditPrefixBorder";    outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditPrefixHint";      outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "BtnPrefixAdd";        outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            return;
-        }
-        if (kind == 2)
-        {
-            nm = "ContainsSectionBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "ContainsSectionAccent"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditContainsBg";        outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditContains";          outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditContainsBorder";    outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditContainsHint";      outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "BtnContainsAdd";        outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            return;
-        }
-        if (kind == 3)
-        {
-            nm = "SlotSectionBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "SlotSectionAccent"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            for (j = 0; j < 4; j = j + 1)
-            {
-                nm = "SlotPre"; nm = nm + j.ToString();
-                outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            }
-            nm = "EditSlotMinBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMin";       outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMinBorder"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMinHint";   outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMaxBg";     outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMax";       outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMaxBorder"; outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "EditSlotMaxHint";   outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            nm = "BtnSlotAdd";        outArr.Insert(m_LayoutRoot.FindAnyWidget(nm));
-            return;
-        }
-    }
 };
 #endif

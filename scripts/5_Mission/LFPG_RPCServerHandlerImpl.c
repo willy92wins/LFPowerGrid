@@ -2453,7 +2453,11 @@ class LFPG_RPCServerHandlerImpl
         }
 
         // Powered check
-        if (!sorter.LFPG_IsPowered())
+        // D2 (V4 TEST): the TEST panel opens read-only without power; config
+        // reads are served, mutations (save/sort/preview) stay fail-closed.
+        // Production (V3 responseSubId) keeps rejecting unpowered requests.
+        bool allowUnpowered = (responseSubId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_RESPONSE);
+        if (!sorter.LFPG_IsPowered() && !allowUnpowered)
         {
             PlayerBase.LFPG_SendClientMsg(player, "Sorter has no power.");
             return;
