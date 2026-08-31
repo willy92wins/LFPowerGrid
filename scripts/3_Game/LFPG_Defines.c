@@ -524,7 +524,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "1.2.3";
+static const string LFPG_VERSION_STR = "1.2.4";
 
 // =========================================================
 // Constants that were previously missing definitions.
@@ -738,6 +738,8 @@ static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -90.0;   // degrees (scr
 static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 90.0;    // degrees (scroll up)
 static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 1.0;     // degrees per scroll tick
 static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 150.0;   // ms between aim RPCs
+static const float LFPG_SEARCHLIGHT_HEARTBEAT_MS      = 2000.0;  // ms between activity heartbeats
+static const int   LFPG_SEARCHLIGHT_LEASE_MS          = 10000;   // server activity lease
 static const float LFPG_SEARCHLIGHT_AIM_DEADZONE_DEG  = 0.25;    // client send threshold
 static const float LFPG_SEARCHLIGHT_SPLASH_RAYCAST_MS = 500.0;   // server physics cadence
 static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 2.5;     // auto-exit distance

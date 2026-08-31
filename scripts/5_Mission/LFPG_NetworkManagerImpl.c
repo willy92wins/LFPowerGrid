@@ -711,8 +711,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (!ident) return false;
 
-        // Log-safe id: this key only indexes in-process rate-limit maps and
-        // is printed in the sliding-window warning below.
+        // This id only indexes in-process maps. Logs render it via LogUid.
         string pid = ident.GetId();
         LFPG_ServerSettings st = LFPG_Settings.Get();
         float now = g_Game.GetTime() * 0.001;
@@ -738,9 +737,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 
                 if (opsInWindow >= LFPG_RPC_MAX_OPS_PER_SEC)
                 {
-                    string swLog = "[RateLimiter] Sliding window exceeded for " + pid;
+                    string swLog = "[RateLimiter] Sliding window exceeded for " + LFPG_Util.LogUid(pid);
                     swLog = swLog + " ops=" + opsInWindow.ToString();
-                    LFPG_Util.Warn(swLog);
+                    LFPG_Util.RateLimitedWarn(ident, "global_sliding_window", swLog);
                     return false;
                 }
             }
@@ -808,9 +807,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RateOpsInWindow.Remove(staleKey);
         }
 
-        if (removed > 0)
+        int warnRemoved = LFPG_Util.PurgeStaleWarnRateLimits(GetGame().GetTickTime(), RATE_LIMITER_STALE_SEC);
+        if (removed > 0 || warnRemoved > 0)
         {
-            string purgeMsg = "[RateLimiter] Purged " + removed.ToString() + " stale entries";
+            string purgeMsg = "[RateLimiter] Purged cooldown=" + removed.ToString() + " warn=" + warnRemoved.ToString() + " stale entries";
             LFPG_Util.Info(purgeMsg);
         }
 
@@ -1544,6 +1544,117 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         #endif
+    }
+
+    // Read-only authorization preflight for FINISH_WIRING input replacement.
+    // The reverse index is accepted only when its count and owner set exactly
+    // match the authoritative LFPG and vanilla wire stores.
+    override bool CanCreatorReplaceWiresTargeting(string targetDeviceId, string targetPort, string creatorId, bool allowOthers)
+    {
+        if (targetDeviceId == "" || creatorId == "")
+            return false;
+
+        string normalizedTargetPort = targetPort;
+        if (normalizedTargetPort == "")
+            normalizedTargetPort = "input_main";
+        string reverseKey = targetDeviceId + "|" + normalizedTargetPort;
+
+        int indexedCount = 0;
+        bool indexedCountPresent = m_ReverseIdx.Find(reverseKey, indexedCount);
+        if (indexedCountPresent && indexedCount <= 0)
+            return false;
+
+        bool indexedOwnersPresent = m_ReverseOwners.Contains(reverseKey);
+        array<string> indexedOwners = m_ReverseOwners.Get(reverseKey);
+        if (indexedCount > 0 && (!indexedOwnersPresent || !indexedOwners || indexedOwners.Count() == 0))
+            return false;
+        if (indexedCount == 0 && indexedOwnersPresent)
+            return false;
+
+        int actualCount = 0;
+        map<string, bool> actualOwners = new map<string, bool>;
+        array<EntityAI> safetySources = new array<EntityAI>;
+        LFPG_DeviceRegistry.Get().GetAllRegisteredForSafety(safetySources);
+
+        int safetySourceIndex;
+        for (safetySourceIndex = 0; safetySourceIndex < safetySources.Count(); safetySourceIndex = safetySourceIndex + 1)
+        {
+            EntityAI safetySource = safetySources[safetySourceIndex];
+            if (!safetySource || !LFPG_DeviceAPI.HasWireStore(safetySource))
+                continue;
+
+            array<ref LFPG_WireData> safetyWires = LFPG_DeviceAPI.GetDeviceWires(safetySource);
+            if (!safetyWires)
+                continue;
+
+            int safetyWireIndex;
+            for (safetyWireIndex = 0; safetyWireIndex < safetyWires.Count(); safetyWireIndex = safetyWireIndex + 1)
+            {
+                LFPG_WireData safetyWire = safetyWires[safetyWireIndex];
+                if (!safetyWire || safetyWire.m_TargetDeviceId != targetDeviceId || safetyWire.m_TargetPort != targetPort)
+                    continue;
+
+                string safetySourceId = LFPG_DeviceAPI.GetDeviceId(safetySource);
+                if (safetySourceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(safetySourceId))
+                    return false;
+                if (LFPG_DeviceRegistry.Get().FindById(safetySourceId) != safetySource)
+                    return false;
+                if (!LFPG_WireHelper.CanCreatorCutWire(safetyWire, creatorId, allowOthers))
+                    return false;
+
+                actualCount = actualCount + 1;
+                actualOwners.Set(safetySourceId, true);
+            }
+        }
+
+        int vanillaOwnerIndex;
+        for (vanillaOwnerIndex = 0; vanillaOwnerIndex < m_VanillaWires.Count(); vanillaOwnerIndex = vanillaOwnerIndex + 1)
+        {
+            string vanillaOwnerId = m_VanillaWires.GetKey(vanillaOwnerIndex);
+            array<ref LFPG_WireData> vanillaWires = GetVanillaWires(vanillaOwnerId);
+            if (!vanillaWires)
+                continue;
+
+            int vanillaWireIndex;
+            for (vanillaWireIndex = 0; vanillaWireIndex < vanillaWires.Count(); vanillaWireIndex = vanillaWireIndex + 1)
+            {
+                LFPG_WireData vanillaWire = vanillaWires[vanillaWireIndex];
+                if (!vanillaWire || vanillaWire.m_TargetDeviceId != targetDeviceId || vanillaWire.m_TargetPort != targetPort)
+                    continue;
+
+                if (vanillaOwnerId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(vanillaOwnerId))
+                    return false;
+                EntityAI vanillaOwner = LFPG_DeviceRegistry.Get().FindById(vanillaOwnerId);
+                if (!vanillaOwner)
+                    vanillaOwner = LFPG_DeviceAPI.ResolveVanillaDevice(vanillaOwnerId);
+                if (!vanillaOwner)
+                    return false;
+                if (!LFPG_WireHelper.CanCreatorCutWire(vanillaWire, creatorId, allowOthers))
+                    return false;
+
+                actualCount = actualCount + 1;
+                actualOwners.Set(vanillaOwnerId, true);
+            }
+        }
+
+        if (actualCount != indexedCount)
+            return false;
+        if (actualCount == 0)
+            return true;
+        if (!indexedOwnersPresent || !indexedOwners)
+            return false;
+        if (indexedOwners.Count() != actualOwners.Count())
+            return false;
+
+        int indexedOwnerIndex;
+        for (indexedOwnerIndex = 0; indexedOwnerIndex < indexedOwners.Count(); indexedOwnerIndex = indexedOwnerIndex + 1)
+        {
+            string indexedOwnerId = indexedOwners[indexedOwnerIndex];
+            if (indexedOwnerId == "" || !actualOwners.Contains(indexedOwnerId))
+                return false;
+        }
+
+        return true;
     }
 
     // Remove all wires targeting a specific device+port from known sources.

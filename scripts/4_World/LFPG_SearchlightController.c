@@ -350,9 +350,11 @@ class LFPG_SearchlightController
         // ---- Local prediction: immediate visual feedback ----
         m_TargetSl.LFPG_ApplyAimLocal(m_AimYaw, m_AimPitch);
 
-        // ---- RPC throttle ----
+        // ---- RPC throttle and activity heartbeat ----
         m_RpcAccum = m_RpcAccum + timeslice * 1000.0;
-        if (m_AimDirty && m_RpcAccum >= LFPG_SEARCHLIGHT_RPC_THROTTLE_MS)
+        bool aimThrottleReady = m_AimDirty && m_RpcAccum >= LFPG_SEARCHLIGHT_RPC_THROTTLE_MS;
+        bool heartbeatDue = m_RpcAccum >= LFPG_SEARCHLIGHT_HEARTBEAT_MS;
+        if (aimThrottleReady || heartbeatDue)
         {
             m_RpcAccum = 0.0;
             m_AimDirty = false;

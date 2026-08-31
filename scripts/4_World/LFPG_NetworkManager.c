@@ -296,6 +296,11 @@ class LFPG_NetworkManager
         #endif
     }
 
+    bool CanCreatorReplaceWiresTargeting(string targetDeviceId, string targetPort, string creatorId, bool allowOthers)
+    {
+        return false;
+    }
+
     int RemoveWiresTargeting(string targetDeviceId, string targetPort, string creatorId = "", bool allowOthers = true)
     {
         #ifdef SERVER

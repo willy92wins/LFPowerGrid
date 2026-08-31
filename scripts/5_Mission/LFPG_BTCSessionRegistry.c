@@ -17,6 +17,7 @@ static const int LFPG_BTC_WARN_WINDOW_MS = 60000;
 static const int LFPG_BTC_WARN_MAX_PER_WINDOW = 3;
 static const int LFPG_BTC_SEQUENCE_CAP = 2000000000;
 static const int LFPG_BTC_SEQUENCE_EXHAUSTION_GUARD = 1000;
+static const int LFPG_BTC_MAX_FORWARD_GAP = 1000000;
 
 class LFPG_BTCSessionResponse
 {
@@ -290,6 +291,12 @@ class LFPG_BTCSessionRegistry
             return LFPG_BTC_NONCE_IN_FLIGHT;
         }
 
+        if (sequence <= session.m_HighestAcceptedSequence)
+            return LFPG_BTC_NONCE_STALE;
+        int forwardGap = sequence - session.m_HighestAcceptedSequence;
+        if (forwardGap > LFPG_BTC_MAX_FORWARD_GAP)
+            return LFPG_BTC_NONCE_INVALID;
+
         // BTC handlers execute synchronously in one frame. A surviving
         // in-flight record when a later sequence arrives is therefore orphaned.
         // If any handler starts deferring work with CallLater, this rule is no
@@ -297,8 +304,6 @@ class LFPG_BTCSessionRegistry
         if (inFlight && sequence > inFlight.m_Sequence)
             SealOrphanedInFlight(session);
 
-        if (sequence <= session.m_HighestAcceptedSequence)
-            return LFPG_BTC_NONCE_STALE;
         // Reaching this guard requires approximately two billion mutations for
         // one UID in one server lifetime, which the action rate limit prevents.
         if (session.m_HighestAcceptedSequence > LFPG_BTC_SEQUENCE_CAP - LFPG_BTC_SEQUENCE_EXHAUSTION_GUARD)
@@ -323,6 +328,9 @@ class LFPG_BTCSessionRegistry
             return false;
         }
         if (sequence <= session.m_HighestAcceptedSequence)
+            return false;
+        int reserveForwardGap = sequence - session.m_HighestAcceptedSequence;
+        if (reserveForwardGap > LFPG_BTC_MAX_FORWARD_GAP)
             return false;
         if (session.m_InFlight)
             return false;

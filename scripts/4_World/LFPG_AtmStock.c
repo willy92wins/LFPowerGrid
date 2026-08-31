@@ -16,6 +16,8 @@ class LFPG_AtmStock
 {
     static bool CanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
     {
+        if (deviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return false;
         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
         if (!mw)
             return false;
@@ -24,6 +26,8 @@ class LFPG_AtmStock
 
     static bool PrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
     {
+        if (deviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return false;
         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
         if (!mw)
             return false;
@@ -33,20 +37,26 @@ class LFPG_AtmStock
     // ATMs whose AfterStoreLoad landed before the mission was reachable.
     // Non-owning references: a deleted ATM leaves a null the drain skips.
     protected static ref array<LFPG_BTCAtmBase> s_PendingReconcile;
+    protected static bool s_ReconcileReady;
+    protected static MissionBaseWorld s_ReadyMission;
 
     static void ReconcileLoadedAtm(LFPG_BTCAtmBase atm)
     {
         if (!atm)
             return;
         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
-        if (mw)
+        if (mw && s_ReconcileReady && s_ReadyMission == mw)
         {
+            string readyDeviceId = atm.LFPG_GetDeviceId();
+            if (readyDeviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(readyDeviceId))
+                return;
             mw.LFPG_AtmReconcileLoaded(atm);
             return;
         }
         if (!s_PendingReconcile)
             s_PendingReconcile = new array<LFPG_BTCAtmBase>;
-        s_PendingReconcile.Insert(atm);
+        if (s_PendingReconcile.Find(atm) < 0)
+            s_PendingReconcile.Insert(atm);
     }
 
     // Called by MissionServer right after super.OnInit(). Empty in the normal
@@ -54,7 +64,11 @@ class LFPG_AtmStock
     // reachable, which is the ordering this net exists to survive.
     static void DrainPendingReconcile(MissionBaseWorld mw)
     {
-        if (!mw || !s_PendingReconcile)
+        if (!mw)
+            return;
+        s_ReadyMission = mw;
+        s_ReconcileReady = true;
+        if (!s_PendingReconcile)
             return;
         int pending = s_PendingReconcile.Count();
         if (pending > 0)
@@ -64,7 +78,11 @@ class LFPG_AtmStock
         {
             LFPG_BTCAtmBase queued = s_PendingReconcile[i];
             if (queued)
-                mw.LFPG_AtmReconcileLoaded(queued);
+            {
+                string queuedDeviceId = queued.LFPG_GetDeviceId();
+                if (queuedDeviceId != "" && !LFPG_DeviceRegistry.Get().IsAmbiguous(queuedDeviceId))
+                    mw.LFPG_AtmReconcileLoaded(queued);
+            }
         }
         s_PendingReconcile.Clear();
     }

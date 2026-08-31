@@ -105,14 +105,6 @@ class LFPG_RPCServerHandlerImpl
         {
             HandleInspectDevice(player, sender, ctx, LFPG_RPCGuard.POLICY_INSPECT_READ);
         }
-        else if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
-        {
-            HandleCameraLink(player, sender, ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
-        {
-            HandleCameraUnlink(player, sender, ctx);
-        }
         else if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
         {
             HandleRequestCameraList(player, sender, ctx);
@@ -583,6 +575,71 @@ class LFPG_RPCServerHandlerImpl
         }
         LFPG_NetworkManager.Get().LockPort(portLockKey);
 
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(srcRealId) || LFPG_DeviceRegistry.Get().IsAmbiguous(dstRealId))
+        {
+            LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+            LFPG_Util.Warn("[FinishWiring-Server] denied (ambiguous replacement endpoint)");
+            PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on this port.");
+            return;
+        }
+
+        bool replaceAllowOthers = false;
+        LFPG_ServerSettings replaceSettings = LFPG_Settings.Get();
+        if (replaceSettings && replaceSettings.AllowCutOthersWires)
+            replaceAllowOthers = true;
+        string replaceCreatorId = wd.m_CreatorId;
+
+        bool replaceSourceAllowed = true;
+        if (isLfpgOwner)
+        {
+            array<ref LFPG_WireData> replaceSourceWires = LFPG_DeviceAPI.GetDeviceWires(srcObj);
+            if (replaceSourceWires)
+            {
+                int replaceSourceIndex;
+                for (replaceSourceIndex = 0; replaceSourceIndex < replaceSourceWires.Count(); replaceSourceIndex = replaceSourceIndex + 1)
+                {
+                    LFPG_WireData replaceSourceWire = replaceSourceWires[replaceSourceIndex];
+                    if (replaceSourceWire && replaceSourceWire.m_SourcePort == srcPort && !LFPG_WireHelper.CanCreatorCutWire(replaceSourceWire, replaceCreatorId, replaceAllowOthers))
+                        replaceSourceAllowed = false;
+                }
+            }
+        }
+        else
+        {
+            array<ref LFPG_WireData> replaceVanillaWires = LFPG_NetworkManager.Get().GetVanillaWires(srcRealId);
+            if (replaceVanillaWires)
+            {
+                int replaceVanillaIndex;
+                for (replaceVanillaIndex = 0; replaceVanillaIndex < replaceVanillaWires.Count(); replaceVanillaIndex = replaceVanillaIndex + 1)
+                {
+                    LFPG_WireData replaceVanillaWire = replaceVanillaWires[replaceVanillaIndex];
+                    if (!replaceVanillaWire)
+                        continue;
+                    string replaceVanillaPort = replaceVanillaWire.m_SourcePort;
+                    if (replaceVanillaPort == "")
+                        replaceVanillaPort = "output_1";
+                    if (replaceVanillaPort == srcPort && !LFPG_WireHelper.CanCreatorCutWire(replaceVanillaWire, replaceCreatorId, replaceAllowOthers))
+                        replaceSourceAllowed = false;
+                }
+            }
+        }
+
+        if (!replaceSourceAllowed)
+        {
+            LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+            LFPG_Util.Warn("[FinishWiring-Server] denied (source replacement authorization)");
+            PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on this port.");
+            return;
+        }
+
+        if (!LFPG_NetworkManager.Get().CanCreatorReplaceWiresTargeting(dstRealId, dstPort, replaceCreatorId, replaceAllowOthers))
+        {
+            LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+            LFPG_Util.Warn("[FinishWiring-Server] denied (input replacement preflight)");
+            PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on this port.");
+            return;
+        }
+
         // ============================================================
         // REPLACEMENT PHASE: remove ALL conflicting wires BEFORE adding
         // v0.7.34 (Bloque E): Atomic mutation â€” prevents premature node
@@ -608,7 +665,7 @@ class LFPG_RPCServerHandlerImpl
                 while (sw >= 0)
                 {
                     LFPG_WireData srcExisting = srcWires[sw];
-                    if (srcExisting && srcExisting.m_SourcePort == srcPort)
+                    if (srcExisting && srcExisting.m_SourcePort == srcPort && LFPG_WireHelper.CanCreatorCutWire(srcExisting, replaceCreatorId, replaceAllowOthers))
                     {
                         LFPG_Util.Info("[Replace-Src] Removed " + srcRealId + ":" + srcPort + " -> " + srcExisting.m_TargetDeviceId + ":" + srcExisting.m_TargetPort);
 
@@ -647,7 +704,7 @@ class LFPG_RPCServerHandlerImpl
                         {
                             vExistPort = "output_1";
                         }
-                        if (vExistPort == srcPort)
+                        if (vExistPort == srcPort && LFPG_WireHelper.CanCreatorCutWire(vExisting, replaceCreatorId, replaceAllowOthers))
                         {
                             LFPG_Util.Info("[Replace-Src] Removed vanilla " + srcRealId + ":" + srcPort + " -> " + vExisting.m_TargetDeviceId);
 
@@ -677,7 +734,7 @@ class LFPG_RPCServerHandlerImpl
         int existingIn = LFPG_NetworkManager.Get().CountWiresTargeting(dstRealId, dstPort);
         if (existingIn > 0)
         {
-            int removedIn = LFPG_NetworkManager.Get().RemoveWiresTargeting(dstRealId, dstPort);
+            int removedIn = LFPG_NetworkManager.Get().RemoveWiresTargeting(dstRealId, dstPort, wd.m_CreatorId, replaceAllowOthers);
             LFPG_Util.Info("[Replace-In] Removed " + removedIn.ToString() + " wire(s) targeting " + dstRealId + ":" + dstPort);
             anyRemoved = true;
         }
@@ -992,28 +1049,6 @@ class LFPG_RPCServerHandlerImpl
         }
     }
 
-    static void HandleCameraLink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
-    {
-        // v0.9.1: DEPRECATED â€” camera linking is now physical (cables).
-        // Read params to drain the stream (avoid corruption).
-        int discardLow = 0;
-        int discardHigh = 0;
-        ctx.Read(discardLow);
-        ctx.Read(discardHigh);
-        LFPG_Util.Warn("[CameraLink] DEPRECATED RPC received â€” ignoring");
-    }
-
-    static void HandleCameraUnlink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
-    {
-        // v0.9.1: DEPRECATED â€” camera unlinking is now physical (cut cable).
-        // Read params to drain the stream (avoid corruption).
-        int discardLow = 0;
-        int discardHigh = 0;
-        ctx.Read(discardLow);
-        ctx.Read(discardHigh);
-        LFPG_Util.Warn("[CameraUnlink] DEPRECATED RPC received â€” ignoring");
-    }
-
     static void HandleRequestCameraList(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         if (!sender)
@@ -1181,6 +1216,9 @@ class LFPG_RPCServerHandlerImpl
             PlayerBase.LFPG_SendClientMsg(player, "No hay camaras detectables.");
             return;
         }
+
+        if (player.IsInVehicle())
+            return;
 
         LFPG_ControlSessionRecord cameraSession = sessions.BeginCCTV(sender, player, monitor, monNetLow, monNetHigh, camCount, camPositions, camOrientations, camLabels);
         if (!cameraSession)
@@ -1509,6 +1547,8 @@ class LFPG_RPCServerHandlerImpl
         if (!sl.LFPG_IsOperator(record.m_PlayerNetLow, record.m_PlayerNetHigh))
             return;
 
+        sessions.RenewSearchlightLease(record);
+
         float nowSeconds = g_Game.GetTime() * 0.001;
         if (!sessions.AllowSearchlightAim(record, nowSeconds))
             return;
@@ -1570,7 +1610,7 @@ class LFPG_RPCServerHandlerImpl
         if (!sessions)
             return;
 
-        // Receipt of an exit arms recovery; a healthy session otherwise has no deadline.
+        // Receipt of an exit replaces the activity lease with the recovery deadline.
         sessions.ArmSearchlightExitDeadline(sender, netLow, netHigh);
 
         // Reject invalid numeric input before object resolution or authorization.
@@ -2838,7 +2878,7 @@ class LFPG_RPCServerHandlerImpl
         }
 
         bool canProceed = false;
-        if (sorter)
+        if (sorter && !sorter.IsRuined() && sorter.LFPG_IsPowered())
         {
             float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
             if (dist <= LFPG_INTERACT_DIST_M)

@@ -203,12 +203,131 @@ class LFPG_FileUtil
         return true;
     }
 
+    protected static bool BalanceEntriesEqual(array<ref LFPG_BalanceEntry> expected, array<ref LFPG_BalanceEntry> actual)
+    {
+        if (!expected && !actual)
+            return true;
+        if (!expected || !actual)
+            return false;
+        if (expected.Count() != actual.Count())
+            return false;
+
+        int entryIndex = 0;
+        for (entryIndex = 0; entryIndex < expected.Count(); entryIndex = entryIndex + 1)
+        {
+            LFPG_BalanceEntry expectedEntry = expected[entryIndex];
+            LFPG_BalanceEntry actualEntry = actual[entryIndex];
+            if (!expectedEntry && !actualEntry)
+                continue;
+            if (!expectedEntry || !actualEntry)
+                return false;
+            if (expectedEntry.uid != actualEntry.uid)
+                return false;
+            if (expectedEntry.balance != actualEntry.balance)
+                return false;
+        }
+        return true;
+    }
+
+    protected static bool BalanceClaimsEqual(array<ref LFPG_BalanceClaim> expected, array<ref LFPG_BalanceClaim> actual)
+    {
+        if (!expected && !actual)
+            return true;
+        if (!expected || !actual)
+            return false;
+        if (expected.Count() != actual.Count())
+            return false;
+
+        int claimIndex = 0;
+        for (claimIndex = 0; claimIndex < expected.Count(); claimIndex = claimIndex + 1)
+        {
+            LFPG_BalanceClaim expectedClaim = expected[claimIndex];
+            LFPG_BalanceClaim actualClaim = actual[claimIndex];
+            if (!expectedClaim && !actualClaim)
+                continue;
+            if (!expectedClaim || !actualClaim)
+                return false;
+            if (expectedClaim.uid != actualClaim.uid)
+                return false;
+            if (expectedClaim.deviceId != actualClaim.deviceId)
+                return false;
+            if (expectedClaim.sessionLow != actualClaim.sessionLow)
+                return false;
+            if (expectedClaim.sessionHigh != actualClaim.sessionHigh)
+                return false;
+            if (expectedClaim.sequence != actualClaim.sequence)
+                return false;
+            if (expectedClaim.debit != actualClaim.debit)
+                return false;
+            if (expectedClaim.stockBefore != actualClaim.stockBefore)
+                return false;
+            if (expectedClaim.stockTarget != actualClaim.stockTarget)
+                return false;
+            if (expectedClaim.state != actualClaim.state)
+                return false;
+            if (expectedClaim.bootsSinceRefund != actualClaim.bootsSinceRefund)
+                return false;
+            if (expectedClaim.orphanBoots != actualClaim.orphanBoots)
+                return false;
+            if (expectedClaim.ambigBoots != actualClaim.ambigBoots)
+                return false;
+        }
+        return true;
+    }
+
+    protected static bool BalanceDataEqual(LFPG_BalanceData expected, LFPG_BalanceData actual)
+    {
+        if (!expected && !actual)
+            return true;
+        if (!expected || !actual)
+            return false;
+        if (expected.ver != actual.ver)
+            return false;
+        if (!BalanceEntriesEqual(expected.entries, actual.entries))
+            return false;
+        return BalanceClaimsEqual(expected.claims, actual.claims);
+    }
+
+    protected static bool LoadBalanceSnapshot(string path, out LFPG_BalanceData snapshot, out string error)
+    {
+        snapshot = new LFPG_BalanceData();
+        return JsonFileLoader<LFPG_BalanceData>.LoadFile(path, snapshot, error);
+    }
+
+    protected static bool RestoreVerifiedBalanceSnapshot(string targetPath, string sourcePath, LFPG_BalanceData expected)
+    {
+        if (FileExist(targetPath) && !DeleteFile(targetPath))
+            return false;
+        if (!CopyFile(sourcePath, targetPath))
+            return false;
+
+        LFPG_BalanceData restored = null;
+        string restoreErr;
+        if (!LoadBalanceSnapshot(targetPath, restored, restoreErr))
+        {
+            DeleteFile(targetPath);
+            return false;
+        }
+        if (!BalanceDataEqual(expected, restored))
+        {
+            DeleteFile(targetPath);
+            return false;
+        }
+        return true;
+    }
+
     // ---- Player Balances ----
     static bool AtomicSaveBalances(string targetPath, LFPG_BalanceData data)
     {
         string tmpPath    = targetPath + ".tmp";
         string bakPath    = targetPath + ".bak";
         string bakNewPath = targetPath + ".bak.new";
+
+        if (!data)
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: null input");
+            return false;
+        }
 
         string err;
         if (!JsonFileLoader<LFPG_BalanceData>.SaveFile(tmpPath, data, err))
@@ -222,67 +341,91 @@ class LFPG_FileUtil
             return false;
         }
 
-        LFPG_ServerSettings st = LFPG_Settings.Get();
-        bool doReadback = true;
-        if (st) doReadback = st.AtomicVerifyReadback;
-        if (doReadback)
+        LFPG_BalanceData tmpSnapshot = null;
+        string tmpReadErr;
+        if (!LoadBalanceSnapshot(tmpPath, tmpSnapshot, tmpReadErr))
         {
-            LFPG_BalanceData verify = new LFPG_BalanceData();
-            string verifyErr;
-            if (!JsonFileLoader<LFPG_BalanceData>.LoadFile(tmpPath, verify, verifyErr))
-            {
-                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: tmp read-back failed: " + verifyErr);
-                DeleteFile(tmpPath);
-                return false;
-            }
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: tmp read-back failed: " + tmpReadErr);
+            PreserveOrphanTmpEvidence(tmpPath);
+            return false;
+        }
+        if (!BalanceDataEqual(data, tmpSnapshot))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: tmp read-back differs from input");
+            PreserveOrphanTmpEvidence(tmpPath);
+            return false;
         }
 
-        if (FileExist(targetPath))
+        bool hadTarget = FileExist(targetPath);
+        LFPG_BalanceData previousSnapshot = null;
+        string previousReadErr;
+
+        if (hadTarget)
         {
+            if (!LoadBalanceSnapshot(targetPath, previousSnapshot, previousReadErr))
+            {
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: existing target is not readable; refusing overwrite: " + previousReadErr);
+                PreserveOrphanTmpEvidence(tmpPath);
+                return false;
+            }
             if (FileExist(bakNewPath)) DeleteFile(bakNewPath);
             if (!CopyFile(targetPath, bakNewPath))
             {
                 LFPG_Util.Error("[FileUtil] AtomicSaveBalances: stage bak.new failed");
-                DeleteFile(tmpPath);
+                PreserveOrphanTmpEvidence(tmpPath);
+                return false;
+            }
+            LFPG_BalanceData stagedSnapshot = null;
+            string stagedReadErr;
+            if (!LoadBalanceSnapshot(bakNewPath, stagedSnapshot, stagedReadErr) || !BalanceDataEqual(previousSnapshot, stagedSnapshot))
+            {
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: staged bak.new failed independent verification");
+                DeleteFile(bakNewPath);
+                PreserveOrphanTmpEvidence(tmpPath);
                 return false;
             }
         }
 
-        if (FileExist(targetPath)) DeleteFile(targetPath);
+        if (hadTarget && !DeleteFile(targetPath))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: could not remove verified previous target");
+            PreserveOrphanTmpEvidence(tmpPath);
+            return false;
+        }
         if (!CopyFile(tmpPath, targetPath))
         {
             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: promote tmp->target failed");
-            if (FileExist(bakNewPath))
+            bool restoredAfterCopyFailure = false;
+            if (hadTarget)
+                restoredAfterCopyFailure = RestoreVerifiedBalanceSnapshot(targetPath, bakNewPath, previousSnapshot);
+            else if (FileExist(targetPath))
+                DeleteFile(targetPath);
+            if (hadTarget && !restoredAfterCopyFailure)
             {
-                CopyFile(bakNewPath, targetPath);
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: previous target restore failed independent verification");
             }
-            else if (FileExist(bakPath))
+            PreserveOrphanTmpEvidence(tmpPath);
+            return false;
+        }
+
+        LFPG_BalanceData targetSnapshot = null;
+        string targetReadErr;
+        bool targetMatches = LoadBalanceSnapshot(targetPath, targetSnapshot, targetReadErr);
+        if (targetMatches)
+            targetMatches = BalanceDataEqual(data, targetSnapshot);
+        if (!targetMatches)
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: promoted target failed independent verification");
+            bool restoredAfterVerifyFailure = false;
+            if (hadTarget)
+                restoredAfterVerifyFailure = RestoreVerifiedBalanceSnapshot(targetPath, bakNewPath, previousSnapshot);
+            else if (FileExist(targetPath))
+                DeleteFile(targetPath);
+            if (hadTarget && !restoredAfterVerifyFailure)
             {
-                CopyFile(bakPath, targetPath);
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: previous target restore after verify failure was not exact");
             }
-            if (!FileExist(targetPath))
-            {
-                // Nothing was restored: the first save on a fresh install, or both
-                // backups gone. The recovery guard in EnsureBalancesFileOrRestore only
-                // fires while a target is ALIVE, so a lone .tmp would be promoted on
-                // the next boot even though the caller is about to roll this mutation
-                // back. Reaching this line means the failure WAS reported upstream, so
-                // the snapshot must lose the auto-promotable name. A crash inside the
-                // delete/copy window never gets here, which is why that case still
-                // promotes: nothing was reported to anyone.
-                PreserveOrphanTmpEvidence(tmpPath);
-                if (FileExist(tmpPath))
-                {
-                    // Last resort. If this also fails there is nothing else the code
-                    // can do about the file, so make the state loud: this is the only
-                    // remaining path where a rolled-back balance can come back after
-                    // a restart, and it needs three consecutive I/O failures to reach.
-                    if (!DeleteFile(tmpPath))
-                    {
-                        LFPG_Util.Error("[FileUtil] AtomicSaveBalances: rejected .tmp could neither be preserved NOR deleted. Next boot WILL promote a balance the runtime rolled back. Admin: delete it by hand before restarting: " + tmpPath);
-                    }
-                }
-            }
+            PreserveOrphanTmpEvidence(tmpPath);
             return false;
         }
 
@@ -400,6 +543,125 @@ class LFPG_FileUtil
         }
         PreserveOrphanTmpEvidence(tmpPath);
         return FileExist(targetPath);
+    }
+
+    protected static bool RestoreTypedBalanceBackup(string targetPath, string backupPath)
+    {
+        LFPG_BalanceData backupSnapshot = null;
+        string backupReadErr;
+        if (!LoadBalanceSnapshot(backupPath, backupSnapshot, backupReadErr))
+        {
+            LFPG_Util.Error("[FileUtil] Balance backup is not readable; skipping: " + backupPath);
+            return false;
+        }
+        if (!RestoreVerifiedBalanceSnapshot(targetPath, backupPath, backupSnapshot))
+        {
+            LFPG_Util.Error("[FileUtil] Balance backup restore failed independent verification: " + backupPath);
+            return false;
+        }
+        return true;
+    }
+
+    // Balance recovery has an independent expected object supplied by the
+    // typed .tmp read. The generic promoter intentionally keeps its legacy
+    // availability semantics for the other stores.
+    protected static bool PromoteOrphanBalances(string targetPath, string tmpPath, string bakPath, string bakNewPath, LFPG_BalanceData expected)
+    {
+        LFPG_BalanceData fallbackSnapshot = null;
+        string fallbackPath = "";
+        bool hasFallback = false;
+
+        if (FileExist(bakNewPath))
+        {
+            LFPG_BalanceData stagedFallbackSnapshot = null;
+            string stagedFallbackErr;
+            if (LoadBalanceSnapshot(bakNewPath, stagedFallbackSnapshot, stagedFallbackErr))
+            {
+                fallbackSnapshot = stagedFallbackSnapshot;
+                fallbackPath = bakNewPath;
+                hasFallback = true;
+            }
+            else
+            {
+                LFPG_Util.Error("[FileUtil] Balance bak.new is not readable; it will not be trusted for recovery: " + bakNewPath);
+            }
+        }
+        if (!hasFallback && FileExist(bakPath))
+        {
+            LFPG_BalanceData olderFallbackSnapshot = null;
+            string olderFallbackErr;
+            if (LoadBalanceSnapshot(bakPath, olderFallbackSnapshot, olderFallbackErr))
+            {
+                fallbackSnapshot = olderFallbackSnapshot;
+                fallbackPath = bakPath;
+                hasFallback = true;
+            }
+            else
+            {
+                LFPG_Util.Error("[FileUtil] Balance bak is not readable; it will not be trusted for recovery: " + bakPath);
+            }
+        }
+
+        if (FileExist(targetPath))
+        {
+            LFPG_Util.Error("[FileUtil] Balance target appeared during orphan promotion; refusing overwrite");
+            PreserveOrphanTmpEvidence(tmpPath);
+            LFPG_BalanceData appearedTargetSnapshot = null;
+            string appearedTargetErr;
+            return LoadBalanceSnapshot(targetPath, appearedTargetSnapshot, appearedTargetErr);
+        }
+
+        if (!CopyFile(tmpPath, targetPath))
+        {
+            LFPG_Util.Error("[FileUtil] Balance orphan promote copy failed");
+            bool restoredCopyFallback = false;
+            if (hasFallback)
+                restoredCopyFallback = RestoreVerifiedBalanceSnapshot(targetPath, fallbackPath, fallbackSnapshot);
+            else if (FileExist(targetPath))
+                DeleteFile(targetPath);
+            PreserveOrphanTmpEvidence(tmpPath);
+            return restoredCopyFallback;
+        }
+
+        LFPG_BalanceData promotedSnapshot = null;
+        string promotedReadErr;
+        bool promotedMatches = LoadBalanceSnapshot(targetPath, promotedSnapshot, promotedReadErr);
+        if (promotedMatches)
+            promotedMatches = BalanceDataEqual(expected, promotedSnapshot);
+        if (!promotedMatches)
+        {
+            LFPG_Util.Error("[FileUtil] Balance orphan target failed independent verification");
+            bool restoredVerifyFallback = false;
+            if (hasFallback)
+                restoredVerifyFallback = RestoreVerifiedBalanceSnapshot(targetPath, fallbackPath, fallbackSnapshot);
+            else if (FileExist(targetPath))
+                DeleteFile(targetPath);
+            PreserveOrphanTmpEvidence(tmpPath);
+            return restoredVerifyFallback;
+        }
+
+        DeleteFile(tmpPath);
+        if (hasFallback && fallbackPath == bakNewPath)
+        {
+            if (FileExist(bakPath)) DeleteFile(bakPath);
+            bool backupRotated = CopyFile(bakNewPath, bakPath);
+            LFPG_BalanceData rotatedSnapshot = null;
+            string rotatedReadErr;
+            if (backupRotated)
+                backupRotated = LoadBalanceSnapshot(bakPath, rotatedSnapshot, rotatedReadErr);
+            if (backupRotated)
+                backupRotated = BalanceDataEqual(fallbackSnapshot, rotatedSnapshot);
+            if (backupRotated)
+            {
+                DeleteFile(bakNewPath);
+            }
+            else
+            {
+                DeleteFile(bakPath);
+                LFPG_Util.Warn("[FileUtil] Balance bak rotation failed verification; leaving verified bak.new for recovery");
+            }
+        }
+        return true;
     }
 
     // ---- Rename .tmp orphan to .tmp.preserved.<ts>_<rnd> (PR-A.6) ----
@@ -589,7 +851,7 @@ class LFPG_FileUtil
             if (JsonFileLoader<LFPG_BalanceData>.LoadFile(tmpPath, probe, parseErr))
             {
                 LFPG_Util.Warn("[FileUtil] Orphan .tmp parses as LFPG_BalanceData, promoting: " + tmpPath);
-                return PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+                return PromoteOrphanBalances(targetPath, tmpPath, bakPath, bakNewPath, probe);
             }
             else
             {
@@ -598,6 +860,12 @@ class LFPG_FileUtil
             }
         }
 
-        return EnsureFileOrRestore(targetPath);
+        if (FileExist(targetPath))
+            return true;
+        if (FileExist(bakNewPath) && RestoreTypedBalanceBackup(targetPath, bakNewPath))
+            return true;
+        if (FileExist(bakPath) && RestoreTypedBalanceBackup(targetPath, bakPath))
+            return true;
+        return false;
     }
 };

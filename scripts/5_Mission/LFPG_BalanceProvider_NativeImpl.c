@@ -33,6 +33,9 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     protected static ref map<string, bool> s_AmbiguousObservedThisBoot;
     protected static ref map<string, int> s_ClaimErrorWindowStartMs;
     protected static ref map<string, int> s_ClaimErrorCounts;
+    protected static ref map<string, bool> s_QuarantinedClaimDevices;
+    protected static bool s_ClaimInputGlobalInhibited;
+    protected static bool s_ClaimInputUnroundtrippable;
     protected static bool s_FutureVersionReadOnly;
 
     // PR-A: corrupt-load latch. Set true if LoadFromDisk detects unparseable
@@ -76,7 +79,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
 
     static bool IsClaimStoreWritable()
     {
-        return !s_FutureVersionReadOnly && !s_DiskInhibited;
+        return !s_FutureVersionReadOnly && !s_DiskInhibited && !s_ClaimInputGlobalInhibited && !s_ClaimInputUnroundtrippable;
     }
     protected static void EnsureClaimState()
     {
@@ -94,6 +97,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_ClaimErrorWindowStartMs = new map<string, int>;
         if (!s_ClaimErrorCounts)
             s_ClaimErrorCounts = new map<string, int>;
+        if (!s_QuarantinedClaimDevices)
+            s_QuarantinedClaimDevices = new map<string, bool>;
     }
 
     protected static bool AllowClaimErrorLog(string uid, string deviceId)
@@ -149,6 +154,142 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     {
         if (AllowClaimErrorLog(uid, deviceId))
             LFPG_Util.Error(message);
+    }
+
+    protected static bool IsClaimDeviceQuarantined(string deviceId)
+    {
+        EnsureClaimState();
+        if (s_ClaimInputGlobalInhibited || s_ClaimInputUnroundtrippable)
+            return true;
+        if (deviceId == "")
+            return true;
+        return s_QuarantinedClaimDevices.Contains(deviceId);
+    }
+
+    protected static void QuarantineLoadedClaim(LFPG_BalanceClaim claim, string reason)
+    {
+        if (!claim)
+            return;
+
+        if (claim.deviceId == "")
+            s_ClaimInputGlobalInhibited = true;
+        else
+            s_QuarantinedClaimDevices.Set(claim.deviceId, true);
+
+        string quarantineMsg = "[LFPG_Balance_Native] Loaded claim quarantined reason=";
+        quarantineMsg = quarantineMsg + reason;
+        quarantineMsg = quarantineMsg + " uid=";
+        quarantineMsg = quarantineMsg + LFPG_Util.LogUid(claim.uid);
+        quarantineMsg = quarantineMsg + " deviceId=";
+        quarantineMsg = quarantineMsg + claim.deviceId;
+        LogClaimError(quarantineMsg, claim.uid, claim.deviceId);
+    }
+
+    protected static bool ValidateLoadedClaimRecord(LFPG_BalanceClaim claim, out string reason)
+    {
+        reason = "";
+        if (!claim)
+        {
+            reason = "claim-input-unroundtrippable";
+            return false;
+        }
+        if (claim.deviceId == "")
+        {
+            reason = "empty deviceId";
+            return false;
+        }
+        if (claim.state != LFPG_CLAIM_PENDING && claim.state != LFPG_CLAIM_REFUNDED)
+        {
+            reason = "unknown state";
+            return false;
+        }
+        if (claim.debit < 0 || claim.debit > LFPG_NATIVE_BALANCE_CAP)
+        {
+            reason = "debit outside Native bounds";
+            return false;
+        }
+        if (claim.stockBefore < 0 || claim.stockBefore > LFPG_NATIVE_BALANCE_CAP)
+        {
+            reason = "stockBefore outside Native bounds";
+            return false;
+        }
+        if (claim.stockTarget < 0 || claim.stockTarget > LFPG_NATIVE_BALANCE_CAP)
+        {
+            reason = "stockTarget outside Native bounds";
+            return false;
+        }
+        if (claim.bootsSinceRefund < 0 || claim.bootsSinceRefund > 2)
+        {
+            reason = "bootsSinceRefund outside writer range";
+            return false;
+        }
+        if (claim.orphanBoots < 0 || claim.orphanBoots > 2)
+        {
+            reason = "orphanBoots outside writer range";
+            return false;
+        }
+        if (claim.ambigBoots < 0 || claim.ambigBoots > 2)
+        {
+            reason = "ambigBoots outside writer range";
+            return false;
+        }
+
+        if (claim.debit > 0)
+        {
+            if (claim.uid == "")
+            {
+                reason = "purchase without uid";
+                return false;
+            }
+            if (claim.sessionLow <= 0 || claim.sessionHigh <= 0)
+            {
+                reason = "purchase without session identity";
+                return false;
+            }
+            if (claim.sequence <= 0 || claim.sequence > LFPG_NATIVE_BALANCE_CAP)
+            {
+                reason = "purchase sequence outside writer range";
+                return false;
+            }
+            if (claim.stockTarget <= claim.stockBefore)
+            {
+                reason = "purchase stock transition is not increasing";
+                return false;
+            }
+            if (claim.state == LFPG_CLAIM_PENDING && claim.bootsSinceRefund != 0)
+            {
+                reason = "pending purchase has refund age";
+                return false;
+            }
+            return true;
+        }
+
+        if (claim.uid != "")
+        {
+            reason = "physical legacy claim has uid";
+            return false;
+        }
+        if (claim.sessionLow != 0 || claim.sessionHigh != 0 || claim.sequence != 0)
+        {
+            reason = "physical legacy claim has session identity";
+            return false;
+        }
+        if (claim.state != LFPG_CLAIM_PENDING)
+        {
+            reason = "physical legacy claim is not pending";
+            return false;
+        }
+        if (claim.bootsSinceRefund != 0)
+        {
+            reason = "physical legacy claim has refund age";
+            return false;
+        }
+        if (claim.stockTarget == claim.stockBefore)
+        {
+            reason = "physical legacy stock transition is empty";
+            return false;
+        }
+        return true;
     }
 
     protected static bool HasDeviceClaims(string deviceId)
@@ -411,6 +552,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
+        if (IsClaimDeviceQuarantined(deviceId))
+            return false;
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return false;
 
         string uid = GetUID(player);
         if (uid == "")
@@ -503,6 +648,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
+        if (IsClaimDeviceQuarantined(deviceId))
+            return false;
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return false;
         if (!HasDeviceClaims(deviceId))
             return true;
         if (!s_ReconciledDevices.Contains(deviceId))
@@ -528,6 +677,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureLoaded();
         EnsureClaimState();
         if (!IsClaimStoreWritable())
+            return false;
+        if (IsClaimDeviceQuarantined(deviceId))
+            return false;
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
             return false;
         if (!HasDeviceClaims(deviceId))
             return true;
@@ -1260,6 +1413,16 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         string deviceId = atm.LFPG_GetDeviceId();
         if (deviceId == "")
             return;
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+        {
+            LogClaimError("[LFPG_Balance_Native] Loaded ATM reconcile blocked by ambiguous deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+            return;
+        }
+        if (IsClaimDeviceQuarantined(deviceId))
+        {
+            LogClaimError("[LFPG_Balance_Native] Loaded ATM reconcile blocked by claim quarantine deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+            return;
+        }
         array<ref LFPG_BalanceClaim> chain = CollectDeviceClaims(deviceId);
         if (chain.Count() == 0)
         {
@@ -1454,6 +1617,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (s_FutureVersionReadOnly)
             return;
+        if (s_ClaimInputGlobalInhibited || s_ClaimInputUnroundtrippable)
+        {
+            LogClaimError("[LFPG_Balance_Native] Orphan sweep blocked by global claim-input quarantine", "", "");
+            return;
+        }
 
         LFPG_Util.Info("[LFPG_Balance_Native] Orphan sweep pass executed");
         int nullIndex = 0;
@@ -1482,6 +1650,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         {
             string deviceId = deviceIds[deviceIndex];
             if (s_OrphanObservedThisBoot.Contains(deviceId))
+                continue;
+            if (IsClaimDeviceQuarantined(deviceId))
+                continue;
+            if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
                 continue;
 
             EntityAI device = null;
@@ -1544,11 +1716,14 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_AmbiguousObservedThisBoot.Clear();
         s_ClaimErrorWindowStartMs.Clear();
         s_ClaimErrorCounts.Clear();
+        s_QuarantinedClaimDevices.Clear();
         s_Claims.Clear();
         if (s_Balances)
             s_Balances.Clear();
         s_Loaded = false;
         s_CompoundActionDirty = false;
+        s_ClaimInputGlobalInhibited = false;
+        s_ClaimInputUnroundtrippable = false;
     }
 
 
@@ -1916,6 +2091,9 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_ReappliedThisBoot.Clear();
         s_OrphanObservedThisBoot.Clear();
         s_AmbiguousObservedThisBoot.Clear();
+        s_QuarantinedClaimDevices.Clear();
+        s_ClaimInputGlobalInhibited = false;
+        s_ClaimInputUnroundtrippable = false;
 
         string settingsDir = LFPG_BTC_SETTINGS_DIR;
         if (!FileExist(settingsDir))
@@ -2048,14 +2226,40 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_Balances.Set(entry.uid, loadedBalance);
         }
 
-        if (data.claims)
+        if (!data.claims)
         {
+            s_ClaimInputUnroundtrippable = true;
+            LogClaimError("[LFPG_Balance_Native] claim-input-unroundtrippable: claims array is null; save inhibited to preserve source", "", "");
+        }
+        else
+        {
+            map<string, int> lastTargetsByDevice = new map<string, int>;
             int claimIndex = 0;
             for (claimIndex = 0; claimIndex < data.claims.Count(); claimIndex = claimIndex + 1)
             {
                 LFPG_BalanceClaim loadedClaim = data.claims[claimIndex];
-                if (loadedClaim)
-                    s_Claims.Insert(loadedClaim);
+                s_Claims.Insert(loadedClaim);
+                if (!loadedClaim)
+                {
+                    s_ClaimInputUnroundtrippable = true;
+                    LogClaimError("[LFPG_Balance_Native] claim-input-unroundtrippable: null claim retained in memory; save inhibited to preserve source", "", "");
+                    continue;
+                }
+
+                string validationReason;
+                bool recordValid = ValidateLoadedClaimRecord(loadedClaim, validationReason);
+                if (!recordValid)
+                    QuarantineLoadedClaim(loadedClaim, validationReason);
+
+                if (loadedClaim.deviceId == "")
+                    continue;
+                if (lastTargetsByDevice.Contains(loadedClaim.deviceId))
+                {
+                    int previousLoadedTarget = lastTargetsByDevice.Get(loadedClaim.deviceId);
+                    if (previousLoadedTarget != loadedClaim.stockBefore)
+                        QuarantineLoadedClaim(loadedClaim, "claim chain discontinuity");
+                }
+                lastTargetsByDevice.Set(loadedClaim.deviceId, loadedClaim.stockTarget);
             }
         }
 
@@ -2093,6 +2297,22 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         }
 
+        if (s_ClaimInputUnroundtrippable)
+        {
+            LogClaimError("[LFPG_Balance_Native] Save blocked: claim-input-unroundtrippable", "", "");
+            return false;
+        }
+        int roundTripIndex = 0;
+        for (roundTripIndex = 0; roundTripIndex < s_Claims.Count(); roundTripIndex = roundTripIndex + 1)
+        {
+            if (!s_Claims[roundTripIndex])
+            {
+                s_ClaimInputUnroundtrippable = true;
+                LogClaimError("[LFPG_Balance_Native] Save blocked before reconstruction: null claim would be omitted", "", "");
+                return false;
+            }
+        }
+
         string settingsDir = LFPG_BTC_SETTINGS_DIR;
         if (!FileExist(settingsDir))
         {
@@ -2123,8 +2343,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         for (claimIndex = 0; claimIndex < s_Claims.Count(); claimIndex = claimIndex + 1)
         {
             LFPG_BalanceClaim claim = s_Claims[claimIndex];
-            if (claim)
-                data.claims.Insert(claim);
+            data.claims.Insert(claim);
         }
 
         string filePath = LFPG_BALANCE_NATIVE_FILE;

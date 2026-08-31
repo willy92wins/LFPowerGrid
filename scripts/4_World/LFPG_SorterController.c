@@ -754,7 +754,7 @@ class LFPG_SorterController extends ViewController
         string stSorting = "SORTING...";
         string stError = "ERROR";
         string stNoLink = "NO LINK";
-        string stSortFail = "SORT FAILED";
+        string stSortFail = "FAILED";
         if (st == stSaving || st == stSorting)
         {
             return LFPG_SorterView.COL_AMBER;
@@ -811,7 +811,7 @@ class LFPG_SorterController extends ViewController
             // (which re-runs InitFromRPC with the correct pairing state).
             // TODO: full fix is a server-push RPC on container unlink so the
             // unpaired overlay shows immediately without an action attempt.
-            string stErr = "FAILED - REOPEN";
+            string stErr = "FAILED";
             SetStatus(stErr);
         }
         m_FeedbackTimer = 2.5;
@@ -832,7 +832,7 @@ class LFPG_SorterController extends ViewController
         {
             // B1 (2026-04-26): see HandleSaveAck note. Most common reason
             // for sort failure is container unlinked server-side.
-            string stFail = "FAILED - REOPEN";
+            string stFail = "FAILED";
             SetStatus(stFail);
         }
         m_FeedbackTimer = 3.0;

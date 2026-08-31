@@ -42,10 +42,6 @@ class LFPG_RPCGuard
 
         if (subId == LFPG_RPC_SubId.CCTV_EXIT_REQUEST)
             return POLICY_CCTV_SESSION;
-        if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
-            return POLICY_CCTV_SESSION;
-        if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
-            return POLICY_CCTV_SESSION;
         if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
             return POLICY_CCTV_SESSION;
 
