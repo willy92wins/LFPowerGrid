@@ -996,62 +996,6 @@ class LFPG_CableRenderer
     // ===========================
     // Entity resolution (client-side)
     // ===========================
-    protected EntityAI ResolveDeviceEntity(string deviceId)
-    {
-        if (deviceId == "")
-            return null;
-
-        // 1. DeviceRegistry (works for LFPG devices on client)
-        EntityAI found = LFPG_DeviceRegistry.Get().FindById(deviceId);
-        if (found)
-        {
-            if (LFPG_DIAG_ENABLED)
-            {
-                LFPG_Diag.ServerEcho("[Resolve] HIT registry id=" + deviceId + " type=" + found.GetType());
-            }
-            return found;
-        }
-
-        // 2. Check negative cache: skip if recently failed
-        float failTime = 0.0;
-        float nowMs = g_Game.GetTime();
-        if (m_NegCache.Find(deviceId, failTime))
-        {
-            float age = nowMs - failTime;
-            if (age < NEG_CACHE_TTL_MS)
-            {
-                if (LFPG_DIAG_ENABLED)
-                {
-                    LFPG_Diag.ServerEcho("[Resolve] NegCache block id=" + deviceId + " age=" + age.ToString());
-                }
-                return null;
-            }
-            m_NegCache.Remove(deviceId);
-        }
-
-        // 3. Vanilla position-based ID: "vp:TYPE:QX:QY:QZ"
-        if (deviceId.IndexOf("vp:") == 0)
-        {
-            EntityAI vObj = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
-            if (vObj)
-            {
-                if (LFPG_DIAG_ENABLED)
-                {
-                    LFPG_Diag.ServerEcho("[Resolve] HIT vanilla id=" + deviceId + " type=" + vObj.GetType());
-                }
-                return vObj;
-            }
-        }
-
-        // 4. Resolution failed
-        m_NegCache[deviceId] = nowMs;
-        if (LFPG_DIAG_ENABLED)
-        {
-            LFPG_Diag.ServerEcho("[Resolve] MISS id=" + deviceId + " -> NegCache");
-        }
-        return null;
-    }
-
     // v0.7.45 (Patch 3C): Extended resolver with NetworkID fallback.
     // Tries DeviceRegistry first, then NetworkID (bypasses NegCache),
     // then vanilla spatial, then NegCache check as last resort.

@@ -167,57 +167,63 @@ class LFPG_Telemetry
             return;
 
         // ---- Dump summary ----
+        // Interval averages still accumulate so per-frame counters can be
+        // reset every tick (WiringClient reads them). The RPT dump is
+        // perf-diag only; production must not Print these lines.
         if (s_FrameCount <= 0)
         {
             s_LastDumpMs = nowMs;
             return;
         }
 
-        // Preview averages (only meaningful if wiring was active)
-        if (s_SumPrvSpans > 0)
+        if (LFPG_PERFDIAG_ENABLED)
         {
-            int avgSpans = s_SumPrvSpans / s_FrameCount;
-            int avgSubSegs = s_SumPrvSubSegs / s_FrameCount;
-            int avgDrawn = s_SumPrvDrawn / s_FrameCount;
-            int totalCulled = s_SumPrvCulledBehind + s_SumPrvCulledOff;
-            int avgProjections = s_SumPrvProjections / s_FrameCount;
-
-            string pLog = "[Telemetry-Preview] frames=" + s_FrameCount.ToString();
-            pLog = pLog + " avgSpans=" + avgSpans.ToString();
-            pLog = pLog + " avgSubSegs=" + avgSubSegs.ToString();
-            pLog = pLog + " avgDrawn=" + avgDrawn.ToString();
-            pLog = pLog + " totalCulled=" + totalCulled.ToString();
-            pLog = pLog + " (behind=" + s_SumPrvCulledBehind.ToString();
-            pLog = pLog + " off=" + s_SumPrvCulledOff.ToString() + ")";
-            pLog = pLog + " avgProjections=" + avgProjections.ToString();
-            Print("[LF_PowerGrid] " + pLog);
-        }
-
-        // Render averages (only meaningful if CableRenderer populated data)
-        if (s_SumRndTotal > 0)
-        {
-            int avgWires = s_SumRndTotal / s_FrameCount;
-            int avgDrawnW = s_SumRndDrawn / s_FrameCount;
-            int avgCulledW = s_SumRndCulled / s_FrameCount;
-            int avgOccW = s_SumRndOccluded / s_FrameCount;
-            int avgSegs = s_SumRndSegs / s_FrameCount;
-            int budgetPct = 0;
-            int budgetMax = 512;  // mirrors LFPG_MAX_RENDERED_SEGS
-            if (budgetMax > 0)
+            // Preview averages (only meaningful if wiring was active)
+            if (s_SumPrvSpans > 0)
             {
-                budgetPct = (s_PeakRndSegs * 100) / budgetMax;
+                int avgSpans = s_SumPrvSpans / s_FrameCount;
+                int avgSubSegs = s_SumPrvSubSegs / s_FrameCount;
+                int avgDrawn = s_SumPrvDrawn / s_FrameCount;
+                int totalCulled = s_SumPrvCulledBehind + s_SumPrvCulledOff;
+                int avgProjections = s_SumPrvProjections / s_FrameCount;
+
+                string pLog = "[Telemetry-Preview] frames=" + s_FrameCount.ToString();
+                pLog = pLog + " avgSpans=" + avgSpans.ToString();
+                pLog = pLog + " avgSubSegs=" + avgSubSegs.ToString();
+                pLog = pLog + " avgDrawn=" + avgDrawn.ToString();
+                pLog = pLog + " totalCulled=" + totalCulled.ToString();
+                pLog = pLog + " (behind=" + s_SumPrvCulledBehind.ToString();
+                pLog = pLog + " off=" + s_SumPrvCulledOff.ToString() + ")";
+                pLog = pLog + " avgProjections=" + avgProjections.ToString();
+                Print("[LF_PowerGrid] " + pLog);
             }
 
-            string rLog = "[Telemetry-Render] frames=" + s_FrameCount.ToString();
-            rLog = rLog + " avgWires=" + avgWires.ToString();
-            rLog = rLog + " avgDrawn=" + avgDrawnW.ToString();
-            rLog = rLog + " avgCulled=" + avgCulledW.ToString();
-            rLog = rLog + " avgOccluded=" + avgOccW.ToString();
-            rLog = rLog + " avgSegs=" + avgSegs.ToString();
-            rLog = rLog + " peakSegs=" + s_PeakRndSegs.ToString();
-            rLog = rLog + " budgetPct=" + budgetPct.ToString() + "%";
-            rLog = rLog + " occRays=" + s_SumRndOccRays.ToString();
-            Print("[LF_PowerGrid] " + rLog);
+            // Render averages (only meaningful if CableRenderer populated data)
+            if (s_SumRndTotal > 0)
+            {
+                int avgWires = s_SumRndTotal / s_FrameCount;
+                int avgDrawnW = s_SumRndDrawn / s_FrameCount;
+                int avgCulledW = s_SumRndCulled / s_FrameCount;
+                int avgOccW = s_SumRndOccluded / s_FrameCount;
+                int avgSegs = s_SumRndSegs / s_FrameCount;
+                int budgetPct = 0;
+                int budgetMax = 512;  // mirrors LFPG_MAX_RENDERED_SEGS
+                if (budgetMax > 0)
+                {
+                    budgetPct = (s_PeakRndSegs * 100) / budgetMax;
+                }
+
+                string rLog = "[Telemetry-Render] frames=" + s_FrameCount.ToString();
+                rLog = rLog + " avgWires=" + avgWires.ToString();
+                rLog = rLog + " avgDrawn=" + avgDrawnW.ToString();
+                rLog = rLog + " avgCulled=" + avgCulledW.ToString();
+                rLog = rLog + " avgOccluded=" + avgOccW.ToString();
+                rLog = rLog + " avgSegs=" + avgSegs.ToString();
+                rLog = rLog + " peakSegs=" + s_PeakRndSegs.ToString();
+                rLog = rLog + " budgetPct=" + budgetPct.ToString() + "%";
+                rLog = rLog + " occRays=" + s_SumRndOccRays.ToString();
+                Print("[LF_PowerGrid] " + rLog);
+            }
         }
 
         // Reset accumulators
