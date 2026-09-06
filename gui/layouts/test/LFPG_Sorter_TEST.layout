@@ -4,7 +4,7 @@
 // one attribute per line; static color tokens as 0-1 floats (alpha always 1);
 // button dispatch by SetUserID from script (no command relays).
 // =========================================================
-FrameWidgetClass SorterRoot {
+FrameWidgetClass TEST_SorterRoot {
 	size 1 1
 	hexactpos 0
 	vexactpos 0
