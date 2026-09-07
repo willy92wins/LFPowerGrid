@@ -121,7 +121,7 @@ class LFPG_BTCAtmView extends ScriptView
     TextWidget FooterBrand;
 
     // ── Palette ──
-    // Shared colors: use LFPG_SorterView.COL_* (dedup F2-B)
+    // Shared colors: use LFPG_UIPalette.COL_* (dedup F2-B)
     // ATM-specific only:
     static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
     static const int COL_AMBER_BTN    = 0xFFB8880F;
@@ -564,82 +564,82 @@ class LFPG_BTCAtmView extends ScriptView
     // =========================================================
     protected void ApplyColors()
     {
-        Tint(PanelBg, LFPG_SorterView.COL_BG_PANEL);
-        Tint(HeaderBg, LFPG_SorterView.COL_HEADER);
-        Tint(AccentLine, LFPG_SorterView.COL_GREEN);
-        Tint(BtnCloseXBg, LFPG_SorterView.COL_BTN);
-        if (BtnCloseXText) { BtnCloseXText.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (HeaderIcon) { HeaderIcon.SetColor(LFPG_SorterView.COL_AMBER); }
-        if (HeaderTitle) { HeaderTitle.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (DragHandle) { DragHandle.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+        Tint(PanelBg, LFPG_UIPalette.COL_BG_PANEL);
+        Tint(HeaderBg, LFPG_UIPalette.COL_HEADER);
+        Tint(AccentLine, LFPG_UIPalette.COL_GREEN);
+        Tint(BtnCloseXBg, LFPG_UIPalette.COL_BTN);
+        if (BtnCloseXText) { BtnCloseXText.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (HeaderIcon) { HeaderIcon.SetColor(LFPG_UIPalette.COL_AMBER); }
+        if (HeaderTitle) { HeaderTitle.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (DragHandle) { DragHandle.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
 
         // Info cards
-        Tint(CardPriceBg, LFPG_SorterView.COL_BG_ELEVATED);
-        Tint(CardStockBg, LFPG_SorterView.COL_BG_ELEVATED);
-        Tint(CardBalanceBg, LFPG_SorterView.COL_BG_ELEVATED);
-        Tint(CardCashBg, LFPG_SorterView.COL_BG_ELEVATED);
-        if (CardPriceLabel) { CardPriceLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (CardStockLabel) { CardStockLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (CardBalanceLabel) { CardBalanceLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (CardCashLabel) { CardCashLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (PriceText) { PriceText.SetColor(LFPG_SorterView.COL_AMBER); }
-        if (StockText) { StockText.SetColor(LFPG_SorterView.COL_BLUE); }
-        if (BalanceText) { BalanceText.SetColor(LFPG_SorterView.COL_GREEN); }
-        if (CashEurText) { CashEurText.SetColor(LFPG_SorterView.COL_GREEN); }
-        if (CashBtcText) { CashBtcText.SetColor(LFPG_SorterView.COL_AMBER); }
+        Tint(CardPriceBg, LFPG_UIPalette.COL_BG_ELEVATED);
+        Tint(CardStockBg, LFPG_UIPalette.COL_BG_ELEVATED);
+        Tint(CardBalanceBg, LFPG_UIPalette.COL_BG_ELEVATED);
+        Tint(CardCashBg, LFPG_UIPalette.COL_BG_ELEVATED);
+        if (CardPriceLabel) { CardPriceLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (CardStockLabel) { CardStockLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (CardBalanceLabel) { CardBalanceLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (CardCashLabel) { CardCashLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (PriceText) { PriceText.SetColor(LFPG_UIPalette.COL_AMBER); }
+        if (StockText) { StockText.SetColor(LFPG_UIPalette.COL_BLUE); }
+        if (BalanceText) { BalanceText.SetColor(LFPG_UIPalette.COL_GREEN); }
+        if (CashEurText) { CashEurText.SetColor(LFPG_UIPalette.COL_GREEN); }
+        if (CashBtcText) { CashBtcText.SetColor(LFPG_UIPalette.COL_AMBER); }
 
         // Amount section
-        Tint(AmountBg, LFPG_SorterView.COL_BG_ELEVATED);
-        if (AmountLabel) { AmountLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (BtcLabel) { BtcLabel.SetColor(LFPG_SorterView.COL_AMBER); }
-        Tint(EditBtcBorder, LFPG_SorterView.COL_INPUT_BORDER);
-        Tint(EditBtcBg, LFPG_SorterView.COL_BG_INPUT);
-        if (EditBtcAmount) { EditBtcAmount.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (ArrowLabel) { ArrowLabel.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (EurLabel) { EurLabel.SetColor(LFPG_SorterView.COL_GREEN); }
-        Tint(EditEurBorder, LFPG_SorterView.COL_INPUT_BORDER);
-        Tint(EditEurBg, LFPG_SorterView.COL_BG_INPUT);
-        if (EditEurAmount) { EditEurAmount.SetColor(LFPG_SorterView.COL_TEXT); }
+        Tint(AmountBg, LFPG_UIPalette.COL_BG_ELEVATED);
+        if (AmountLabel) { AmountLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (BtcLabel) { BtcLabel.SetColor(LFPG_UIPalette.COL_AMBER); }
+        Tint(EditBtcBorder, LFPG_UIPalette.COL_INPUT_BORDER);
+        Tint(EditBtcBg, LFPG_UIPalette.COL_BG_INPUT);
+        if (EditBtcAmount) { EditBtcAmount.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (ArrowLabel) { ArrowLabel.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (EurLabel) { EurLabel.SetColor(LFPG_UIPalette.COL_GREEN); }
+        Tint(EditEurBorder, LFPG_UIPalette.COL_INPUT_BORDER);
+        Tint(EditEurBg, LFPG_UIPalette.COL_BG_INPUT);
+        if (EditEurAmount) { EditEurAmount.SetColor(LFPG_UIPalette.COL_TEXT); }
 
         // Tabs — default: Cash active (green), Account dimmed
         SetTabColors(false);
 
         // Separator
-        Tint(SepBuySell, LFPG_SorterView.COL_SEPARATOR);
+        Tint(SepBuySell, LFPG_UIPalette.COL_SEPARATOR);
 
         // Row 1: Buy/Sell BTC
-        Tint(BtnBuyBtcBg, LFPG_SorterView.COL_GREEN_BTN);
-        Tint(BtnSellBtcBg, LFPG_SorterView.COL_RED_BTN);
-        if (BtnBuyBtcText) { BtnBuyBtcText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnSellBtcText) { BtnSellBtcText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnBuyBtcHint) { BtnBuyBtcHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
-        if (BtnSellBtcHint) { BtnSellBtcHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
+        Tint(BtnBuyBtcBg, LFPG_UIPalette.COL_GREEN_BTN);
+        Tint(BtnSellBtcBg, LFPG_UIPalette.COL_RED_BTN);
+        if (BtnBuyBtcText) { BtnBuyBtcText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnSellBtcText) { BtnSellBtcText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnBuyBtcHint) { BtnBuyBtcHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
+        if (BtnSellBtcHint) { BtnSellBtcHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
 
         // Row 2: Withdraw/Deposit EUR
-        Tint(BtnWithdrawEurBg, LFPG_SorterView.COL_BLUE_BTN);
-        Tint(BtnDepositEurBg, LFPG_SorterView.COL_BTN);
-        if (BtnWithdrawEurText) { BtnWithdrawEurText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnDepositEurText) { BtnDepositEurText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnWithdrawEurHint) { BtnWithdrawEurHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
-        if (BtnDepositEurHint) { BtnDepositEurHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
+        Tint(BtnWithdrawEurBg, LFPG_UIPalette.COL_BLUE_BTN);
+        Tint(BtnDepositEurBg, LFPG_UIPalette.COL_BTN);
+        if (BtnWithdrawEurText) { BtnWithdrawEurText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnDepositEurText) { BtnDepositEurText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnWithdrawEurHint) { BtnWithdrawEurHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
+        if (BtnDepositEurHint) { BtnDepositEurHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
 
         // Row 3: Withdraw/Deposit BTC
-        Tint(BtnWithdrawBtcBg, LFPG_SorterView.COL_BLUE_BTN);
-        Tint(BtnDepositBtcBg, LFPG_SorterView.COL_BTN);
-        if (BtnWithdrawBtcText) { BtnWithdrawBtcText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnDepositBtcText) { BtnDepositBtcText.SetColor(LFPG_SorterView.COL_TEXT); }
-        if (BtnWithdrawBtcHint) { BtnWithdrawBtcHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
-        if (BtnDepositBtcHint) { BtnDepositBtcHint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
+        Tint(BtnWithdrawBtcBg, LFPG_UIPalette.COL_BLUE_BTN);
+        Tint(BtnDepositBtcBg, LFPG_UIPalette.COL_BTN);
+        if (BtnWithdrawBtcText) { BtnWithdrawBtcText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnDepositBtcText) { BtnDepositBtcText.SetColor(LFPG_UIPalette.COL_TEXT); }
+        if (BtnWithdrawBtcHint) { BtnWithdrawBtcHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
+        if (BtnDepositBtcHint) { BtnDepositBtcHint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
 
         // Status (initially hidden)
         Tint(StatusBg, COL_STATUS_OK_BG);
-        if (StatusText) { StatusText.SetColor(LFPG_SorterView.COL_GREEN); }
+        if (StatusText) { StatusText.SetColor(LFPG_UIPalette.COL_GREEN); }
 
         // Footer
-        Tint(FooterSep, LFPG_SorterView.COL_SEPARATOR);
-        Tint(FooterBg, LFPG_SorterView.COL_HEADER);
-        if (FooterEscHint) { FooterEscHint.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-        if (FooterBrand) { FooterBrand.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+        Tint(FooterSep, LFPG_UIPalette.COL_SEPARATOR);
+        Tint(FooterBg, LFPG_UIPalette.COL_HEADER);
+        if (FooterEscHint) { FooterEscHint.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+        if (FooterBrand) { FooterBrand.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
 
         // A4: Hide "drag" label
         if (DragHandle) { DragHandle.Show(false); }
@@ -655,16 +655,16 @@ class LFPG_BTCAtmView extends ScriptView
         if (accountMode)
         {
             Tint(TabAccountBg, COL_AMBER_BTN);
-            if (TabAccountText) { TabAccountText.SetColor(LFPG_SorterView.COL_TEXT); }
-            Tint(TabCashBg, LFPG_SorterView.COL_BTN);
-            if (TabCashText) { TabCashText.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+            if (TabAccountText) { TabAccountText.SetColor(LFPG_UIPalette.COL_TEXT); }
+            Tint(TabCashBg, LFPG_UIPalette.COL_BTN);
+            if (TabCashText) { TabCashText.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
         }
         else
         {
-            Tint(TabCashBg, LFPG_SorterView.COL_GREEN_BTN);
-            if (TabCashText) { TabCashText.SetColor(LFPG_SorterView.COL_TEXT); }
-            Tint(TabAccountBg, LFPG_SorterView.COL_BTN);
-            if (TabAccountText) { TabAccountText.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+            Tint(TabCashBg, LFPG_UIPalette.COL_GREEN_BTN);
+            if (TabCashText) { TabCashText.SetColor(LFPG_UIPalette.COL_TEXT); }
+            Tint(TabAccountBg, LFPG_UIPalette.COL_BTN);
+            if (TabAccountText) { TabAccountText.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
         }
     }
 

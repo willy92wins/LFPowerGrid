@@ -91,7 +91,7 @@ class LFPG_SorterTagView extends ScriptView
         // is already communicated by the bg tint.
         if (TagLabel)
         {
-            TagLabel.SetColor(LFPG_SorterView.COL_TEXT);
+            TagLabel.SetColor(LFPG_UIPalette.COL_TEXT);
         }
 
         // v4.3: Set BtnRemove X text to grey + encode UID for
@@ -118,7 +118,7 @@ class LFPG_SorterTagView extends ScriptView
             TextWidget btnTxt = TextWidget.Cast(tagRoot.FindAnyWidget(btnTxtName));
             if (btnTxt)
             {
-                btnTxt.SetColor(LFPG_SorterView.COL_TEXT_MID);
+                btnTxt.SetColor(LFPG_UIPalette.COL_TEXT_MID);
             }
         }
 
