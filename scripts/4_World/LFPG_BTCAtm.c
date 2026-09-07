@@ -74,6 +74,16 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         return m_BtcStock;
     }
 
+    // Refuse dismantling while the machine still holds BTC. The kit that
+    // dismantling spawns carries no stock, and the device is deleted right
+    // after, so every unit left inside would be destroyed with no refund
+    // and no warning. Empty the ATM first, the same way the action already
+    // demands no attachments and no cargo.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_BtcStock > 0;
+    }
+
     void LFPG_SetBtcStock(int stock)
     {
         #ifdef SERVER

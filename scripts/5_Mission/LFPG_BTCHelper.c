@@ -240,6 +240,37 @@ class LFPG_BTCHelper
     protected static const int LFPG_BTC_MAX_ENTITIES_PER_TX = 64;
     protected static ref map<string, int> s_StackCapacityCache;
 
+    // Sales whose destruction already ran in THIS boot. Guards the last hole
+    // of E04 (2026-09-07): if both clearing and rebasing the .sell marker fail
+    // — two file writes to the same path, so a lock or a full disk takes both —
+    // the marker keeps its pre-credit balanceBefore. The reconciler would then
+    // see current == balanceBefore + creditAmount on the next connect and
+    // destroy the player's items A SECOND TIME. Marking the sale here lets the
+    // reconciler refuse that while the server stays up, which is exactly the
+    // window in which the player reconnects after the failure.
+    // Deliberately NOT persisted: a durable record would need the very write
+    // that just failed. Across a restart the fail-closed log still stands, and
+    // it names the file for the admin to delete.
+    protected static ref map<string, bool> s_SellDestroyedThisBoot;
+
+    static void LFPG_MarkSellDestroyedThisBoot(string uid)
+    {
+        if (uid == "")
+            return;
+        if (!s_SellDestroyedThisBoot)
+            s_SellDestroyedThisBoot = new map<string, bool>();
+        s_SellDestroyedThisBoot.Set(uid, true);
+    }
+
+    static bool LFPG_SellDestroyedThisBoot(string uid)
+    {
+        if (uid == "")
+            return false;
+        if (!s_SellDestroyedThisBoot)
+            return false;
+        return s_SellDestroyedThisBoot.Contains(uid);
+    }
+
     // =========================================================
     // BTC ATM: Utility methods (no external dependency)
     // =========================================================
@@ -1472,6 +1503,22 @@ class LFPG_BTCHelper
             return;
         }
 
+        // A sale whose destruction already ran in this boot must never be
+        // destroyed again. Reaching here with the flag set means the marker
+        // could be neither cleared nor rebased after that destruction, so the
+        // balance still reads as "credited but not destroyed" and is no longer
+        // evidence of anything. Fail closed: leave the items and the marker,
+        // and tell the admin which file to remove.
+        if (LFPG_SellDestroyedThisBoot(uid))
+        {
+            LFPG_Util.Error("[BTCSell] sell-intent marker survived a sale already destroyed this boot; NOT destroying again. Admin: delete the sibling .sell file uid=" + LFPG_Util.LogUid(uid));
+            return;
+        }
+
+        // Mark BEFORE destroying, not after: if the destruction is interrupted
+        // half way the flag is still set, and the next reconcile in this boot
+        // fails closed instead of destroying an unknown remainder again.
+        LFPG_MarkSellDestroyedThisBoot(uid);
         int destroyed = DestroyPlayerItems(player, classname, btcAmount);
         if (destroyed != btcAmount)
         {
@@ -1965,7 +2012,13 @@ class LFPG_BTCHelper
         SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL,okCode, newStock, newBalance, destroyed, eurTotal, serverSessionLow, serverSessionHigh, sequence);
 
         if (sellIntentWritten)
+        {
+            // Order matters: mark BEFORE trying to clear the marker. If both
+            // the clear and the rebase fail, the flag is already set and the
+            // reconciler refuses to destroy this player's items a second time.
+            LFPG_MarkSellDestroyedThisBoot(sellIntentUid);
             ClearSellDestroyIntentAfterDestroy(sellIntentUid, newBalance, accountAdded, btcAmount, btcClassname);
+        }
 
         string logSell = "[BTCSell] player sold ";
         logSell = logSell + destroyed.ToString();
