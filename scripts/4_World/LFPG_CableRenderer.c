@@ -1151,8 +1151,11 @@ class LFPG_CableRenderer
 
         if (m_TempKeys.Count() > 0)
         {
-            string ncMsg = "[CableRenderer] NegCache purged " + m_TempKeys.Count().ToString() + " expired entries";
-            LFPG_Util.Debug(ncMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string ncMsg = "[CableRenderer] NegCache purged " + m_TempKeys.Count().ToString() + " expired entries";
+                LFPG_Util.Debug(ncMsg);
+            }
         }
     }
 
@@ -1261,8 +1264,11 @@ class LFPG_CableRenderer
 
         m_NegCache.Remove(ownerDeviceId);
 
-        string uobMsg = "[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString();
-        LFPG_Util.Info(uobMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string uobMsg = "[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString();
+            LFPG_Util.Debug(uobMsg);
+        }
         if (LFPG_DIAG_ENABLED)
         {
             LFPG_Diag.ServerEcho("[CableRenderer] UpsertOwnerBlob owner=" + ownerDeviceId + " jsonLen=" + json.Length().ToString());
@@ -1341,8 +1347,11 @@ class LFPG_CableRenderer
             // Retain an authoritative empty owner state so generation checks
             // can prove that a valid no-wire snapshot is up to date.
 
-            string bltMsg = "[CableRenderer] Built owner=" + ownerDeviceId + " wires=" + wireCount.ToString() + " pending=" + m_RetryQueue.Count().ToString();
-            LFPG_Util.Info(bltMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string bltMsg = "[CableRenderer] Built owner=" + ownerDeviceId + " wires=" + wireCount.ToString() + " pending=" + m_RetryQueue.Count().ToString();
+                LFPG_Util.Debug(bltMsg);
+            }
         }
         else
         {
@@ -1351,8 +1360,11 @@ class LFPG_CableRenderer
                 st.wireGeneration = snapshotGeneration;
             }
             MarkDeviceSyncBlobReceived(ownerDeviceId, st);
-            string skipMsg = "[CableRenderer] UpsertOwnerBlob SKIP (json unchanged) owner=" + ownerDeviceId;
-            LFPG_Util.Debug(skipMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string skipMsg = "[CableRenderer] UpsertOwnerBlob SKIP (json unchanged) owner=" + ownerDeviceId;
+                LFPG_Util.Debug(skipMsg);
+            }
         }
     }
 
@@ -1440,11 +1452,14 @@ class LFPG_CableRenderer
             }
         }
 
-        string nvcMsg = "[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId;
-        nvcMsg = nvcMsg + " powered=" + st.lastPowered.ToString();
-        nvcMsg = nvcMsg + " load=" + st.lastLoadRatio.ToString();
-        nvcMsg = nvcMsg + " overloaded=" + st.lastOverloaded.ToString();
-        LFPG_Util.Debug(nvcMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string nvcMsg = "[CableRenderer] NotifyOwnerVisualChanged owner=" + ownerDeviceId;
+            nvcMsg = nvcMsg + " powered=" + st.lastPowered.ToString();
+            nvcMsg = nvcMsg + " load=" + st.lastLoadRatio.ToString();
+            nvcMsg = nvcMsg + " overloaded=" + st.lastOverloaded.ToString();
+            LFPG_Util.Debug(nvcMsg);
+        }
     }
 
     // ==========================================================
@@ -2049,8 +2064,11 @@ class LFPG_CableRenderer
         if (!m_ByOwnerId.Find(ownerDeviceId, st) || !st || !st.wires)
             return;
 
-        string bowMsg = "[CableRenderer] BuildOwnerWires owner=" + ownerDeviceId + " net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString() + " wires=" + st.wires.Count().ToString();
-        LFPG_Util.Info(bowMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string bowMsg = "[CableRenderer] BuildOwnerWires owner=" + ownerDeviceId + " net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString() + " wires=" + st.wires.Count().ToString();
+            LFPG_Util.Debug(bowMsg);
+        }
 
         EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
         if (!ownerObj)
@@ -2163,8 +2181,11 @@ class LFPG_CableRenderer
             int estSegs = EstimateSegments(m_TempPoints);
             if (totalSegs + estSegs > LFPG_MAX_RENDERED_SEGS)
             {
-                string budgMsg = "[CableRenderer] Over segment budget, queue retry " + wireKey;
-                LFPG_Util.Debug(budgMsg);
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    string budgMsg = "[CableRenderer] Over segment budget, queue retry " + wireKey;
+                    LFPG_Util.Debug(budgMsg);
+                }
                 AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
                 // G5: wire skipped by segment budget
                 bldTelRnd.m_WiresBudget = bldTelRnd.m_WiresBudget + 1;
@@ -2595,8 +2616,11 @@ class LFPG_CableRenderer
             for (gk = 0; gk < m_GhostKeys.Count(); gk = gk + 1)
             {
                 string ghostId = m_GhostKeys[gk];
-                string ghostMsg = "[CableRenderer] CullTick: removing ghost owner=" + ghostId + " (entity null for 30+s)";
-                LFPG_Util.Info(ghostMsg);
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    string ghostMsg = "[CableRenderer] CullTick: removing ghost owner=" + ghostId + " (entity null for 30+s)";
+                    LFPG_Util.Debug(ghostMsg);
+                }
                 DestroyOwnerLines(ghostId);
                 ClearOwnerRetries(ghostId);
                 m_ByOwnerId.Remove(ghostId);
@@ -3886,8 +3910,11 @@ class LFPG_CableRenderer
                     entry.retryCount = entry.retryCount + 1;
                     if (entry.retryCount > LFPG_RETRY_MAX)
                     {
-                        string rlOwnMsg = "[CableRenderer] Retry limit (owner missing) for " + wireKey + ", giving up";
-                        LFPG_Util.Debug(rlOwnMsg);
+                        if (LFPG_LOG_LEVEL >= 2)
+                        {
+                            string rlOwnMsg = "[CableRenderer] Retry limit (owner missing) for " + wireKey + ", giving up";
+                            LFPG_Util.Debug(rlOwnMsg);
+                        }
                         m_RetryQueue.Remove(wireKey);
                     }
                 }
@@ -3919,8 +3946,11 @@ class LFPG_CableRenderer
                     entry.retryCount = entry.retryCount + 1;
                     if (entry.retryCount > LFPG_RETRY_MAX)
                     {
-                        string rlTgtMsg = "[CableRenderer] Retry limit (target missing) for " + wireKey + ", giving up";
-                        LFPG_Util.Debug(rlTgtMsg);
+                        if (LFPG_LOG_LEVEL >= 2)
+                        {
+                            string rlTgtMsg = "[CableRenderer] Retry limit (target missing) for " + wireKey + ", giving up";
+                            LFPG_Util.Debug(rlTgtMsg);
+                        }
                         m_RetryQueue.Remove(wireKey);
                     }
                 }
@@ -3981,8 +4011,11 @@ class LFPG_CableRenderer
 
             m_RetryQueue.Remove(wireKey);
 
-            string retOkMsg = "[CableRenderer] Retry succeeded: " + wireKey;
-            LFPG_Util.Debug(retOkMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string retOkMsg = "[CableRenderer] Retry succeeded: " + wireKey;
+                LFPG_Util.Debug(retOkMsg);
+            }
         }
     }
 
@@ -4055,12 +4088,15 @@ class LFPG_CableRenderer
 
         if (reconciled > 0)
         {
-            string logMsg = "[CableRenderer] ReconcileTick: re-queued ";
-            logMsg = logMsg + reconciled.ToString();
-            logMsg = logMsg + " orphaned wire(s) out of ";
-            logMsg = logMsg + totalWiresScanned.ToString();
-            logMsg = logMsg + " scanned";
-            LFPG_Util.Info(logMsg);
+            if (LFPG_LOG_LEVEL >= 1)
+            {
+                string logMsg = "[CableRenderer] ReconcileTick: re-queued ";
+                logMsg = logMsg + reconciled.ToString();
+                logMsg = logMsg + " orphaned wire(s) out of ";
+                logMsg = logMsg + totalWiresScanned.ToString();
+                logMsg = logMsg + " scanned";
+                LFPG_Util.Info(logMsg);
+            }
         }
     }
 

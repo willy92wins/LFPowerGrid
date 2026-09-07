@@ -27,6 +27,15 @@ class LFPG_Fridge_Kit : LFPG_KitBaseDeployable
 // ---------------------------------------------------------
 class LFPG_Fridge : LFPG_DeviceBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterFridge(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet = false;
     protected bool m_IsOpen     = false;
@@ -84,11 +93,14 @@ class LFPG_Fridge : LFPG_DeviceBase
         m_LastCargoCount = -1;
         SetSynchDirty();
 
-        string msg = "[LFPG_Fridge] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Fridge] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 
@@ -131,7 +143,7 @@ class LFPG_Fridge : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterFridge(this);
         #endif
     }
@@ -370,11 +382,14 @@ class LFPG_Fridge : LFPG_DeviceBase
 
         if (cooled > 0)
         {
-            string coolMsg = "[LFPG_Fridge] CoolTick: cooled=";
-            coolMsg = coolMsg + cooled.ToString();
-            coolMsg = coolMsg + " id=";
-            coolMsg = coolMsg + m_DeviceId;
-            LFPG_Util.Debug(coolMsg);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string coolMsg = "[LFPG_Fridge] CoolTick: cooled=";
+                coolMsg = coolMsg + cooled.ToString();
+                coolMsg = coolMsg + " id=";
+                coolMsg = coolMsg + m_DeviceId;
+                LFPG_Util.Debug(coolMsg);
+            }
         }
         #endif
     }

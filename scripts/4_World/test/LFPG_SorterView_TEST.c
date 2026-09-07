@@ -15,7 +15,7 @@
 //                the 4 filter sections is visible.
 //   Sprint 3  ✓ Active Rules header (column 3)
 //                — Step ③ circle + title + sublabel "ON OUT N - ...".
-//                Legacy LblActiveRules hidden at runtime.
+//                Legacy header label removed with the old layout.
 //   Sprint 4  ✓ Polish — BtnClearOut ghost variant; sublabel uppercase.
 //
 // Sprint 5+ TODO (deferred until in-game testing feedback):
@@ -26,8 +26,8 @@
 //   - Header redesign: SORT NOW button + POWERED dot + linked badge
 //   - Tag chip restyle: per-rule-type colored prefix (CAT blue, PFX
 //     amber, CON purple, SLT green) + color border-left
-//   - Remove legacy LblActiveRules + horizontal TabBar widgets from
-//     the layout XML entirely (currently runtime-hidden, harmless)
+//   - Legacy header label + horizontal tab bar widgets are gone
+//     from the new S2 layout entirely
 //   - Hoist new array<string> allocations in RefreshBuilderTab_TEST
 //     to member fields (avoids 4 allocs per refresh)
 //
@@ -44,11 +44,6 @@
 //       SetUserData/GetUserData (LFPG_ColorData_TEST). No more O(n) scan.
 //   M5: ClampPanelPos helper — DPI-safe clamp shared between
 //       CenterPanel and drag, eliminates 45 lines of duplication.
-//
-// v2.5 changes:
-//   B1-B3: UIScaler — resolution-proportional scaling via
-//          Capture(design values) + Apply(scale) on every Open.
-//          Dynamic items (tags, preview rows) scaled in SetData.
 //
 // v2.4 changes:
 //   Bug A: ESC via MissionGameplay.OnKeyPress (LocalPress blocked by ChangeGameFocus)
@@ -113,14 +108,18 @@ class LFPG_SorterView_TEST extends ScriptView
     // N3: Tracks whether controls are enabled (unpaired = false).
     // Set from Controller via static setter; read by OnMouseEnter.
     protected bool m_ControlsEnabled;
-    // P3: Track first Tint pass (LoadImageFile only needed once)
-    protected bool m_ColorsInitialized;
     // M2: Track first AssignButtonIDs pass (UserIDs don't change)
     protected bool m_ButtonIDsAssigned;
 
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
     protected bool m_FadingIn;
+    // MCP TEST command hook. Separate layout so ui_reload_layout
+    // preview cannot hijack the name. Polled from Update because
+    // DispatchUiSetText calls SetText and never runs OnClick.
+    protected EditBoxWidget m_McpCmd;
+    protected bool m_McpCmdOwned;
+    protected bool m_McpCmdCreateFailed;
 
     // Widget refs for ApplyColors ONLY (no dupes with Controller)
     // ModalOverlay REMOVED (Bug #1)
@@ -132,15 +131,9 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget PanelBg;
     ImageWidget AccentLine;
     ImageWidget HeaderBg;
-    ImageWidget TabBarBg;
-    ImageWidget TabSep;
-    ImageWidget TabIndicator;
     ImageWidget ColumnSep;
     ImageWidget RulesPanelBg;
     ImageWidget PreviewPanelBg;
-    ImageWidget FooterBg;
-    ImageWidget FooterSep;
-    ImageWidget FooterMidSep;
     ImageWidget EditPrefixBg;
     ImageWidget EditContainsBg;
     ImageWidget EditSlotMinBg;
@@ -149,7 +142,6 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget EditContainsBorder;
     ImageWidget EditSlotMinBorder;
     ImageWidget EditSlotMaxBorder;
-    ImageWidget DestIndicatorBg;
     ImageWidget MatchFooterBg;
     ImageWidget BtnCloseXBg;
     TextWidget BtnCloseXText;
@@ -242,25 +234,13 @@ class LFPG_SorterView_TEST extends ScriptView
     ImageWidget AccentLineBottom;
     // v3: Drag handle (P-II)
     TextWidget DragHandle;
-    // v3: Section cards (A)
-    ImageWidget CatSectionBg;
-    ImageWidget CatSectionAccent;
-    ImageWidget PrefixSectionBg;
-    ImageWidget PrefixSectionAccent;
-    ImageWidget ContainsSectionBg;
-    ImageWidget ContainsSectionAccent;
-    ImageWidget SlotSectionBg;
-    ImageWidget SlotSectionAccent;
-    ImageWidget CatchAllCardBg;
     // v3: Edit hints (E)
     TextWidget EditPrefixHint;
     TextWidget EditContainsHint;
     TextWidget EditSlotMinHint;
     TextWidget EditSlotMaxHint;
-    // v3: Footer ESC (P-V)
-    TextWidget FooterEscHint;
 
-    static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
+    static const bool S1_PROBE = true;
 
     // ── LFPG Palette v2 (ARGB) — DayZ-adjusted (RGB×1.35 bg, ×1.30 btn, alpha×1.40) ──
     static const int COL_BG_DEEP      = 0xFF131C2B;
@@ -299,11 +279,20 @@ class LFPG_SorterView_TEST extends ScriptView
     static const int COL_CATCHALL_BG     = 0x26FBBF24;
     static const int COL_PURPLE          = 0xFFA78BFA;
 
+    // S2 premixes (spec): opaque static-chrome colors, painted by the layout
+    static const int COL_S2_BG_SECTION   = 0xFF162036;
+    static const int COL_S2_HEADER       = 0xFF0F172B;
+    static const int COL_S2_SEPARATOR    = 0xFF424C62;
+    static const int COL_S2_CATCHALL_BG  = 0xFF242A35;
+    static const int COL_S2_RULEROW_BG   = 0xFF1D273C;
+    static const int COL_S2_GREENBTN_HDR = 0xFF14313A;
+    static const int COL_S2_GREENBTN_SEC = 0xFF1A3944;
+    static const int COL_S2_GREENBTN_PAN = 0xFF173644;
+    static const int COL_S2_REDBTN_BG    = 0xFF2D283C;
+
     // ── M2: Button UserID ranges (int dispatch replaces string comparison) ──
-    // 100+i: output tabs, 110-111: view tabs, 200+i: categories,
+    // 111: preview toggle, 200+i: categories,
     // 300+i: slots, 400-402: adds, 500+: actions
-    static const int UID_TAB_OUT_BASE  = 100;
-    static const int UID_TAB_RULES     = 110;
     static const int UID_TAB_PREVIEW   = 111;
     static const int UID_CAT_BASE      = 200;
     static const int UID_SLOT_BASE     = 300;
@@ -314,8 +303,6 @@ class LFPG_SorterView_TEST extends ScriptView
     static const int UID_CLEAR_OUT     = 501;
     static const int UID_RESET_ALL     = 502;
     static const int UID_SAVE          = 503;
-    static const int UID_SORT          = 504;
-    static const int UID_CLOSE         = 505;
     static const int UID_CLOSE_X       = 506;
     static const int UID_SORT_HEADER   = 507;
     // v4.3: Tag BtnRemove — UID = 600 + outIdx*10 + (ruleIdx+1)
@@ -387,6 +374,13 @@ class LFPG_SorterView_TEST extends ScriptView
         {
             ctrl.TickTimers(dt);
         }
+
+        // Read LFPG_MCP_SorterCmd here. ui_set_text writes the widget
+        // directly; routing this through OnClick would hit the five guards.
+        if (m_McpCmd)
+        {
+            PollMcpSorterCmd();
+        }
     }
 
     void LFPG_SorterView_TEST()
@@ -399,6 +393,9 @@ class LFPG_SorterView_TEST extends ScriptView
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
+        m_McpCmd = null;
+        m_McpCmdOwned = false;
+        m_McpCmdCreateFailed = false;
         m_ColorDataRefs = new array<ref LFPG_ColorData_TEST>();
         m_TintedWidgets = new array<Widget>();
     }
@@ -406,6 +403,7 @@ class LFPG_SorterView_TEST extends ScriptView
     // S1 fix: destructor releases input lock if destroyed while open
     void ~LFPG_SorterView_TEST()
     {
+        DestroyMcpCmdWidget();
         if (g_Game)
         {
             // v2.4 Bug D: Restore player actions on destruction
@@ -463,24 +461,12 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!AccentLine) { AccentLine = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "HeaderBg";
         if (!HeaderBg) { HeaderBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabBarBg";
-        if (!TabBarBg) { TabBarBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabSep";
-        if (!TabSep) { TabSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "TabIndicator";
-        if (!TabIndicator) { TabIndicator = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "ColumnSep";
         if (!ColumnSep) { ColumnSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "RulesPanelBg";
         if (!RulesPanelBg) { RulesPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "PreviewPanelBg";
         if (!PreviewPanelBg) { PreviewPanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterBg";
-        if (!FooterBg) { FooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterSep";
-        if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterMidSep";
-        if (!FooterMidSep) { FooterMidSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditPrefixBg";
         if (!EditPrefixBg) { EditPrefixBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditContainsBg";
@@ -497,8 +483,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!EditSlotMinBorder) { EditSlotMinBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditSlotMaxBorder";
         if (!EditSlotMaxBorder) { EditSlotMaxBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "DestIndicatorBg";
-        if (!DestIndicatorBg) { DestIndicatorBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "MatchFooterBg";
         if (!MatchFooterBg) { MatchFooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
 
@@ -638,24 +622,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!AccentLineBottom) { AccentLineBottom = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "DragHandle";
         if (!DragHandle) { DragHandle = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatSectionBg";
-        if (!CatSectionBg) { CatSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatSectionAccent";
-        if (!CatSectionAccent) { CatSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PrefixSectionBg";
-        if (!PrefixSectionBg) { PrefixSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PrefixSectionAccent";
-        if (!PrefixSectionAccent) { PrefixSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ContainsSectionBg";
-        if (!ContainsSectionBg) { ContainsSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ContainsSectionAccent";
-        if (!ContainsSectionAccent) { ContainsSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SlotSectionBg";
-        if (!SlotSectionBg) { SlotSectionBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "SlotSectionAccent";
-        if (!SlotSectionAccent) { SlotSectionAccent = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CatchAllCardBg";
-        if (!CatchAllCardBg) { CatchAllCardBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditPrefixHint";
         if (!EditPrefixHint) { EditPrefixHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditContainsHint";
@@ -664,8 +630,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (!EditSlotMinHint) { EditSlotMinHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
         wn = "EditSlotMaxHint";
         if (!EditSlotMaxHint) { EditSlotMaxHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterEscHint";
-        if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
     }
 
     // =========================================================
@@ -682,29 +646,7 @@ class LFPG_SorterView_TEST extends ScriptView
         string wn = "";
         Widget btn = null;
 
-        // Output tabs (100+i)
-        int ti = 0;
-        string tabPrefix = "TabOut";
-        for (ti = 0; ti < 6; ti = ti + 1)
-        {
-            wn = tabPrefix;
-            wn = wn + ti.ToString();
-            btn = root.FindAnyWidget(wn);
-            if (btn)
-            {
-                int tabId = UID_TAB_OUT_BASE;
-                tabId = tabId + ti;
-                btn.SetUserID(tabId);
-            }
-        }
 
-        // View tabs
-        wn = "TabRules";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_TAB_RULES); }
-        wn = "TabPreview";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_TAB_PREVIEW); }
 
         // Category buttons (200+i)
         int ci = 0;
@@ -762,12 +704,9 @@ class LFPG_SorterView_TEST extends ScriptView
         wn = "BtnSave";
         btn = root.FindAnyWidget(wn);
         if (btn) { btn.SetUserID(UID_SAVE); }
-        wn = "BtnSort";
+        wn = "BtnPreview";
         btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_SORT); }
-        wn = "BtnClose";
-        btn = root.FindAnyWidget(wn);
-        if (btn) { btn.SetUserID(UID_CLOSE); }
+        if (btn) { btn.SetUserID(UID_TAB_PREVIEW); }
         wn = "BtnCloseX";
         btn = root.FindAnyWidget(wn);
         if (btn) { btn.SetUserID(UID_CLOSE_X); }
@@ -815,79 +754,13 @@ class LFPG_SorterView_TEST extends ScriptView
         // objects alive. Without Clear(), each Open accumulates ~130 objects.
         m_ColorDataRefs.Clear();
 
-        // Bug #1: ModalOverlay removed
-        Tint(PanelBg, COL_BG_PANEL);
-        Tint(AccentLine, COL_GREEN);
-        Tint(HeaderBg, COL_HEADER);
-        Tint(TabBarBg, COL_BG_DEEP);
-        Tint(TabSep, COL_SEPARATOR);
-        Tint(TabIndicator, COL_GREEN);
-        Tint(ColumnSep, COL_SEPARATOR);
-        Tint(RulesPanelBg, COL_BG_RULES_PANEL);
-        Tint(PreviewPanelBg, COL_BG_RULES_PANEL);
-        Tint(FooterBg, COL_BG_PANEL);
-        Tint(FooterSep, COL_SEPARATOR);
-        Tint(FooterMidSep, COL_SEPARATOR);
-        Tint(EditPrefixBg, COL_BG_INPUT);
-        Tint(EditContainsBg, COL_BG_INPUT);
-        Tint(EditSlotMinBg, COL_BG_INPUT);
-        Tint(EditSlotMaxBg, COL_BG_INPUT);
-        Tint(EditPrefixBorder, COL_INPUT_BORDER);
-        Tint(EditContainsBorder, COL_INPUT_BORDER);
-        Tint(EditSlotMinBorder, COL_INPUT_BORDER);
-        Tint(EditSlotMaxBorder, COL_INPUT_BORDER);
-        Tint(DestIndicatorBg, COL_GREEN_DIM);
-        Tint(MatchFooterBg, COL_SEPARATOR);
-
-        // === Sprint 1 (2026-04-26): rail tinting ===
-        Tint(OutputRailBg, COL_BG_SECTION_CARD);
-        Tint(OutputRailBorder, COL_SEPARATOR);
-        Tint(Step1Circle, COL_GREEN);
-        if (Step1Number) { Step1Number.SetColor(COL_BG_PANEL); }
-        if (Step1Title) { Step1Title.SetColor(COL_TEXT); }
-        // Each row: bg dim, indicator transparent (highlighted by Refresh)
-        Tint(OutputRow0Bg, COL_BG_PANEL);
-        Tint(OutputRow1Bg, COL_BG_PANEL);
-        Tint(OutputRow2Bg, COL_BG_PANEL);
-        Tint(OutputRow3Bg, COL_BG_PANEL);
-        Tint(OutputRow4Bg, COL_BG_PANEL);
-        Tint(OutputRow5Bg, COL_BG_PANEL);
-        // Catch-all has its own amber tint
-        Tint(CatchAllRowBg, COL_CATCHALL_BG);
-        Tint(CatchAllRowIndicator, COL_AMBER);
-        if (CatchAllRowLabel) { CatchAllRowLabel.SetColor(COL_AMBER); }
-        if (CatchAllRowSublabel) { CatchAllRowSublabel.SetColor(COL_TEXT_DIM); }
-
-        // === Sprint 2 (2026-04-26): builder tab bar tinting (base) ===
-        Tint(BuilderTabBg, COL_BG_PANEL);
-        Tint(BuilderTabBorder, COL_SEPARATOR);
-        Tint(BuilderTabCategoryBg, COL_BG_PANEL);
-        Tint(BuilderTabPrefixBg, COL_BG_PANEL);
-        Tint(BuilderTabContainsBg, COL_BG_PANEL);
-        Tint(BuilderTabSlotBg, COL_BG_PANEL);
-        // Underline starts transparent — RefreshBuilderTab paints active.
-        Tint(BuilderTabCategoryUnderline, 0x00000000);
-        Tint(BuilderTabPrefixUnderline, 0x00000000);
-        Tint(BuilderTabContainsUnderline, 0x00000000);
-        Tint(BuilderTabSlotUnderline, 0x00000000);
-        if (BuilderTabCategoryText) { BuilderTabCategoryText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabPrefixText)   { BuilderTabPrefixText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabContainsText) { BuilderTabContainsText.SetColor(COL_TEXT_DIM); }
-        if (BuilderTabSlotText)     { BuilderTabSlotText.SetColor(COL_TEXT_DIM); }
-
-        // === Sprint 3 (2026-04-26): Step 3 + sublabel tinting ===
-        Tint(Step3Circle, COL_AMBER);
-        if (Step3Number) { Step3Number.SetColor(COL_BG_PANEL); }
-        if (Step3Title) { Step3Title.SetColor(COL_TEXT); }
-        if (RulesSublabel) { RulesSublabel.SetColor(COL_TEXT_DIM); }
-
-
-        // BtnCloseX default color
-        Tint(BtnCloseXBg, COL_BTN);
+        // BtnCloseX default color (static chrome is painted by the layout)
+        Tint(BtnCloseXBg, COL_S2_HEADER);
         if (BtnCloseXText)
         {
             BtnCloseXText.SetColor(COL_TEXT_DIM);
         }
+
         // Pairing badge default (unpaired)
         Tint(PairingBadgeBg, COL_PAIRING_ERR);
         if (PairingBadgeText)
@@ -897,11 +770,7 @@ class LFPG_SorterView_TEST extends ScriptView
             PairingBadgeText.SetColor(COL_RED);
         }
 
-        // v2.4 Bug C: Unpaired overlay (v3: updated hex)
-        if (UnpairedOverlayBg)
-        {
-            Tint(UnpairedOverlayBg, 0xCC0E1423);
-        }
+        // v2.4 Bug C: Unpaired overlay labels (overlay bg painted by the layout)
         if (UnpairedLabel)
         {
             UnpairedLabel.SetColor(COL_RED);
@@ -942,60 +811,12 @@ class LFPG_SorterView_TEST extends ScriptView
                 ebMax.SetColor(COL_TEXT);
             }
         }
-
-        // v3: Panel frame
-        Tint(PanelBorderLeft, COL_SEPARATOR);
-        Tint(PanelBorderRight, COL_SEPARATOR);
-        Tint(AccentLineBottom, COL_GREEN);
-        // v3: Drag handle
-        if (DragHandle)
-        {
-            DragHandle.SetColor(COL_TEXT_DIM);
-        }
-        // v3: Section cards
-        Tint(CatSectionBg, COL_BG_SECTION_CARD);
-        Tint(CatSectionAccent, COL_GREEN);
-        Tint(PrefixSectionBg, COL_BG_SECTION_CARD);
-        Tint(PrefixSectionAccent, COL_BLUE);
-        Tint(ContainsSectionBg, COL_BG_SECTION_CARD);
-        Tint(ContainsSectionAccent, COL_AMBER);
-        Tint(SlotSectionBg, COL_BG_SECTION_CARD);
-        Tint(SlotSectionAccent, COL_PURPLE);
-        Tint(CatchAllCardBg, COL_CATCHALL_BG);
-        // v3: Edit hints
-        if (EditPrefixHint)
-        {
-            EditPrefixHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditContainsHint)
-        {
-            EditContainsHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditSlotMinHint)
-        {
-            EditSlotMinHint.SetColor(COL_TEXT_DIM);
-        }
-        if (EditSlotMaxHint)
-        {
-            EditSlotMaxHint.SetColor(COL_TEXT_DIM);
-        }
-        // v3: Footer ESC hint
-        if (FooterEscHint)
-        {
-            FooterEscHint.SetColor(COL_TEXT_DIM);
-        }
-        m_ColorsInitialized = true;
     }
 
     protected void Tint(ImageWidget img, int color)
     {
         if (!img)
             return;
-        // P3: LoadImageFile only on first pass — subsequent calls just SetColor
-        if (!m_ColorsInitialized)
-        {
-            img.LoadImageFile(0, PROC_WHITE);
-        }
         img.SetColor(color);
         // Cache for hover system (v2.2)
         CacheColorLocal(img, color);
@@ -1184,13 +1005,6 @@ class LFPG_SorterView_TEST extends ScriptView
         // M2: Dispatch by UserID (int) — no string comparisons
         int uid = btn.GetUserID();
 
-        // Output tabs: 100..105
-        if (uid >= UID_TAB_OUT_BASE && uid < UID_TAB_OUT_BASE + 6)
-        {
-            int tabIdx = uid - UID_TAB_OUT_BASE;
-            ctrl.SelectOutput(tabIdx);
-            return true;
-        }
         // Sprint 1 (2026-04-26): vertical rail rows -> same SelectOutput
         if (uid >= UID_RAIL_ROW_BASE && uid < UID_RAIL_ROW_BASE + 6)
         {
@@ -1212,9 +1026,8 @@ class LFPG_SorterView_TEST extends ScriptView
             ctrl.SelectBuilderTab_TEST(builderIdx);
             return true;
         }
-        // View tabs
-        if (uid == UID_TAB_RULES)   { ctrl.TabRules();   return true; }
-        if (uid == UID_TAB_PREVIEW) { ctrl.TabPreview();  return true; }
+        // Preview toggle
+        if (uid == UID_TAB_PREVIEW) { ctrl.TogglePreview_TEST(); return true; }
         // Category buttons: 200..207
         if (uid >= UID_CAT_BASE && uid < UID_CAT_BASE + 8)
         {
@@ -1238,8 +1051,6 @@ class LFPG_SorterView_TEST extends ScriptView
         if (uid == UID_CLEAR_OUT)    { ctrl.BtnClearOut();    return true; }
         if (uid == UID_RESET_ALL)    { ctrl.BtnResetAll();    return true; }
         if (uid == UID_SAVE)         { ctrl.BtnSave();        return true; }
-        if (uid == UID_SORT)         { ctrl.BtnSort();        return true; }
-        if (uid == UID_CLOSE)        { ctrl.BtnClose();       return true; }
         if (uid == UID_CLOSE_X)      { ctrl.BtnCloseX();      return true; }
         if (uid == UID_SORT_HEADER)  { ctrl.BtnSortHeader();  return true; }
 
@@ -1508,13 +1319,6 @@ class LFPG_SorterView_TEST extends ScriptView
             root.Show(false);
             root.SetSort(50000);
         }
-        // v2.5 B1: Capture design-time widget values for resolution scaling.
-        // Must happen AFTER ScriptView creates widgets (constructor) and
-        // BEFORE any Apply call. SorterPanel and all children are captured.
-        if (s_Instance.SorterPanel)
-        {
-            LFPG_UIScaler.Capture(s_Instance.SorterPanel);
-        }
         #endif
     }
 
@@ -1522,6 +1326,12 @@ class LFPG_SorterView_TEST extends ScriptView
     static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         #ifndef SERVER
+        if (LFPG_SorterView.IsOpen())
+        {
+            string dualOpenMsg = "[LFPG_Sorter_TEST] Open blocked: production sorter is already open";
+            Print(dualOpenMsg);
+            return;
+        }
         bool constructedNow = false;
         if (!s_Instance)
         {
@@ -1544,7 +1354,7 @@ class LFPG_SorterView_TEST extends ScriptView
             {
                 sorterId = LFPG_DeviceAPI.GetDeviceId(sorterEntity);
             }
-            string perfView = "LFPG_PERFDIAG t=";
+            string perfView = "[LFPG_Sorter_TEST] LFPG_PERFDIAG t=";
             perfView = perfView + g_Game.GetTickTime().ToString();
             perfView = perfView + " deviceId=";
             perfView = perfView + sorterId;
@@ -1620,9 +1430,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // g_Game null guard for safe shutdown.
     static void Cleanup()
     {
-        // v2.5 B3: Release scaler arrays before destroying widgets
-        LFPG_UIScaler.Reset();
-
         if (s_Instance)
         {
             s_Instance.m_IsOpen = false;
@@ -1693,34 +1500,8 @@ class LFPG_SorterView_TEST extends ScriptView
         m_ControlsEnabled = true;
         root.Show(true);
 
-        // === Sprint 3 (2026-04-26): hide legacy LblActiveRules ===
-        // Step3Title replaces it with the new step-numbered header.
-        Widget legacyLbl = root.FindAnyWidget("LblActiveRules");
-        if (legacyLbl) { legacyLbl.Show(false); }
-
-        // === Sprint 1 (2026-04-26): hide V3 horizontal tab bar ===
-        // The vertical rail visually replaces it; but we keep the tab bar
-        // widgets in the layout so existing controller bindings (TabOut0Bg
-        // etc.) can stay alive without crashing on null. We just hide the
-        // ButtonWidget container so they don't render or accept clicks.
-        Widget v3TabBar = root.FindAnyWidget("TabBarBg");
-        if (v3TabBar) { v3TabBar.Show(false); }
-        int hi = 0;
-        string hideName;
-        Widget hideW;
-        for (hi = 0; hi < 6; hi = hi + 1)
-        {
-            hideName = "TabOut" + hi.ToString();
-            hideW = root.FindAnyWidget(hideName);
-            if (hideW) { hideW.Show(false); }
-        }
 
 
-        // v2.5 B3: Apply resolution scaling BEFORE centering.
-        // Apply reads from captured design values (never accumulates error).
-        // CenterPanel then reads the scaled SorterPanel size to center correctly.
-        float uiScale = LFPG_UIScaler.ComputeScale();
-        LFPG_UIScaler.Apply(uiScale);
         CenterPanel();
 
         // Fade-in (v2.2)
@@ -1756,6 +1537,8 @@ class LFPG_SorterView_TEST extends ScriptView
         EnsureViewBindings();
         // M2: Assign int IDs to buttons (only first open)
         AssignButtonIDs();
+        m_McpCmdCreateFailed = false;
+        EnsureMcpCmdWidget();
         LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
         if (ctrl)
         {
@@ -1776,9 +1559,88 @@ class LFPG_SorterView_TEST extends ScriptView
         // v3: Initial hint visibility
         RefreshEditHints();
 
+        if (S1_PROBE)
+        {
+            RunS1Probe();
+        }
+
         string openMsg = "[SorterView] Opened for: ";
         openMsg = openMsg + containerName;
         LFPG_Util.Info(openMsg);
+    }
+
+    // S1 instrumented probe: layout metrics, SetSize units, SetColor without texture.
+    protected static void RunS1Probe()
+    {
+        if (!s_Instance)
+            return;
+
+        string line;
+        float szW = 0.0;
+        float szH = 0.0;
+        float posX = 0.0;
+        float posY = 0.0;
+        float scrW = 0.0;
+        float scrH = 0.0;
+        float scrX = 0.0;
+        float scrY = 0.0;
+        float origW = 0.0;
+        float origH = 0.0;
+        float afterW = 0.0;
+        float afterH = 0.0;
+        float restW = 0.0;
+        float restH = 0.0;
+
+        Widget panel = s_Instance.SorterPanel;
+        if (panel)
+        {
+            panel.GetSize(szW, szH);
+            panel.GetPos(posX, posY);
+            panel.GetScreenSize(scrW, scrH);
+            panel.GetScreenPos(scrX, scrY);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_size_w=%1", szW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_size_h=%1", szH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_pos_x=%1", posX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_pos_y=%1", posY);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screensize_w=%1", scrW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screensize_h=%1", scrH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screenpos_x=%1", scrX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] sorterpanel_screenpos_y=%1", scrY);
+            Print(line);
+        }
+
+        Widget col = s_Instance.OutputRailBg;
+        if (col)
+        {
+            col.GetSize(szW, szH);
+            col.GetPos(posX, posY);
+            col.GetScreenSize(scrW, scrH);
+            col.GetScreenPos(scrX, scrY);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_size_w=%1", szW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_size_h=%1", szH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_pos_x=%1", posX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_pos_y=%1", posY);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screensize_w=%1", scrW);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screensize_h=%1", scrH);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screenpos_x=%1", scrX);
+            Print(line);
+            line = string.Format("[LFPG_Sorter_TEST][S1Probe] outputrailbg_screenpos_y=%1", scrY);
+            Print(line);
+        }
+
     }
 
     protected void DoClose()
@@ -1789,6 +1651,10 @@ class LFPG_SorterView_TEST extends ScriptView
         m_Dragging = false;
         m_FadingIn = false;
         m_HoveredBg = null;
+        if (m_McpCmd)
+        {
+            m_McpCmd.Show(false);
+        }
 
         // FIX 2: Release tag/preview views now (breaks circular refs).
         // Without this, views survive until next Open or full Cleanup.
@@ -2022,6 +1888,268 @@ class LFPG_SorterView_TEST extends ScriptView
         }
 
         return false;
+    }
+
+
+    // MCP TEST command hook. Lives in LFPG_MCP_SorterCmd.layout, not the
+    // panel layout. Polled from Update because ui_set_text calls SetText
+    // directly (MCPClientBridge.c DispatchUiSetText) and never OnClick.
+    protected void EnsureMcpCmdWidget()
+    {
+        if (m_McpCmd)
+        {
+            m_McpCmd.Show(true);
+            return;
+        }
+        if (m_McpCmdCreateFailed)
+        {
+            return;
+        }
+        string mcpFail = "[SorterView] MCP cmd hook create failed";
+        if (!g_Game)
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+            return;
+        }
+        WorkspaceWidget ws = g_Game.GetWorkspace();
+        if (!ws)
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+            return;
+        }
+        string hookName = "LFPG_MCP_SorterCmd";
+        Widget existing = ws.FindAnyWidget(hookName);
+        if (existing)
+        {
+            m_McpCmd = EditBoxWidget.Cast(existing);
+            if (m_McpCmd)
+            {
+                m_McpCmdOwned = false;
+                m_McpCmd.Show(true);
+                return;
+            }
+        }
+        string layoutPath = "LFPowerGrid/gui/layouts/test/LFPG_MCP_SorterCmd.layout";
+        Widget created = ws.CreateWidgets(layoutPath);
+        m_McpCmd = EditBoxWidget.Cast(created);
+        if (!m_McpCmd)
+        {
+            if (created)
+            {
+                m_McpCmd = EditBoxWidget.Cast(created.FindAnyWidget(hookName));
+            }
+        }
+        if (m_McpCmd)
+        {
+            m_McpCmdOwned = true;
+            m_McpCmd.Show(true);
+            string emptyText = "";
+            m_McpCmd.SetText(emptyText);
+        }
+        else
+        {
+            m_McpCmdCreateFailed = true;
+            LFPG_Util.Warn(mcpFail);
+        }
+    }
+
+    protected void DestroyMcpCmdWidget()
+    {
+        if (!m_McpCmd)
+        {
+            return;
+        }
+        if (m_McpCmdOwned)
+        {
+            if (g_Game)
+            {
+                m_McpCmd.Unlink();
+            }
+        }
+        m_McpCmd = null;
+        m_McpCmdOwned = false;
+    }
+
+    protected void PollMcpSorterCmd()
+    {
+        if (!m_McpCmd)
+        {
+            return;
+        }
+        string cmd = m_McpCmd.GetText();
+        cmd.TrimInPlace();
+        if (cmd == "")
+        {
+            return;
+        }
+        string emptyText = "";
+        m_McpCmd.SetText(emptyText);
+        bool ok = DispatchMcpCommand(cmd);
+        WriteMcpDump(cmd, ok);
+    }
+
+    protected bool DispatchMcpCommand(string cmd)
+    {
+        LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
+        if (cmd == "dump")
+        {
+            return true;
+        }
+        if (cmd == "close")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            ctrl.BtnCloseX();
+            return true;
+        }
+        if (cmd == "catch_all")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            if (!ctrl.McpCanEdit())
+            {
+                return false;
+            }
+            ctrl.BtnCatchAll();
+            return true;
+        }
+        if (cmd == "tab_preview")
+        {
+            if (!ctrl)
+            {
+                return false;
+            }
+            ctrl.TabPreview();
+            return true;
+        }
+        if (cmd.IndexOf("cat:") == 0)
+        {
+            int cmdLen = cmd.Length();
+            if (cmdLen <= 4)
+            {
+                return false;
+            }
+            string rest = cmd.Substring(4, cmdLen - 4);
+            int idx = rest.ToInt();
+            string idxText = idx.ToString();
+            if (idxText != rest)
+            {
+                return false;
+            }
+            if (!ctrl)
+            {
+                return false;
+            }
+            if (!ctrl.McpCanEdit())
+            {
+                return false;
+            }
+            int catCount = ctrl.McpCategoryCount();
+            if (idx < 0 || idx >= catCount)
+            {
+                return false;
+            }
+            ctrl.ToggleCategoryByIdx(idx);
+            return true;
+        }
+        return false;
+    }
+
+    protected string McpJsonBool(bool v)
+    {
+        if (v)
+        {
+            return "true";
+        }
+        return "false";
+    }
+
+    // Escapes are built by CONCATENATING single-escape literals, never written as
+    // one literal that holds two escape sequences. A lone escaped backslash and a
+    // lone escaped quote each compile (vanilla ships both); a literal carrying two
+    // of them does not. The client died on this with CParser: quoted string not
+    // closed, and took the whole World module with it. Vanilla's own JSON writer
+    // uses this same concatenation (scripts/3_game/tools/jsonobject.c:54-55).
+    // Deliberately phrased without the offending character sequences: a comment is
+    // supposed to be lexed before string literals, and that assumption is exactly
+    // what cost a boot here, so it is not worth re-testing in production code.
+    protected string McpJsonEscape(string s)
+    {
+        string bs = "\\";
+        string quote = "\"";
+        string outStr = s;
+        outStr.Replace(bs, bs + bs);
+        outStr.Replace(quote, bs + quote);
+        outStr.Replace("\n", bs + "n");
+        outStr.Replace("\r", bs + "r");
+        outStr.Replace("\t", bs + "t");
+        return outStr;
+    }
+
+    protected void WriteMcpDump(string cmd, bool ok)
+    {
+        bool openFlag = m_IsOpen;
+        bool paired = false;
+        bool powered = false;
+        string status = "";
+        bool catchAll = false;
+        int ruleCount = 0;
+        int closeUid = 0;
+
+        Widget root = GetLayoutRoot();
+        if (root)
+        {
+            string closeName = "BtnCloseX";
+            Widget closeW = root.FindAnyWidget(closeName);
+            if (closeW)
+            {
+                closeUid = closeW.GetUserID();
+            }
+        }
+
+        LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
+        if (ctrl)
+        {
+            ctrl.McpCollectState(paired, powered, status, catchAll, ruleCount);
+        }
+
+        string json = "{";
+        json = json + "\"cmd\":\"";
+        json = json + McpJsonEscape(cmd);
+        json = json + "\",\"ok\":";
+        json = json + McpJsonBool(ok);
+        json = json + ",\"open\":";
+        json = json + McpJsonBool(openFlag);
+        json = json + ",\"powered\":";
+        json = json + McpJsonBool(powered);
+        json = json + ",\"paired\":";
+        json = json + McpJsonBool(paired);
+        json = json + ",\"status\":\"";
+        json = json + McpJsonEscape(status);
+        json = json + "\",\"close_x_uid\":";
+        json = json + closeUid.ToString();
+        json = json + ",\"catch_all\":";
+        json = json + McpJsonBool(catchAll);
+        json = json + ",\"rule_count\":";
+        json = json + ruleCount.ToString();
+        json = json + "}";
+
+        string dumpPath = "$profile:lfpg_sorter_mcp.json";
+        FileHandle file = OpenFile(dumpPath, FileMode.WRITE);
+        if (file == 0)
+        {
+            string dumpFail = "[SorterView] MCP dump OpenFile failed";
+            LFPG_Util.Warn(dumpFail);
+            return;
+        }
+        FPrint(file, json);
+        CloseFile(file);
     }
 
     LFPG_SorterController_TEST GetSorterController()

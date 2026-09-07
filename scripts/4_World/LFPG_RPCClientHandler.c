@@ -288,7 +288,10 @@ class LFPG_RPCClientHandler
         if (!ctx.Read(high)) { LFPG_Util.Warn("[CLIENT] SyncOwnerWires: read high FAIL"); return; }
         if (!ctx.Read(json)) { LFPG_Util.Warn("[CLIENT] SyncOwnerWires: read json FAIL"); return; }
 
-        LFPG_Util.Info("[CLIENT] SyncOwnerWires: owner=" + ownerDeviceId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString());
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            LFPG_Util.Debug("[CLIENT] SyncOwnerWires: owner=" + ownerDeviceId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString());
+        }
         LFPG_Diag.ServerEcho("[CLIENT] SyncOwnerWires owner=" + ownerDeviceId + " jsonLen=" + json.Length().ToString());
 
         LFPG_CableRenderer r = LFPG_CableRenderer.Get();
@@ -332,13 +335,16 @@ class LFPG_RPCClientHandler
         if (!ctx.Read(generation))
             return;
 
-        string syncMsg = "[CLIENT] SyncOwnerWiresV2 owner=";
-        syncMsg = syncMsg + ownerDeviceId;
-        syncMsg = syncMsg + " generation=";
-        syncMsg = syncMsg + generation.ToString();
-        syncMsg = syncMsg + " jsonLen=";
-        syncMsg = syncMsg + json.Length().ToString();
-        LFPG_Util.Info(syncMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string syncMsg = "[CLIENT] SyncOwnerWiresV2 owner=";
+            syncMsg = syncMsg + ownerDeviceId;
+            syncMsg = syncMsg + " generation=";
+            syncMsg = syncMsg + generation.ToString();
+            syncMsg = syncMsg + " jsonLen=";
+            syncMsg = syncMsg + json.Length().ToString();
+            LFPG_Util.Debug(syncMsg);
+        }
 
         LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
         if (renderer)

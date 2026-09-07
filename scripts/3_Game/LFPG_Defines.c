@@ -211,8 +211,13 @@ static const float LFPG_DEFAULT_PASSTHROUGH_CAPACITY = 200.0; // units/s
 
 // v0.7.10: Client-side wire count limit per owner (DecodeOwner).
 // Guards against malformed/malicious JSON payloads flooding the client.
-// Matches server-side LFPG_MAX_WIRES_PER_DEVICE by default.
-static const int   LFPG_MAX_WIRES_PER_OWNER_CLIENT = 64;
+// Raised to the vanilla owner ceiling: LFPG wires stay capped at
+// LFPG_MAX_WIRES_PER_DEVICE by LFPG_WireHelper.c:170, but a vanilla owner can hold
+// up to LFPG_SETTINGS_MAX_WIRES_DEVICE and server settings never reach the client,
+// so a lower ceiling here dropped those wires from the renderer without a trace.
+// Literal on purpose: LFPG_Defines.c loads before LFPG_Settings.c, and a
+// cross-file static const would resolve to 0.
+static const int   LFPG_MAX_WIRES_PER_OWNER_CLIENT = 128;
 
 // Hard cap: maximum total segments rendered per client.
 static const int   LFPG_MAX_RENDERED_SEGS    = 512;
@@ -392,7 +397,7 @@ static const float LFPG_TELEM_INTERVAL_MS = 5000.0;
 // ---- Logging ----
 static const string LFPG_LOG_PREFIX = "[LF_PowerGrid] ";
 static const bool   LFPG_LOG_ENABLED  = true;
-static const int    LFPG_LOG_LEVEL    = 2;
+static const int    LFPG_LOG_LEVEL    = 1;
 // v0.7.33 (A4-2/3): Default to false in production. Set true only for debug.
 // When false, ServerEcho calls (~15 in CableRenderer hot path) are no-ops.
 // Controlled at compile-time — no runtime branch cost when false.
@@ -519,7 +524,7 @@ static const int LFPG_MAX_EDGES_PER_NODE  = 12;
 // Only logs when load changes exceed this delta since last log.
 static const float LFPG_LOAD_TELEM_DELTA = 0.05;
 
-static const string LFPG_VERSION_STR = "1.2.2";
+static const string LFPG_VERSION_STR = "1.2.4";
 
 // =========================================================
 // Constants that were previously missing definitions.

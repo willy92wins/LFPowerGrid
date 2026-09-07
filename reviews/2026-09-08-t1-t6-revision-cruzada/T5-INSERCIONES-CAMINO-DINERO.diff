@@ -1,0 +1,176 @@
+diff --git a/scripts/3_Game/LFPG_FileUtil.c b/scripts/3_Game/LFPG_FileUtil.c
+index 2d0d81e..d133f49 100644
+--- a/scripts/3_Game/LFPG_FileUtil.c
++++ b/scripts/3_Game/LFPG_FileUtil.c
+@@ -212,6 +212,10 @@ class LFPG_FileUtil
+     // ---- Player Balances ----
+     static bool AtomicSaveBalances(string targetPath, LFPG_BalanceData data)
+     {
++        LFPG_FaultInject.Touch();
++        if (LFPG_FaultInject.ShouldFail("AtomicSaveBalances_false"))
++            return false;
++
+         string tmpPath    = targetPath + ".tmp";
+         string bakPath    = targetPath + ".bak";
+         string bakNewPath = targetPath + ".bak.new";
+@@ -223,9 +227,12 @@ class LFPG_FileUtil
+             // SaveFile can return false and still leave a parseable .tmp.
+             // No in-flight marker has been written yet, so recovery must not
+             // treat that leftover as a committed mutation.
+-            DiscardAbortedBalancesTmp(tmpPath);
++            if (!LFPG_FaultInject.ShouldFail("DiscardAbortedTmp_false"))
++                DiscardAbortedBalancesTmp(tmpPath);
+             return false;
+         }
++        if (LFPG_FaultInject.ShouldFail("SaveFile_abort_leave_tmp"))
++            return false;
+         if (!FileExist(tmpPath))
+         {
+             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: tmp not found after write");
+@@ -268,7 +275,12 @@ class LFPG_FileUtil
+         }
+ 
+         if (FileExist(targetPath)) DeleteFile(targetPath);
+-        if (!CopyFile(tmpPath, targetPath))
++        if (LFPG_FaultInject.ShouldCrash("balances_after_delete_before_promote"))
++            return false;
++        bool promoteOk = false;
++        if (!LFPG_FaultInject.ShouldFail("CopyFile_promote"))
++            promoteOk = CopyFile(tmpPath, targetPath);
++        if (!promoteOk)
+         {
+             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: promote tmp->target failed");
+             // Clear the in-flight marker before touching leftovers so the next
+@@ -279,11 +291,13 @@ class LFPG_FileUtil
+             }
+             if (FileExist(bakNewPath))
+             {
+-                CopyFile(bakNewPath, targetPath);
++                if (!LFPG_FaultInject.ShouldFail("CopyFile_restore"))
++                    CopyFile(bakNewPath, targetPath);
+             }
+             else if (FileExist(bakPath))
+             {
+-                CopyFile(bakPath, targetPath);
++                if (!LFPG_FaultInject.ShouldFail("CopyFile_restore"))
++                    CopyFile(bakPath, targetPath);
+             }
+             if (!FileExist(targetPath))
+             {
+@@ -472,6 +486,8 @@ class LFPG_FileUtil
+         string savingPath = BalancesSaveIntentPath(targetPath);
+         if (!FileExist(savingPath))
+             return true;
++        if (LFPG_FaultInject.ShouldFail("DeleteFile_saving"))
++            return false;
+         DeleteFile(savingPath);
+         return !FileExist(savingPath);
+     }
+@@ -480,6 +496,8 @@ class LFPG_FileUtil
+     {
+         if (!FileExist(tmpPath))
+             return;
++        if (LFPG_FaultInject.ShouldFail("DiscardAbortedTmp_false"))
++            return;
+         PreserveOrphanTmpEvidence(tmpPath);
+         if (FileExist(tmpPath))
+         {
+@@ -798,6 +816,7 @@ class LFPG_FileUtil
+     // ---- Typed: Player Balances ----
+     static bool EnsureBalancesFileOrRestore(string targetPath)
+     {
++        LFPG_FaultInject.Touch();
+         SweepPreservedBalanceTmpEvidence(targetPath);
+         string tmpPath    = targetPath + ".tmp";
+         string bakPath    = targetPath + ".bak";
+diff --git a/scripts/5_Mission/LFPG_BTCHelper.c b/scripts/5_Mission/LFPG_BTCHelper.c
+index 804a039..b0858ad 100644
+--- a/scripts/5_Mission/LFPG_BTCHelper.c
++++ b/scripts/5_Mission/LFPG_BTCHelper.c
+@@ -271,6 +271,7 @@ class LFPG_BTCHelper
+         int btcOnInv = CountPlayerItems(player, btcCls);
+ 
+         LFPG_BTCSessionRegistry.Get().CompleteRequest(sender, serverSessionLow, serverSessionHigh, sequence, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv);
++        LFPG_FaultInject.ObserveTx(txType, errCode, newStock, newBalance, btcMoved, cashOnInv, btcOnInv);
+         SendBTCTxResultPayload(player, sender, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence);
+     }
+ 
+@@ -1396,12 +1397,18 @@ class LFPG_BTCHelper
+ 
+     static void ClearSellDestroyIntentAfterDestroy(string uid, int currentBalance, int creditAmount, int btcAmount, string classname)
+     {
+-        if (LFPG_FileUtil.ClearSellDestroyIntent(uid))
++        bool cleared = false;
++        if (!LFPG_FaultInject.ShouldFail("E04_clear_after_destroy"))
++            cleared = LFPG_FileUtil.ClearSellDestroyIntent(uid);
++        if (cleared)
+             return;
+ 
+         bool rebased = false;
+         if (currentBalance >= 0 && creditAmount > 0 && btcAmount > 0 && classname != "")
+-            rebased = LFPG_FileUtil.WriteSellDestroyIntent(uid, currentBalance, creditAmount, btcAmount, classname);
++        {
++            if (!LFPG_FaultInject.ShouldFail("E04_rewrite_after_destroy"))
++                rebased = LFPG_FileUtil.WriteSellDestroyIntent(uid, currentBalance, creditAmount, btcAmount, classname);
++        }
+         if (rebased)
+         {
+             LFPG_Util.Warn("[BTCSell] sell-intent marker could not be cleared after destroy; rebased balanceBefore to current uid=" + LFPG_Util.LogUid(uid));
+@@ -1451,6 +1458,7 @@ class LFPG_BTCHelper
+         int current = provider.GetBalance(player);
+         if (current == balanceBefore)
+         {
++            LFPG_FaultInject.ObserveReconcile(current, balanceBefore, creditAmount, 0, btcAmount);
+             if (!LFPG_FileUtil.ClearSellDestroyIntent(uid))
+                 LFPG_Util.Error("[BTCSell] aborted sell-intent marker could not be cleared. Admin: delete the sibling .sell file before restarting");
+             else
+@@ -1483,6 +1491,7 @@ class LFPG_BTCHelper
+             shortMsg = shortMsg + LFPG_Util.LogUid(uid);
+             LFPG_Util.Error(shortMsg);
+         }
++        LFPG_FaultInject.ObserveReconcile(current, balanceBefore, creditAmount, destroyed, btcAmount);
+         ClearSellDestroyIntentAfterDestroy(uid, current, creditAmount, btcAmount, classname);
+     }
+ 
+@@ -1868,6 +1877,8 @@ class LFPG_BTCHelper
+                     return;
+                 }
+                 sellIntentWritten = true;
++                if (LFPG_FaultInject.ShouldCrash("E04_crash_after_marker_before_credit"))
++                    return;
+                 accountAdded = atmEarlyS.AddBalance(player, expectedAccountPayout);
+             }
+             if (accountAdded != expectedAccountPayout)
+@@ -1894,6 +1905,8 @@ class LFPG_BTCHelper
+                 LFPG_Util.Error("[BTCSell] account credit differed from preflight before destruction; staged cash aborted and BTC left intact");
+                 return;
+             }
++            if (LFPG_FaultInject.ShouldCrash("E04_crash_after_credit"))
++                return;
+         }
+ 
+         int destroyed = DestroyPlayerItems(player, btcClassname, btcAmount);
+diff --git a/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c b/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
+index b2c4db5..32eb02a 100644
+--- a/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
++++ b/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
+@@ -1240,6 +1240,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+             s_ReappliedThisBoot.Set(deviceId, true);
+             s_ReconciledDevices.Set(deviceId, true);
+             LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM matched refunded tombstone; stock compensation applied, tombstones kept until a future boot proves hive delivery deviceId=" + deviceId);
++            LFPG_FaultInject.ShouldCrash("E16_crash_after_apply");
+             return;
+         }
+ 
+@@ -1741,6 +1742,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+         {
+             toAdd = room;
+         }
++        if (LFPG_FaultInject.ShouldFail("AddBalance_partial"))
++        {
++            if (toAdd > 1)
++                toAdd = 1;
++        }
+         if (toAdd <= 0)
+             return 0;
+ 

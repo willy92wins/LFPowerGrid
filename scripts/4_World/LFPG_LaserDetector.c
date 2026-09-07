@@ -41,6 +41,15 @@ class LFPG_LaserDetector_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_LaserDetector : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterLaserDetector(this);
+    }
+
     // ---- SyncVars ----
     protected bool  m_PoweredNet = false;
     protected bool  m_GateOpen   = false;
@@ -121,11 +130,14 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
 
         SetSynchDirty();
 
-        string pwrMsg = "[LFPG_LaserDetector] SetPowered(";
-        pwrMsg = pwrMsg + powered.ToString();
-        pwrMsg = pwrMsg + ") id=";
-        pwrMsg = pwrMsg + m_DeviceId;
-        LFPG_Util.Debug(pwrMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string pwrMsg = "[LFPG_LaserDetector] SetPowered(";
+            pwrMsg = pwrMsg + powered.ToString();
+            pwrMsg = pwrMsg + ") id=";
+            pwrMsg = pwrMsg + m_DeviceId;
+            LFPG_Util.Debug(pwrMsg);
+        }
         #endif
     }
 
@@ -141,10 +153,12 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     }
 
     // ---- Beam accessors ----
+    #ifndef SERVER
     float LFPG_GetBeamLength()
     {
         return m_BeamLength;
     }
+    #endif
 
     vector LFPG_GetBeamStart()
     {
@@ -173,6 +187,7 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         return Vector(dx * invLen, dy * invLen, dz * invLen);
     }
 
+    #ifndef SERVER
     vector LFPG_GetBeamEnd()
     {
         vector beamStart = LFPG_GetBeamStart();
@@ -187,6 +202,7 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         float eZ = beamStart[2] + beamDir[2] * len;
         return Vector(eX, eY, eZ);
     }
+    #endif
 
     // ============================================
     // Beam raycast (called by NM centralized tick)
@@ -508,7 +524,7 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterLaserDetector(this);
         #endif
 

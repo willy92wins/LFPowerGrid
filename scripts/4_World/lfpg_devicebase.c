@@ -39,10 +39,12 @@ class LFPG_DeviceBase : Inventory_Base
     // ---- Local derived state ----
     protected string m_DeviceId      = "";
     protected bool   m_LFPG_Deleting = false;
+    #ifndef SERVER
     protected int    m_PerfDiagSyncReceiveCount = 0;
+    #endif
 
     // ---- Port system ----
-    protected ref array<ref LFPG_PortDef> m_Ports;
+    protected ref TManagedRefArray m_Ports;
 
     // ---- Hologram projection guard (v4.4) ----
     // Static flag: set by HologramMod.ProjectionBasedOnParent() just before
@@ -79,7 +81,7 @@ class LFPG_DeviceBase : Inventory_Base
         RegisterNetSyncVariableInt(varLow);
         RegisterNetSyncVariableInt(varHigh);
 
-        m_Ports = new array<ref LFPG_PortDef>;
+        m_Ports = new TManagedRefArray;
     }
 
     // ============================================
@@ -103,21 +105,36 @@ class LFPG_DeviceBase : Inventory_Base
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return "";
-        return m_Ports[idx].m_Name;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return "";
+
+        return pd.m_Name;
     }
 
     int LFPG_GetPortDir(int idx)
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return -1;
-        return m_Ports[idx].m_Dir;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return -1;
+
+        return pd.m_Dir;
     }
 
     string LFPG_GetPortLabel(int idx)
     {
         if (idx < 0 || idx >= m_Ports.Count())
             return "";
-        return m_Ports[idx].m_Label;
+
+        LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[idx]);
+        if (!pd)
+            return "";
+
+        return pd.m_Label;
     }
 
     bool LFPG_HasPort(string name, int dir)
@@ -125,8 +142,8 @@ class LFPG_DeviceBase : Inventory_Base
         int i;
         for (i = 0; i < m_Ports.Count(); i = i + 1)
         {
-            LFPG_PortDef pd = m_Ports[i];
-            if (pd.m_Name == name && pd.m_Dir == dir)
+            LFPG_PortDef pd = LFPG_PortDef.Cast(m_Ports[i]);
+            if (pd && pd.m_Name == name && pd.m_Dir == dir)
                 return true;
         }
         return false;
@@ -278,6 +295,10 @@ class LFPG_DeviceBase : Inventory_Base
         }
 
         m_LFPG_Deleting = true;
+        // LFPG_OnDeleted runs FIRST. Its overrides must reach the network manager
+        // through GetExisting(): the creating factory here materialises the manager
+        // mid-teardown and makes the GetExisting() in OnDeviceDeleted below pointless,
+        // since it would always find the instance this line just built.
         LFPG_OnDeleted();
         // Future: LFPG_SpatialGrid.Get().Remove(this)
         LFPG_DeviceLifecycle.OnDeviceDeleted(this, m_DeviceId);
@@ -307,6 +328,7 @@ class LFPG_DeviceBase : Inventory_Base
     // OnVariablesSynchronized
     // RequestDeviceSync at this level because ALL devices need it.
     // ============================================
+    #ifndef SERVER
     override void OnVariablesSynchronized()
     {
         super.OnVariablesSynchronized();
@@ -341,6 +363,7 @@ class LFPG_DeviceBase : Inventory_Base
 
         LFPG_OnVarSync();
     }
+    #endif
 
     // ============================================
     // Persistence (v3 format with per-device version)
@@ -550,6 +573,11 @@ class LFPG_DeviceBase : Inventory_Base
     // Hooks (empty — subclass overrides)
     // ============================================
     void LFPG_OnInit() {}
+
+    // F6 B1: re-registration seam. Overridden by every device that
+    // registers with the network manager; the MissionServer.OnInit sweep
+    // calls it once the mission-backed manager exists.
+    void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm) { }
     void LFPG_OnKilled() {}
     void LFPG_OnDeleted() {}
     void LFPG_OnVarSync() {}
@@ -570,5 +598,22 @@ class LFPG_DeviceBase : Inventory_Base
         string kitClass = GetType();
         kitClass = kitClass + "_Kit";
         return kitClass;
+    }
+
+    // ============================================
+    // Dismantle guard (2026-09-07)
+    // Returns true when the device must REFUSE dismantling because it
+    // still holds value or state the kit cannot carry. The kit is a
+    // plain deployable: whatever the device kept in script fields dies
+    // with the ObjectDelete in LFPG_ActionDismantleDevice, silently.
+    //
+    // Default: open on purpose, so devices that only hold wires and
+    // attachments keep behaving as before. Devices that store value in
+    // script fields must override this guard to block dismantling while
+    // that value remains inside.
+    // ============================================
+    bool LFPG_BlocksDismantle()
+    {
+        return false;
     }
 };

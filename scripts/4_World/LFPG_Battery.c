@@ -47,6 +47,15 @@ class LFPG_BatteryLarge_Kit : LFPG_KitBaseDeployable
 // ---------------------------------------------------------
 class LFPG_BatteryBase : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterBattery(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool  m_PoweredNet       = false;
     protected bool  m_Overloaded       = false;
@@ -60,7 +69,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // int32 by 4 orders of magnitude.
     protected int   m_StoredEnergyX10  = 0;
     protected int   m_ChargeRateX10    = 0;
+    #ifndef SERVER
     protected int   m_PerfDiagChargeRateDirtyCount = 0;
+    #endif
 
     // ---- Battery state (persisted, not SyncVars) ----
     protected bool m_DischargeEnabled = true;
@@ -105,6 +116,12 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         // 54464, displays as 27%). Large battery X10 max = 1_000_000.
         RegisterNetSyncVariableInt(varStored, 0, 1500000);
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
+    }
+
+    // The kit carries no stored energy; empty the device before dismantling.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_StoredEnergyX10 > 0;
     }
 
     // ============================================
@@ -246,7 +263,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterBattery(this);
         #endif
     }
@@ -296,6 +313,14 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             LFPG_Util.Error(errStored);
             return false;
         }
+        // Non-finite persisted energy survives the cast as garbage; reset to
+        // empty instead. Same policy as the persisted aim guard in LFPG_Searchlight.
+        if (LFPG_Searchlight.LFPG_IsInvalidAimValue(storedFromSave))
+        {
+            LFPG_Util.Warn("[LFPG_Battery] Non-finite persisted energy reset to zero");
+            storedFromSave = 0.0;
+        }
+
         int loadedX10 = storedFromSave * 10.0;
         m_StoredEnergyX10 = loadedX10;
 
@@ -451,6 +476,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         m_ChargeRateX10 = rateX10;
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagChargeRateDirtyCount = m_PerfDiagChargeRateDirtyCount + 1;
@@ -462,6 +488,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             perfDiag = perfDiag + rateX10.ToString();
             Print(perfDiag);
         }
+        #endif
         #endif
     }
 

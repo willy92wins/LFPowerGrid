@@ -59,6 +59,15 @@ class LFPG_DoorController_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_DoorController : LFPG_DeviceBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterDoorController(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet = false;
 
@@ -142,11 +151,14 @@ class LFPG_DoorController : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_DoorController] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_DoorController] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
 
         LFPG_ApplyDoorState();
         #endif
@@ -234,7 +246,7 @@ class LFPG_DoorController : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterDoorController(this);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SearchAndPairDoor);
         m_SearchInProgress = false;
@@ -664,6 +676,7 @@ class LFPG_DoorController : LFPG_DeviceBase
             pairMsg = pairMsg + m_DeviceId;
             LFPG_Util.Info(pairMsg);
 
+            #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
             {
                 int pairLatencyMs = nowMs - m_SearchWakeMs;
@@ -675,12 +688,14 @@ class LFPG_DoorController : LFPG_DeviceBase
                 pairDiag = pairDiag + count.ToString();
                 Print(pairDiag);
             }
+            #endif
 
             LFPG_ApplyDoorState();
         }
         else
         {
             m_NextSearchMs = nowMs + m_SearchBackoffMs;
+            #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
             {
                 string retryDiag = "LFPG_PERFDIAG door_pair miss attempts=";
@@ -691,6 +706,7 @@ class LFPG_DoorController : LFPG_DeviceBase
                 retryDiag = retryDiag + count.ToString();
                 Print(retryDiag);
             }
+            #endif
             m_SearchBackoffMs = m_SearchBackoffMs * 2;
             if (m_SearchBackoffMs > LFPG_DC_BACKOFF_MAX_MS)
                 m_SearchBackoffMs = LFPG_DC_BACKOFF_MAX_MS;

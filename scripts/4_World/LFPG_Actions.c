@@ -48,6 +48,7 @@
 // avoid even reading the cache when the scroll menu doesn't
 // need it refreshed.
 // ---------------------------------------------------------
+#ifndef SERVER
 class LFPG_ActionRaycast
 {
     // ---- Unified ray cache ----
@@ -484,6 +485,7 @@ class LFPG_ActionPortCache
         return false;
     }
 };
+#endif
 
 // =========================================================
 // PER-PORT ACTION BASE
@@ -591,7 +593,13 @@ class ActionLFPG_PortBase : ActionSingleUseBase
             }
             else
             {
-                bool evidentlyFree = LFPG_ActionPortCache.IsEmptyConnEvidentlyFree(portDir, devId);
+                bool evidentlyFree = false;
+                if (!g_Game.IsDedicatedServer())
+                {
+#ifndef SERVER
+                    evidentlyFree = LFPG_ActionPortCache.IsEmptyConnEvidentlyFree(portDir, devId);
+#endif
+                }
                 if (evidentlyFree)
                 {
                     m_Text = "Wire from " + portLabel;
@@ -606,6 +614,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -655,6 +664,7 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         }
 #endif
     }
+    #endif
 };
 
 // ---------------------------------------------------------
@@ -727,7 +737,6 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
 #ifndef SERVER
         if (!LFPG_WiringClient.Get().IsActive())
             return false;
-#endif
 
         // Hide when looking at electrical device (port actions handle that)
         if (LFPG_ActionRaycast.IsCursorOnDevice(player))
@@ -739,6 +748,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         // on foreign player's GameInventory.GetCurrentInventoryLocation).
         if (LFPG_ActionRaycast.IsCursorOnPlayer(player))
             return false;
+#endif
 
         return true;
     }
@@ -752,6 +762,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -776,6 +787,7 @@ class ActionLFPG_PlaceWaypoint : ActionSingleUseBase
         player.MessageStatus("[LFPG] Waypoint " + wpCount.ToString());
 #endif
     }
+    #endif
 };
 
 // ---------------------------------------------------------
@@ -820,6 +832,7 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -834,6 +847,7 @@ class ActionLFPG_CancelWiring : ActionSingleUseBase
         }
 #endif
     }
+    #endif
 	
 	override bool AddActionJuncture(ActionData action_data)
     {
@@ -885,6 +899,7 @@ class ActionLFPG_CutWires : ActionSingleUseBase
         return LFPG_WorldUtil.DistSq(player.GetPosition(), e.GetPosition()) <= LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -910,6 +925,7 @@ class ActionLFPG_CutWires : ActionSingleUseBase
         rpc.Write(high);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 };
 
 // ---------------------------------------------------------
@@ -1058,18 +1074,22 @@ class ActionLFPG_CutPortBase : ActionSingleUseBase
             if (g_Game.IsDedicatedServer())
                 return false;
 
+#ifndef SERVER
             bool evidentlyFree = LFPG_ActionPortCache.IsEmptyConnEvidentlyFree(portDir, devId);
             if (evidentlyFree)
                 return false;
 
             m_Text = "Cut " + portLabel;
             return true;
+#endif
+            return false;
         }
 
         m_Text = "Cut " + portLabel + " (" + connType + ")";
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -1100,6 +1120,7 @@ class ActionLFPG_CutPortBase : ActionSingleUseBase
         rpc.Write(portDir);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 };
 
 class ActionLFPG_CutPort0 : ActionLFPG_CutPortBase
@@ -1345,6 +1366,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         return LFPG_DeviceAPI.IsElectricDevice(dev);
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -1483,6 +1505,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         player.MessageStatus("[LFPG] Wiring active: " + wiringActive.ToString());
 #endif
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data)
     {

@@ -17,7 +17,9 @@ class LFPG_ActionDrinkPumpCB : ActionContinuousBaseCB
 class LFPG_ActionDrinkPump : ActionContinuousBase
 {
     // Client-side sound ref (static OK — only 1 local player)
+    #ifndef SERVER
     protected static EffectSound m_DrinkSound;
+    #endif
 
     void LFPG_ActionDrinkPump()
     {

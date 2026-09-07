@@ -173,6 +173,7 @@ class LFPG_ActionFillPump : ActionContinuousBase
         pump2.LFPG_SetTankLevel(newTankLvl);
     }
 
+    #ifndef SERVER
     override void OnFinishProgressClient(ActionData action_data)
     {
         if (action_data && action_data.m_Target)
@@ -188,4 +189,5 @@ class LFPG_ActionFillPump : ActionContinuousBase
             }
         }
     }
+    #endif
 };

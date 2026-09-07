@@ -16,15 +16,39 @@
 // PlayerBase.LFPG_SetSkipOnSelectPlayer propagates flag here.
 modded class MissionBaseWorld
 {
+    #ifndef SERVER
     protected bool m_LFPG_SkipResetGUI = false;
+    #endif
 
+    #ifndef SERVER
     void LFPG_SetSkipResetGUI(bool skip)
     {
         m_LFPG_SkipResetGUI = skip;
     }
+    #endif
 
     // Vanilla missionbaseworld.c:3-6 uses a base factory for mission-owned services.
     LFPG_ElecGraph LFPG_CreateElecGraph() { return null; }
+
+    // The network manager lives in the mission arena as well. Unlike the graph
+    // this one is reached from client code, so both missions override it.
+    LFPG_NetworkManager LFPG_CreateNetworkManager() { return null; }
+
+    // Server RPC handlers live in the mission arena; the World arena only
+    // carries this seam. Base is a no-op so a client mission drops silently.
+    void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx) { }
+
+    // ATM stock belongs to the native balance implementation, which lives in the
+    // mission arena. Routed here and NOT through LFPG_BalanceRegistry: the active
+    // balance provider answers who holds the player EUR, which is a different
+    // question and is LBmaster on servers that run it.
+    bool LFPG_AtmCanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
+    bool LFPG_AtmPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
+    void LFPG_AtmReconcileLoaded(LFPG_BTCAtmBase atm) { }
+
+    // Published to external mods from the World arena; implemented in Mission.
+    int LFPG_NativeGetPlayerBalance(string uid) { return 0; }
+    bool LFPG_NativeSetPlayerBalance(string uid, int balance) { return false; }
 };
 
 modded class PlayerBase

@@ -14,14 +14,37 @@ modded class MissionServer
     override void OnInit()
     {
         super.OnInit();
+        // Entities restored inside super.OnInit() can reconcile before the
+        // mission is reachable; this drains anything that had to wait.
+        LFPG_AtmStock.DrainPendingReconcile(this);
         LFPG_NetworkManager initNm = LFPG_NetworkManager.Get();
         if (initNm) initNm.StartServerScheduler();
+        // F6 B1: devices restored during super.OnInit() registered while
+        // Get() returned the inert fallback. Re-register every known device
+        // now that the mission-backed manager exists (RegisterX is idempotent).
+        if (initNm)
+        {
+            array<EntityAI> lfpgBootDevices = new array<EntityAI>;
+            LFPG_DeviceRegistry.Get().GetAll(lfpgBootDevices);
+            int lfpgBootIdx;
+            for (lfpgBootIdx = 0; lfpgBootIdx < lfpgBootDevices.Count(); lfpgBootIdx = lfpgBootIdx + 1)
+            {
+                LFPG_DeviceBase lfpgBootDev = LFPG_DeviceBase.Cast(lfpgBootDevices[lfpgBootIdx]);
+                if (lfpgBootDev) lfpgBootDev.LFPG_RegisterWithNetworkManager(initNm);
+            }
+        }
         Print(LFPG_LOG_PREFIX + "MissionServer OnInit (v" + LFPG_VERSION_STR + ")");
     }
 
     void LFPG_RunOrphanSweep()
     {
-        LFPG_BalanceProvider_Native.SweepOrphanClaims();
+        LFPG_BalanceProvider_NativeImpl.SweepOrphanClaims();
+    }
+
+    override void InvokeOnConnect(PlayerBase player, PlayerIdentity identity)
+    {
+        super.InvokeOnConnect(player, identity);
+        LFPG_BTCHelper.ReconcilePendingAccountSell(player);
     }
 
     override void OnMissionStart()
@@ -29,7 +52,7 @@ modded class MissionServer
         super.OnMissionStart();
         // This one-shot entry point owns no handler state or staged references.
         // BTC handlers remain synchronous; their IN_FLIGHT assumption is unchanged.
-        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_RunOrphanSweep, LFPG_BalanceProvider_Native.LFPG_BTC_ORPHAN_SWEEP_DELAY_MS, false);
+        GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_RunOrphanSweep, LFPG_BalanceProvider_NativeImpl.LFPG_BTC_ORPHAN_SWEEP_DELAY_MS, false);
     }
 
     override void OnMissionFinish()
@@ -42,19 +65,53 @@ modded class MissionServer
         }
         LFPG_BalanceProvider activeBalance = LFPG_BalanceRegistry.GetActive();
         if (activeBalance && activeBalance.GetName() == "Native")
-            LFPG_BalanceProvider_Native.FlushBalanceOnShutdown();
+            LFPG_BalanceProvider_NativeImpl.FlushBalanceOnShutdown();
         if (GetGame())
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_RunOrphanSweep);
-        LFPG_BalanceProvider_Native.ResetMissionClaimState();
+        LFPG_BalanceProvider_NativeImpl.ResetMissionClaimState();
         super.OnMissionFinish();
     }
 
     override LFPG_ElecGraph LFPG_CreateElecGraph() { return new LFPG_ElecGraphImpl(); }
+
+    override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
+
+    override void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx)
+    {
+        LFPG_RPCServerHandlerImpl.Dispatch(player, sender, subId, ctx);
+    }
+
+    override bool LFPG_AtmCanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+    {
+        return LFPG_BalanceProvider_NativeImpl.CanPrepareStockMutation(deviceId, stockBefore, stockTarget);
+    }
+
+    override bool LFPG_AtmPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+    {
+        return LFPG_BalanceProvider_NativeImpl.PrepareStockMutation(deviceId, stockBefore, stockTarget);
+    }
+
+    override void LFPG_AtmReconcileLoaded(LFPG_BTCAtmBase atm)
+    {
+        LFPG_BalanceProvider_NativeImpl.ReconcileLoadedAtm(atm);
+    }
+
+    override int LFPG_NativeGetPlayerBalance(string uid)
+    {
+        return LFPG_BalanceProvider_NativeImpl.ReadPlayerBalance(uid);
+    }
+
+    override bool LFPG_NativeSetPlayerBalance(string uid, int balance)
+    {
+        return LFPG_BalanceProvider_NativeImpl.WritePlayerBalance(uid, balance);
+    }
 };
 
 #ifndef SERVER
 modded class MissionGameplay
 {
+    override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
+
     protected bool m_LFPG_WasActive      = false;
     protected bool m_LFPG_SyncRequested   = false;
     protected bool m_LFPG_WidgetsCreated  = false;
@@ -131,6 +188,15 @@ modded class MissionGameplay
             return;
         }
 
+        if (LFPG_SorterView_TEST.IsOpen())
+        {
+            if (key == 1)
+            {
+                LFPG_SorterView_TEST.HandleEscKey();
+            }
+            return;
+        }
+
         // BTC ATM UI: same pattern as Sorter
         if (LFPG_BTCAtmView.IsOpen())
         {
@@ -168,6 +234,10 @@ modded class MissionGameplay
                 return;
             if (LFPG_SorterView.IsEscCooldown())
                 return;
+            if (LFPG_SorterView_TEST.IsOpen())
+                return;
+            if (LFPG_SorterView_TEST.IsEscCooldown())
+                return;
         }
 
         super.OnKeyRelease(key);
@@ -202,6 +272,36 @@ modded class MissionGameplay
             if (shouldClose)
             {
                 LFPG_SorterView.Close();
+            }
+        }
+
+        if (LFPG_SorterView_TEST.IsOpen())
+        {
+            // Dual-open overlap can only come from the action-RPC race; TEST yields.
+            if (LFPG_SorterView.IsOpen())
+            {
+                LFPG_SorterView_TEST.Close();
+            }
+            else
+            {
+                PlayerBase sorterTestPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+                bool sorterTestShouldClose = false;
+                if (!sorterTestPlayer)
+                {
+                    sorterTestShouldClose = true;
+                }
+                else if (!sorterTestPlayer.IsAlive())
+                {
+                    sorterTestShouldClose = true;
+                }
+                else if (sorterTestPlayer.IsUnconscious())
+                {
+                    sorterTestShouldClose = true;
+                }
+                if (sorterTestShouldClose)
+                {
+                    LFPG_SorterView_TEST.Close();
+                }
             }
         }
 

@@ -2,7 +2,7 @@
 // LF_PowerGrid — LBmaster Balance Provider
 //
 // Wraps LB_ATM_Playerbase from the LBmaster ATM mod.
-// Entire file compiled only when LBmaster_Core is present.
+// Entire file compiled only when the LBmaster core define is present.
 // =========================================================
 
 #ifdef LBmaster_Core

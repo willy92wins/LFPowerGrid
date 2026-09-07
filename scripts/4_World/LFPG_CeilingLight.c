@@ -64,11 +64,14 @@ class LFPG_CeilingLight : LFPG_WireOwnerBase
             return;
         m_PoweredNet = powered;
         SetSynchDirty();
-        string dbgMsg = "[LFPG_CeilingLight] SetPowered(";
-        dbgMsg = dbgMsg + powered.ToString();
-        dbgMsg = dbgMsg + ") id=";
-        dbgMsg = dbgMsg + m_DeviceId;
-        LFPG_Util.Debug(dbgMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string dbgMsg = "[LFPG_CeilingLight] SetPowered(";
+            dbgMsg = dbgMsg + powered.ToString();
+            dbgMsg = dbgMsg + ") id=";
+            dbgMsg = dbgMsg + m_DeviceId;
+            LFPG_Util.Debug(dbgMsg);
+        }
         #endif
     }
 

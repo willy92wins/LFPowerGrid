@@ -316,7 +316,10 @@ class LFPG_DeviceAPI
         string devId = GetDeviceId(e);
         if (devId != "")
         {
-            LFPG_Util.Debug("[SetPowered] LFPG path for " + objType + " powered=" + powered.ToString());
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                LFPG_Util.Debug("[SetPowered] LFPG path for " + objType + " powered=" + powered.ToString());
+            }
             return;
         }
 
@@ -346,13 +349,19 @@ class LFPG_DeviceAPI
             if (curEnergy < LFPG_VANILLA_ENERGY_POOL * 0.5)
             {
                 em.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
-                LFPG_Util.Debug("[SetPowered] Injected energy for " + objType + " (" + curEnergy.ToString() + " -> " + LFPG_VANILLA_ENERGY_POOL.ToString() + ")");
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    LFPG_Util.Debug("[SetPowered] Injected energy for " + objType + " (" + curEnergy.ToString() + " -> " + LFPG_VANILLA_ENERGY_POOL.ToString() + ")");
+                }
             }
 
             if (!em.IsSwitchedOn() && em.CanSwitchOn())
             {
                 em.SwitchOn();
-                LFPG_Util.Debug("[SetPowered] SwitchOn for " + objType);
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    LFPG_Util.Debug("[SetPowered] SwitchOn for " + objType);
+                }
             }
         }
         else
@@ -360,7 +369,10 @@ class LFPG_DeviceAPI
             if (em.IsSwitchedOn())
             {
                 em.SwitchOff();
-                LFPG_Util.Debug("[SetPowered] SwitchOff for " + objType);
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    LFPG_Util.Debug("[SetPowered] SwitchOff for " + objType);
+                }
             }
         }
     }
@@ -749,6 +761,7 @@ class LFPG_DeviceAPI
 
     // Get current load ratio on a source device (0.0 = idle, 1.0 = full).
     // Only meaningful for sources. Set by PropagateFrom on server.
+    #ifndef SERVER
     static float GetLoadRatio(EntityAI e)
     {
         if (!e) return 0.0;
@@ -757,6 +770,7 @@ class LFPG_DeviceAPI
             return dev.LFPG_GetLoadRatio();
         return CallFloat(e, "LFPG_GetLoadRatio", null, 0.0);
     }
+    #endif
 
     // Set load ratio on a source device (server only).
     static void SetLoadRatio(EntityAI e, float ratio)
@@ -774,6 +788,7 @@ class LFPG_DeviceAPI
 
     // v1.0: Overloaded state (all-off policy: demand > capacity).
     // True when the device's downstream demand exceeds available power.
+    #ifndef SERVER
     static bool GetOverloaded(EntityAI e)
     {
         if (!e) return false;
@@ -782,6 +797,7 @@ class LFPG_DeviceAPI
             return dev.LFPG_GetOverloaded();
         return CallBool(e, "LFPG_GetOverloaded", null, false);
     }
+    #endif
 
     static void SetOverloaded(EntityAI e, bool val)
     {

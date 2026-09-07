@@ -79,11 +79,14 @@ class LFPG_Splitter : LFPG_WireOwnerBase
             return;
         m_PoweredNet = powered;
         SetSynchDirty();
-        string msg = "[LFPG_Splitter] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Splitter] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 

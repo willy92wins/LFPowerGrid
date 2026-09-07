@@ -45,6 +45,15 @@ class EffLFPGFurnaceSmoke : EffectParticle
 // ---------------------------------------------------------
 class LFPG_Furnace : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm && m_SourceOn && m_FuelCurrent > 0) nm.RegisterFurnace(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool  m_SourceOn     = false;
     protected float m_LoadRatio    = 0.0;
@@ -86,6 +95,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         RegisterNetSyncVariableFloat(varLoadRatio, 0.0, 5.0, 2);
         RegisterNetSyncVariableBool(varOverload);
         RegisterNetSyncVariableInt(varFuel);
+    }
+
+    // The kit carries no stored fuel; empty the device before dismantling.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_FuelCurrent > 0;
     }
 
     // ============================================
@@ -303,7 +318,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterFurnace(this);
         LFPG_SetHeatActive(false);
         #endif
@@ -329,11 +344,13 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // ============================================
     // Smoke position (relative to model)
     // ============================================
+    #ifndef SERVER
     protected vector LFPG_GetSmokePosition()
     {
         string pos = "0.1 1.4 -0.1";
         return pos.ToVector();
     }
+    #endif
 
     // ============================================
     // Client FX cleanup (sound + smoke)
@@ -473,9 +490,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
                 {
                     if (nm) nm.RequestPropagate(m_DeviceId);
                 }
-                string offMsg = "[LFPG_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
-                offMsg = offMsg + m_DeviceId;
-                LFPG_Util.Info(offMsg);
+                if (LFPG_LOG_LEVEL >= 1)
+                {
+                    string offMsg = "[LFPG_Furnace] Fuel exhausted + cargo empty, auto-off. id=";
+                    offMsg = offMsg + m_DeviceId;
+                    LFPG_Util.Info(offMsg);
+                }
 
                 LFPG_SetHeatActive(false);
             }
@@ -695,6 +715,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         return false;
     }
 
+    #ifndef SERVER
     int LFPG_GetCargoItemCount()
     {
         CargoBase cargo = GetInventory().GetCargo();
@@ -703,7 +724,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
         return cargo.GetItemCount();
     }
+    #endif
 
+    #ifndef SERVER
     int LFPG_GetCargoFuelEstimate()
     {
         CargoBase cargo = GetInventory().GetCargo();
@@ -723,6 +746,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         }
         return total;
     }
+    #endif
 
     bool LFPG_AutoConsumeLargestItem()
     {
@@ -784,15 +808,18 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
         SetSynchDirty();
 
-        string acLog = "[LFPG_Furnace] Auto-consumed ";
-        acLog = acLog + burnedType;
-        acLog = acLog + " +";
-        acLog = acLog + bestFuel.ToString();
-        acLog = acLog + " fuel=";
-        acLog = acLog + m_FuelCurrent.ToString();
-        acLog = acLog + " id=";
-        acLog = acLog + m_DeviceId;
-        LFPG_Util.Info(acLog);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string acLog = "[LFPG_Furnace] Auto-consumed ";
+            acLog = acLog + burnedType;
+            acLog = acLog + " +";
+            acLog = acLog + bestFuel.ToString();
+            acLog = acLog + " fuel=";
+            acLog = acLog + m_FuelCurrent.ToString();
+            acLog = acLog + " id=";
+            acLog = acLog + m_DeviceId;
+            LFPG_Util.Debug(acLog);
+        }
 
         return true;
         #else

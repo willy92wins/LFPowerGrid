@@ -77,10 +77,12 @@ class LFPG_KitBase : Inventory_Base
     }
 
     // Wall: roll offset (degrees)
+    #ifndef SERVER
     float LFPG_GetWallRollOffset()
     {
         return 0.0;
     }
+    #endif
 
     // Global: pitch offset applied in all modes (degrees)
     float LFPG_GetPitchOffset()
@@ -89,10 +91,12 @@ class LFPG_KitBase : Inventory_Base
     }
 
     // Global: roll offset applied in all modes (degrees)
+    #ifndef SERVER
     float LFPG_GetRollOffset()
     {
         return 0.0;
     }
+    #endif
 
     // Floor: Y offset above ground (metres)
     float LFPG_GetFloorYOffset()

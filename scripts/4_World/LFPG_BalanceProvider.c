@@ -63,7 +63,7 @@ class LFPG_BalanceProvider
 
 class LFPG_BalanceRegistry
 {
-    protected static ref array<ref LFPG_BalanceProvider> s_Providers;
+    protected static ref TManagedRefArray s_Providers;
     protected static ref LFPG_BalanceProvider s_Active;
     protected static bool s_Initialized;
 
@@ -71,7 +71,7 @@ class LFPG_BalanceRegistry
     {
         if (!s_Providers)
         {
-            s_Providers = new array<ref LFPG_BalanceProvider>;
+            s_Providers = new TManagedRefArray;
         }
 
         // Log all registered providers
@@ -80,7 +80,7 @@ class LFPG_BalanceRegistry
         string regMsg = "[LFPG_Balance] Registered: ";
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_BalanceProvider prov = s_Providers[i];
+            LFPG_BalanceProvider prov = LFPG_BalanceProvider.Cast(s_Providers[i]);
             if (!prov)
                 continue;
 
@@ -159,7 +159,7 @@ class LFPG_BalanceRegistry
 
         if (!s_Providers)
         {
-            s_Providers = new array<ref LFPG_BalanceProvider>;
+            s_Providers = new TManagedRefArray;
         }
 
         s_Providers.Insert(provider);
@@ -200,7 +200,7 @@ class LFPG_BalanceRegistry
         int count = s_Providers.Count();
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_BalanceProvider prov = s_Providers[i];
+            LFPG_BalanceProvider prov = LFPG_BalanceProvider.Cast(s_Providers[i]);
             if (!prov)
                 continue;
 
@@ -225,7 +225,7 @@ class LFPG_BalanceRegistry
         int i = 0;
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_BalanceProvider prov = s_Providers[i];
+            LFPG_BalanceProvider prov = LFPG_BalanceProvider.Cast(s_Providers[i]);
             if (!prov)
                 continue;
 

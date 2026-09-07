@@ -22,6 +22,12 @@
 //   4. .bak exists -> restore (older snapshot).
 //   5. nothing -> return false (caller starts fresh).
 //
+// Balances are different: Native rolls RAM back when AtomicSaveBalances
+// returns false. A leftover parseable .tmp must not be promoted unless an
+// in-flight marker (target + ".saving") proves the process died inside the
+// DeleteFile/CopyFile window and a backup still exists to reconstruct the
+// previous target. An aborted save clears that marker first.
+//
 // Enforce Script has no RenameFile; we use CopyFile + DeleteFile.
 // CopyFile destName must be "$profile:" or "$saves:" (vanilla constraint).
 //
@@ -214,6 +220,10 @@ class LFPG_FileUtil
         if (!JsonFileLoader<LFPG_BalanceData>.SaveFile(tmpPath, data, err))
         {
             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: failed to write tmp: " + err);
+            // SaveFile can return false and still leave a parseable .tmp.
+            // No in-flight marker has been written yet, so recovery must not
+            // treat that leftover as a committed mutation.
+            DiscardAbortedBalancesTmp(tmpPath);
             return false;
         }
         if (!FileExist(tmpPath))
@@ -243,15 +253,30 @@ class LFPG_FileUtil
             if (!CopyFile(targetPath, bakNewPath))
             {
                 LFPG_Util.Error("[FileUtil] AtomicSaveBalances: stage bak.new failed");
-                DeleteFile(tmpPath);
+                DiscardAbortedBalancesTmp(tmpPath);
                 return false;
             }
+        }
+
+        // Marker is written only after the candidate verifies and the previous
+        // target is staged. A crash past this line, with target absent and a
+        // backup present, is the sole case recovery may promote the .tmp.
+        if (!WriteBalancesSaveIntent(targetPath))
+        {
+            DiscardAbortedBalancesTmp(tmpPath);
+            return false;
         }
 
         if (FileExist(targetPath)) DeleteFile(targetPath);
         if (!CopyFile(tmpPath, targetPath))
         {
             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: promote tmp->target failed");
+            // Clear the in-flight marker before touching leftovers so the next
+            // boot cannot promote a mutation the caller is about to roll back.
+            if (!ClearBalancesSaveIntent(targetPath))
+            {
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: in-flight marker survived a reported abort. Admin: delete it before restarting: " + targetPath + ".saving");
+            }
             if (FileExist(bakNewPath))
             {
                 CopyFile(bakNewPath, targetPath);
@@ -259,6 +284,10 @@ class LFPG_FileUtil
             else if (FileExist(bakPath))
             {
                 CopyFile(bakPath, targetPath);
+            }
+            if (!FileExist(targetPath))
+            {
+                DiscardAbortedBalancesTmp(tmpPath);
             }
             return false;
         }
@@ -276,6 +305,7 @@ class LFPG_FileUtil
             }
         }
         DeleteFile(tmpPath);
+        ClearBalancesSaveIntent(targetPath);
 
         return true;
     }
@@ -379,18 +409,19 @@ class LFPG_FileUtil
         return FileExist(targetPath);
     }
 
-    // ---- Rename .tmp orphan to .tmp.preserved.<ts>_<rnd> (PR-A.6) ----
+    // ---- Preserve a failed .tmp beside target as .tmp.preserved (PR-A.6) ----
     // Called from PromoteOrphanTmp abort paths. Prevents the next AtomicSave
     // Step 1 (which writes targetPath + ".tmp") from silently overwriting a
-    // parseable orphan that recovery couldn't promote safely. The preserved
-    // file is admin-recoverable; not auto-consumed by any future Ensure*.
+    // parseable orphan that recovery couldn't promote safely. EnsureBalances
+    // deletes leftover .tmp.preserved.* siblings on the next load so they
+    // cannot grow without bound. Copy anything still needed before restart.
     protected static void PreserveOrphanTmpEvidence(string tmpPath)
     {
         if (!FileExist(tmpPath))
             return;
-        float ts = GetGame().GetTickTime();
-        int rnd = Math.RandomInt(10000, 99999);
-        string preservedPath = tmpPath + ".preserved." + ((int)ts).ToString() + "_" + rnd.ToString();
+        string preservedPath = tmpPath + ".preserved";
+        if (FileExist(preservedPath))
+            DeleteFile(preservedPath);
         if (CopyFile(tmpPath, preservedPath))
         {
             DeleteFile(tmpPath);
@@ -406,6 +437,242 @@ class LFPG_FileUtil
             failMsg = failMsg + " - .tmp will be overwritten by next save. Manual intervention required NOW.";
             LFPG_Util.Error(failMsg);
         }
+    }
+
+    protected static string BalancesSaveIntentPath(string targetPath)
+    {
+        return targetPath + ".saving";
+    }
+
+    protected static bool WriteBalancesSaveIntent(string targetPath)
+    {
+        string savingPath = BalancesSaveIntentPath(targetPath);
+        if (FileExist(savingPath))
+            DeleteFile(savingPath);
+
+        FileHandle handle;
+        handle = OpenFile(savingPath, FileMode.WRITE);
+        if (handle == 0)
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: failed to write in-flight marker");
+            return false;
+        }
+        FPrintln(handle, "1");
+        CloseFile(handle);
+        if (!FileExist(savingPath))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSaveBalances: in-flight marker missing after write");
+            return false;
+        }
+        return true;
+    }
+
+    protected static bool ClearBalancesSaveIntent(string targetPath)
+    {
+        string savingPath = BalancesSaveIntentPath(targetPath);
+        if (!FileExist(savingPath))
+            return true;
+        DeleteFile(savingPath);
+        return !FileExist(savingPath);
+    }
+
+    protected static void DiscardAbortedBalancesTmp(string tmpPath)
+    {
+        if (!FileExist(tmpPath))
+            return;
+        PreserveOrphanTmpEvidence(tmpPath);
+        if (FileExist(tmpPath))
+        {
+            if (!DeleteFile(tmpPath))
+            {
+                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: aborted .tmp remains after preserve and delete failed: " + tmpPath);
+            }
+        }
+    }
+
+    protected static bool IsSellIntentUidSafe(string uid)
+    {
+        if (uid == "")
+            return false;
+        string allowed = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-";
+        int i = 0;
+        int n = uid.Length();
+        string ch = "";
+        for (i = 0; i < n; i = i + 1)
+        {
+            ch = uid.Get(i);
+            if (allowed.IndexOf(ch) < 0)
+                return false;
+        }
+        return true;
+    }
+
+    protected static string SellDestroyIntentPath(string uid)
+    {
+        return LFPG_BALANCE_NATIVE_FILE + ".sell." + uid;
+    }
+
+    protected static bool ParseNonNegativeIntText(string text, out int value)
+    {
+        value = 0;
+        if (text == "")
+            return false;
+        int i = 0;
+        int n = text.Length();
+        string ch = "";
+        bool isDigit = false;
+        for (i = 0; i < n; i = i + 1)
+        {
+            ch = text.Get(i);
+            isDigit = false;
+            if (ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4")
+                isDigit = true;
+            if (ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9")
+                isDigit = true;
+            if (!isDigit)
+                return false;
+        }
+        value = text.ToInt();
+        if (value < 0)
+            return false;
+        return true;
+    }
+
+    static bool WriteSellDestroyIntent(string uid, int balanceBefore, int creditAmount, int btcAmount, string classname)
+    {
+        if (!IsSellIntentUidSafe(uid) || classname == "" || balanceBefore < 0 || creditAmount <= 0 || btcAmount <= 0)
+            return false;
+
+        string intentPath = SellDestroyIntentPath(uid);
+        if (FileExist(intentPath))
+            DeleteFile(intentPath);
+
+        FileHandle handle;
+        handle = OpenFile(intentPath, FileMode.WRITE);
+        if (handle == 0)
+        {
+            LFPG_Util.Error("[FileUtil] WriteSellDestroyIntent: failed to open marker");
+            return false;
+        }
+        FPrintln(handle, uid);
+        FPrintln(handle, balanceBefore.ToString());
+        FPrintln(handle, creditAmount.ToString());
+        FPrintln(handle, btcAmount.ToString());
+        FPrintln(handle, classname);
+        CloseFile(handle);
+        if (!FileExist(intentPath))
+        {
+            LFPG_Util.Error("[FileUtil] WriteSellDestroyIntent: marker missing after write");
+            return false;
+        }
+        return true;
+    }
+
+    static bool ClearSellDestroyIntent(string uid)
+    {
+        if (!IsSellIntentUidSafe(uid))
+            return false;
+        string intentPath = SellDestroyIntentPath(uid);
+        if (!FileExist(intentPath))
+            return true;
+        DeleteFile(intentPath);
+        return !FileExist(intentPath);
+    }
+
+    static bool TryReadSellDestroyIntent(string uid, out int balanceBefore, out int creditAmount, out int btcAmount, out string classname)
+    {
+        balanceBefore = 0;
+        creditAmount = 0;
+        btcAmount = 0;
+        classname = "";
+        if (!IsSellIntentUidSafe(uid))
+            return false;
+
+        string intentPath = SellDestroyIntentPath(uid);
+        if (!FileExist(intentPath))
+            return false;
+
+        FileHandle handle = OpenFile(intentPath, FileMode.READ);
+        if (handle == 0)
+            return false;
+
+        string lineUid = "";
+        string lineBalance = "";
+        string lineCredit = "";
+        string lineBtc = "";
+        string lineClass = "";
+        bool readOk = true;
+        if (FGets(handle, lineUid) <= 0)
+            readOk = false;
+        if (readOk && FGets(handle, lineBalance) <= 0)
+            readOk = false;
+        if (readOk && FGets(handle, lineCredit) <= 0)
+            readOk = false;
+        if (readOk && FGets(handle, lineBtc) <= 0)
+            readOk = false;
+        if (readOk && FGets(handle, lineClass) <= 0)
+            readOk = false;
+        CloseFile(handle);
+        if (!readOk)
+            return false;
+
+        // Trim line endings and edge whitespace without changing field interiors.
+        lineUid = lineUid.Trim();
+        lineBalance = lineBalance.Trim();
+        lineCredit = lineCredit.Trim();
+        lineBtc = lineBtc.Trim();
+        lineClass = lineClass.Trim();
+
+        if (lineUid != uid || lineClass == "")
+            return false;
+        if (!ParseNonNegativeIntText(lineBalance, balanceBefore))
+            return false;
+        if (!ParseNonNegativeIntText(lineCredit, creditAmount))
+            return false;
+        if (!ParseNonNegativeIntText(lineBtc, btcAmount))
+            return false;
+        if (creditAmount <= 0 || btcAmount <= 0)
+            return false;
+        classname = lineClass;
+        return true;
+    }
+
+    protected static void SweepPreservedBalanceTmpEvidence(string targetPath)
+    {
+        string preservedPath = targetPath + ".tmp.preserved";
+        if (FileExist(preservedPath))
+        {
+            if (DeleteFile(preservedPath))
+                LFPG_Util.Info("[FileUtil] Removed leftover preserved balances tmp: " + preservedPath);
+        }
+
+        string fileName;
+        FileAttr fileAttr;
+        string pattern = targetPath + ".tmp.preserved.*";
+        FindFileHandle handle = FindFile(pattern, fileName, fileAttr, FindFileFlags.ALL);
+        if (!handle)
+            return;
+
+        int removed = 0;
+        bool found = true;
+        string leftoverPath = "";
+        while (found)
+        {
+            if (fileName != "" && fileAttr != FileAttr.DIRECTORY && removed < 32)
+            {
+                leftoverPath = LFPG_BTC_SETTINGS_DIR + "/" + fileName;
+                if (FileExist(leftoverPath))
+                {
+                    if (DeleteFile(leftoverPath))
+                    {
+                        removed = removed + 1;
+                        LFPG_Util.Info("[FileUtil] Removed leftover unique preserved balances tmp: " + leftoverPath);
+                    }
+                }
+            }
+            found = FindNextFile(handle, fileName, fileAttr);
+        }
+        CloseFindFile(handle);
     }
 
     // ---- Typed: Vanilla Wires ----
@@ -539,24 +806,64 @@ class LFPG_FileUtil
     // ---- Typed: Player Balances ----
     static bool EnsureBalancesFileOrRestore(string targetPath)
     {
+        SweepPreservedBalanceTmpEvidence(targetPath);
         string tmpPath    = targetPath + ".tmp";
         string bakPath    = targetPath + ".bak";
         string bakNewPath = targetPath + ".bak.new";
+        string savingPath = BalancesSaveIntentPath(targetPath);
+        bool inFlight = FileExist(savingPath);
 
         if (FileExist(tmpPath))
         {
+            // A live target means Native already had a committed snapshot. Any
+            // sibling .tmp is a mutation the runtime rolled back or a crash
+            // before the replace window. Never promote beside a live target.
+            if (FileExist(targetPath))
+            {
+                LFPG_Util.Error("[FileUtil] Orphan .tmp beside a live balances target: NOT promoting, the caller rolled this mutation back. Preserving as evidence: " + tmpPath);
+                PreserveOrphanTmpEvidence(tmpPath);
+                ClearBalancesSaveIntent(targetPath);
+                return true;
+            }
+
+            bool hasBackup = false;
+            if (FileExist(bakNewPath))
+                hasBackup = true;
+            else if (FileExist(bakPath))
+                hasBackup = true;
+
+            // Promote only an in-flight crash inside the replace window: no
+            // target, marker still present, and a backup that can rebuild the
+            // previous snapshot. First-save crashes and reported aborts fail
+            // closed (empty/fresh or restore-from-backup) instead of resurrecting
+            // a rolled-back credit.
+            if (!inFlight || !hasBackup)
+            {
+                LFPG_Util.Error("[FileUtil] Orphan balances .tmp is not an in-flight replace. NOT promoting: " + tmpPath);
+                PreserveOrphanTmpEvidence(tmpPath);
+                ClearBalancesSaveIntent(targetPath);
+                return EnsureFileOrRestore(targetPath);
+            }
+
             LFPG_BalanceData probe = new LFPG_BalanceData();
             string parseErr;
             if (JsonFileLoader<LFPG_BalanceData>.LoadFile(tmpPath, probe, parseErr))
             {
-                LFPG_Util.Warn("[FileUtil] Orphan .tmp parses as LFPG_BalanceData, promoting: " + tmpPath);
-                return PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+                LFPG_Util.Warn("[FileUtil] In-flight balances .tmp parses as LFPG_BalanceData, promoting: " + tmpPath);
+                bool promoted = PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+                ClearBalancesSaveIntent(targetPath);
+                return promoted;
             }
             else
             {
                 LFPG_Util.Error("[FileUtil] Orphan .tmp unparseable (LFPG_BalanceData): " + parseErr + " - discarding: " + tmpPath);
                 DeleteFile(tmpPath);
+                ClearBalancesSaveIntent(targetPath);
             }
+        }
+        else if (inFlight)
+        {
+            ClearBalancesSaveIntent(targetPath);
         }
 
         return EnsureFileOrRestore(targetPath);

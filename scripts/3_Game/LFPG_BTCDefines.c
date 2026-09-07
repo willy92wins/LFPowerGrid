@@ -255,6 +255,12 @@ class LFPG_BTCAtmClientData
                 s_LastTxType = txType;
                 s_LastErrCode = errCode;
                 bool preserveDisplay = errCode == LFPG_BTC_ERR_INVALID && newStock == 0 && newBalance == 0;
+                // err=11 before ATM/balance resolve: 0/0 is unavailable, not a real zero.
+                bool noProviderZeros = errCode == LFPG_BTC_ERR_NO_BALANCE_PROVIDER && newStock == 0 && newBalance == 0;
+                if (noProviderZeros)
+                {
+                    preserveDisplay = true;
+                }
                 if (!preserveDisplay)
                 {
                     s_LastNewStock = newStock;

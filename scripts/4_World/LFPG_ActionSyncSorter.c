@@ -73,6 +73,7 @@ class LFPG_ActionSyncSorter : ActionInteractBase
         return true;
     }
 
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -109,4 +110,5 @@ class LFPG_ActionSyncSorter : ActionInteractBase
         logMsg = logMsg + netHigh.ToString();
         LFPG_Util.Info(logMsg);
     }
+    #endif
 };

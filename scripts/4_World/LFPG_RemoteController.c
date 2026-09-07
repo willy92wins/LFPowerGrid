@@ -73,7 +73,7 @@ class LFPG_PairedEntry : Managed
 class LFPG_RemoteController : Inventory_Base
 {
     // Paired devices (server-authoritative, full data)
-    protected ref array<ref LFPG_PairedEntry> m_PairedEntries;
+    protected ref TManagedRefArray m_PairedEntries;
 
     // Client mirror (IDs only, synced via RPC for ActionCondition text)
     protected ref array<string> m_ClientPairedIds;
@@ -83,20 +83,20 @@ class LFPG_RemoteController : Inventory_Base
     protected int m_LastSeenSerial;
     protected bool m_LastPairEvictedOldest;
     protected ref array<string> m_PruneEvictedIds;
-    protected ref array<ref LFPG_PairedEntry> m_PairOrderBuffer;
+    protected ref TManagedRefArray m_PairOrderBuffer;
 
     // ============================================
     // Constructor
     // ============================================
     void LFPG_RemoteController()
     {
-        m_PairedEntries = new array<ref LFPG_PairedEntry>;
+        m_PairedEntries = new TManagedRefArray;
         m_ClientPairedIds = new array<string>;
         m_LastActivateTime = 0;
         m_LastSeenSerial = 0;
         m_LastPairEvictedOldest = false;
         m_PruneEvictedIds = new array<string>;
-        m_PairOrderBuffer = new array<ref LFPG_PairedEntry>;
+        m_PairOrderBuffer = new TManagedRefArray;
     }
 
     // ============================================
@@ -119,7 +119,7 @@ class LFPG_RemoteController : Inventory_Base
         int count = m_PairedEntries.Count();
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (entry && entry.m_DeviceId == deviceId)
             {
                 return true;
@@ -158,7 +158,7 @@ class LFPG_RemoteController : Inventory_Base
             if (oldestIndex < 0)
                 return false;
 
-            LFPG_PairedEntry oldestEntry = m_PairedEntries[oldestIndex];
+            LFPG_PairedEntry oldestEntry = LFPG_PairedEntry.Cast(m_PairedEntries[oldestIndex]);
             string oldestId = "<null>";
             if (oldestEntry)
                 oldestId = oldestEntry.m_DeviceId;
@@ -201,7 +201,7 @@ class LFPG_RemoteController : Inventory_Base
         int i;
         for (i = 0; i < m_PairedEntries.Count(); i = i + 1)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (!entry)
                 return i;
             if (oldestIndex < 0 || entry.m_LastSeenOrder < oldestOrder)
@@ -258,7 +258,7 @@ class LFPG_RemoteController : Inventory_Base
         int i = m_PairedEntries.Count() - 1;
         while (i >= 0)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (LFPG_IsPairEntryStale(entry))
             {
                 string removedId = "<null>";
@@ -294,7 +294,7 @@ class LFPG_RemoteController : Inventory_Base
         int count = m_PairedEntries.Count();
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (entry && entry.m_DeviceId == deviceId)
             {
                 m_PairedEntries.Remove(i);
@@ -338,7 +338,7 @@ class LFPG_RemoteController : Inventory_Base
         int i;
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (entry)
             {
                 rpc.Write(entry.m_DeviceId);
@@ -352,9 +352,12 @@ class LFPG_RemoteController : Inventory_Base
 
         rpc.Send(this, LFPG_RPC_REMOTE_PAIR_SYNC, true, recipient);
 
-        string syncMsg = "[LFPG_RemoteController] SyncPairedList -> client, count=";
-        syncMsg = syncMsg + count.ToString();
-        LFPG_Util.Debug(syncMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string syncMsg = "[LFPG_RemoteController] SyncPairedList -> client, count=";
+            syncMsg = syncMsg + count.ToString();
+            LFPG_Util.Debug(syncMsg);
+        }
         #endif
     }
 
@@ -404,10 +407,13 @@ class LFPG_RemoteController : Inventory_Base
             }
         }
 
-        string rcvMsg = "[LFPG_RemoteController] Client received paired list: ";
-        rcvMsg = rcvMsg + m_ClientPairedIds.Count().ToString();
-        rcvMsg = rcvMsg + " entries";
-        LFPG_Util.Debug(rcvMsg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string rcvMsg = "[LFPG_RemoteController] Client received paired list: ";
+            rcvMsg = rcvMsg + m_ClientPairedIds.Count().ToString();
+            rcvMsg = rcvMsg + " entries";
+            LFPG_Util.Debug(rcvMsg);
+        }
         #endif
     }
 
@@ -432,7 +438,7 @@ class LFPG_RemoteController : Inventory_Base
         int i = m_PairedEntries.Count() - 1;
         while (i >= 0)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (!entry)
             {
                 m_PairedEntries.Remove(i);
@@ -583,7 +589,7 @@ class LFPG_RemoteController : Inventory_Base
         int i;
         for (i = 0; i < count; i = i + 1)
         {
-            LFPG_PairedEntry entry = m_PairedEntries[i];
+            LFPG_PairedEntry entry = LFPG_PairedEntry.Cast(m_PairedEntries[i]);
             if (entry)
             {
                 ctx.Write(entry.m_DeviceId);
@@ -662,7 +668,7 @@ class LFPG_RemoteController : Inventory_Base
                     int oldestIndex = LFPG_FindOldestPairIndex();
                     if (oldestIndex >= 0)
                     {
-                        LFPG_PairedEntry oldestEntry = m_PairedEntries[oldestIndex];
+                        LFPG_PairedEntry oldestEntry = LFPG_PairedEntry.Cast(m_PairedEntries[oldestIndex]);
                         string oldestId = "<null>";
                         if (oldestEntry)
                             oldestId = oldestEntry.m_DeviceId;

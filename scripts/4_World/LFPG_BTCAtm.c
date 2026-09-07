@@ -40,6 +40,12 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
     protected int  m_BtcStock          = 0;
     protected bool m_ATMWithdrawOnly   = false;
 
+    // Same 64-entity budget as LFPG_BTCHelper.LFPG_BTC_MAX_ENTITIES_PER_TX.
+    // Duplicated here: that protected constant lives in the later Mission module.
+    protected static const int LFPG_BTC_MAX_ENTITIES_ON_KILL = 64;
+    // One attempt per killed instance, including partial drops and failed commits.
+    protected bool m_BtcKillDropHandled = false;
+
     // ---- Server-only persisted state (NOT SyncVar) ----
     // Accumulated fractional money that couldn't be given as
     // physical bills. Carried over across transactions.
@@ -74,6 +80,16 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         return m_BtcStock;
     }
 
+    // Refuse dismantling while the machine still holds BTC. The kit that
+    // dismantling spawns carries no stock, and the device is deleted right
+    // after, so every unit left inside would be destroyed with no refund
+    // and no warning. Empty the ATM first, the same way the action already
+    // demands no attachments and no cargo.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_BtcStock > 0;
+    }
+
     void LFPG_SetBtcStock(int stock)
     {
         #ifdef SERVER
@@ -89,7 +105,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         if (stock == m_BtcStock)
             return;
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, stock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, stock))
             return;
 
         m_BtcStock = stock;
@@ -108,7 +124,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
             return false;
         int newStock = m_BtcStock + count;
         string deviceId = LFPG_GetDeviceId();
-        return LFPG_BalanceProvider_Native.CanPrepareStockMutation(deviceId, m_BtcStock, newStock);
+        return LFPG_AtmStock.CanPrepareStockMutation(deviceId, m_BtcStock, newStock);
         #else
         return false;
         #endif
@@ -128,7 +144,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         newStock = newStock + amount;
 
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, newStock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, newStock))
             return false;
 
         m_BtcStock = newStock;
@@ -150,7 +166,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
 
         int newStock = m_BtcStock - amount;
         string deviceId = LFPG_GetDeviceId();
-        if (!LFPG_BalanceProvider_Native.PrepareStockMutation(deviceId, m_BtcStock, newStock))
+        if (!LFPG_AtmStock.PrepareStockMutation(deviceId, m_BtcStock, newStock))
             return false;
 
         m_BtcStock = newStock;
@@ -255,11 +271,113 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
     // ============================================
     override void LFPG_OnInit()
     {
+        // Deliberately empty. The config value is a global floor applied in
+        // LFPG_IsWithdrawOnly under SERVER; it is not written into persisted ATM
+        // state, and a per-ATM off cannot override the floor while it is active.
+        // The #ifdef SERVER that used to wrap these comments was removed: a guard
+        // whose body holds no statements segfaults (pitfalls-advanced.md:66-77).
+    }
+
+    // Shared by player and admin ATMs. Do not call Mission helpers from World.
+    override void LFPG_OnKilled()
+    {
         #ifdef SERVER
-        // The config value is a global floor applied in
-        // LFPG_IsWithdrawOnly under SERVER. It is not written
-        // into persisted ATM state. A per-ATM off cannot
-        // override the floor while the floor is active.
+        if (m_BtcKillDropHandled || m_BtcStock <= 0)
+            return;
+        m_BtcKillDropHandled = true;
+
+        int stockBefore = m_BtcStock;
+        string deviceId = LFPG_GetDeviceId();
+        if (!g_Game)
+        {
+            LFPG_Util.Error("[LFPG_BTCAtm] kill drop unavailable; stock retained=" + stockBefore.ToString() + " deviceId=" + deviceId);
+            return;
+        }
+        string classname = LFPG_BTCConfig.GetBtcItemClassname();
+        if (classname == "")
+        {
+            LFPG_Util.Error("[LFPG_BTCAtm] kill drop has empty BTC classname; stock retained=" + stockBefore.ToString() + " deviceId=" + deviceId);
+            return;
+        }
+
+        array<EntityAI> drops = new array<EntityAI>();
+        vector basePos = GetPosition();
+        int remaining = stockBefore;
+        int maxStack = 0;
+        int attempt = 0;
+        // Failed spawns also consume an attempt, so null cannot cause a retry loop.
+        for (attempt = 0; attempt < LFPG_BTC_MAX_ENTITIES_ON_KILL; attempt = attempt + 1)
+        {
+            if (remaining <= 0)
+                break;
+            vector pos = basePos;
+            pos[0] = pos[0] + Math.RandomFloat(-0.15, 0.15);
+            pos[2] = pos[2] + Math.RandomFloat(-0.15, 0.15);
+            Object obj = g_Game.CreateObjectEx(classname, pos, ECE_CREATEPHYSICS);
+            if (!obj)
+            {
+                LFPG_Util.Error("[LFPG_BTCAtm] kill drop CreateObjectEx failed cls=" + classname + " remaining=" + remaining.ToString() + " deviceId=" + deviceId);
+                continue;
+            }
+            EntityAI item = EntityAI.Cast(obj);
+            if (!item)
+            {
+                g_Game.ObjectDelete(obj);
+                LFPG_Util.Error("[LFPG_BTCAtm] kill drop is not EntityAI cls=" + classname + " deviceId=" + deviceId);
+                continue;
+            }
+
+            // The first item is also the stack-capacity probe, as in BTC staging.
+            if (maxStack == 0)
+            {
+                maxStack = item.GetQuantityMax();
+                if (maxStack < 1 || !item.HasQuantity())
+                    maxStack = 1;
+            }
+            int qty = remaining;
+            if (qty > maxStack)
+                qty = maxStack;
+            item.SetQuantity((float)qty, false, false);
+            // SetQuantity returns whether it deleted the item, not success.
+            if (!item)
+            {
+                LFPG_Util.Error("[LFPG_BTCAtm] kill drop item disappeared during SetQuantity cls=" + classname + " deviceId=" + deviceId);
+                continue;
+            }
+            if (item.HasQuantity() && item.GetQuantity() != (float)qty)
+            {
+                g_Game.ObjectDelete(item);
+                LFPG_Util.Error("[LFPG_BTCAtm] kill drop quantity mismatch cls=" + classname + " deviceId=" + deviceId);
+                continue;
+            }
+            drops.Insert(item);
+            remaining = remaining - qty;
+        }
+
+        if (remaining != stockBefore)
+        {
+            // Remove preserves the stock timeline and returns success. Unlike
+            // LFPG_SetBtcStock it does not clamp residual stock loaded under an
+            // older config cap. Never bypass its gate after a failed commit.
+            int delivered = stockBefore - remaining;
+            if (!LFPG_RemoveBtcStock(delivered))
+            {
+                int i = 0;
+                for (i = 0; i < drops.Count(); i = i + 1)
+                {
+                    EntityAI staged = drops[i];
+                    if (staged)
+                        g_Game.ObjectDelete(staged);
+                }
+                LFPG_Util.Error("[LFPG_BTCAtm] kill drop stock commit denied; drops rolled back, stock retained=" + stockBefore.ToString() + ". Admin: inspect stock timeline before recovering ruined ATM deviceId=" + deviceId);
+                return;
+            }
+            LFPG_Util.Info("[LFPG_BTCAtm] kill drop stockBefore=" + stockBefore.ToString() + " delivered=" + delivered.ToString() + " remaining=" + remaining.ToString() + " cls=" + classname + " deviceId=" + deviceId);
+        }
+        if (remaining > 0)
+        {
+            LFPG_Util.Error("[LFPG_BTCAtm] kill drop incomplete after 64-attempt budget; undropped stock retained=" + remaining.ToString() + " cls=" + classname + ". Admin: recover residual from ruined ATM before cleanup deviceId=" + deviceId);
+        }
         #endif
     }
 
@@ -320,7 +438,11 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
     override void AfterStoreLoad()
     {
         super.AfterStoreLoad();
-        LFPG_BalanceProvider_Native.ReconcileLoadedAtm(this);
+        // Reconcile is a server persistence concern; the client VM must not
+        // feed the pre-mission queue (nothing drains it there).
+        #ifdef SERVER
+        LFPG_AtmStock.ReconcileLoadedAtm(this);
+        #endif
     }
 
     // ============================================
@@ -442,6 +564,7 @@ class LFPG_BTCAtm : LFPG_BTCAtmBase
     // ============================================
     override void LFPG_OnKilled()
     {
+        super.LFPG_OnKilled();
         #ifdef SERVER
         if (m_PoweredNet)
         {

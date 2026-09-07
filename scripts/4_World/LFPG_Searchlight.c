@@ -50,18 +50,30 @@ class LFPG_Searchlight : LFPG_DeviceBase
     protected float m_SplashY    = 0.0;
     protected float m_SplashZ    = 0.0;
     protected float m_SplashRaycastLastMs = -1.0;
+    #ifndef SERVER
     protected int m_PerfDiagAimCommitCount;
+    #endif
+    #ifndef SERVER
     protected int m_PerfDiagSplashRaycastCount;
+    #endif
 
     // ---- Server-only: operator tracking (NOT SyncVars, NOT persisted) ----
     protected int m_OperatorNetLow  = 0;
     protected int m_OperatorNetHigh = 0;
 
     // ---- Client lights (NOT ref — ScriptedLightBase is engine object) ----
+    #ifndef SERVER
     protected ScriptedLightBase m_LightBeamCore;
+    #endif
+    #ifndef SERVER
     protected ScriptedLightBase m_LightBeamSpill;
+    #endif
+    #ifndef SERVER
     protected ScriptedLightBase m_LightHalo;
+    #endif
+    #ifndef SERVER
     protected ScriptedLightBase m_LightSplash;
+    #endif
 
     // ---- Base orientation yaw (set once in LFPG_OnInit, never synced/persisted) ----
     protected float m_BaseOriYaw = 0.0;
@@ -182,11 +194,14 @@ class LFPG_Searchlight : LFPG_DeviceBase
             LFPG_KickOperator();
         }
 
-        string msg = "[LFPG_Searchlight] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Searchlight] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 
@@ -637,6 +652,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
         #ifdef SERVER
         SetSynchDirty();
 
+        #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
             m_PerfDiagAimCommitCount = m_PerfDiagAimCommitCount + 1;
@@ -654,6 +670,7 @@ class LFPG_Searchlight : LFPG_DeviceBase
             perfAim = perfAim + m_DeviceId;
             Print(perfAim);
         }
+        #endif
         #endif
     }
 

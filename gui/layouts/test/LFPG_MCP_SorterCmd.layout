@@ -1,0 +1,17 @@
+// =========================================================
+// TEST MCP command hook for the V4 sorter panel.
+// Separate from LFPG_Sorter_TEST.layout so ui_reload_layout preview
+// cannot hijack this widget name. ui_set_text writes SetText here;
+// LFPG_SorterView_TEST.Update polls it. EditBoxWidget so GetText exists.
+// =========================================================
+EditBoxWidgetClass LFPG_MCP_SorterCmd {
+	position 0 0
+	size 1 1
+	hexactpos 1
+	vexactpos 1
+	hexactsize 1
+	vexactsize 1
+	ignorepointer 1
+	{
+	}
+}

@@ -49,7 +49,9 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
     protected bool m_RestoredFromSave = false;
 
     // ---- Client visual state ----
+    #ifndef SERVER
     protected int m_PrevCounterValue = -1;
+    #endif
 
     void LFPG_ElectronicCounter()
     {
@@ -197,11 +199,14 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
                     m_CounterValue = 0;
                     m_PulseActive = false;
 
-                    string onMsg = "[Counter] Power ON (real), reset to 0 id=";
-                    onMsg = onMsg + m_DeviceId;
-                    onMsg = onMsg + " offDur=";
-                    onMsg = onMsg + offDuration.ToString();
-                    LFPG_Util.Debug(onMsg);
+                    if (LFPG_LOG_LEVEL >= 2)
+                    {
+                        string onMsg = "[Counter] Power ON (real), reset to 0 id=";
+                        onMsg = onMsg + m_DeviceId;
+                        onMsg = onMsg + " offDur=";
+                        onMsg = onMsg + offDuration.ToString();
+                        LFPG_Util.Debug(onMsg);
+                    }
                 }
             }
             else
@@ -216,13 +221,16 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
                     m_PulseActive = false;
                 }
 
-                string debMsg = "[Counter] Power ON (debounced, preserved val=";
-                debMsg = debMsg + m_CounterValue.ToString();
-                debMsg = debMsg + ") id=";
-                debMsg = debMsg + m_DeviceId;
-                debMsg = debMsg + " offDur=";
-                debMsg = debMsg + offDuration.ToString();
-                LFPG_Util.Info(debMsg);
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    string debMsg = "[Counter] Power ON (debounced, preserved val=";
+                    debMsg = debMsg + m_CounterValue.ToString();
+                    debMsg = debMsg + ") id=";
+                    debMsg = debMsg + m_DeviceId;
+                    debMsg = debMsg + " offDur=";
+                    debMsg = debMsg + offDuration.ToString();
+                    LFPG_Util.Debug(debMsg);
+                }
             }
 
             m_ToggleWasHigh = newIn1;
@@ -246,9 +254,12 @@ class LFPG_ElectronicCounter : LFPG_WireOwnerBase
             m_ToggleWasHigh = false;
             changed = true;
 
-            string offMsg2 = "[Counter] Power OFF id=";
-            offMsg2 = offMsg2 + m_DeviceId;
-            LFPG_Util.Debug(offMsg2);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string offMsg2 = "[Counter] Power OFF id=";
+                offMsg2 = offMsg2 + m_DeviceId;
+                LFPG_Util.Debug(offMsg2);
+            }
         }
         else if (mainPower)
         {

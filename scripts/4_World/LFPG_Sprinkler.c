@@ -44,6 +44,15 @@ class LFPG_Sprinkler_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_Sprinkler : LFPG_DeviceBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterSprinkler(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool m_PoweredNet      = false;
     protected bool m_SprinklerActive = false;
@@ -111,11 +120,14 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_Sprinkler] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Sprinkler] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 
@@ -134,11 +146,14 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         m_SprinklerActive = active;
         SetSynchDirty();
 
-        string msg = "[LFPG_Sprinkler] SetSprinklerActive(";
-        msg = msg + active.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Sprinkler] SetSprinklerActive(";
+            msg = msg + active.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 
@@ -227,11 +242,11 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterSprinkler(this);
         if (m_WaterSourceId != "")
         {
-            LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
+            LFPG_NetworkManager nm2 = LFPG_NetworkManager.GetExisting();
             if (nm2) nm2.LFPG_RefreshPumpSprinklerLink(m_WaterSourceId, m_DeviceId);
         }
         #endif
@@ -255,6 +270,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
     // =========================================================
     // Particle helpers (Pattern A — FireplaceBase style)
     // =========================================================
+    #ifndef SERVER
     protected bool LFPG_PlayParticle(out Particle particle, int particleType, vector localPos)
     {
         if (particle)
@@ -270,6 +286,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         particle = pm.PlayOnObject(particleType, this, localPos);
         return true;
     }
+    #endif
 
     protected bool LFPG_StopParticle(out Particle particle)
     {
@@ -284,11 +301,13 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         return true;
     }
 
+    #ifndef SERVER
     protected vector LFPG_GetSprayPosition()
     {
         string pos = "0 0.15 0";
         return pos.ToVector();
     }
+    #endif
 
     // =========================================================
     // VarSync: sound + particle toggle (CLIENT)
@@ -550,13 +569,16 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         // Debug log OUTSIDE loop (1 string per tick, not per object)
         if (gardensWatered > 0 || itemsWetted > 0 || playersWetted > 0)
         {
-            string tickLog = "[Sprinkler] Watered gardens=";
-            tickLog = tickLog + gardensWatered.ToString();
-            tickLog = tickLog + " items=";
-            tickLog = tickLog + itemsWetted.ToString();
-            tickLog = tickLog + " players=";
-            tickLog = tickLog + playersWetted.ToString();
-            LFPG_Util.Debug(tickLog);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                string tickLog = "[Sprinkler] Watered gardens=";
+                tickLog = tickLog + gardensWatered.ToString();
+                tickLog = tickLog + " items=";
+                tickLog = tickLog + itemsWetted.ToString();
+                tickLog = tickLog + " players=";
+                tickLog = tickLog + playersWetted.ToString();
+                LFPG_Util.Debug(tickLog);
+            }
         }
         #endif
     }

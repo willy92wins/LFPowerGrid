@@ -15,7 +15,7 @@
 // ---- Single currency denomination ----
 class LFPG_BTCCurrency
 {
-    string classname;   // e.g. "Paper_Bill_100"
+    string classname;   // a money item that exists on THIS server (see LogCatalogHelp)
     int value;          // e.g. 100
 
     void LFPG_BTCCurrency()
@@ -69,28 +69,20 @@ class LFPG_BTCSettingsData
         maxEurPerOperation = 100000;
         atmWithdrawOnlyDefault = false;
         balanceMode = "auto";
+        // Currency catalog ships EMPTY on purpose.
+        //
+        // It used to default to Paper_Bill_100/50/10/1. Those classes do not
+        // exist: verified 2026-09-07 by scanning the 124 PBOs of a DayZServer
+        // install (0 hits, with Battery9V as positive control at 4 hits), and
+        // this mod's own config.cpp does not declare them either. So a fresh
+        // install wrote that catalog to disk and then rejected it as invalid,
+        // disabling every cash operation on a server whose admin had not
+        // touched anything.
+        //
+        // Any concrete default is a guess about somebody else's economy mod,
+        // and that guess already went wrong once. An empty catalog fails
+        // closed the same way but says so out loud (see LogCatalogHelp).
         currencies = new array<ref LFPG_BTCCurrency>;
-
-        // Default denominations
-        ref LFPG_BTCCurrency c100 = new LFPG_BTCCurrency();
-        c100.classname = "Paper_Bill_100";
-        c100.value = 100;
-        currencies.Insert(c100);
-
-        ref LFPG_BTCCurrency c50 = new LFPG_BTCCurrency();
-        c50.classname = "Paper_Bill_50";
-        c50.value = 50;
-        currencies.Insert(c50);
-
-        ref LFPG_BTCCurrency c10 = new LFPG_BTCCurrency();
-        c10.classname = "Paper_Bill_10";
-        c10.value = 10;
-        currencies.Insert(c10);
-
-        ref LFPG_BTCCurrency c1 = new LFPG_BTCCurrency();
-        c1.classname = "Paper_Bill_1";
-        c1.value = 1;
-        currencies.Insert(c1);
     }
 };
 
@@ -99,6 +91,7 @@ class LFPG_BTCConfig
 {
     protected static ref LFPG_BTCSettingsData s_Data;
     protected static bool s_Loaded = false;
+    protected static bool s_CurrencyCatalogValid = false;
 
     static LFPG_BTCSettingsData Get()
     {
@@ -135,11 +128,6 @@ class LFPG_BTCConfig
                 LFPG_Util.Warn(warnMsg);
                 s_Data = new LFPG_BTCSettingsData();
             }
-            else
-            {
-                ValidateAndClamp();
-                LogSettings();
-            }
         }
         else
         {
@@ -148,6 +136,9 @@ class LFPG_BTCConfig
             LFPG_Util.Info(createMsg);
             Save();
         }
+
+        ValidateAndClamp();
+        LogSettings();
 
         // Sort currencies descending by value (for greedy change algorithm)
         SortCurrenciesDesc();
@@ -277,23 +268,18 @@ class LFPG_BTCConfig
             s_Data.balanceMode = bmCheck;
         }
 
-        // currencies: must have at least one entry
-        if (!s_Data.currencies || s_Data.currencies.Count() == 0)
+        // currencies: fail closed on empty, duplicate, BTC overlap, or invalid class.
+        // Null entries are removed because they are not economic values. Invalid
+        // remaining entries are not rewritten with invented denominations.
+        s_CurrencyCatalogValid = true;
+        if (!s_Data.currencies)
         {
-            string warnCur = "[LFPG_BTCConfig] No currencies defined, creating defaults";
-            LFPG_Util.Warn(warnCur);
             s_Data.currencies = new array<ref LFPG_BTCCurrency>;
-
-            ref LFPG_BTCCurrency fallback = new LFPG_BTCCurrency();
-            fallback.classname = "Paper_Bill_1";
-            fallback.value = 1;
-            s_Data.currencies.Insert(fallback);
+            s_CurrencyCatalogValid = false;
+            LFPG_Util.Error("[LFPG_BTCConfig] Currency catalog missing; cash operations fail closed");
         }
 
-        // Validate each currency entry
         int ci;
-        // B2 fix 2026-05-17: compact null entries before validation.
-        // Iterate in reverse so Remove() doesn't break indices.
         for (ci = s_Data.currencies.Count() - 1; ci >= 0; ci = ci - 1)
         {
             if (!s_Data.currencies[ci])
@@ -303,31 +289,176 @@ class LFPG_BTCConfig
             }
         }
 
+        if (s_Data.currencies.Count() == 0)
+        {
+            s_CurrencyCatalogValid = false;
+            LFPG_Util.Error("[LFPG_BTCConfig] Currency catalog empty after null removal; cash operations fail closed");
+        }
+        if (s_Data.currencies.Count() > 16)
+        {
+            s_CurrencyCatalogValid = false;
+            LFPG_Util.Error("[LFPG_BTCConfig] Currency catalog exceeds 16 entries; cash operations fail closed");
+        }
+
+        string btcCls = s_Data.btcItemClassname;
+        string btcKey = btcCls + "";
+        btcKey.ToLower();
+        array<string> seenClassnames = new array<string>;
+        string classnameKey = "";
         for (ci = 0; ci < s_Data.currencies.Count(); ci = ci + 1)
         {
-            ref LFPG_BTCCurrency cur = s_Data.currencies[ci];
+            LFPG_BTCCurrency cur = s_Data.currencies[ci];
             if (!cur)
+            {
+                s_CurrencyCatalogValid = false;
                 continue;
+            }
+
+            classnameKey = cur.classname + "";
+            classnameKey.ToLower();
 
             if (cur.classname == "")
             {
-                string warnCls = "[LFPG_BTCConfig] Currency entry ";
-                warnCls = warnCls + ci.ToString();
-                warnCls = warnCls + " has empty classname";
-                LFPG_Util.Warn(warnCls);
+                s_CurrencyCatalogValid = false;
+                LFPG_Util.Error("[LFPG_BTCConfig] Currency entry " + ci.ToString() + " has empty classname");
+            }
+            else if (seenClassnames.Find(classnameKey) >= 0)
+            {
+                s_CurrencyCatalogValid = false;
+                LFPG_Util.Error("[LFPG_BTCConfig] Duplicate currency classname: " + cur.classname);
+            }
+            else
+            {
+                seenClassnames.Insert(classnameKey);
             }
 
-            if (cur.value < 1)
+            if (btcKey != "" && classnameKey == btcKey)
             {
+                s_CurrencyCatalogValid = false;
+                LFPG_Util.Error("[LFPG_BTCConfig] Currency classname overlaps btcItemClassname: " + cur.classname);
+            }
+
+            if (cur.classname != "" && !ConfigClassExists(cur.classname))
+            {
+                s_CurrencyCatalogValid = false;
+                LFPG_Util.Error("[LFPG_BTCConfig] Currency classname is not a CfgVehicles/CfgMagazines/CfgWeapons class: " + cur.classname);
+            }
+
+            if (cur.value < 1 || cur.value > 10000000)
+            {
+                s_CurrencyCatalogValid = false;
                 string warnVal = "[LFPG_BTCConfig] Currency entry ";
                 warnVal = warnVal + ci.ToString();
                 warnVal = warnVal + " has invalid value (";
                 warnVal = warnVal + cur.value.ToString();
-                warnVal = warnVal + "), clamping to 1";
-                LFPG_Util.Warn(warnVal);
-                cur.value = 1;
+                warnVal = warnVal + "); cash operations fail closed";
+                LFPG_Util.Error(warnVal);
             }
         }
+
+        if (!s_CurrencyCatalogValid)
+        {
+            LogCatalogHelp();
+        }
+    }
+
+    // ---- Verbose operator-facing help when the catalog is refused ----
+    //
+    // Printed once per boot, right after the per-entry reasons above, because
+    // the admin who has to fix this is reading a log file and not this source.
+    // One Error() call per line on purpose: level 0 is always written, and
+    // building the block without escape sequences keeps it away from the
+    // "CParser: quoted string not closed" trap.
+    protected static void LogCatalogHelp()
+    {
+        int total = 0;
+        if (s_Data && s_Data.currencies)
+        {
+            total = s_Data.currencies.Count();
+        }
+
+        LFPG_Util.Error("[LFPG_BTCConfig] ============================================================");
+        LFPG_Util.Error("[LFPG_BTCConfig] CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED");
+        LFPG_Util.Error("[LFPG_BTCConfig] ============================================================");
+
+        if (total == 0)
+        {
+            LFPG_Util.Error("[LFPG_BTCConfig] The catalog is EMPTY. This mod ships no default denominations,");
+            LFPG_Util.Error("[LFPG_BTCConfig] because it cannot know which money items your server uses.");
+            LFPG_Util.Error("[LFPG_BTCConfig] You are seeing this for one of three reasons:");
+            LFPG_Util.Error("[LFPG_BTCConfig]   a) first run - the file was just created for you, fill it in;");
+            LFPG_Util.Error("[LFPG_BTCConfig]   b) the file failed to parse, so defaults were used (see the");
+            LFPG_Util.Error("[LFPG_BTCConfig]      load error logged above this block);");
+            LFPG_Util.Error("[LFPG_BTCConfig]   c) currencies was left as an empty list on purpose.");
+        }
+        else
+        {
+            string cntMsg = "[LFPG_BTCConfig] The catalog has ";
+            cntMsg = cntMsg + total.ToString();
+            cntMsg = cntMsg + " entries and at least one of them was rejected.";
+            LFPG_Util.Error(cntMsg);
+            LFPG_Util.Error("[LFPG_BTCConfig] The reason for each one is logged immediately above this block.");
+            LFPG_Util.Error("[LFPG_BTCConfig] One bad entry refuses the WHOLE catalog - money is not partially trusted.");
+        }
+
+        LFPG_Util.Error("[LFPG_BTCConfig] ");
+        LFPG_Util.Error("[LFPG_BTCConfig] WHAT IS DISABLED: deposit, withdraw, selling for cash, and the ATM");
+        LFPG_Util.Error("[LFPG_BTCConfig] balance read. They refuse cleanly rather than move the wrong amount.");
+        LFPG_Util.Error("[LFPG_BTCConfig] Everything else in LF_PowerGrid keeps working normally.");
+        LFPG_Util.Error("[LFPG_BTCConfig] ");
+
+        string fileMsg = "[LFPG_BTCConfig] FILE TO EDIT: ";
+        fileMsg = fileMsg + LFPG_BTC_SETTINGS_FILE;
+        LFPG_Util.Error(fileMsg);
+        LFPG_Util.Error("[LFPG_BTCConfig] THIS IS NOT RE-READ WHILE RUNNING. Edit it, then RESTART the server.");
+        LFPG_Util.Error("[LFPG_BTCConfig] ");
+        LFPG_Util.Error("[LFPG_BTCConfig] EXPECTED SHAPE (classname = a real item, value = what it is worth):");
+        LFPG_Util.Error("[LFPG_BTCConfig]     currencies: [");
+        LFPG_Util.Error("[LFPG_BTCConfig]         { classname: SomeBanknote_100, value: 100 },");
+        LFPG_Util.Error("[LFPG_BTCConfig]         { classname: SomeBanknote_10,  value: 10 }");
+        LFPG_Util.Error("[LFPG_BTCConfig]     ]");
+        LFPG_Util.Error("[LFPG_BTCConfig] ");
+        LFPG_Util.Error("[LFPG_BTCConfig] EVERY ENTRY MUST SATISFY ALL OF:");
+        LFPG_Util.Error("[LFPG_BTCConfig]   1. classname is not empty");
+        LFPG_Util.Error("[LFPG_BTCConfig]   2. classname exists in CfgVehicles, CfgMagazines or CfgWeapons");
+        LFPG_Util.Error("[LFPG_BTCConfig]      -> it must come from vanilla or from a mod this server LOADS");
+        LFPG_Util.Error("[LFPG_BTCConfig]   3. classname is not repeated (upper/lower case does not make it different)");
+
+        string btcMsg = "[LFPG_BTCConfig]   4. classname is not the BTC item itself, currently: ";
+        btcMsg = btcMsg + s_Data.btcItemClassname;
+        LFPG_Util.Error(btcMsg);
+
+        LFPG_Util.Error("[LFPG_BTCConfig]   5. value is a whole number between 1 and 10000000");
+        LFPG_Util.Error("[LFPG_BTCConfig]   6. the list holds at least 1 and at most 16 entries");
+        LFPG_Util.Error("[LFPG_BTCConfig] ============================================================");
+    }
+
+    protected static bool ConfigClassExists(string classname)
+    {
+        if (classname == "")
+            return false;
+        if (!GetGame())
+            return false;
+
+        string vehiclesPath = "CfgVehicles ";
+        vehiclesPath = vehiclesPath + classname;
+        vehiclesPath = vehiclesPath + " ";
+        if (GetGame().ConfigIsExisting(vehiclesPath))
+            return true;
+
+        string magPath = "CfgMagazines ";
+        magPath = magPath + classname;
+        magPath = magPath + " ";
+        if (GetGame().ConfigIsExisting(magPath))
+            return true;
+
+        string weapPath = "CfgWeapons ";
+        weapPath = weapPath + classname;
+        weapPath = weapPath + " ";
+        if (GetGame().ConfigIsExisting(weapPath))
+            return true;
+
+        return false;
     }
 
     // ---- Sort currencies descending by value (bubble sort) ----
@@ -351,8 +482,8 @@ class LFPG_BTCConfig
             for (i = 0; i < count - 1; i = i + 1)
             {
                 j = i + 1;
-                ref LFPG_BTCCurrency a = s_Data.currencies[i];
-                ref LFPG_BTCCurrency b = s_Data.currencies[j];
+                LFPG_BTCCurrency a = s_Data.currencies[i];
+                LFPG_BTCCurrency b = s_Data.currencies[j];
                 if (a && b && a.value < b.value)
                 {
                     // Swap
@@ -367,7 +498,7 @@ class LFPG_BTCConfig
         string sortMsg = "[LFPG_BTCConfig] Currencies sorted (desc): ";
         for (i = 0; i < count; i = i + 1)
         {
-            ref LFPG_BTCCurrency entry = s_Data.currencies[i];
+            LFPG_BTCCurrency entry = s_Data.currencies[i];
             if (!entry)
                 continue;
             if (i > 0)
@@ -410,6 +541,8 @@ class LFPG_BTCConfig
         }
         msg = msg + " currencies=";
         msg = msg + curCount.ToString();
+        msg = msg + " catalogValid=";
+        msg = msg + s_CurrencyCatalogValid.ToString();
 
         LFPG_Util.Info(msg);
     }
@@ -420,6 +553,12 @@ class LFPG_BTCConfig
     {
         LFPG_BTCSettingsData d = Get();
         return d.enabled;
+    }
+
+    static bool IsCurrencyCatalogValid()
+    {
+        Get();
+        return s_CurrencyCatalogValid;
     }
 
     static float GetRefreshMs()

@@ -10,6 +10,9 @@
 //   - Device must be completely empty:
 //     * No attachments (upgrade materials, radio, batteries, etc.)
 //     * No cargo items (Fridge contents, etc.)
+//     * LFPG_BlocksDismantle() == false — script-side value the kit cannot
+//       carry (an ATM's BTC stock). Added 2026-09-07: without it, any player
+//       with a screwdriver destroyed a stocked ATM's balance in 5 s.
 //
 // On completion (server):
 //   1. Re-validate all conditions (anti-exploit)
@@ -105,6 +108,13 @@ class LFPG_ActionDismantleDevice : ActionContinuousBase
             if (cargoCount > 0)
                 return null;
         }
+
+        // Device must not be holding value the kit cannot carry.
+        // Attachments and cargo are engine-side inventory; this covers the
+        // script-side equivalent (e.g. an ATM's BTC stock), which the
+        // ObjectDelete below would destroy with no refund and no warning.
+        if (device.LFPG_BlocksDismantle())
+            return null;
 
         // Manual proximity check (belt-and-suspenders with CCTCursor)
         float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), device.GetPosition());

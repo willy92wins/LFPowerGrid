@@ -34,6 +34,15 @@ class LFPG_Sorter_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 class LFPG_Sorter : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterSorter(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected int  m_LinkedContainerLow  = 0;
     protected int  m_LinkedContainerHigh = 0;
@@ -45,7 +54,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     protected ref LFPG_SortConfig m_FilterConfig;
 
     // ---- Container uniqueness (static, server-side) ----
-    protected static ref map<string, EntityAI> s_ContainerMap;
+    protected static ref TStringManagedMap s_ContainerMap;
 
     // ============================================
     // Constructor — ports + SyncVars
@@ -89,7 +98,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 
         if (!s_ContainerMap)
         {
-            s_ContainerMap = new map<string, EntityAI>;
+            s_ContainerMap = new TStringManagedMap;
         }
     }
 
@@ -167,11 +176,14 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         m_PoweredNet = powered;
         SetSynchDirty();
 
-        string msg = "[LFPG_Sorter] SetPowered(";
-        msg = msg + powered.ToString();
-        msg = msg + ") id=";
-        msg = msg + m_DeviceId;
-        LFPG_Util.Debug(msg);
+        if (LFPG_LOG_LEVEL >= 2)
+        {
+            string msg = "[LFPG_Sorter] SetPowered(";
+            msg = msg + powered.ToString();
+            msg = msg + ") id=";
+            msg = msg + m_DeviceId;
+            LFPG_Util.Debug(msg);
+        }
         #endif
     }
 
@@ -279,7 +291,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterSorter(this);
         UnregisterContainer();
         #endif
@@ -406,7 +418,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 
             if (s_ContainerMap.Contains(candKey))
             {
-                EntityAI claimant = s_ContainerMap.Get(candKey);
+                EntityAI claimant = EntityAI.Cast(s_ContainerMap.Get(candKey));
                 bool claimantValid = false;
                 if (claimant)
                 {
@@ -512,7 +524,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 
             if (s_ContainerMap.Contains(candKey))
             {
-                EntityAI claimant = s_ContainerMap.Get(candKey);
+                EntityAI claimant = EntityAI.Cast(s_ContainerMap.Get(candKey));
                 // F1-B: Defensive validation — claimant may be stale
                 // if its destructor/OnKilled failed to UnregisterContainer.
                 bool claimantValid = false;
@@ -588,7 +600,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         key = key + m_LinkedContainerHigh.ToString();
         if (s_ContainerMap && s_ContainerMap.Contains(key))
         {
-            EntityAI owner = s_ContainerMap.Get(key);
+            EntityAI owner = EntityAI.Cast(s_ContainerMap.Get(key));
             if (owner == this)
             {
                 s_ContainerMap.Remove(key);

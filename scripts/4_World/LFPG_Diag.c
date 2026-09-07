@@ -13,13 +13,18 @@
 class LFPG_Diag
 {
     // Throttle: avoid spamming RPC
+    #ifndef SERVER
     protected static int s_EchoCount = 0;
+    #endif
+    #ifndef SERVER
     protected static float s_LastEchoTime = 0;
+    #endif
 
     // Send a diagnostic string from client to server via RPC.
     // On server, just prints directly.
     static void ServerEcho(string msg)
     {
+        #ifndef SERVER
         if (!LFPG_DIAG_ENABLED)
             return;
 
@@ -57,6 +62,7 @@ class LFPG_Diag
         rpc.Write((int)LFPG_RPC_SubId.DIAG_CLIENT_LOG);
         rpc.Write(msg);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        #endif
     }
 
     // v0.7.26 (Audit 4): Full graph diagnostic dump.

@@ -38,6 +38,19 @@ class LFPG_Util
             Warn(msg);
     }
 
+    // Log-safe rendering of a player id. Vanilla marks the plaintext id as
+    // unusable in logs (3_game/gameplay.c:369-370), but the balances ledger
+    // keys on it durably, so the stored value cannot change without a data
+    // migration; only its printed form is masked here. The last 4 characters
+    // survive so an admin can still correlate lines with a player list.
+    static string LogUid(string uid)
+    {
+        int uidLen = uid.Length();
+        if (uidLen <= 4)
+            return "***";
+        return "***" + uid.Substring(uidLen - 4, 4);
+    }
+
     // Persistent device id helpers
     static void GenerateDeviceId(out int low, out int high)
     {

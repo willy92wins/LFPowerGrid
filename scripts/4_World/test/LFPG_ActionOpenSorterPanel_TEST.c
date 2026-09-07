@@ -7,7 +7,6 @@
 // Conditions:
 //   - No item in hand (CCINone)
 //   - Target is LFPG_Sorter_TEST
-//   - Target is powered
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
 //
@@ -56,9 +55,6 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         if (!sorter)
             return false;
 
-        // Must be powered
-        if (!sorter.LFPG_IsPowered())
-            return false;
 
         // Must not be ruined
         if (sorter.IsRuined())
@@ -68,17 +64,17 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
 #ifndef SERVER
         if (LFPG_SorterView_TEST.IsOpen())
             return false;
+        if (LFPG_SorterView.IsOpen())
+            return false;
 #endif
 
-        // v2.4 Bug B: Only show if container is linked
-        if (!sorter.LFPG_IsLinked())
-            return false;
 
         return true;
     }
 
     // RPC in OnExecuteClient (after animation completes, same pattern
     // as LFPG_ActionWatchMonitor v0.9.6 crash fix).
+    #ifndef SERVER
     override void OnExecuteClient(ActionData action_data)
     {
         super.OnExecuteClient(action_data);
@@ -105,6 +101,7 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         rpc.Write(netHigh);
         rpc.Send(action_data.m_Player, LFPG_RPC_CHANNEL, true, null);
     }
+    #endif
 
     override void OnExecuteServer(ActionData action_data) {}
 };

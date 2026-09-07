@@ -33,6 +33,15 @@ class LFPG_SolarPanel_Kit : LFPG_KitBaseDeployable
 // ---------------------------------------------------------
 class LFPG_SolarPanel : LFPG_WireOwnerBase
 {
+    // F6 B1: idempotent re-registration point for the OnInit sweep
+    // (devices restored during super.OnInit() registered against the
+    // inert fallback). RegisterX dedups; this replicates only the
+    // registration condition, never init side effects.
+    override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
+    {
+        if (nm) nm.RegisterSolar(this);
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool  m_SourceOn   = false;
     protected float m_LoadRatio  = 0.0;
@@ -158,7 +167,7 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
     override void LFPG_OnDeleted()
     {
         #ifdef SERVER
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        LFPG_NetworkManager nm = LFPG_NetworkManager.GetExisting();
         if (nm) nm.UnregisterSolar(this);
         #endif
     }
