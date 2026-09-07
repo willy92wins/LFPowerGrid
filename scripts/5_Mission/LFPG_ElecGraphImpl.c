@@ -606,6 +606,16 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         // ==========================================
         // PASO 4: Insert edge (original logic preserved)
         // ==========================================
+        // N-01: refuse per-node edge caps BEFORE EnsureNode. Creating a
+        // missing endpoint and then failing left an orphan; deferred
+        // cleanup only annotates endpoints of removed edges.
+        if (EdgeCapacityReached(sourceId, targetId))
+        {
+            string capEdgeMsg = "[ElecGraph] OnWireAdded REJECTED: per-node edge cap " + sourceId + " -> " + targetId;
+            LFPG_Util.Warn(capEdgeMsg);
+            return false;
+        }
+
         EntityAI srcObj = LFPG_DeviceRegistry.Get().FindById(sourceId);
         EntityAI tgtObj = LFPG_DeviceRegistry.Get().FindById(targetId);
 
@@ -1308,6 +1318,28 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
+    protected bool EdgeCapacityReached(string sourceId, string targetId)
+    {
+        #ifdef SERVER
+        ref array<ref LFPG_ElecEdge> existOut;
+        if (m_Outgoing.Find(sourceId, existOut) && existOut)
+        {
+            if (existOut.Count() >= LFPG_MAX_EDGES_PER_NODE)
+                return true;
+        }
+
+        ref array<ref LFPG_ElecEdge> existIn;
+        if (m_Incoming.Find(targetId, existIn) && existIn)
+        {
+            if (existIn.Count() >= LFPG_MAX_EDGES_PER_NODE)
+                return true;
+        }
+        return false;
+        #else
+        return false;
+        #endif
+    }
+
     protected bool AddEdgeInternal(string sourceId, string targetId, string srcPort, string tgtPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
@@ -1335,6 +1367,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             {
                 string wTgtReg = "[ElecGraph] AddEdge rejected: target " + targetId + " not in registry";
                 LFPG_Util.Warn(wTgtReg);
+                DiscardUnusedNodes(sourceId, "");
                 return false;
             }
             EnsureNode(targetId, tgtObj);
@@ -1347,6 +1380,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             {
                 string wOutLim = "[ElecGraph] AddEdge rejected: source limit " + sourceId + " (out=" + existOut.Count().ToString() + ")";
                 LFPG_Util.Warn(wOutLim);
+                DiscardUnusedNodes(sourceId, targetId);
                 return false;
             }
         }
@@ -1358,6 +1392,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             {
                 string wInLim = "[ElecGraph] AddEdge rejected: target limit " + targetId + " (in=" + existIn.Count().ToString() + ")";
                 LFPG_Util.Warn(wInLim);
+                DiscardUnusedNodes(sourceId, targetId);
                 return false;
             }
         }
@@ -1374,6 +1409,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 if (!dupE) continue;
                 if (dupE.m_TargetNodeId == targetId && dupE.m_SourcePort == srcPort && dupE.m_TargetPort == tgtPort)
                 {
+                    DiscardUnusedNodes(sourceId, targetId);
                     return false;
                 }
             }
@@ -1487,6 +1523,27 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return false;
         #else
         return false;
+        #endif
+    }
+
+    // A rejected AddEdgeInternal can EnsureNode first. Queue those ids so
+    // EndGraphMutation (or an immediate cleanup) drops nodes that still
+    // have zero edges. Nodes that already had other edges are skipped.
+    protected void DiscardUnusedNodes(string sourceId, string targetId)
+    {
+        #ifdef SERVER
+        if (m_MutationActive)
+        {
+            if (sourceId != "")
+                m_DeferredOrphanCleanup.Insert(sourceId);
+            if (targetId != "")
+                m_DeferredOrphanCleanup.Insert(targetId);
+        }
+        else
+        {
+            CleanupOrphanNode(sourceId);
+            CleanupOrphanNode(targetId);
+        }
         #endif
     }
 
