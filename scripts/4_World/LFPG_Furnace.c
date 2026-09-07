@@ -97,6 +97,12 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         RegisterNetSyncVariableInt(varFuel);
     }
 
+    // The kit carries no stored fuel; empty the device before dismantling.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_FuelCurrent > 0;
+    }
+
     // ============================================
     // SetActions
     // ============================================

@@ -1504,14 +1504,14 @@ class LFPG_BTCHelper
         }
 
         // A sale whose destruction already ran in this boot must never be
-        // destroyed again. Reaching here with the flag set means the marker
-        // could be neither cleared nor rebased after that destruction, so the
-        // balance still reads as "credited but not destroyed" and is no longer
-        // evidence of anything. Fail closed: leave the items and the marker,
-        // and tell the admin which file to remove.
+        // destroyed again. The marker may remain after a partial destruction
+        // or after clearing and rebasing both failed. The credited balance is
+        // no longer evidence of how many items remain to destroy.
+        // Fail closed: leave the items and the marker,
+        // and tell the admin which file to inspect.
         if (LFPG_SellDestroyedThisBoot(uid))
         {
-            LFPG_Util.Error("[BTCSell] sell-intent marker survived a sale already destroyed this boot; NOT destroying again. Admin: delete the sibling .sell file uid=" + LFPG_Util.LogUid(uid));
+            LFPG_Util.Error("[BTCSell] sell-intent marker survived a destruction attempt this boot; NOT destroying again. Admin: inspect ledger/items vs sibling .sell file before restarting uid=" + LFPG_Util.LogUid(uid));
             return;
         }
 
@@ -1528,7 +1528,10 @@ class LFPG_BTCHelper
             shortMsg = shortMsg + btcAmount.ToString();
             shortMsg = shortMsg + " BTC uid=";
             shortMsg = shortMsg + LFPG_Util.LogUid(uid);
+            shortMsg = shortMsg + "; sibling .sell file retained. Admin: reconcile the partial destruction before restarting";
             LFPG_Util.Error(shortMsg);
+            // The boot flag was set before destruction; do not retry or disarm.
+            return;
         }
         ClearSellDestroyIntentAfterDestroy(uid, current, creditAmount, btcAmount, classname);
     }
@@ -2407,82 +2410,6 @@ class LFPG_BTCHelper
         logD = logD + destroyed.ToString();
         logD = logD + " BTC into pool";
         LFPG_Util.Info(logD);
-    }
-
-    static int DestroyPlayerCash(PlayerBase player, int eurAmount)
-    {
-        if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
-            return 0;
-        int remaining = eurAmount;
-        auto currencies = LFPG_BTCConfig.GetCurrencies();
-        int cCount = currencies.Count();
-        int ci;
-        for (ci = 0; ci < cCount; ci = ci + 1)
-        {
-            LFPG_BTCCurrency cur = currencies[ci];
-            if (!cur)
-                continue;
-            string cls = cur.classname;
-            int denomination = cur.value;
-
-            int playerHas = CountPlayerItems(player, cls);
-            if (playerHas <= 0)
-                continue;
-
-            int needed = remaining / denomination;
-            if (needed <= 0)
-            {
-                // Check if one bill of this denomination covers what's left
-                if (denomination >= remaining)
-                {
-                    needed = 1;
-                }
-                else
-                    continue;
-            }
-
-            if (needed > playerHas)
-            {
-                needed = playerHas;
-            }
-
-            int destroyed = DestroyPlayerItems(player, cls, needed);
-            int valueDestroyed = destroyed * denomination;
-            remaining = remaining - valueDestroyed;
-
-            if (remaining <= 0)
-            {
-                break;
-            }
-        }
-
-        // Ceiling pass: greedy alone cannot cover prices that don't divide
-        // evenly into the denominations the player carries (e.g. price 67931
-        // with only $100 bills leaves remaining=31 after destroying 679 bills).
-        // Find the smallest denomination on hand that covers the residue and
-        // destroy one extra bill. Callers refund the excess via GreedyChange.
-        if (remaining > 0)
-        {
-            int sj = cCount - 1;
-            while (sj >= 0)
-            {
-                LFPG_BTCCurrency curS = currencies[sj];
-                if (curS && curS.value >= remaining)
-                {
-                    int hasS = CountPlayerItems(player, curS.classname);
-                    if (hasS > 0)
-                    {
-                        int destS = DestroyPlayerItems(player, curS.classname, 1);
-                        remaining = remaining - (destS * curS.value);
-                        break;
-                    }
-                }
-                sj = sj - 1;
-            }
-        }
-
-        int totalDestroyed = eurAmount - remaining;
-        return totalDestroyed;
     }
 
     static void HandleBTCWithdrawCash(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)

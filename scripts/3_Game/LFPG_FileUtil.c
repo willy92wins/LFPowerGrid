@@ -615,6 +615,14 @@ class LFPG_FileUtil
         CloseFile(handle);
         if (!readOk)
             return false;
+
+        // Trim line endings and edge whitespace without changing field interiors.
+        lineUid = lineUid.Trim();
+        lineBalance = lineBalance.Trim();
+        lineCredit = lineCredit.Trim();
+        lineBtc = lineBtc.Trim();
+        lineClass = lineClass.Trim();
+
         if (lineUid != uid || lineClass == "")
             return false;
         if (!ParseNonNegativeIntText(lineBalance, balanceBefore))

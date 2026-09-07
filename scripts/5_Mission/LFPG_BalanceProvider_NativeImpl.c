@@ -1984,7 +1984,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
         }
 
-        ref LFPG_BalanceData data = new LFPG_BalanceData();
+        LFPG_BalanceData data = new LFPG_BalanceData();
         string err;
         bool ok = JsonFileLoader<LFPG_BalanceData>.LoadFile(filePath, data, err);
         if (!ok)
@@ -2105,7 +2105,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             MakeDirectory(settingsDir);
         }
 
-        ref LFPG_BalanceData data = new LFPG_BalanceData();
+        LFPG_BalanceData data = new LFPG_BalanceData();
         data.ver = 2;
 
         // Rebuild entries array from map

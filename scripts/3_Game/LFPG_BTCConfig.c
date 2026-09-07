@@ -482,8 +482,8 @@ class LFPG_BTCConfig
             for (i = 0; i < count - 1; i = i + 1)
             {
                 j = i + 1;
-                ref LFPG_BTCCurrency a = s_Data.currencies[i];
-                ref LFPG_BTCCurrency b = s_Data.currencies[j];
+                LFPG_BTCCurrency a = s_Data.currencies[i];
+                LFPG_BTCCurrency b = s_Data.currencies[j];
                 if (a && b && a.value < b.value)
                 {
                     // Swap
@@ -498,7 +498,7 @@ class LFPG_BTCConfig
         string sortMsg = "[LFPG_BTCConfig] Currencies sorted (desc): ";
         for (i = 0; i < count; i = i + 1)
         {
-            ref LFPG_BTCCurrency entry = s_Data.currencies[i];
+            LFPG_BTCCurrency entry = s_Data.currencies[i];
             if (!entry)
                 continue;
             if (i > 0)

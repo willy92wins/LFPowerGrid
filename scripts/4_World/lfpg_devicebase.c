@@ -607,11 +607,10 @@ class LFPG_DeviceBase : Inventory_Base
     // plain deployable: whatever the device kept in script fields dies
     // with the ObjectDelete in LFPG_ActionDismantleDevice, silently.
     //
-    // Default: nothing blocks, so devices that only hold wires and
-    // attachments keep behaving as before. Override on any device that
-    // stores something a player would notice missing.
-    // Fail-closed on purpose: a device that cannot answer must not be
-    // dismantled with value inside.
+    // Default: open on purpose, so devices that only hold wires and
+    // attachments keep behaving as before. Devices that store value in
+    // script fields must override this guard to block dismantling while
+    // that value remains inside.
     // ============================================
     bool LFPG_BlocksDismantle()
     {

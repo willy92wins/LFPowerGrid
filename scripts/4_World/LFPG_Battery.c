@@ -118,6 +118,12 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 
+    // The kit carries no stored energy; empty the device before dismantling.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_StoredEnergyX10 > 0;
+    }
+
     // ============================================
     // SetActions — DeviceBase removes TakeItem/TakeItemToHands
     // ============================================
