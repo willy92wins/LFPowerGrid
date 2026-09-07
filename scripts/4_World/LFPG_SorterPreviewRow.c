@@ -87,27 +87,27 @@ class LFPG_SorterPreviewRow extends ScriptView
         }
         if (CatBadge)
         {
-            CatBadge.SetColor(LFPG_SorterView.COL_GREEN_BORDER);
+            CatBadge.SetColor(LFPG_UIPalette.COL_GREEN_BORDER);
         }
         if (SlotBadgeBg)
         {
-            SlotBadgeBg.SetColor(LFPG_SorterView.COL_BTN);
+            SlotBadgeBg.SetColor(LFPG_UIPalette.COL_BTN);
         }
         if (RowSep)
         {
-            RowSep.SetColor(LFPG_SorterView.COL_SEPARATOR);
+            RowSep.SetColor(LFPG_UIPalette.COL_SEPARATOR);
         }
         if (CatIcon)
         {
-            CatIcon.SetColor(LFPG_SorterView.COL_GREEN);
+            CatIcon.SetColor(LFPG_UIPalette.COL_GREEN);
         }
         if (ItemName)
         {
-            ItemName.SetColor(LFPG_SorterView.COL_TEXT);
+            ItemName.SetColor(LFPG_UIPalette.COL_TEXT);
         }
         if (SlotText)
         {
-            SlotText.SetColor(LFPG_SorterView.COL_TEXT_MID);
+            SlotText.SetColor(LFPG_UIPalette.COL_TEXT_MID);
         }
 
         // v2.6: Scale only on first use (pool-safe for future reuse).

@@ -57,7 +57,7 @@ class LFPG_BTCAtmController extends ViewController
     protected float m_StatusTimer;
 
     // ── Palette (dedup F2-B) ──
-    // Shared colors: use LFPG_SorterView.COL_*
+    // Shared colors: use LFPG_UIPalette.COL_*
     // ATM-specific only:
     static const int COL_STATUS_OK  = 0x1734D399;
     static const int COL_STATUS_ERR = 0x17F87171;
@@ -183,11 +183,11 @@ class LFPG_BTCAtmController extends ViewController
 
                 if (isNeg)
                 {
-                    m_PriceChangeText.SetColor(LFPG_SorterView.COL_RED);
+                    m_PriceChangeText.SetColor(LFPG_UIPalette.COL_RED);
                 }
                 else
                 {
-                    m_PriceChangeText.SetColor(LFPG_SorterView.COL_GREEN);
+                    m_PriceChangeText.SetColor(LFPG_UIPalette.COL_GREEN);
                 }
             }
         }
@@ -415,13 +415,13 @@ class LFPG_BTCAtmController extends ViewController
         {
             sellDimmed = true;
         }
-        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHint, sellDimmed, LFPG_SorterView.COL_RED_BTN);
+        DimButton(m_BtnSellBtcBg, m_BtnSellBtcText, m_BtnSellBtcHint, sellDimmed, LFPG_UIPalette.COL_RED_BTN);
 
         // Deposit EUR: dimmed if wo (always, regardless of tab)
-        DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, LFPG_SorterView.COL_BTN);
+        DimButton(m_BtnDepositEurBg, m_BtnDepositEurText, m_BtnDepositEurHint, wo, LFPG_UIPalette.COL_BTN);
 
         // Deposit BTC: dimmed if wo (always, regardless of tab)
-        DimButton(m_BtnDepositBtcBg, m_BtnDepositBtcText, m_BtnDepositBtcHint, wo, LFPG_SorterView.COL_BTN);
+        DimButton(m_BtnDepositBtcBg, m_BtnDepositBtcText, m_BtnDepositBtcHint, wo, LFPG_UIPalette.COL_BTN);
     }
 
     protected void DimButton(ImageWidget bg, TextWidget txt, TextWidget hint, bool dimmed, int normalBgColor)
@@ -433,8 +433,8 @@ class LFPG_BTCAtmController extends ViewController
             {
                 m_View.Tint(bg, COL_DIM_BG);
             }
-            if (txt) { txt.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
-            if (hint) { hint.SetColor(LFPG_SorterView.COL_TEXT_DIM); }
+            if (txt) { txt.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
+            if (hint) { hint.SetColor(LFPG_UIPalette.COL_TEXT_DIM); }
         }
         else
         {
@@ -442,8 +442,8 @@ class LFPG_BTCAtmController extends ViewController
             {
                 m_View.Tint(bg, normalBgColor);
             }
-            if (txt) { txt.SetColor(LFPG_SorterView.COL_TEXT); }
-            if (hint) { hint.SetColor(LFPG_SorterView.COL_TEXT_MID); }
+            if (txt) { txt.SetColor(LFPG_UIPalette.COL_TEXT); }
+            if (hint) { hint.SetColor(LFPG_UIPalette.COL_TEXT_MID); }
         }
     }
 
@@ -800,11 +800,11 @@ class LFPG_BTCAtmController extends ViewController
             m_StatusText.SetText(msg);
             if (isError)
             {
-                m_StatusText.SetColor(LFPG_SorterView.COL_RED);
+                m_StatusText.SetColor(LFPG_UIPalette.COL_RED);
             }
             else
             {
-                m_StatusText.SetColor(LFPG_SorterView.COL_GREEN);
+                m_StatusText.SetColor(LFPG_UIPalette.COL_GREEN);
             }
         }
 
