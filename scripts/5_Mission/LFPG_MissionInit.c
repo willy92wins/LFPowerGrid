@@ -41,6 +41,12 @@ modded class MissionServer
         LFPG_BalanceProvider_NativeImpl.SweepOrphanClaims();
     }
 
+    override void InvokeOnConnect(PlayerBase player, PlayerIdentity identity)
+    {
+        super.InvokeOnConnect(player, identity);
+        LFPG_BTCHelper.ReconcilePendingAccountSell(player);
+    }
+
     override void OnMissionStart()
     {
         super.OnMissionStart();

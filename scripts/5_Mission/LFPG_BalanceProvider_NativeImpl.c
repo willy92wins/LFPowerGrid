@@ -1234,12 +1234,19 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 LogAmbiguousChain(deviceId, stock, chain, "late refunded-stock revert failed");
                 return;
             }
+            // Compensation is RAM + SetSynchDirty. Hive durability is a later
+            // LFPG_OnStoreSaveExtra. Keep the tombstones, matching pending
+            // purchase reapply, until a future boot loads the compensated stock.
+            s_ReappliedThisBoot.Set(deviceId, true);
+            s_ReconciledDevices.Set(deviceId, true);
+            LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM matched refunded tombstone; stock compensation applied, tombstones kept until a future boot proves hive delivery deviceId=" + deviceId);
+            return;
         }
 
         if (PersistRemoveDeviceClaimPrefix(deviceId, count))
         {
             s_ReconciledDevices.Set(deviceId, true);
-            LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM matched refunded tombstone; stock compensation applied and tombstones cleared durably deviceId=" + deviceId);
+            LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM hive stock already matched refunded compensation; tombstones cleared durably deviceId=" + deviceId);
         }
     }
 
@@ -1381,12 +1388,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         int nextBoot = claim.bootsSinceRefund + 1;
         if (nextBoot >= 3)
         {
-            if (!PersistRemoveClaimAt(claimIndex))
-            {
-                LogClaimError("[LFPG_Balance_Native] Refunded tombstone prune failed deviceId=" + claim.deviceId, claim.uid, claim.deviceId);
-                return false;
-            }
-            return true;
+            // Boot count is not hive proof. An absent ATM never received
+            // ReconcileRefundedChain compensation, so this tombstone is still
+            // the only record that stock must be reverted on reappear.
+            // Compact only when a present load already matches restoredStock.
+            return false;
         }
 
         int previousBoot = claim.bootsSinceRefund;
