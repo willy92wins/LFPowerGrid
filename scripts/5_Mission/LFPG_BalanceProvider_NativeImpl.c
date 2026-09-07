@@ -1240,6 +1240,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_ReappliedThisBoot.Set(deviceId, true);
             s_ReconciledDevices.Set(deviceId, true);
             LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM matched refunded tombstone; stock compensation applied, tombstones kept until a future boot proves hive delivery deviceId=" + deviceId);
+            LFPG_FaultInject.ShouldCrash("E16_crash_after_apply");
             return;
         }
 
@@ -1740,6 +1741,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         if (toAdd > room)
         {
             toAdd = room;
+        }
+        if (LFPG_FaultInject.ShouldFail("AddBalance_partial"))
+        {
+            if (toAdd > 1)
+                toAdd = 1;
         }
         if (toAdd <= 0)
             return 0;
