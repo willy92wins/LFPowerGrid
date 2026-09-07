@@ -271,6 +271,7 @@ class LFPG_BTCHelper
         int btcOnInv = CountPlayerItems(player, btcCls);
 
         LFPG_BTCSessionRegistry.Get().CompleteRequest(sender, serverSessionLow, serverSessionHigh, sequence, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv);
+        LFPG_FaultInject.ObserveTx(txType, errCode, newStock, newBalance, btcMoved, cashOnInv, btcOnInv);
         SendBTCTxResultPayload(player, sender, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence);
     }
 
@@ -1396,12 +1397,18 @@ class LFPG_BTCHelper
 
     static void ClearSellDestroyIntentAfterDestroy(string uid, int currentBalance, int creditAmount, int btcAmount, string classname)
     {
-        if (LFPG_FileUtil.ClearSellDestroyIntent(uid))
+        bool cleared = false;
+        if (!LFPG_FaultInject.ShouldFail("E04_clear_after_destroy"))
+            cleared = LFPG_FileUtil.ClearSellDestroyIntent(uid);
+        if (cleared)
             return;
 
         bool rebased = false;
         if (currentBalance >= 0 && creditAmount > 0 && btcAmount > 0 && classname != "")
-            rebased = LFPG_FileUtil.WriteSellDestroyIntent(uid, currentBalance, creditAmount, btcAmount, classname);
+        {
+            if (!LFPG_FaultInject.ShouldFail("E04_rewrite_after_destroy"))
+                rebased = LFPG_FileUtil.WriteSellDestroyIntent(uid, currentBalance, creditAmount, btcAmount, classname);
+        }
         if (rebased)
         {
             LFPG_Util.Warn("[BTCSell] sell-intent marker could not be cleared after destroy; rebased balanceBefore to current uid=" + LFPG_Util.LogUid(uid));
@@ -1451,6 +1458,7 @@ class LFPG_BTCHelper
         int current = provider.GetBalance(player);
         if (current == balanceBefore)
         {
+            LFPG_FaultInject.ObserveReconcile(current, balanceBefore, creditAmount, 0, btcAmount);
             if (!LFPG_FileUtil.ClearSellDestroyIntent(uid))
                 LFPG_Util.Error("[BTCSell] aborted sell-intent marker could not be cleared. Admin: delete the sibling .sell file before restarting");
             else
@@ -1483,6 +1491,7 @@ class LFPG_BTCHelper
             shortMsg = shortMsg + LFPG_Util.LogUid(uid);
             LFPG_Util.Error(shortMsg);
         }
+        LFPG_FaultInject.ObserveReconcile(current, balanceBefore, creditAmount, destroyed, btcAmount);
         ClearSellDestroyIntentAfterDestroy(uid, current, creditAmount, btcAmount, classname);
     }
 
@@ -1868,6 +1877,8 @@ class LFPG_BTCHelper
                     return;
                 }
                 sellIntentWritten = true;
+                if (LFPG_FaultInject.ShouldCrash("E04_crash_after_marker_before_credit"))
+                    return;
                 accountAdded = atmEarlyS.AddBalance(player, expectedAccountPayout);
             }
             if (accountAdded != expectedAccountPayout)
@@ -1894,6 +1905,8 @@ class LFPG_BTCHelper
                 LFPG_Util.Error("[BTCSell] account credit differed from preflight before destruction; staged cash aborted and BTC left intact");
                 return;
             }
+            if (LFPG_FaultInject.ShouldCrash("E04_crash_after_credit"))
+                return;
         }
 
         int destroyed = DestroyPlayerItems(player, btcClassname, btcAmount);

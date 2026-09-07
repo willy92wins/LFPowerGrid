@@ -1,0 +1,564 @@
+{
+  "note": "Empty matrix. No PASA/FALLA. The driver fills a verdict only when pointed at a real server log.",
+  "err_codes": {
+    "OK": 0,
+    "INVALID": 9,
+    "NO_CASH": 10,
+    "AMOUNT_TOO_LARGE": 14
+  },
+  "tx_types": {
+    "BUY": 1,
+    "SELL": 2,
+    "WITHDRAW": 3,
+    "DEPOSIT": 4,
+    "WITHDRAW_CASH": 5,
+    "DEPOSIT_CASH": 6
+  },
+  "cases": [
+    {
+      "id": "E04_save_false_after_spill",
+      "ficha": "E04",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E04_save_false_after_spill",
+      "remaining": 1,
+      "point": "AtomicSaveBalances_false after spill staging and sell marker write",
+      "prep": "Native provider. Player with BTC to sell to account. If account room is below payout, stage spill cash first (expectedCashPayout>0). Catalog valid.",
+      "action": "HandleBTCSell toAccount=true with amount that reaches AddBalance after WriteSellDestroyIntent.",
+      "invariant": "BTC and spill EUR still with the player; err INVALID; zero credit; no durable .sell marker.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=AtomicSaveBalances_false",
+        "[BTCSell] account credit differed from preflight before destruction; staged cash aborted and BTC left intact",
+        "[LFPG_Balance_Native] Add rollback: balance snapshot was not durable"
+      ],
+      "forbid_contains": [
+        "[BTCSell] player sold "
+      ]
+    },
+    {
+      "id": "E04_crash_after_credit",
+      "ficha": "E04",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": true,
+      "restart": true,
+      "scenario": "E04_crash_after_credit",
+      "remaining": 1,
+      "point": "after AddBalance OK, before DestroyPlayerItems",
+      "prep": "Same as E04 save-false. Note pre-credit Native balance B, credit C, BTC count N. Arm crash JSON. After CRASH_NOW, SIGKILL if the process still lives. Disarm JSON before boot 2.",
+      "action": "Sell to account. Process dies. Reconnect the same player on boot 2.",
+      "invariant": "Boot 2: durable credit B+C intact; reconcile destroys N BTC. ObserveReconcile current=B+C destroyed=N.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=E04_crash_after_credit",
+        "LFPG_FAULTINJECT CRASH_NOW",
+        "LFPG_FAULTINJECT OBSERVE reconcile current="
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E04_crash_after_marker_before_credit",
+      "ficha": "E04",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": true,
+      "restart": true,
+      "scenario": "E04_crash_after_marker_before_credit",
+      "remaining": 1,
+      "point": "after WriteSellDestroyIntent, before AddBalance",
+      "prep": "Same as E04. Disarm JSON before boot 2.",
+      "action": "Sell to account. Die. Reconnect on boot 2.",
+      "invariant": "BTC intact. Marker cleared because current==balanceBefore. No credit.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=E04_crash_after_marker_before_credit",
+        "LFPG_FAULTINJECT CRASH_NOW",
+        "sell-intent marker had no durable credit; marker cleared and items left intact"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E04_delete_marker_fail",
+      "ficha": "E04",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "E04_delete_marker_fail",
+      "remaining": 1,
+      "point": "ClearSellDestroyIntentAfterDestroy skips DeleteFile; rewrite rebase is allowed",
+      "prep": "Completed account sell that destroys BTC. Arm this scenario. After the tx, restart and reconnect (JSON disarmed on boot 2).",
+      "action": "Sell to account to completion. Boot 2 reconnect.",
+      "invariant": "Third-pass rebase: marker rewritten with balanceBefore=post-credit. Boot 2 must NOT destroy BTC again (current==rebased before).",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=E04_clear_after_destroy",
+        "sell-intent marker could not be cleared after destroy; rebased balanceBefore to current"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E04_clear_and_rewrite_fail",
+      "ficha": "E04",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "E04_clear_and_rewrite_fail",
+      "remaining": 2,
+      "point": "AfterDestroy: skip Clear and skip Write rebase",
+      "prep": "Completed account sell. remaining=2 so both AfterDestroy hooks fire. Boot 2 reconnect with JSON disarmed.",
+      "action": "Sell to account to completion. Reconnect.",
+      "invariant": "Log asks admin to delete .sell. Boot 2 MAY re-destroy BTC if balance still equals before+credit — that is the residue the third pass could not close. Record it; do not call the ficha closed from this lane.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=E04_clear_after_destroy",
+        "LFPG_FAULTINJECT FIRE hook=E04_rewrite_after_destroy",
+        "sell-intent marker survived after destroy and could not be rebased"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "SEC09_savefile_abort_leave_tmp",
+      "ficha": "SEC09",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "SEC09_savefile_abort_leave_tmp",
+      "remaining": 1,
+      "point": "SaveFile succeeds, AtomicSaveBalances then returns false without marker and without DiscardAbortedTmp",
+      "prep": "Prefer first-save (no LF_Balances.json target) or delete the target before the tx so boot 2 sees tmp without target. Trigger any Native save (deposit/sell credit). Disarm JSON before boot 2.",
+      "action": "One save. Restart. Load Native.",
+      "invariant": "Boot 2 does not promote the leftover tmp (no .saving). Log: NOT promoting. No credited mutation from the aborted save.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=SaveFile_abort_leave_tmp",
+        "Orphan balances .tmp is not an in-flight replace. NOT promoting"
+      ],
+      "forbid_contains": [
+        "In-flight balances .tmp parses as LFPG_BalanceData, promoting"
+      ]
+    },
+    {
+      "id": "SEC09_crash_delete_copy_window",
+      "ficha": "SEC09",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": true,
+      "restart": true,
+      "scenario": "SEC09_crash_delete_copy_window",
+      "remaining": 1,
+      "point": "after DeleteFile(target), before CopyFile(tmp,target); .saving and bak exist",
+      "prep": "Target and bak must exist before the save (not first-save). SIGKILL after CRASH_NOW. Disarm JSON before boot 2.",
+      "action": "One Native save. Die inside the replace window. Boot 2.",
+      "invariant": "Boot 2 MAY promote tmp (in-flight + backup + no target). Log promoting. This is the one crash window recovery is allowed to commit.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=balances_after_delete_before_promote",
+        "LFPG_FAULTINJECT CRASH_NOW",
+        "In-flight balances .tmp parses as LFPG_BalanceData, promoting"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "SEC09_copyfile_promote_fail",
+      "ficha": "SEC09",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "SEC09_copyfile_promote_fail",
+      "remaining": 1,
+      "point": "CopyFile(tmp,target) skipped; marker cleared; target restored from bak",
+      "prep": "Existing balances target + bak. One save. Disarm JSON before boot 2.",
+      "action": "Native save that reaches promote. Restart.",
+      "invariant": "Reported abort. Boot 2 does not promote leftover tmp. Target is the restored snapshot.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=CopyFile_promote",
+        "[FileUtil] AtomicSaveBalances: promote tmp->target failed"
+      ],
+      "forbid_contains": [
+        "In-flight balances .tmp parses as LFPG_BalanceData, promoting"
+      ]
+    },
+    {
+      "id": "SEC09_residual_b",
+      "ficha": "SEC09",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "SEC09_residual_b",
+      "remaining": 8,
+      "point": "CopyFile promote + DeleteFile .saving + restore CopyFile + DiscardAbortedTmp all fail in one save",
+      "prep": "Existing target. remaining=8. Disarm JSON before boot 2. REVIEW-T1 MENOR: this is the residual (b) stack.",
+      "action": "One Native save. Restart.",
+      "invariant": "If .tmp parseable + .saving + bak survive with no target, boot 2 CAN promote an aborted mutation. Record the log. This is the residue T1 left open; do not green-wash it.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=CopyFile_promote",
+        "in-flight marker survived a reported abort"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E16_crash_after_apply",
+      "ficha": "E16",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": true,
+      "restart": true,
+      "scenario": "E16_crash_after_apply",
+      "remaining": 1,
+      "point": "ReconcileRefundedChain after LFPG_ApplyClaimedStockTarget, before return (tombstones kept)",
+      "prep": "ATM with REFUNDED tombstones whose restoredStock != loaded hive stock. SIGKILL. Disarm JSON. Boot 2 loads the ATM again.",
+      "action": "Boot 1 reconciles and dies after apply. Boot 2 loads the same ATM.",
+      "invariant": "Tombstones still in JSON (no PersistRemoveDeviceClaimPrefix on this path). Boot 2 must not double-compensate. Watch Late ATM matched refunded tombstone twice vs compact on stock match.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=E16_crash_after_apply",
+        "LFPG_FAULTINJECT CRASH_NOW",
+        "Late ATM matched refunded tombstone; stock compensation applied, tombstones kept"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E16_absent_atm_3boots",
+      "ficha": "E16",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "",
+      "remaining": 0,
+      "point": "none — operational. SweepOrphanClaims / AdvanceOrPruneRefundedClaimAt",
+      "prep": "ATM that was refunded, then packed/out of bubble so it is absent from LFPG_DeviceRegistry. Keep the tombstone JSON. Three clean boots of orphan sweep, then reappear the ATM with old hive stock.",
+      "action": "Boots N, N+1, N+2 absent. Boot N+3 reappear.",
+      "invariant": "After the second T1 pass, bootsSinceRefund+1>=3 must NOT PersistRemoveClaimAt. Tombstone remains. Reappear applies compensation once. Refund+stock must not both stay.",
+      "expect_contains": [
+        "[LFPG_Balance_Native] Orphan sweep pass executed"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E16_second_boot_compact",
+      "ficha": "E16",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": true,
+      "scenario": "",
+      "remaining": 0,
+      "point": "none — ReconcileRefundedChain compact when stock already matches",
+      "prep": "After a successful compensate-and-keep-tombstone boot, hive stock already equals restoredStock.",
+      "action": "Next boot with ATM present and pendingCount==0.",
+      "invariant": "Log: hive stock already matched refunded compensation; tombstones cleared durably.",
+      "expect_contains": [
+        "Late ATM hive stock already matched refunded compensation; tombstones cleared durably"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E02_no_cash_max_request",
+      "ficha": "E02",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "require_observe": true,
+      "restart": false,
+      "scenario": "E02_no_cash_max_request",
+      "remaining": 0,
+      "point": "none — input. Optional observe JSON remaining=0 for OBSERVE tx line",
+      "prep": "Player with zero catalog bills. Catalog valid. Request maxBtcPerMachine cash buy.",
+      "action": "HandleBTCBuy cash.",
+      "invariant": "Zero BTC entities created. err NO_CASH (10). ProbeAndCacheStack is NOT reached (returns before warmup).",
+      "expect_contains": [
+        "LFPG_FAULTINJECT OBSERVE tx=1 err=10"
+      ],
+      "forbid_contains": [
+        "[BTCBuy] cash: "
+      ]
+    },
+    {
+      "id": "E02_partial_funds",
+      "ficha": "E02",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "require_observe": true,
+      "restart": false,
+      "scenario": "E02_partial_funds",
+      "remaining": 0,
+      "point": "none — input",
+      "prep": "Player bills cover K < requested BTC at current price. Catalog valid.",
+      "action": "Cash buy requesting more than affordable.",
+      "invariant": "Partial delivery of affordable BTC. Bills consumed only for that. Log [BTCBuy] cash: K BTC.",
+      "expect_contains": [
+        "[BTCBuy] cash: "
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E02_abort_inventory_full",
+      "ficha": "E02",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "require_observe": true,
+      "restart": false,
+      "scenario": "E02_abort_inventory_full",
+      "remaining": 0,
+      "point": "none — input",
+      "prep": "Player can pay but inventory cannot accept BTC and/or change (fill cargo).",
+      "action": "Cash buy.",
+      "invariant": "AbortOutputs; no bill consumption. OBSERVE err INVENTORY_FULL (6) moved=0.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT OBSERVE tx=1 err=6"
+      ],
+      "forbid_contains": [
+        "[BTCBuy] cash: "
+      ]
+    },
+    {
+      "id": "E03_65_entities",
+      "ficha": "E03",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E03_65_entities",
+      "remaining": 0,
+      "point": "none — input. Currency value 1, stack 1, amount that needs 65 entities",
+      "prep": "Catalog: one denomination classname with value=1 and GetQuantityMax==1 (probe). Player can pay. Request cash buy/sell/withdraw whose Estimate*Entities is 65.",
+      "action": "The op that would spawn 65 entities.",
+      "invariant": "AMOUNT_TOO_LARGE (14), zero spawn except the controlled probe create+delete. Error entity budget exceeded / entity budget rejected.",
+      "expect_contains": [
+        "entity budget"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E03_64_entities",
+      "ficha": "E03",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "require_observe": true,
+      "restart": false,
+      "scenario": "E03_64_entities",
+      "remaining": 0,
+      "point": "none — input. Same config, 64 entities exactly",
+      "prep": "Same as E03_65 but amount that estimates 64.",
+      "action": "The op.",
+      "invariant": "Op is not rejected for budget. Cap is 64 (LFPG_BTC_MAX_ENTITIES_PER_TX).",
+      "expect_contains": [
+        "LFPG_FAULTINJECT OBSERVE"
+      ],
+      "forbid_contains": [
+        "entity budget exceeded before spawn",
+        "entity budget rejected"
+      ]
+    },
+    {
+      "id": "E03_btc_unstackable_withdraw",
+      "ficha": "E03",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E03_btc_unstackable_withdraw",
+      "remaining": 0,
+      "point": "none — input. BTC classname stack 1, withdraw 65",
+      "prep": "btcItemClassname with GetQuantityMax==1. ATM stock >=65. Withdraw 65.",
+      "action": "HandleBTCWithdraw 65.",
+      "invariant": "AMOUNT_TOO_LARGE before spawn. Log [BTCWithdraw] rejected: entity budget exceeded before spawn.",
+      "expect_contains": [
+        "[BTCWithdraw] rejected: entity budget exceeded before spawn"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_duplicates",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "LF_BTCAtm.json catalog, not a code hook. Load() once per boot.",
+      "prep": "Two currency entries with the same classname. Restart so Load() runs.",
+      "action": "Boot, then any cash op (buy/sell/withdraw/deposit cash).",
+      "invariant": "CURRENCY CATALOG REFUSED. Duplicate currency classname logged. Cash ops INVALID. No cash spawn/credit.",
+      "expect_contains": [
+        "Duplicate currency classname",
+        "CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_case_insensitive_dup",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "LF_BTCAtm.json — Paper_Bill_100 and PAPER_BILL_100 (second T1 pass ToLower)",
+      "prep": "Same classname twice with different case. Restart.",
+      "action": "Boot + cash op.",
+      "invariant": "Catalog refused (ToLower before Find). Same logs as duplicates.",
+      "expect_contains": [
+        "Duplicate currency classname",
+        "CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_btc_overlap",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "LF_BTCAtm.json currency classname == btcItemClassname",
+      "prep": "Set a currency.classname equal to btcItemClassname. Restart.",
+      "action": "Boot + cash op.",
+      "invariant": "Currency classname overlaps btcItemClassname. Catalog refused.",
+      "expect_contains": [
+        "Currency classname overlaps btcItemClassname",
+        "CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_empty_or_missing_class",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "LF_BTCAtm.json empty classname or class not in CfgVehicles/CfgMagazines/CfgWeapons",
+      "prep": "One entry classname empty, or a garbage classname. Restart.",
+      "action": "Boot + cash op.",
+      "invariant": "empty classname OR not a Cfg* class. Catalog refused.",
+      "expect_contains": [
+        "CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_null_or_empty_catalog",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "LF_BTCAtm.json currencies [null] or []",
+      "prep": "Nulls stripped; empty after that fails closed. Restart. A fresh install with empty defaults also hits this.",
+      "action": "Boot + cash op.",
+      "invariant": "Currency catalog empty after null removal. Cash ops disabled. Account buy/sell still allowed.",
+      "expect_contains": [
+        "CURRENCY CATALOG REFUSED - ALL CASH OPERATIONS ARE DISABLED"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E08_production_json_gate",
+      "ficha": "E08",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "",
+      "remaining": 0,
+      "point": "none — deploy gate from REVIEW-T1 GRAVE E08",
+      "prep": "Copy the LIVE server LF_BTCAtm.json onto a DIAG box with this code.",
+      "action": "Boot and read catalog logs.",
+      "invariant": "If the live JSON fails any of the seven rules, ALL cash ops die until an admin edits JSON and restarts. This case is the deploy gate, not a code defect.",
+      "expect_contains": [],
+      "forbid_contains": []
+    },
+    {
+      "id": "E05_bill100_deposit60",
+      "ficha": "E05",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E05_bill100_deposit60",
+      "remaining": 0,
+      "point": "none — input. SelectPreparedCashExact before first AddBalance",
+      "prep": "Player holds a single bill of 100. Deposit 60. Catalog valid. Native has room.",
+      "action": "HandleBTCDepositCash 60.",
+      "invariant": "Zero AtomicSaveBalances. Cash intact. Log: amount is not representable with prepared bills; no account mutation. OBSERVE tx=6 err=9.",
+      "expect_contains": [
+        "[BTCDepositCash] amount is not representable with prepared bills; no account mutation"
+      ],
+      "forbid_contains": [
+        "EUR deposited from bills",
+        "[LFPG_Balance_Native] Add uid="
+      ]
+    },
+    {
+      "id": "E05_room30_exact",
+      "ficha": "E05",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E05_room30_exact",
+      "remaining": 0,
+      "point": "none — input. Native room 30, exact bills for 30",
+      "prep": "Player balance cap-30. Bills that greedy-exact to 30. Deposit 100 (clamped to room 30).",
+      "action": "HandleBTCDepositCash.",
+      "invariant": "One save. Credit 30. Bills of 30 consumed.",
+      "expect_contains": [
+        "[BTCDepositCash] 30 EUR deposited from bills"
+      ],
+      "forbid_contains": []
+    },
+    {
+      "id": "E05_room30_unrepresentable",
+      "ficha": "E05",
+      "injectable": false,
+      "require_fire": false,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E05_room30_unrepresentable",
+      "remaining": 0,
+      "point": "none — input. Room 30, bills [50,50] (exact 30 impossible)",
+      "prep": "Native room 30. Player bills 50+50. Deposit 100 -> requestedCredit=30, SelectPreparedCashExact(30) fails.",
+      "action": "HandleBTCDepositCash.",
+      "invariant": "Zero saves. Cash intact.",
+      "expect_contains": [
+        "[BTCDepositCash] amount is not representable with prepared bills; no account mutation"
+      ],
+      "forbid_contains": [
+        "[LFPG_Balance_Native] Add uid="
+      ]
+    },
+    {
+      "id": "E05_addbalance_partial",
+      "ficha": "E05",
+      "injectable": true,
+      "require_fire": true,
+      "require_crash": false,
+      "restart": false,
+      "scenario": "E05_addbalance_partial",
+      "remaining": 1,
+      "point": "AddBalance_partial: force toAdd=1 after room clamp, then save that partial",
+      "prep": "Representable deposit (e.g. bill 50, deposit 50). remaining=1 so RemoveBalance revert can still save.",
+      "action": "HandleBTCDepositCash exact amount.",
+      "invariant": "creditedCash != requestedCredit; revert attempted. Cash not committed. Log account credit mismatch path.",
+      "expect_contains": [
+        "LFPG_FAULTINJECT FIRE hook=AddBalance_partial"
+      ],
+      "forbid_contains": [
+        "EUR deposited from bills"
+      ]
+    }
+  ]
+}

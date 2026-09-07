@@ -1,0 +1,6 @@
+{
+  "armPhrase": "I_UNDERSTAND_THIS_DESTROYS_MONEY",
+  "enabled": true,
+  "scenario": "E02_abort_inventory_full",
+  "remaining": 0
+}

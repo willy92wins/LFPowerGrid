@@ -212,6 +212,10 @@ class LFPG_FileUtil
     // ---- Player Balances ----
     static bool AtomicSaveBalances(string targetPath, LFPG_BalanceData data)
     {
+        LFPG_FaultInject.Touch();
+        if (LFPG_FaultInject.ShouldFail("AtomicSaveBalances_false"))
+            return false;
+
         string tmpPath    = targetPath + ".tmp";
         string bakPath    = targetPath + ".bak";
         string bakNewPath = targetPath + ".bak.new";
@@ -223,9 +227,12 @@ class LFPG_FileUtil
             // SaveFile can return false and still leave a parseable .tmp.
             // No in-flight marker has been written yet, so recovery must not
             // treat that leftover as a committed mutation.
-            DiscardAbortedBalancesTmp(tmpPath);
+            if (!LFPG_FaultInject.ShouldFail("DiscardAbortedTmp_false"))
+                DiscardAbortedBalancesTmp(tmpPath);
             return false;
         }
+        if (LFPG_FaultInject.ShouldFail("SaveFile_abort_leave_tmp"))
+            return false;
         if (!FileExist(tmpPath))
         {
             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: tmp not found after write");
@@ -268,7 +275,12 @@ class LFPG_FileUtil
         }
 
         if (FileExist(targetPath)) DeleteFile(targetPath);
-        if (!CopyFile(tmpPath, targetPath))
+        if (LFPG_FaultInject.ShouldCrash("balances_after_delete_before_promote"))
+            return false;
+        bool promoteOk = false;
+        if (!LFPG_FaultInject.ShouldFail("CopyFile_promote"))
+            promoteOk = CopyFile(tmpPath, targetPath);
+        if (!promoteOk)
         {
             LFPG_Util.Error("[FileUtil] AtomicSaveBalances: promote tmp->target failed");
             // Clear the in-flight marker before touching leftovers so the next
@@ -279,11 +291,13 @@ class LFPG_FileUtil
             }
             if (FileExist(bakNewPath))
             {
-                CopyFile(bakNewPath, targetPath);
+                if (!LFPG_FaultInject.ShouldFail("CopyFile_restore"))
+                    CopyFile(bakNewPath, targetPath);
             }
             else if (FileExist(bakPath))
             {
-                CopyFile(bakPath, targetPath);
+                if (!LFPG_FaultInject.ShouldFail("CopyFile_restore"))
+                    CopyFile(bakPath, targetPath);
             }
             if (!FileExist(targetPath))
             {
@@ -472,6 +486,8 @@ class LFPG_FileUtil
         string savingPath = BalancesSaveIntentPath(targetPath);
         if (!FileExist(savingPath))
             return true;
+        if (LFPG_FaultInject.ShouldFail("DeleteFile_saving"))
+            return false;
         DeleteFile(savingPath);
         return !FileExist(savingPath);
     }
@@ -479,6 +495,8 @@ class LFPG_FileUtil
     protected static void DiscardAbortedBalancesTmp(string tmpPath)
     {
         if (!FileExist(tmpPath))
+            return;
+        if (LFPG_FaultInject.ShouldFail("DiscardAbortedTmp_false"))
             return;
         PreserveOrphanTmpEvidence(tmpPath);
         if (FileExist(tmpPath))
@@ -798,6 +816,7 @@ class LFPG_FileUtil
     // ---- Typed: Player Balances ----
     static bool EnsureBalancesFileOrRestore(string targetPath)
     {
+        LFPG_FaultInject.Touch();
         SweepPreservedBalanceTmpEvidence(targetPath);
         string tmpPath    = targetPath + ".tmp";
         string bakPath    = targetPath + ".bak";
