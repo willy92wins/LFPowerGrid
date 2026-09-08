@@ -12,7 +12,6 @@
 // v2.6 changes (Tag Pool — Phase 5):
 //   - m_TagPool: REMOVED in v4.1 (pool reuse broke Dabs re-parenting).
 //     Fresh TagViews created each RefreshTagsList call.
-//   - ClearCollections: pool cleared on DoClose to break refs.
 //
 // v2.3 changes (P3 Performance & Polish):
 //   S5: Extracted GetStatusColor (eliminates 40-line duplication)
@@ -76,9 +75,11 @@ class LFPG_SorterController_TEST extends ViewController
 
     // ── B2 (2026-04-26): in-flight throttling for Save/Sort RPCs ──
     // Prevents user from spamming the button and flooding the server with
-    // redundant requests. Reset on the corresponding Ack handler.
+	// redundant requests. Released by the corresponding ACK or timeout.
     protected bool m_SaveInFlight;
     protected bool m_SortInFlight;
+	protected float m_SaveTimeout;
+	protected float m_SortTimeout;
     protected bool m_PreviewInFlight;
     protected float m_PreviewInFlightSince;
     protected bool m_PreviewPending;
@@ -134,6 +135,10 @@ class LFPG_SorterController_TEST extends ViewController
     protected ref array<TextWidget> m_SlotTexts;
     // F4-D: Reusable sort index array (avoids new array per PopulatePreview)
     protected ref array<int> m_SortIdx;
+	// Last row payload, copied by value; collection count detects cleared views.
+	protected ref array<string> m_PreviewNames;
+	protected ref array<string> m_PreviewCats;
+	protected ref array<string> m_PreviewInfos;
     // m_LayoutRoot — inherited from ViewController (ScriptedWidgetEventHandler)
     // Catch-all
     ImageWidget BtnCatchAllBg; TextWidget BtnCatchAllText;
@@ -188,6 +193,9 @@ class LFPG_SorterController_TEST extends ViewController
         }
         // F4-D: Reusable sort index array
         m_SortIdx = new array<int>;
+		m_PreviewNames = new array<string>;
+		m_PreviewCats = new array<string>;
+		m_PreviewInfos = new array<string>;
         m_SelectedOutput = 0;
         m_ShowRules = true;
         m_ResetConfirmActive = false;
@@ -200,6 +208,8 @@ class LFPG_SorterController_TEST extends ViewController
         m_FeedbackTimer = 0.0;
         m_SaveInFlight = false;
         m_SortInFlight = false;
+		m_SaveTimeout = 0.0;
+		m_SortTimeout = 0.0;
         m_PreviewInFlight = false;
         m_PreviewInFlightSince = 0.0;
         m_PreviewPending = false;
@@ -485,6 +495,8 @@ class LFPG_SorterController_TEST extends ViewController
         // may have been left set by a previous session that closed mid-RPC.
         m_SaveInFlight = false;
         m_SortInFlight = false;
+		m_SaveTimeout = 0.0;
+		m_SortTimeout = 0.0;
         m_PreviewInFlight = false;
         m_PreviewInFlightSince = 0.0;
         m_PreviewPending = false;
@@ -739,6 +751,12 @@ class LFPG_SorterController_TEST extends ViewController
         string stNoLink = "NO LINK";
         string stFailed = "FAILED";
         string stNoPower = "NO POWER";
+		string stSaveTimeout = "SAVE: NO RESPONSE";
+		string stSortTimeout = "SORT: NO RESPONSE";
+		if (st == stSaveTimeout || st == stSortTimeout)
+		{
+			return LFPG_SorterView_TEST.COL_AMBER;
+		}
         if (st == stSaving || st == stSorting)
         {
             return LFPG_SorterView_TEST.COL_AMBER;
@@ -779,8 +797,10 @@ class LFPG_SorterController_TEST extends ViewController
 
     void HandleSaveAck(bool success)
     {
-        // B2: clear in-flight throttle on either outcome.
+		// Ignore unsolicited or expired ACKs while idle; request correlation needs S12.
+		if (!m_SaveInFlight) return;
         m_SaveInFlight = false;
+		m_SaveTimeout = 0.0;
         if (success)
         {
             string stSaved = "SAVED";
@@ -803,8 +823,10 @@ class LFPG_SorterController_TEST extends ViewController
     // v3.2: Server sort result feedback
     void HandleSortAck(bool success, int movedCount)
     {
-        // B2: clear in-flight throttle on either outcome.
+		// Ignore unsolicited or expired ACKs while idle; request correlation needs S12.
+		if (!m_SortInFlight) return;
         m_SortInFlight = false;
+		m_SortTimeout = 0.0;
         if (success)
         {
             string stSorted = "SORTED: ";
@@ -877,6 +899,33 @@ class LFPG_SorterController_TEST extends ViewController
             RefreshPowerState();
         }
 
+		// Independent deadlines: status feedback and the other RPC cannot extend them.
+		// A missing response leaves the server outcome unknown; never retry automatically.
+		if (m_SaveInFlight)
+		{
+			m_SaveTimeout = m_SaveTimeout - dt;
+			if (m_SaveTimeout <= 0.0)
+			{
+				m_SaveInFlight = false;
+				m_SaveTimeout = 0.0;
+				string saveTimeoutStatus = "SAVE: NO RESPONSE";
+				SetStatus(saveTimeoutStatus);
+				m_FeedbackTimer = 3.0;
+			}
+		}
+		if (m_SortInFlight)
+		{
+			m_SortTimeout = m_SortTimeout - dt;
+			if (m_SortTimeout <= 0.0)
+			{
+				m_SortInFlight = false;
+				m_SortTimeout = 0.0;
+				string sortTimeoutStatus = "SORT: NO RESPONSE";
+				SetStatus(sortTimeoutStatus);
+				m_FeedbackTimer = 3.0;
+			}
+		}
+
         float previewNow = 0.0;
         if (m_PreviewInFlight && g_Game)
         {
@@ -911,6 +960,7 @@ class LFPG_SorterController_TEST extends ViewController
             return;
         if (idx < 0 || idx >= LFPG_SORT_MAX_OUTPUTS)
             return;
+		if (idx == m_SelectedOutput) return;
         m_SelectedOutput = idx;
         // R21-4: cancel BOTH pending confirms (label + color restored)
         CancelResetConfirm();
@@ -1018,7 +1068,7 @@ class LFPG_SorterController_TEST extends ViewController
         if (!outCfg) return;
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_CATEGORY, catValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_CATEGORY, catValue); }
-        else { outCfg.AddRule(LFPG_SORT_FILTER_CATEGORY, catValue); }
+		else if (!outCfg.AddRule(LFPG_SORT_FILTER_CATEGORY, catValue)) return;
         // P4: Only cat buttons + rules changed
         ReBindButtons();
         RefreshCategoryButtons();
@@ -1042,7 +1092,7 @@ class LFPG_SorterController_TEST extends ViewController
         if (!outCfg) return;
         bool hasIt = outCfg.HasRule(LFPG_SORT_FILTER_SLOT, slotValue);
         if (hasIt) { RemoveRuleByValue(outCfg, LFPG_SORT_FILTER_SLOT, slotValue); }
-        else { outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue); }
+		else if (!outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue)) return;
         // P4: Only slot buttons + rules changed
         ReBindButtons();
         RefreshSlotButtons();
@@ -1058,7 +1108,7 @@ class LFPG_SorterController_TEST extends ViewController
         if (EditPrefix == "") return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        outCfg.AddRule(LFPG_SORT_FILTER_PREFIX, EditPrefix);
+		if (!outCfg.AddRule(LFPG_SORT_FILTER_PREFIX, EditPrefix)) return;
         EditPrefix = "";
         string propEP = "EditPrefix";
         NotifyPropertyChanged(propEP, false);
@@ -1074,7 +1124,7 @@ class LFPG_SorterController_TEST extends ViewController
         if (EditContains == "") return;
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        outCfg.AddRule(LFPG_SORT_FILTER_CONTAINS, EditContains);
+		if (!outCfg.AddRule(LFPG_SORT_FILTER_CONTAINS, EditContains)) return;
         EditContains = "";
         string propEC = "EditContains";
         NotifyPropertyChanged(propEC, false);
@@ -1098,7 +1148,7 @@ class LFPG_SorterController_TEST extends ViewController
         slotValue = slotValue + maxVal.ToString();
         LFPG_SortOutputConfig outCfg = m_Config.GetOutput(m_SelectedOutput);
         if (!outCfg) return;
-        outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue);
+		if (!outCfg.AddRule(LFPG_SORT_FILTER_SLOT, slotValue)) return;
         EditSlotMin = "";
         EditSlotMax = "";
         string propMin = "EditSlotMin";
@@ -1184,10 +1234,14 @@ class LFPG_SorterController_TEST extends ViewController
         if (!CanEdit())
             return;
         // B2 (2026-04-26): drop click if a previous Save is still pending.
-        // HandleSaveAck (success or failure) clears the flag.
+		// ACK or the independent request deadline clears the flag.
         if (m_SaveInFlight)
             return;
+		if (!g_Game) return;
+		PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
+		if (!player) return;
         m_SaveInFlight = true;
+		m_SaveTimeout = 8.0;
 
         string json = m_Config.ToJSON();
         string saveMsg = "[SorterCtrl] SAVE: ";
@@ -1195,11 +1249,8 @@ class LFPG_SorterController_TEST extends ViewController
         LFPG_Util.Info(saveMsg);
         string savingLabel = "SAVING";
         SetStatus(savingLabel);
+		m_FeedbackTimer = 0.0;
         #ifndef SERVER
-        // R4: g_Game guard
-        if (!g_Game)
-            return;
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             ScriptRPC rpc = new ScriptRPC();
@@ -1228,21 +1279,21 @@ class LFPG_SorterController_TEST extends ViewController
     {
         if (!CanEdit()) return;
         // B2 (2026-04-26): drop click if a previous Sort is still pending.
-        // HandleSortAck (success or failure) clears the flag.
+		// ACK or the independent request deadline clears the flag.
         if (m_SortInFlight)
             return;
+		if (!g_Game) return;
+		PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
+		if (!player) return;
         m_SortInFlight = true;
+		m_SortTimeout = 8.0;
 
         LFPG_Util.Info(logLabel);
         string sortingLabel = "SORTING";
         SetStatus(sortingLabel);
-        // S6: Timeout timer — SORT_ACK will override with real result
-        m_FeedbackTimer = 8.0;
+		// Feedback is separate from the request deadline.
+		m_FeedbackTimer = 0.0;
         #ifndef SERVER
-        // R4: g_Game guard
-        if (!g_Game)
-            return;
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (player)
         {
             ScriptRPC rpc = new ScriptRPC();
@@ -1256,7 +1307,7 @@ class LFPG_SorterController_TEST extends ViewController
     }
 
     // =========================================================
-    // Tag removal (called from tag chip via direct ref)
+	// Tag removal (SorterView decodes the chip button UID).
     // =========================================================
     void OnRemoveTag(int outputIdx, int ruleIdx)
     {
@@ -1351,8 +1402,6 @@ class LFPG_SorterController_TEST extends ViewController
 
     protected void RefreshAll()
     {
-        // Sprint 1 (2026-04-26): keep vertical rail in sync.
-        RefreshRail_TEST();
         // Sprint 2 (2026-04-26): keep builder tab + sections in sync.
         RefreshBuilderTab_TEST();
         // Sprint 3 (2026-04-26): keep Active Rules sublabel in sync.
@@ -1376,6 +1425,7 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     protected void RefreshRulesDisplay()
     {
+		RefreshRail_TEST();
         // F3-B: Rules changed — preview count is stale until server responds
         m_LastMatchedItems = -1;
         RefreshTagsList();
@@ -1498,10 +1548,7 @@ class LFPG_SorterController_TEST extends ViewController
     }
 
     // =========================================================
-    // Tags list rebuild — v2.6 pool pattern.
-    // Clear() detaches widgets from WrapSpacer but pool refs
-    // keep TagViews alive. SetData reuses existing instances.
-    // Only creates new TagViews when pool is too small.
+	// Tags list rebuild: fresh views after an effective edit or output change.
     // Max 9 tags per output (8 rules + 1 catch-all).
     // =========================================================
     protected void RefreshTagsList()
@@ -1536,7 +1583,7 @@ class LFPG_SorterController_TEST extends ViewController
             label = rule.GetDisplayLabel();
             color = GetRuleColor(rule.m_Type);
             tag = new LFPG_SorterTagView_TEST();
-            tag.SetData(label, color, GetRuleTypeTag(rule.m_Type), ri, m_SelectedOutput, this);
+			tag.SetData(label, color, GetRuleTypeTag(rule.m_Type), ri, m_SelectedOutput);
             TagsList.Insert(tag);
             inserted = inserted + 1;
         }
@@ -1547,7 +1594,7 @@ class LFPG_SorterController_TEST extends ViewController
             string caLabel = "CATCH-ALL";
             string caTag = "*";
             tag = new LFPG_SorterTagView_TEST();
-            tag.SetData(caLabel, LFPG_SorterView_TEST.COL_AMBER, caTag, -1, m_SelectedOutput, this);
+			tag.SetData(caLabel, LFPG_SorterView_TEST.COL_AMBER, caTag, -1, m_SelectedOutput);
             TagsList.Insert(tag);
             inserted = inserted + 1;
         }
@@ -1763,16 +1810,29 @@ class LFPG_SorterController_TEST extends ViewController
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
     }
 
-    // Called from View.OnPreviewData (static delegate from PlayerRPC)
-    // v4.3: slots changed from array<int> to array<string> (formatted "WxH" / "WxH xQ")
-    void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<string> infos)
-    {
-        m_PreviewInFlight = false;
-        m_PreviewInFlightSince = 0.0;
+	protected bool PreviewRowsMatch(array<string> names, array<string> cats, array<string> infos)
+	{
+		int count = names.Count();
+		if (PreviewItems.Count() != count || m_PreviewNames.Count() != count || m_PreviewCats.Count() != count || m_PreviewInfos.Count() != count) return false;
+		for (int i = 0; i < count; i = i + 1)
+		{
+			if (m_PreviewNames[i] != names[i] || m_PreviewCats[i] != cats[i] || m_PreviewInfos[i] != infos[i]) return false;
+		}
+		return true;
+	}
 
-        // Guard: if user switched output tab while RPC was in flight, ignore
-        if (outputIdx != m_SelectedOutput)
-            return;
+	protected void RefreshPreviewRows(array<string> names, array<string> cats, array<string> infos)
+	{
+		if (PreviewRowsMatch(names, cats, infos)) return;
+		m_PreviewNames.Clear();
+		m_PreviewCats.Clear();
+		m_PreviewInfos.Clear();
+		for (int copyIdx = 0; copyIdx < names.Count(); copyIdx = copyIdx + 1)
+		{
+			m_PreviewNames.Insert(names[copyIdx]);
+			m_PreviewCats.Insert(cats[copyIdx]);
+			m_PreviewInfos.Insert(infos[copyIdx]);
+		}
 
         PreviewItems.Clear();
 
@@ -1814,7 +1874,7 @@ class LFPG_SorterController_TEST extends ViewController
             iSort = iSort + 1;
         }
 
-        // v4.2: Fresh rows each call (no pool — same fix as tags v4.1).
+		// Fresh rows only when the payload changes (no pool — same fix as tags v4.1).
         // Pool reuse with ObservableCollection causes Dabs MVC to not
         // re-parent recycled ScriptView layout roots to the GridSpacer
         // after Clear()+Insert(), leaving rows invisible.
@@ -1835,7 +1895,24 @@ class LFPG_SorterController_TEST extends ViewController
             PreviewItems.Insert(row);
         }
 
-        // Update count display
+	}
+
+    // Called from View.OnPreviewData (static delegate from PlayerRPC)
+    // v4.3: slots changed from array<int> to array<string> (formatted "WxH" / "WxH xQ")
+    void PopulatePreview(int outputIdx, int totalMatched, array<string> names, array<string> cats, array<string> infos)
+    {
+        m_PreviewInFlight = false;
+        m_PreviewInFlightSince = 0.0;
+
+        // Guard: if user switched output tab while RPC was in flight, ignore
+        if (outputIdx != m_SelectedOutput)
+            return;
+		if (!names || !cats || !infos) return;
+		int sentCount = names.Count();
+		if (cats.Count() != sentCount || infos.Count() != sentCount) return;
+		RefreshPreviewRows(names, cats, infos);
+
+        // Update count display even if rows match: totals and empty hints may differ.
         bool showEmpty = (sentCount == 0);
         string countStr = "";
         if (totalMatched > LFPG_SORTER_PREVIEW_CAP)
@@ -1902,12 +1979,16 @@ class LFPG_SorterController_TEST extends ViewController
         txt.SetColor(color);
     }
 
-    // FIX 2: Release tag/preview views on close to break circular refs.
-    // Called from View.DoClose. Safe: destructor of TagView already
-    // nulls m_OwnerController, so Clear triggers clean teardown.
-    // v4.2: m_PreviewPool removed (same Dabs re-parenting fix as tags).
+	// Release tag/preview views and pending client requests on View.DoClose.
     void ClearCollections()
     {
+		m_SaveInFlight = false;
+		m_SortInFlight = false;
+		m_SaveTimeout = 0.0;
+		m_SortTimeout = 0.0;
+		m_PreviewNames.Clear();
+		m_PreviewCats.Clear();
+		m_PreviewInfos.Clear();
         m_PreviewInFlight = false;
         m_PreviewInFlightSince = 0.0;
         m_PreviewPending = false;
@@ -1925,7 +2006,7 @@ class LFPG_SorterController_TEST extends ViewController
 
     // ============================================================
     // Sprint 1 (2026-04-26): vertical rail row state refresh.
-    // Called from RefreshAll to update each row's active-state visuals
+	// Called from RefreshRulesDisplay to update each row's active-state visuals
     // and content. Widgets resolved via m_LayoutRoot.FindAnyWidget()
     // — Dabs ViewController exposes m_LayoutRoot (Widget) but not the
     // ScriptView instance directly, so we query widgets by name.

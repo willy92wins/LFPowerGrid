@@ -4,8 +4,6 @@
 // LF_PowerGrid — Sorter Tag Chip (Dabs MVC prefab, v2.6)
 //
 // Bug 10 fix: tag bg alpha 0x12→0x26 for visibility in DayZ
-// R1 fix: destructor breaks TagController→OwnerController
-//         circular reference (refcount GC leak)
 //
 // Enforce Script: no ternaries, no ++/--, no foreach.
 // =========================================================
@@ -13,12 +11,6 @@
 class LFPG_SorterTagController_TEST extends ViewController
 {
     string TagLabel;
-
-    int m_RuleIndex;
-    int m_OutputIndex;
-
-    // Direct ref instead of parent traversal
-    LFPG_SorterController_TEST m_OwnerController;
 };
 
 class LFPG_SorterTagView_TEST extends ScriptView
@@ -27,7 +19,6 @@ class LFPG_SorterTagView_TEST extends ScriptView
     TextWidget TagLabel;
     ImageWidget TagLeftBar;
     TextWidget TagTypeLabel;
-    protected int m_TagColor;
 	protected bool m_Scaled;
 
     override string GetLayoutFile()
@@ -45,29 +36,13 @@ class LFPG_SorterTagView_TEST extends ScriptView
         return false;
     }
 
-    // R1 fix: break circular ref (Controller → TagsList → TagView → TagController → m_OwnerController → Controller)
-    // Without this, refcount GC never frees tags after ObservableCollection.Clear().
-    void ~LFPG_SorterTagView_TEST()
-    {
-        LFPG_SorterTagController_TEST ctrl = LFPG_SorterTagController_TEST.Cast(GetController());
-        if (ctrl)
-        {
-            ctrl.m_OwnerController = null;
-        }
-    }
-
-    // ownerCtrl passed directly from Controller.RefreshTagsList
-    void SetData(string label, int color, string typeTag, int ruleIndex, int outputIndex, LFPG_SorterController_TEST ownerCtrl)
-    {
-        m_TagColor = color;
-
+	// Rule/output indices are encoded in the remove button UID, not retained.
+	void SetData(string label, int color, string typeTag, int ruleIndex, int outputIndex)
+	{
         LFPG_SorterTagController_TEST ctrl = LFPG_SorterTagController_TEST.Cast(GetController());
         if (ctrl)
         {
             ctrl.TagLabel = label;
-            ctrl.m_RuleIndex = ruleIndex;
-            ctrl.m_OutputIndex = outputIndex;
-            ctrl.m_OwnerController = ownerCtrl;
             string propTL = "TagLabel";
             ctrl.NotifyPropertyChanged(propTL);
         }
