@@ -1,8 +1,8 @@
 // =========================================================
 // LF_PowerGrid - persistence schema migrators (v0.7.15, Sprint 3 P1)
 //
-// Chained migration: each migrator transforms data from version N to N+1.
-// DeserializeJSON calls MigrateBlob() which applies all needed steps.
+// Legacy version helpers: apply the v1 -> v2 bump without changing wire fields.
+// Newer schema versions are returned unchanged; validation belongs to loaders.
 //
 // Migration chain:
 //   v1 (original) → v2 (Sprint 3: infrastructure + sanitization)
@@ -34,9 +34,8 @@
 
 class LFPG_Migrators
 {
-    // Apply all necessary migrations to a PersistBlob.
-    // Called from DeserializeJSON after initial parse.
-    // Returns the final version number.
+	// Apply the legacy version bump without validating or rewriting wire fields.
+	// Returns the version; newer schemas are left unchanged.
     static int MigrateBlob(LFPG_PersistBlob blob)
     {
         if (!blob)
@@ -51,10 +50,10 @@ class LFPG_Migrators
             return ver;
         }
 
-        // Apply chained migrations
+		// v1 -> v2 changes only the version; loaders validate wire data.
         if (ver < 2)
         {
-            MigrateV1ToV2(blob);
+			LFPG_Util.Info("[Migrators] Migrating PersistBlob v1 → v2");
             ver = 2;
         }
 
@@ -80,29 +79,11 @@ class LFPG_Migrators
 
         if (ver < 2)
         {
-            MigrateVanillaV1ToV2(store);
+			LFPG_Util.Info("[Migrators] Migrating VanillaWireStore v1 → v2");
             ver = 2;
         }
 
         store.ver = ver;
         return ver;
-    }
-
-    // ---- v1 → v2: Infrastructure migration ----
-    // No schema changes. Establishes the migration chain.
-    // Applies sanitization that v1 data may need (NaN, range, dedup).
-    // Sanitization is done in ValidateWireData (called by DeserializeJSON),
-    // so this migrator just bumps the version.
-    protected static void MigrateV1ToV2(LFPG_PersistBlob blob)
-    {
-        LFPG_Util.Info("[Migrators] Migrating PersistBlob v1 → v2");
-        // No field changes — sanitization handled by ValidateWireData
-        // Version bump signals that data has passed through v2 sanitization
-    }
-
-    protected static void MigrateVanillaV1ToV2(LFPG_VanillaWireStore store)
-    {
-        LFPG_Util.Info("[Migrators] Migrating VanillaWireStore v1 → v2");
-        // No field changes — sanitization handled by ValidateVanillaEntry
     }
 };
