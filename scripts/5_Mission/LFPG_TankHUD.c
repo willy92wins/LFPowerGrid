@@ -31,6 +31,9 @@ class LFPG_TankHUD
     protected float m_LastNearPumpCheckMs = -1.0;
     protected bool m_NearT2Pump = false;
     static const float NEAR_PUMP_CHECK_MS = 250.0;
+	static const float NEGATIVE_PUMP_CHECK_MS = 1000.0;
+	protected vector m_LastNearPumpPosition;
+	protected PlayerBase m_LastNearPumpPlayer;
 
     void LFPG_TankHUD()
     {
@@ -158,15 +161,27 @@ class LFPG_TankHUD
 
         float nowMs = g_Game.GetTime();
         float elapsed = nowMs - m_LastNearPumpCheckMs;
-        if (m_LastNearPumpCheckMs >= 0.0 && elapsed >= 0.0 && elapsed < NEAR_PUMP_CHECK_MS)
-            return m_NearT2Pump;
+		vector playerPos = player.GetPosition();
+		if (player == m_LastNearPumpPlayer && m_LastNearPumpCheckMs >= 0.0 && elapsed >= 0.0)
+		{
+			if (elapsed < NEAR_PUMP_CHECK_MS)
+				return m_NearT2Pump;
+			// The query has 1.5m padding: recheck after moving 1m, or at 1s
+			// while stationary so newly streamed/placed pumps are still discovered.
+			vector moved = playerPos - m_LastNearPumpPosition;
+			float movedSq = moved[0] * moved[0] + moved[1] * moved[1] + moved[2] * moved[2];
+			if (!m_NearT2Pump && elapsed < NEGATIVE_PUMP_CHECK_MS && movedSq < 1.0)
+				return false;
+		}
 
+		m_LastNearPumpPosition = playerPos;
+		m_LastNearPumpPlayer = player;
         m_LastNearPumpCheckMs = nowMs;
         m_NearT2Pump = false;
         m_NearbyObjects.Clear();
         m_NearbyCargo.Clear();
         float queryRadius = LFPG_INTERACT_DIST_M + 1.5;
-        g_Game.GetObjectsAtPosition3D(player.GetPosition(), queryRadius, m_NearbyObjects, m_NearbyCargo);
+		g_Game.GetObjectsAtPosition3D(playerPos, queryRadius, m_NearbyObjects, m_NearbyCargo);
 
         int i;
         for (i = 0; i < m_NearbyObjects.Count(); i = i + 1)
