@@ -527,6 +527,8 @@ class ActionLFPG_PortBase : ActionSingleUseBase
 #ifndef SERVER
         if (LFPG_SorterView.IsOpen())
             return false;
+		if (LFPG_SorterView_TEST.IsOpen())
+			return false;
 #endif
 
         if (!target)

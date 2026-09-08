@@ -28,6 +28,7 @@ class LFPG_SorterTagView_TEST extends ScriptView
     ImageWidget TagLeftBar;
     TextWidget TagTypeLabel;
     protected int m_TagColor;
+	protected bool m_Scaled;
 
     override string GetLayoutFile()
     {
@@ -115,6 +116,17 @@ class LFPG_SorterTagView_TEST extends ScriptView
                 btnTxt.SetColor(LFPG_SorterView_TEST.COL_TEXT_MID);
             }
         }
+
+		// Scale each dynamic tag once, as in V3.
+		if (!m_Scaled)
+		{
+			float tagScale = LFPG_UIScaler.ComputeScale();
+			if (tagRoot)
+			{
+				LFPG_UIScaler.ScaleWidget(tagRoot, tagScale);
+			}
+			m_Scaled = true;
+		}
     }
 };
 #endif
