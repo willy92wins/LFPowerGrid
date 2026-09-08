@@ -11,6 +11,13 @@
 
 class LFPG_RPCServerHandlerImpl
 {
+	protected static const float s_DeviceSyncDirtyCooldownS = 2.0;
+	// S03: preserve the existing Save ceiling for both server entry points.
+	protected static const int s_SorterMaxJsonLength = 4096;
+	protected static ref map<string, float> s_DeviceSyncDirtyTimes;
+	protected static ref array<string> s_ExpiredDeviceSyncDirtyKeys;
+	protected static float s_DeviceSyncDirtyLastPurge;
+
     #ifndef SERVER
     protected static int s_PerfDiagDeviceSyncBatchCount;
     #endif
@@ -215,8 +222,6 @@ class LFPG_RPCServerHandlerImpl
     {
         if (!sender) return;
 
-        LFPG_Util.Debug("[FinishWiring-Server] RPC received from pid=" + sender.GetId());
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             LFPG_Util.Warn("[FinishWiring-Server] denied (rate limited)");
@@ -250,63 +255,18 @@ class LFPG_RPCServerHandlerImpl
         string srcPort;
         string dstPort;
 
-        array<vector> waypoints = new array<vector>;
-
         if (!ctx.Read(srcLow)) return;
         if (!ctx.Read(srcHigh)) return;
         if (!ctx.Read(dstLow)) return;
         if (!ctx.Read(dstHigh)) return;
-        if (!ctx.Read(srcDeviceId)) return;
-        if (!ctx.Read(dstDeviceId)) return;
-        if (!ctx.Read(srcPort)) return;
-        if (!ctx.Read(dstPort)) return;
-
-        string pl1 = "[FinishWiring-Server] payload: src=" + srcDeviceId + " net=" + srcLow.ToString() + "," + srcHigh.ToString();
-        string pl2 = "  dst=" + dstDeviceId + " net=" + dstLow.ToString() + "," + dstHigh.ToString();
-        string pl3 = "  srcPort=" + srcPort + "  dstPort=" + dstPort;
-        LFPG_Util.Debug(pl1 + pl2 + pl3);
-
-        // Input hardening
-        if (srcDeviceId.Length() > 64 || dstDeviceId.Length() > 64)
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (deviceId too long)");
-            return;
-        }
-        if (srcPort.Length() > 32 || dstPort.Length() > 32)
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (port too long)");
-            return;
-        }
-
-        if (!ctx.Read(waypoints)) return;
-
-        int wpCount = 0;
-        if (waypoints)
-        {
-            wpCount = waypoints.Count();
-        }
-        LFPG_Util.Debug("[FinishWiring-Server] waypoints=" + wpCount.ToString());
-
-        // v0.7.32 (Audit): Validate RPC waypoints for NaN, range, and inter-wp distance.
-        // ValidateWaypoints is called during deserialization but was missing from the
-        // creation path. A modified client could inject extreme/NaN coordinates that
-        // corrupt persistence and downstream calculations.
-        if (waypoints && waypoints.Count() > 0)
-        {
-            if (waypoints.Count() > LFPG_MAX_WAYPOINTS)
-            {
-                LFPG_Util.Warn("[FinishWiring-Server] denied (too many waypoints: " + waypoints.Count().ToString() + ")");
-                PlayerBase.LFPG_SendClientMsg(player, "Too many waypoints.");
-                return;
-            }
-
-            if (!LFPG_WireHelper.ValidateWaypoints(waypoints, "FinishWiring-RPC", dstDeviceId))
-            {
-                LFPG_Util.Warn("[FinishWiring-Server] denied (corrupt waypoints from RPC)");
-                PlayerBase.LFPG_SendClientMsg(player, "Invalid wire path.");
-                return;
-            }
-        }
+		if (!ctx.Read(srcDeviceId)) return;
+		if (srcDeviceId.Length() > 64) return;
+		if (!ctx.Read(dstDeviceId)) return;
+		if (dstDeviceId.Length() > 64) return;
+		if (!ctx.Read(srcPort)) return;
+		if (srcPort.Length() > 32) return;
+		if (!ctx.Read(dstPort)) return;
+		if (dstPort.Length() > 32) return;
 
         // Resolve objects by network ID
         EntityAI srcObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(srcLow, srcHigh));
@@ -316,8 +276,6 @@ class LFPG_RPCServerHandlerImpl
             LFPG_Util.Warn("[FinishWiring-Server] invalid net objects");
             return;
         }
-
-        LFPG_Util.Debug("[FinishWiring-Server] resolved: src=" + srcObj.GetType() + " dst=" + dstObj.GetType());
 
         // v0.7.4: reject endpoints that aren't world-placed.
         // Devices in inventory, cargo, or attached to another entity
@@ -337,16 +295,17 @@ class LFPG_RPCServerHandlerImpl
         }
 
         // Distance check: player must be near at least one end of the wire
-        float distToSrc = vector.Distance(player.GetPosition(), srcObj.GetPosition());
-        float distToDst = vector.Distance(player.GetPosition(), dstObj.GetPosition());
-        float nearestDist = distToSrc;
-        if (distToDst < nearestDist)
+		vector playerPos = player.GetPosition();
+		float distToSrcSq = LFPG_WorldUtil.DistSq(playerPos, srcObj.GetPosition());
+		float distToDstSq = LFPG_WorldUtil.DistSq(playerPos, dstObj.GetPosition());
+		float nearestDistSq = distToSrcSq;
+		if (distToDstSq < nearestDistSq)
+		{
+			nearestDistSq = distToDstSq;
+		}
+		if (nearestDistSq > 16.0)
         {
-            nearestDist = distToDst;
-        }
-        if (nearestDist > 4.0)
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (too far nearest=" + nearestDist.ToString() + "m)");
+			LFPG_Util.RateLimitedWarn(sender, "finish_distance", "[FinishWiring-Server] denied (too far from both endpoints)");
             PlayerBase.LFPG_SendClientMsg(player, "Too far from device.");
             return;
         }
@@ -358,14 +317,15 @@ class LFPG_RPCServerHandlerImpl
         // Normal gameplay: player walks from source to destination,
         // so they are near the destination and source is at most
         // wire-length away. This check blocks cross-map spoofing.
-        float farthestDist = distToSrc;
-        if (distToDst > farthestDist)
+		float farthestDistSq = distToSrcSq;
+		if (distToDstSq > farthestDistSq)
+		{
+			farthestDistSq = distToDstSq;
+		}
+		float maxWireLenSq = LFPG_MAX_WIRE_LEN_M * LFPG_MAX_WIRE_LEN_M;
+		if (farthestDistSq > maxWireLenSq)
         {
-            farthestDist = distToDst;
-        }
-        if (farthestDist > LFPG_MAX_WIRE_LEN_M)
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (far endpoint=" + farthestDist.ToString() + "m exceeds max wire len)");
+			LFPG_Util.RateLimitedWarn(sender, "finish_distance", "[FinishWiring-Server] denied (remote endpoint exceeds max wire len)");
             PlayerBase.LFPG_SendClientMsg(player, "Too far from remote device.");
             return;
         }
@@ -400,6 +360,26 @@ class LFPG_RPCServerHandlerImpl
 		if (srcIsLFPG && !LFPG_DeviceAPI.CanConnectTo(srcObj, dstObj, srcPort, dstPort))
 		{
 			PlayerBase.LFPG_SendClientMsg(player, "Cannot connect these devices.");
+			return;
+		}
+
+		// H8: resolve and validate the cheap endpoint fields before materializing the path.
+		// SEC07: Serializer.Read has no bounded-array overload; keep the wire format.
+		array<vector> waypoints = new array<vector>;
+		if (!ctx.Read(waypoints)) return;
+		int wpCount = 0;
+		if (waypoints)
+			wpCount = waypoints.Count();
+		if (wpCount > LFPG_MAX_WAYPOINTS)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "finish_waypoints", "[FinishWiring-Server] denied (too many waypoints)");
+			PlayerBase.LFPG_SendClientMsg(player, "Too many waypoints.");
+			return;
+		}
+		// Never put a client-supplied device ID in WireHelper's warning text.
+		if (wpCount > 0 && !LFPG_WireHelper.ValidateWaypoints(waypoints, "FinishWiring-RPC", "untrusted RPC target"))
+		{
+			PlayerBase.LFPG_SendClientMsg(player, "Invalid wire path.");
 			return;
 		}
 
@@ -472,17 +452,9 @@ class LFPG_RPCServerHandlerImpl
             return;
         }
 
-        // Validate wire geometry
-        vector startPos = srcObj.GetPosition();
-        if (srcIsLFPG)
-        {
-            startPos = LFPG_DeviceAPI.GetPortWorldPos(srcObj, srcPort);
-        }
-        vector endPos = dstObj.GetPosition();
-        if (dstIsLFPG)
-        {
-            endPos = LFPG_DeviceAPI.GetPortWorldPos(dstObj, dstPort);
-        }
+		// SEC17: reuse the endpoints; keep ValidateWire's server rejection/kick policy.
+		vector startPos = preStartPos;
+		vector endPos = preEndPos;
 
         string reason;
         if (!LFPG_NetworkManager.Get().ValidateWire(startPos, endPos, waypoints, reason))
@@ -496,6 +468,14 @@ class LFPG_RPCServerHandlerImpl
             }
             return;
         }
+
+		if (LFPG_LOG_ENABLED && LFPG_LOG_LEVEL >= 2)
+		{
+			string payloadLog = "[FinishWiring-Server] validated srcNet=" + srcLow.ToString() + "," + srcHigh.ToString();
+			payloadLog = payloadLog + " dstNet=" + dstLow.ToString() + "," + dstHigh.ToString();
+			payloadLog = payloadLog + " waypoints=" + wpCount.ToString();
+			LFPG_Util.Debug(payloadLog);
+		}
 
         // Create wire data
         LFPG_WireData wd = new LFPG_WireData();
@@ -2144,6 +2124,7 @@ class LFPG_RPCServerHandlerImpl
             return;
         if (!ctx.Read(clientDeviceId))
             return;
+		if (clientDeviceId.Length() > 64) return;
 
         EntityAI syncTarget;
         string serverDeviceId;
@@ -2152,6 +2133,49 @@ class LFPG_RPCServerHandlerImpl
 
         LFPG_NetworkManager.Get().SendDeviceSyncTo(player, serverDeviceId);
     }
+
+	// SEC06: remember actual re-pushes, not repeated requests, so retries cannot extend the window.
+	// Purge once per interval; memory covers at most two intervals of admitted bounded batches.
+	protected static void PruneDeviceSyncDirtyTimes(float now)
+	{
+		if (!s_DeviceSyncDirtyTimes)
+		{
+			s_DeviceSyncDirtyTimes = new map<string, float>;
+			s_ExpiredDeviceSyncDirtyKeys = new array<string>;
+			s_DeviceSyncDirtyLastPurge = now;
+			return;
+		}
+		if (now < s_DeviceSyncDirtyLastPurge)
+		{
+			s_DeviceSyncDirtyTimes.Clear();
+			s_DeviceSyncDirtyLastPurge = now;
+		}
+		if (now - s_DeviceSyncDirtyLastPurge < s_DeviceSyncDirtyCooldownS) return;
+		s_DeviceSyncDirtyLastPurge = now;
+		s_ExpiredDeviceSyncDirtyKeys.Clear();
+		MapIterator dirtyIt;
+		for (dirtyIt = s_DeviceSyncDirtyTimes.Begin(); dirtyIt != s_DeviceSyncDirtyTimes.End(); dirtyIt = s_DeviceSyncDirtyTimes.Next(dirtyIt))
+		{
+			if (now - s_DeviceSyncDirtyTimes.GetIteratorElement(dirtyIt) >= s_DeviceSyncDirtyCooldownS)
+				s_ExpiredDeviceSyncDirtyKeys.Insert(s_DeviceSyncDirtyTimes.GetIteratorKey(dirtyIt));
+		}
+		int i;
+		for (i = 0; i < s_ExpiredDeviceSyncDirtyKeys.Count(); i = i + 1)
+			s_DeviceSyncDirtyTimes.Remove(s_ExpiredDeviceSyncDirtyKeys[i]);
+		s_ExpiredDeviceSyncDirtyKeys.Clear();
+	}
+
+	protected static bool AllowDeviceSyncDirty(string playerId, string deviceId, float now)
+	{
+		string key = playerId + "|" + deviceId;
+		float lastDirty = 0.0;
+		if (s_DeviceSyncDirtyTimes.Find(key, lastDirty))
+		{
+			if (now >= lastDirty && now - lastDirty < s_DeviceSyncDirtyCooldownS) return false;
+		}
+		s_DeviceSyncDirtyTimes.Set(key, now);
+		return true;
+	}
 
     static void HandleRequestDeviceSyncBatch(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
@@ -2166,8 +2190,8 @@ class LFPG_RPCServerHandlerImpl
         if (requestCount <= 0 || requestCount > LFPG_DEVICE_SYNC_BATCH_MAX)
             return;
 
-        ref array<int> lows = new array<int>;
-        ref array<int> highs = new array<int>;
+		array<int> lows = new array<int>;
+		array<int> highs = new array<int>;
         int i;
         for (i = 0; i < requestCount; i = i + 1)
         {
@@ -2180,6 +2204,7 @@ class LFPG_RPCServerHandlerImpl
                 return;
             if (!ctx.Read(clientDeviceId))
                 return;
+			if (clientDeviceId.Length() > 64) return;
             lows.Insert(netLow);
             highs.Insert(netHigh);
         }
@@ -2198,8 +2223,11 @@ class LFPG_RPCServerHandlerImpl
         }
         #endif
 
-        ref map<string, bool> sentDeviceIds = new map<string, bool>;
-        ref map<string, bool> sentOwners = new map<string, bool>;
+		map<string, bool> sentDeviceIds = new map<string, bool>;
+		map<string, bool> sentOwners = new map<string, bool>;
+		float dirtyNow = g_Game.GetTickTime();
+		PruneDeviceSyncDirtyTimes(dirtyNow);
+		string dirtyPlayerId = sender.GetId();
         int dirtyCount = 0;
         for (i = 0; i < requestCount; i = i + 1)
         {
@@ -2214,14 +2242,9 @@ class LFPG_RPCServerHandlerImpl
             sentDeviceIds[serverDeviceId] = true;
             LFPG_NetworkManager.Get().SendDeviceSyncToBatched(player, serverDeviceId, sentOwners);
 
-            // AMENDMENT-1 (accept W3-F02 rev): one-shot SyncVar re-push for the JIP
-            // batch. Bubble entry may deliver default SyncVars (v1.1 JIP bug) and T1
-            // removed the periodic dirties that masked it. Bounded by
-            // LFPG_DEVICE_SYNC_BATCH_MAX and deduped per device; the client-side
-            // generation predicate keeps the resync feedback loop from re-forming.
-            // Steady-state resync remains replication-free.
-            // B-03: dirty only the EntityAI already authorized for this entry.
-            if (batchEntity)
+			// SEC06: a new recipient still gets its initial JIP re-push; repeated batches
+			// from that recipient coalesce for two seconds. Cable replies remain unconditional.
+			if (batchEntity && AllowDeviceSyncDirty(dirtyPlayerId, serverDeviceId, dirtyNow))
             {
                 batchEntity.SetSynchDirty();
                 dirtyCount = dirtyCount + 1;
@@ -2631,144 +2654,97 @@ class LFPG_RPCServerHandlerImpl
         LFPG_Util.Info(logMsg);
     }
 
-    static void HandleSorterConfigSave(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int responseSubId)
-    {
-        if (!sender)
-            return;
+	static void HandleSorterConfigSave(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int responseSubId)
+	{
+		if (!sender || !player || !g_Game) return;
+		bool saveOk = TrySorterConfigSave(player, sender, ctx);
+		ScriptRPC ackRpc = new ScriptRPC();
+		ackRpc.Write(responseSubId);
+		ackRpc.Write(saveOk);
+		ackRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+	}
 
-        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
-        {
-            PlayerBase.LFPG_SendClientMsg(player, "Too fast! Wait a moment.");
-            return;
-        }
+	protected static bool TrySorterConfigSave(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+	{
+		if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender)) return false;
 
-        int netLow = 0;
-        int netHigh = 0;
-        string filterJSON = "";
-        if (!ctx.Read(netLow))
-            return;
-        if (!ctx.Read(netHigh))
-            return;
-        if (!ctx.Read(filterJSON))
-            return;
+		int netLow = 0;
+		int netHigh = 0;
+		string filterJSON = "";
+		if (!ctx.Read(netLow)) return false;
+		if (!ctx.Read(netHigh)) return false;
+		if (!ctx.Read(filterJSON)) return false;
+		// S03: Save and Preview share the same JSON admission limit.
+		if (filterJSON.Length() > s_SorterMaxJsonLength)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] rejected: JSON too large");
+			return false;
+		}
 
-        // Input hardening: reject oversized JSON
-        if (filterJSON.Length() > 4096)
-        {
-            LFPG_Util.Warn("[SorterConfigSave] rejected: JSON too large (" + filterJSON.Length().ToString() + ")");
-            return;
-        }
+		EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
+		LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
+		if (!sorter)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] sorter not found");
+			return false;
+		}
+		float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
+		if (dist > LFPG_INTERACT_DIST_M)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] player too far");
+			return false;
+		}
+		if (!sorter.LFPG_IsPowered())
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] sorter not powered");
+			return false;
+		}
+		if (!sorter.LFPG_SetFilterJSON(filterJSON))
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] rejected malformed JSON from client");
+			return false;
+		}
+		LFPG_Util.Info("[SorterConfigSave] Updated config for " + sorter.LFPG_GetDeviceId());
+		return true;
+	}
 
-        // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
-        if (!devEnt)
-        {
-            LFPG_Util.Warn("[SorterConfigSave] entity not found");
-            return;
-        }
+	static void HandleSorterRequestSort(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int responseSubId)
+	{
+		if (!sender || !player || !g_Game) return;
+		int sortMoved = TrySorterRequestSort(player, sender, ctx);
+		// S09: zero transfers can still mean a successful cargo repack.
+		bool sortOk = (sortMoved >= 0);
+		ScriptRPC sortAckRpc = new ScriptRPC();
+		sortAckRpc.Write(responseSubId);
+		sortAckRpc.Write(sortOk);
+		sortAckRpc.Write(sortMoved);
+		sortAckRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
+	}
 
-        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
-        if (!sorter)
-        {
-            LFPG_Util.Warn("[SorterConfigSave] entity is not LFPG_Sorter");
-            return;
-        }
+	protected static int TrySorterRequestSort(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+	{
+		if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender)) return -1;
 
-        // Proximity check (match ActionCondition distance)
-        float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
-        if (dist > LFPG_INTERACT_DIST_M)
-        {
-            LFPG_Util.Warn("[SorterConfigSave] player too far");
-            return;
-        }
-
-        // Powered check â€” don't allow config changes on unpowered device
-        if (!sorter.LFPG_IsPowered())
-        {
-            LFPG_Util.Warn("[SorterConfigSave] sorter not powered");
-            return;
-        }
-
-        // Store config â€” returns false if JSON is malformed (M3 validation)
-        bool saveOk = sorter.LFPG_SetFilterJSON(filterJSON);
-
-        // H4: Send ACK back to client
-        ScriptRPC ackRpc = new ScriptRPC();
-        int ackSubId = responseSubId;  // Sprint 0: parametrized â€” V3=SORTER_SAVE_ACK / V4=SORTER_TEST_SAVE_ACK
-        ackRpc.Write(ackSubId);
-        ackRpc.Write(saveOk);
-        ackRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
-
-        if (!saveOk)
-        {
-            LFPG_Util.Warn("[SorterConfigSave] rejected malformed JSON from client");
-            return;
-        }
-
-        string logMsg = "[SorterConfigSave] Updated config for ";
-        logMsg = logMsg + sorter.LFPG_GetDeviceId();
-        LFPG_Util.Info(logMsg);
-    }
-
-    static void HandleSorterRequestSort(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int responseSubId)
-    {
-        if (!sender)
-            return;
-
-        if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
-        {
-            PlayerBase.LFPG_SendClientMsg(player, "Too fast! Wait a moment.");
-            return;
-        }
-
-        int netLow = 0;
-        int netHigh = 0;
-        if (!ctx.Read(netLow))
-            return;
-        if (!ctx.Read(netHigh))
-            return;
-
-        // Resolve sorter
-        EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
-        if (!devEnt)
-        {
-            LFPG_Util.Warn("[SorterRequestSort] entity not found");
-            return;
-        }
-
-        LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
-        if (!sorter)
-        {
-            LFPG_Util.Warn("[SorterRequestSort] entity is not LFPG_Sorter");
-            return;
-        }
-
-        // Proximity check
-        float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
-        if (dist > LFPG_INTERACT_DIST_M)
-        {
-            LFPG_Util.Warn("[SorterRequestSort] player too far");
-            return;
-        }
-
-        // Delegate to NetworkManager (handles powered + container checks)
-        // v5.0: Pass sender ID so cargo refresh broadcast excludes requester
-        string senderPlayerId = "";
-        if (sender)
-        {
-            senderPlayerId = sender.GetId();
-        }
-        int sortMoved = LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter, senderPlayerId);
-        bool sortOk = (sortMoved >= 0);
-
-        // Send ACK only to requesting player (not broadcast)
-        ScriptRPC sortAckRpc = new ScriptRPC();
-        int sortAckSubId = responseSubId;  // Sprint 0: parametrized â€” V3=SORTER_SORT_ACK / V4=SORTER_TEST_SORT_ACK
-        sortAckRpc.Write(sortAckSubId);
-        sortAckRpc.Write(sortOk);
-        sortAckRpc.Write(sortMoved);
-        sortAckRpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
-    }
+		int netLow = 0;
+		int netHigh = 0;
+		if (!ctx.Read(netLow)) return -1;
+		if (!ctx.Read(netHigh)) return -1;
+		EntityAI devEnt = EntityAI.Cast(g_Game.GetObjectByNetworkId(netLow, netHigh));
+		LFPG_Sorter sorter = LFPG_Sorter.Cast(devEnt);
+		if (!sorter)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_sort", "[SorterRequestSort] sorter not found");
+			return -1;
+		}
+		float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
+		if (dist > LFPG_INTERACT_DIST_M)
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_sort", "[SorterRequestSort] player too far");
+			return -1;
+		}
+		// Manager owns power/container checks and returns negative on failure.
+		return LFPG_NetworkManager.Get().HandleSorterRequestSort(sorter, sender.GetId());
+	}
 
     static void HandleSorterResync(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int responseSubId)
     {
@@ -2884,7 +2860,7 @@ class LFPG_RPCServerHandlerImpl
 
         // v4.1: Validate client JSON length (prevent oversized payloads)
         int clientJSONLen = clientJSON.Length();
-        if (clientJSONLen > LFPG_SORT_MAX_JSON_BYTES)
+		if (clientJSONLen > s_SorterMaxJsonLength)
             return;
 
         // From this point, always send a response (even if empty).
@@ -2941,7 +2917,7 @@ class LFPG_RPCServerHandlerImpl
             // Resolve linked container
             EntityAI container = sorter.LFPG_GetLinkedContainer();
 
-            if (container && hasRules)
+			if (container && hasRules && LFPG_SorterLogic.CanTakeFromContainer(container, null))
             {
                 GameInventory inv = container.GetInventory();
                 if (inv)
@@ -2966,6 +2942,8 @@ class LFPG_RPCServerHandlerImpl
                             cItem = cargo.GetItem(ci);
                             if (!cItem)
                                 continue;
+							if (!LFPG_SorterLogic.CanTakeFromContainer(container, cItem))
+								continue;
 
                             matched = false;
                             if (isCatchAll)
