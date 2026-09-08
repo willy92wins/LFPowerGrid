@@ -133,7 +133,7 @@ class LFPG_ControlSessionRegistry
         record.m_DeviceNetHigh = deviceNetHigh;
         record.m_PlayerNetLow = playerNetLow;
         record.m_PlayerNetHigh = playerNetHigh;
-        record.m_DeadlineMs = 0;
+		record.m_DeadlineMs = g_Game.GetTime() + LFPG_SEARCHLIGHT_LEASE_MS;
         record.m_SearchlightYaw = yaw;
         record.m_SearchlightPitch = pitch;
         record.m_AimLimiter = new LFPG_RateLimiter();
@@ -148,6 +148,18 @@ class LFPG_ControlSessionRegistry
 
         return record.m_AimLimiter.Allow(nowSeconds, LFPG_SEARCHLIGHT_AIM_COOLDOWN_S);
     }
+
+	void RenewSearchlightLease(LFPG_ControlSessionRecord record)
+	{
+		if (!record)
+			return;
+		if (record.m_Kind != LFPG_CONTROL_KIND_SEARCHLIGHT)
+			return;
+		if (record.m_State != LFPG_CONTROL_STATE_ENTERING && record.m_State != LFPG_CONTROL_STATE_ACTIVE)
+			return;
+
+		record.m_DeadlineMs = g_Game.GetTime() + LFPG_SEARCHLIGHT_LEASE_MS;
+	}
 
     bool AllowCCTVReplay(LFPG_ControlSessionRecord record, float nowSeconds)
     {
@@ -172,8 +184,10 @@ class LFPG_ControlSessionRegistry
         if (!Matches(record, LFPG_CONTROL_KIND_SEARCHLIGHT, deviceNetLow, deviceNetHigh))
             return false;
 
-        if (record.m_DeadlineMs <= 0)
-            record.m_DeadlineMs = g_Game.GetTime() + LFPG_CONTROL_SESSION_TIMEOUT_MS;
+		// An invalid/repeated EXIT may shorten recovery, never renew activity.
+		int exitDeadlineMs = g_Game.GetTime() + LFPG_CONTROL_SESSION_TIMEOUT_MS;
+		if (record.m_DeadlineMs <= 0 || record.m_DeadlineMs > exitDeadlineMs)
+			record.m_DeadlineMs = exitDeadlineMs;
         return true;
     }
 

@@ -411,6 +411,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
+		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+			return false;
 
         string uid = GetUID(player);
         if (uid == "")
@@ -503,6 +505,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
+		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+			return false;
         if (!HasDeviceClaims(deviceId))
             return true;
         if (!s_ReconciledDevices.Contains(deviceId))
@@ -529,6 +533,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
+		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+			return false;
         if (!HasDeviceClaims(deviceId))
             return true;
         if (!s_ReconciledDevices.Contains(deviceId))
@@ -1268,6 +1274,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         string deviceId = atm.LFPG_GetDeviceId();
         if (deviceId == "")
             return;
+		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+		{
+			LogClaimError("[LFPG_Balance_Native] Loaded ATM reconcile blocked by ambiguous deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+			return;
+		}
         array<ref LFPG_BalanceClaim> chain = CollectDeviceClaims(deviceId);
         if (chain.Count() == 0)
         {
@@ -1490,6 +1501,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             string deviceId = deviceIds[deviceIndex];
             if (s_OrphanObservedThisBoot.Contains(deviceId))
                 continue;
+			if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+				continue;
 
             EntityAI device = null;
             if (deviceId != "")
