@@ -1,0 +1,56 @@
+---------------------------------------------
+Log P:\LFPowerGrid_dev\_client\profiles\script_2026-09-08_16-04-27.log started at 08.09. 16:04:29
+
+SCRIPT       : Module: GameLib; loaded 19x files; 29x classes; used 49/2097 kB (2%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STAC
+SCRIPT       : Registered 315 temporary action enum(s), UAN==315
+SCRIPT       : Module: Game; loaded 687x files; 2020x classes; used 6700/33554 kB (19%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_
+SCRIPT       : ... Backlit Effects Enabled
+SCRIPT       : Module: World; loaded 2284x files; 5975x classes; used 12676/33554 kB (37%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRA
+ SCRIPT       : Module: Mission; loaded 247x files; 589x classes; used 4872/33554 kB (14%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRA
+ SCRIPT       : Creating Mission: mpmissions\__cur_mp.chernarusplus\mission.c
+ SCRIPT       : string s =    'Module PluginConfigDebugProfile is not Registred in PluginManager.c!'
+ SCRIPT    (E):    -- Stack trace --
+ SCRIPT    (E):    GetPlugin() scripts/4_World/plugins\pluginmanager.c : 339
+ SCRIPT    (E):    OnInit() scripts/4_World/plugins\pluginbase\pluginitemdiagnostic.c : 94
+ SCRIPT    (E):    PluginsInit() scripts/4_World/plugins\pluginmanager.c : 134
+ SCRIPT    (E):    PluginManagerInit() scripts/4_World/plugins\pluginmanager.c : 302
+ SCRIPT    (E):    MissionBase@211#1() scripts/5_Mission/mission\missionbase.c : 21
+ SCRIPT    (E):    CreateMission() scripts/5_Mission/somemission.c : 23
+ SCRIPT    (E):    -----------------
+ SCRIPT       : SyncEvents -> RegisterEvents
+ SCRIPT       : [LF_PowerGrid] MissionGameplay OnInit (v1.2.4)
+ SCRIPT       : [LF_PowerGrid] Resetting client singletons...
+ SCRIPT       : [LF_PowerGrid] [DeviceInspector] Widgets created, wireSlots=8
+ SCRIPT       : [LF_PowerGrid] [DeviceInspector] Initialized
+ SCRIPT       : [LF_PowerGrid] [BTCAtmView] Pre-created (hidden)
+ SCRIPT       : [LF_PowerGrid] Client singletons reset complete
+ SCRIPT       : [MCP-CLIENT] client config loaded path=$profile:dayz_mcp.json url=http://127.0.0.1:8765/ keylen=43 instlen=36 poll_hz=5
+SCRIPT       : [LF_PowerGrid] Loaded (v=1.2.4)
+SCRIPT       : [LF_PowerGrid] Settings loaded: MaxWiresPerPlayer=128 MaxWiresPerDevice=64 AllowCutOthersWires=false RpcCooldownSeconds=0.5 DeviceBubbleM=25 AtomicVerifyReadback=true HideCablesWithoutReel=false VanillaCompat=true VanillaDefConsumption=20 C
+SCRIPT       : [LF_PowerGrid] VanillaCompat: blacklist parsed prefixes=1 exact=7
+SCRIPT       : [LF_PowerGrid] FurnaceFuel: whitelist cached entries=2
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "scuffErc_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "walkCro_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "runCro_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "jumpErc_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "jumpErc_en_deforested_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "landFootErc_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "landFootErc_en_deforested_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "walkRasErc_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "walkRasErc_en_deforested_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "runRasErc_sakhal_snow_forest_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "runRasErc_en_deforested_Char_Soundset".
+  SCRIPT       : AnimSoundObjectBuilderBank: Invalid sound set "landFeetErc_sakhal_snow_forest_Char_Soundset".
+SCRIPT       : [MCP-DIALOG] probe idx=0 path=$profile:mcp_hot.layout file_exist=1
+SCRIPT       : [MCP-DIALOG] probe WINNER=$profile:mcp_hot.layout
+SCRIPT       : [MCP-DIALOG] host created path=$profile:mcp_hot.layout
+SCRIPT       : [LF_PowerGrid] [FullSync] Requested (elapsed=150.258s)
+SCRIPT       : [LF_PowerGrid] [CameraViewport] Overlay widgets created (hidden)
+ SCRIPT       : string logMsg = '[LFPG] Server settings received: HideCablesWithoutReel=false'
+ SCRIPT       : [LF_PowerGrid] [WRN] [CableRenderer] BuildOwnerWires: ownerObj NULL net=0:0
+SCRIPT       : [MCP-CLIENT] client poll commands=1 sent_tick=19868 callback_tick=19890
+SCRIPT       : [MCP-CLIENT] client result posted id=136 ok=0 sent_tick=19868 callback_tick=19890 dispatch_tick=19890
+SCRIPT       : [MCP-CLIENT] client result ack size=11
+SCRIPT       : [MCP-CLIENT] client poll commands=1 sent_tick=21939 callback_tick=21962
+SCRIPT       : [MCP-CLIENT] client result posted id=137 ok=0 sent_tick=21939 callback_tick=21962 dispatch_tick=21962
+SCRIPT       : [MCP-CLIENT] client result ack size=11

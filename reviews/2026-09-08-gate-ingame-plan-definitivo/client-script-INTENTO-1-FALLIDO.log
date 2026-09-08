@@ -1,0 +1,12 @@
+---------------------------------------------
+Log P:\LFPowerGrid_dev\_client\profiles\script_2026-09-08_15-52-06.log started at 08.09. 15:52:08
+
+SCRIPT       : Module: GameLib; loaded 19x files; 29x classes; used 49/2097 kB (2%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STAC
+SCRIPT       : Registered 315 temporary action enum(s), UAN==315
+SCRIPT       : Module: Game; loaded 687x files; 2020x classes; used 6700/33554 kB (19%) of static memory; defines: "DAYZ_1_29,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_
+SCRIPT       : ... Backlit Effects Enabled
+SCRIPT    (E): @"LFPowerGrid/scripts/4_World/lfpg_cablerenderer.c,2825": Can't find variable 'm_Projections'
+SCRIPT    (E): Can't compile "World" script module!
+
+LFPowerGrid/scripts/4_World/lfpg_cablerenderer.c(2825): Can't find variable 'm_Projections'
+SCRIPT    (E): Failed to load entities script!
