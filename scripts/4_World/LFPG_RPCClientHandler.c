@@ -713,7 +713,8 @@ class LFPG_RPCClientHandler
         // LocationSyncMoveEntity on server moves items but client
         // may not refresh cargo view until relog. UpdateInventoryMenu
         // is vanilla EntityAI method called after every inventory op.
-        if (success && movedCount > 0)
+		// Repack can change cargo positions without transferring any items.
+		if (success)
         {
             player.UpdateInventoryMenu();
 

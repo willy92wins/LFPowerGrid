@@ -212,65 +212,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm) nm.RegisterSorter(this);
 
-        // Post-restart re-link: if container link persisted,
-        // verify it still resolves. If stale, re-scan by proximity.
-        EntityAI existCheck;
-        int rLow;
-        int rHigh;
-        string rKey;
-        string relinkMsg;
-        bool isValidContainer;
-        Man manGuard;
-        CargoBase cargoGuard;
-
-        if (m_LinkedContainerLow != 0 || m_LinkedContainerHigh != 0)
-        {
-            existCheck = LFPG_DeviceAPI.ResolveByNetworkId(m_LinkedContainerLow, m_LinkedContainerHigh);
-
-            isValidContainer = false;
-            if (existCheck)
-            {
-                manGuard = Man.Cast(existCheck);
-                if (!manGuard && !LFPG_DeviceAPI.IsElectricDevice(existCheck))
-                {
-                    if (existCheck.GetInventory())
-                    {
-                        cargoGuard = existCheck.GetInventory().GetCargo();
-                        if (cargoGuard)
-                        {
-                            isValidContainer = true;
-                        }
-                    }
-                }
-            }
-
-            if (!isValidContainer)
-            {
-                m_LinkedContainerLow = 0;
-                m_LinkedContainerHigh = 0;
-                LFPG_LinkNearestContainer(GetPosition());
-                relinkMsg = "[LFPG_Sorter] Post-restart re-link attempted at ";
-                relinkMsg = relinkMsg + GetPosition().ToString();
-                LFPG_Util.Info(relinkMsg);
-            }
-            else
-            {
-                rLow = 0;
-                rHigh = 0;
-                existCheck.GetNetworkID(rLow, rHigh);
-                rKey = rLow.ToString();
-                rKey = rKey + ":";
-                rKey = rKey + rHigh.ToString();
-                s_ContainerMap.Set(rKey, this);
-
-                if (rLow != m_LinkedContainerLow || rHigh != m_LinkedContainerHigh)
-                {
-                    m_LinkedContainerLow = rLow;
-                    m_LinkedContainerHigh = rHigh;
-                    SetSynchDirty();
-                }
-            }
-        }
+		// Restored session IDs are discarded on load; re-link is explicit.
         #endif
     }
 
@@ -331,33 +273,48 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     // ============================================
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
-        ctx.Write(m_LinkedContainerLow);
-        ctx.Write(m_LinkedContainerHigh);
+		// Preserve the legacy int/int/string layout, including for old readers.
+		// NetworkIDs identify this session only; new saves must not re-link on restart.
+		int noPersistentLink = 0;
+		ctx.Write(noPersistentLink);
+		ctx.Write(noPersistentLink);
         ctx.Write(m_FilterJSON);
     }
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-        if (!ctx.Read(m_LinkedContainerLow))
+		// Consume legacy IDs without publishing them as a live container link.
+		int legacyLow = 0;
+		int legacyHigh = 0;
+		string loadedFilterJSON;
+		if (!ctx.Read(legacyLow))
         {
             string errLow = "[LFPG_Sorter] OnStoreLoad failed: m_LinkedContainerLow";
             LFPG_Util.Error(errLow);
             return false;
         }
 
-        if (!ctx.Read(m_LinkedContainerHigh))
+		if (!ctx.Read(legacyHigh))
         {
             string errHigh = "[LFPG_Sorter] OnStoreLoad failed: m_LinkedContainerHigh";
             LFPG_Util.Error(errHigh);
             return false;
         }
 
-        if (!ctx.Read(m_FilterJSON))
+		if (!ctx.Read(loadedFilterJSON))
         {
             string errFilter = "[LFPG_Sorter] OnStoreLoad failed: m_FilterJSON";
             LFPG_Util.Error(errFilter);
             return false;
         }
+
+		// All fields have been read. Never resolve or proximity-replace a saved ID.
+		LFPG_UnlinkContainer();
+		if (legacyLow != 0 || legacyHigh != 0)
+		{
+			LFPG_Util.Warn("[LFPG_Sorter] Discarded saved session link; explicit container resync required");
+		}
+		m_FilterJSON = loadedFilterJSON;
 
         if (m_FilterJSON != "")
         {
@@ -370,10 +327,14 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     // ============================================
     // Container linking
     // ============================================
-    EntityAI LFPG_FindNearestContainerCandidate(float maxDist)
-    {
+	EntityAI LFPG_FindNearestContainerCandidate(float maxDist)
+	{
+		return LFPG_FindContainerCandidateAt(GetPosition(), maxDist);
+	}
+
+	protected EntityAI LFPG_FindContainerCandidateAt(vector searchPos, float maxDist)
+	{
         #ifdef SERVER
-        vector searchPos = GetPosition();
         float bestDistSq = maxDist * maxDist;
         EntityAI bestContainer = null;
 
@@ -405,8 +366,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
                 continue;
 
             CargoBase candidateCargo = candidate.GetInventory().GetCargo();
-            int attachCount = candidate.GetInventory().AttachmentCount();
-            if (!candidateCargo && attachCount == 0)
+			// Tick, manual sort and preview consume cargo only.
+			if (!candidateCargo)
                 continue;
 
             int candLow = 0;
@@ -432,6 +393,11 @@ class LFPG_Sorter : LFPG_WireOwnerBase
                 {
                     continue;
                 }
+				// Keep the stale-claim cleanup shared with the explicit link search.
+				if (!claimantValid)
+				{
+					s_ContainerMap.Remove(candKey);
+				}
             }
 
             float distSq = LFPG_WorldUtil.DistSq(searchPos, candidate.GetPosition());
@@ -480,80 +446,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     void LFPG_LinkNearestContainer(vector searchPos)
     {
         #ifdef SERVER
-        float bestDistSq = LFPG_SORTER_LINK_RADIUS * LFPG_SORTER_LINK_RADIUS;
-        EntityAI bestContainer = null;
-
-        ref array<Object> nearObjects = new array<Object>;
-        g_Game.GetObjectsAtPosition(searchPos, LFPG_SORTER_LINK_RADIUS, nearObjects, null);
-
-        int i;
-        for (i = 0; i < nearObjects.Count(); i = i + 1)
-        {
-            Object obj = nearObjects[i];
-            if (!obj)
-                continue;
-
-            if (obj == this)
-                continue;
-
-            EntityAI candidate = EntityAI.Cast(obj);
-            if (!candidate)
-                continue;
-
-            Man manCheck = Man.Cast(candidate);
-            if (manCheck)
-                continue;
-
-            if (LFPG_DeviceAPI.IsElectricDevice(candidate))
-                continue;
-
-            if (!candidate.GetInventory())
-                continue;
-
-            CargoBase candidateCargo = candidate.GetInventory().GetCargo();
-            int attachCount = candidate.GetInventory().AttachmentCount();
-            if (!candidateCargo && attachCount == 0)
-                continue;
-
-            int candLow = 0;
-            int candHigh = 0;
-            candidate.GetNetworkID(candLow, candHigh);
-            string candKey = candLow.ToString();
-            candKey = candKey + ":";
-            candKey = candKey + candHigh.ToString();
-
-            if (s_ContainerMap.Contains(candKey))
-            {
-                EntityAI claimant = EntityAI.Cast(s_ContainerMap.Get(candKey));
-                // F1-B: Defensive validation — claimant may be stale
-                // if its destructor/OnKilled failed to UnregisterContainer.
-                bool claimantValid = false;
-                if (claimant)
-                {
-                    LFPG_Sorter claimSorter = LFPG_Sorter.Cast(claimant);
-                    if (claimSorter && !claimSorter.IsRuined())
-                    {
-                        claimantValid = true;
-                    }
-                }
-                if (claimantValid && claimant != this)
-                {
-                    continue;
-                }
-                // Stale or self-claim — remove before potential re-claim
-                if (!claimantValid)
-                {
-                    s_ContainerMap.Remove(candKey);
-                }
-            }
-
-            float distSq = LFPG_WorldUtil.DistSq(searchPos, candidate.GetPosition());
-            if (distSq < bestDistSq)
-            {
-                bestDistSq = distSq;
-                bestContainer = candidate;
-            }
-        }
+		EntityAI bestContainer = LFPG_FindContainerCandidateAt(searchPos, LFPG_SORTER_LINK_RADIUS);
 
         if (bestContainer)
         {
