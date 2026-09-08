@@ -13,10 +13,9 @@
 // On completion:
 //   1. Capture pos/ori and filter state
 //   2. Create and validate T2 at same pos/ori
-//   3. Consume materials (excess dropped to ground)
-//   4. DeviceLifecycle.OnDeviceKilled (cuts wires, cleans graph)
-//   5. Delete T1
-//   6. Transfer NBC filter (GasMask_Filter, if any) to T2
+//   3. Stage material surplus with vanilla properties preserved
+//   4. Move the original filter to T2 after all output creation succeeds
+//   5. Consume originals, cut wires and delete T1
 //
 // ENFORCE SCRIPT NOTES:
 //   - No ternary operators
@@ -145,11 +144,8 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         vector ori = pump.GetOrientation();
         string deviceId = pump.LFPG_GetDeviceId();
     
-        int filterQty = 0;
-        string filterSlot = "GasMaskFilter";
-        EntityAI filterItem = pump.FindAttachmentBySlotName(filterSlot);
-        if (filterItem)
-            filterQty = filterItem.GetQuantity();
+		string filterSlot = "GasMaskFilter";
+		EntityAI filterItem = pump.FindAttachmentBySlotName(filterSlot);
     
         // Resolve the T2 surface position while T1 is still in the physics world.
         vector rayFrom = pos;
@@ -195,29 +191,6 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         array<EntityAI> stagedOutputs = new array<EntityAI>();
         stagedOutputs.Insert(t2);
     
-        // Stage the replacement filter before any T1 attachment can be deleted.
-        if (filterQty > 0)
-        {
-            EntityAI newFilter = t2.GetInventory().CreateAttachment("GasMask_Filter");
-            if (!newFilter)
-            {
-                g_Game.ObjectDelete(t2);
-                pump.LFPG_EndExclusiveOp();
-                LFPG_Util.Error("[UpgradePump] Failed to create T2 filter - T1 + original filter preserved");
-                return;
-            }
-    
-            ItemBase newFilterItem = ItemBase.Cast(newFilter);
-            if (!newFilterItem)
-            {
-                g_Game.ObjectDelete(t2);
-                pump.LFPG_EndExclusiveOp();
-                LFPG_Util.Error("[UpgradePump] Invalid T2 filter type - T1 + original filter preserved");
-                return;
-            }
-            newFilterItem.SetQuantity(filterQty);
-        }
-    
         if (!StageMaterialSurplus(plate, plateQty, LFPG_PUMP_UPGRADE_PLATES, pos, stagedOutputs))
         {
             AbortStagedUpgradeOutputs(stagedOutputs);
@@ -232,7 +205,29 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             LFPG_Util.Error("[UpgradePump] Failed to stage Nail surplus - T1 + materials preserved");
             return;
         }
-        // Commit sources only after T2, its filter, and every surplus output exist.
+		// Move the original filter only after every fallible output creation succeeds.
+		// Its identity preserves subtype, zero quantity, health and custom script state.
+		if (filterItem)
+		{
+			InventoryLocation filterSource = new InventoryLocation();
+			InventoryLocation filterTarget = new InventoryLocation();
+			if (!filterItem.GetInventory().GetCurrentInventoryLocation(filterSource))
+			{
+				AbortStagedUpgradeOutputs(stagedOutputs);
+				pump.LFPG_EndExclusiveOp();
+				LFPG_Util.Error("[UpgradePump] Cannot locate original filter - T1 preserved");
+				return;
+			}
+			filterTarget.SetAttachment(t2, filterItem, filterSource.GetSlot());
+			if (!GameInventory.LocationSyncMoveEntity(filterSource, filterTarget))
+			{
+				AbortStagedUpgradeOutputs(stagedOutputs);
+				pump.LFPG_EndExclusiveOp();
+				LFPG_Util.Error("[UpgradePump] Cannot transfer original filter - T1 preserved");
+				return;
+			}
+		}
+		// No fallible creation or transfer remains after moving the original filter.
         g_Game.ObjectDelete(plate);
         g_Game.ObjectDelete(nails);
         LFPG_DeviceLifecycle.OnDeviceKilled(pump, deviceId);
@@ -264,6 +259,8 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         if (!excessItem)
             return false;
     
+		// Keep vanilla health (including zones), variables and agents; quantity is the surplus.
+		MiscGameplayFunctions.TransferItemProperties(item, excessItem, true, true, true, true);
         excessItem.SetQuantity(excessQty);
         return true;
     }

@@ -63,13 +63,9 @@ class LFPG_DeviceBase : Inventory_Base
         s_LFPG_SkipHologramInit = false;
     }
 
-    // ---- Persistence version range accepted by OnStoreLoad ----
-    // Bump the value returned by LFPG_GetDevicePersistVersion() when
-    // changing the format of LFPG_OnStoreSaveExtra. Old saves whose
-    // deviceVer falls outside [MIN, MAX_ACCEPTED] are discarded cleanly
-    // to avoid engine "String CORRUPTED" noise from legacy formats.
-    static const int LFPG_DEVICE_PERSIST_VER_MIN = 1;
-    static const int LFPG_DEVICE_PERSIST_VER_MAX_ACCEPTED = 999;
+	// Reject future schemas relative to the concrete device writer.
+	// Preserve the existing legacy range; each reader validates its payload.
+	static const int LFPG_DEVICE_PERSIST_VER_MIN = 1;
 
     // ============================================
     // Constructor
@@ -409,14 +405,15 @@ class LFPG_DeviceBase : Inventory_Base
             return false;
         }
 
-        bool verOutOfRange = (deviceVer < LFPG_DEVICE_PERSIST_VER_MIN) || (deviceVer > LFPG_DEVICE_PERSIST_VER_MAX_ACCEPTED);
+		int currentDeviceVer = LFPG_GetDevicePersistVersion();
+		bool verOutOfRange = (deviceVer < LFPG_DEVICE_PERSIST_VER_MIN) || (deviceVer > currentDeviceVer);
         if (verOutOfRange)
         {
             string errBadVer = "[LFPG_DeviceBase] OnStoreLoad: unknown deviceVer=";
             errBadVer = errBadVer + deviceVer.ToString();
             errBadVer = errBadVer + " on ";
             errBadVer = errBadVer + GetType();
-            errBadVer = errBadVer + " (likely pre-v4.0 legacy save) - discarding entity";
+			errBadVer = errBadVer + " - unsupported device schema, refusing load";
             LFPG_Util.Warn(errBadVer);
             return false;
         }

@@ -191,12 +191,12 @@ class LFPG_DeviceAPI
         if (!ParseVanillaId(deviceId, typeName, targetPos))
             return null;
 
-        // Spatial search (2D radius on XZ, we check Y manually)
+		// Spatial candidates are checked against the full 3D radius below.
         array<Object> objects = new array<Object>;
         g_Game.GetObjectsAtPosition(targetPos, searchRadius, objects, null);
 
         EntityAI bestMatch = null;
-        float bestDist = searchRadius + 1.0;
+		float bestDist = searchRadius;
 
         int i;
         for (i = 0; i < objects.Count(); i = i + 1)
@@ -506,6 +506,9 @@ class LFPG_DeviceAPI
 
     static vector GetPortWorldPos(Object obj, string portName)
     {
+		LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(obj);
+		if (dev)
+			return dev.LFPG_GetPortWorldPos(portName);
         Param1<string> p = new Param1<string>(portName);
         vector fb = "0 0 0";
         if (obj) fb = obj.GetPosition();
@@ -841,6 +844,10 @@ class LFPG_DeviceAPI
     {
         if (!e) return "";
 
+		LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+		if (dev)
+			return dev.LFPG_GetPortName(idx);
+
         Param1<int> p = new Param1<int>(idx);
         string name = CallString(e, "LFPG_GetPortName", p, "");
         if (name != "") return name;
@@ -858,6 +865,10 @@ class LFPG_DeviceAPI
     {
         if (!e) return -1;
 
+		LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+		if (dev)
+			return dev.LFPG_GetPortDir(idx);
+
         Param1<int> p = new Param1<int>(idx);
         int dir = CallInt(e, "LFPG_GetPortDir", p, -1);
         if (dir >= 0) return dir;
@@ -873,6 +884,10 @@ class LFPG_DeviceAPI
     static string GetPortLabel(EntityAI e, int idx)
     {
         if (!e) return "";
+
+		LFPG_DeviceBase dev = LFPG_DeviceBase.Cast(e);
+		if (dev)
+			return dev.LFPG_GetPortLabel(idx);
 
         Param1<int> p = new Param1<int>(idx);
         string label = CallString(e, "LFPG_GetPortLabel", p, "");

@@ -387,6 +387,8 @@ class LFPG_DoorController : LFPG_DeviceBase
             {
                 if (m_SearchBackoffMs <= LFPG_DC_BACKOFF_MIN_MS)
                     return;
+				if (nowMs < m_LastSearchAttemptMs + LFPG_DC_BACKOFF_MIN_MS)
+					return;
                 if (!m_SearchNearbyPlayers)
                     return;
 
@@ -411,8 +413,6 @@ class LFPG_DoorController : LFPG_DeviceBase
                     }
                 }
                 if (!hasNearbyPlayer)
-                    return;
-                if (nowMs < m_LastSearchAttemptMs + LFPG_DC_BACKOFF_MIN_MS)
                     return;
             }
             if (!m_SearchObjects)

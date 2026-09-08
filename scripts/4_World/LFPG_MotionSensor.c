@@ -340,26 +340,32 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-        if (!ctx.Read(m_DetectMode))
+		int detectMode;
+		string pairedGroupName;
+		if (!ctx.Read(detectMode))
         {
             string errMode = "[LFPG_MotionSensor] OnStoreLoad failed: m_DetectMode";
             LFPG_Util.Error(errMode);
             return false;
         }
 
-        // v4.1: If LBmaster_Groups is not compiled in, force ALL mode.
-        // Prevents stale TEAM/ENEMY mode from a previous server config.
-        #ifndef LBmaster_Groups
-        m_DetectMode = 0;
-        #endif
-
-        if (!ctx.Read(m_PairedGroupName))
+		if (!ctx.Read(pairedGroupName))
         {
             string errGroup = "[LFPG_MotionSensor] OnStoreLoad failed: m_PairedGroupName";
             LFPG_Util.Error(errGroup);
             return false;
         }
 
+		if (detectMode < LFPG_SENSOR_MODE_ALL || detectMode >= LFPG_SENSOR_MODE_COUNT)
+		{
+			LFPG_Util.Error("[LFPG_MotionSensor] OnStoreLoad: invalid detect mode");
+			return false;
+		}
+		#ifndef LBmaster_Groups
+		detectMode = LFPG_SENSOR_MODE_ALL;
+		#endif
+		m_DetectMode = detectMode;
+		m_PairedGroupName = pairedGroupName;
         return true;
     }
 
