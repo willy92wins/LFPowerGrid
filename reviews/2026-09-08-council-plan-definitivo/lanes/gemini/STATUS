@@ -1,0 +1,17 @@
+STATUS=QUOTA   (definitivo, 2 intentos)
+RC=1 en los dos. Sin artefacto: stdout 0 B en ambos.
+
+Intento 1 (12:57-12:58): "Quota exceeded ... generate_content_free_tier_requests, limit: 5,
+                          model: gemini-3.5-flash". Retry sugerido 48,8 s.
+Intento 2 (13:00-13:01): HTTP 429, "... limit: 20, model: gemini-3.5-flash".
+                          Retry sugerido 49,8 s. Cubo de cuota distinto -> hay al menos dos
+                          limites (por minuto y por dia) y el free tier esta agotado hoy.
+
+ORACULO != PIN, y es un hallazgo aparte de la cuota: el CLI sirvio `gemini-3.5-flash` en las
+dos corridas, no el `gemini-3.7-flash` pineado en el manifiesto. Reescritura silenciosa del
+modelo, exactamente el modo de fallo que el protocolo (C9) manda comprobar por oraculo. Esta
+fila NO se compara con ninguna corrida historica de 3.7.
+
+NO ENTRA AL ARBITRAJE. No se sustituye: el manifiesto declara `fallback: ninguno`.
+N del council baja de 6 a 5. Recuento por puerta tras la baja: Anthropic 1, OpenAI 1, Cursor 3
+-> Cursor pasa de la mitad a 3 de 5, que es MAS concentracion, no menos.

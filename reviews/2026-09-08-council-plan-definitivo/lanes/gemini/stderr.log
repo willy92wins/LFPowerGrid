@@ -1,0 +1,25 @@
+Warning: True color (24-bit) support not detected. Using a terminal with true color enabled will result in a better visual experience.
+Ripgrep is not available. Falling back to GrepTool.
+Error when talking to Gemini API Full report available at: C:\Users\guill\AppData\Local\Temp\gemini-client-error-Turn.run-sendMessageStream-2026-09-08T10-59-58-398Z.json TerminalQuotaError: You have exhausted your daily quota on this model.
+    at classifyGoogleError (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:306572:16)
+    at retryWithBackoff (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:307295:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:330898:28)
+    at async GeminiChat.streamWithRetries (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:330671:29)
+    at async Turn.run (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:331556:24)
+    at async GeminiClient.processTurn (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:345083:22)
+    at async GeminiClient.sendMessageStream (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-32XQ54AJ.js:345180:14)
+    at async file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/gemini-63IMHOLI.js:11524:26
+    at async main (file:///C:/Users/guill/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/gemini-63IMHOLI.js:16951:5) {
+  cause: {
+    code: 429,
+    message: 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n' +
+      '* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\n' +
+      'Please retry in 49.789587982s.',
+    details: [ [Object], [Object], [Object] ]
+  },
+  retryDelayMs: undefined,
+  reason: undefined,
+  status: 429
+}
+An unexpected critical error occurred:[object Object]

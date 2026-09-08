@@ -1,0 +1,3 @@
+STATUS=COMPLETE  fuente=PLAN.md 50250 B  7/7 secciones  46 filas en B  15 lanes en D  23 min  37 tool_uses
+SENAL DE TERMINO: notificacion del subagente, no exit code (lane in-process).
+COMPROBADO por la propia lane: 7 cabeceras en orden, CRLF (371/371), git status sin tocar nada fuera del council.

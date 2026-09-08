@@ -1,0 +1,2 @@
+STATUS=COMPLETE  RC=0  fuente=PLAN.md 61066 B  7/7  turn.completed  24m  55 item.completed
+Nota: 1 "CreateProcessWithLogonW failed: 267" en stderr (exec del sandbox) que NO impidio la entrega; y el ruido habitual de rmcp::transport.

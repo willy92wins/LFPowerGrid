@@ -1,0 +1,6 @@
+RC=0
+SENAL=notificacion-del-agente (lane in-process: NO hay proceso externo que retorne, asi que
+       la quinta conjuncion de C12 no aplica por fichero EXIT. Este RC lo escribe el
+       orquestador al recibir la notificacion de fin del subagente, y su evidencia es esa
+       notificacion mas el artefacto en disco, no un exit code del SO.)
+END 2026-09-08T11:16Z aprox
