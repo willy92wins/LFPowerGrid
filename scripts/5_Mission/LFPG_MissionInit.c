@@ -47,6 +47,13 @@ modded class MissionServer
         LFPG_BTCHelper.ReconcilePendingAccountSell(player);
     }
 
+	override void PlayerDisconnected(PlayerBase player, PlayerIdentity identity, string uid)
+	{
+		// Vanilla passes the hashed UID even when the identity has already expired.
+		LFPG_BTCSessionRegistry.ReleaseDisconnected(uid);
+		super.PlayerDisconnected(player, identity, uid);
+	}
+
     override void OnMissionStart()
     {
         super.OnMissionStart();
@@ -134,11 +141,6 @@ modded class MissionGameplay
     override void OnInit()
     {
         super.OnInit();
-
-        // F2-A: Normalize widget brightness — DayZ engine applies negative LV by default,
-        // darkening grays/pastels 30-50%. Static call affects all widgets globally.
-        Widget.SetLV(0);
-        Widget.SetTextLV(0);
 
         Print(LFPG_LOG_PREFIX + "MissionGameplay OnInit (v" + LFPG_VERSION_STR + ")");
 
@@ -361,7 +363,9 @@ modded class MissionGameplay
         LFPG_CableHUD hud = LFPG_CableHUD.Get();
         hud.BeginFrame(canvasProducerActive);
 
-        if (canvasProducerActive)
+		// TickPreview also expires wiring sessions and guards its own drawing with IsReady.
+		bool canvasFrameReady = hud.IsReady();
+		if (canvasProducerActive && canvasFrameReady)
         {
             if (cableProducerActive)
             {
@@ -371,12 +375,15 @@ modded class MissionGameplay
             {
                 laserR.DrawFrame();
             }
-            if (isActive)
-            {
-                LFPG_WiringClient.TickPreview();
-            }
-            hud.EndFrame();
         }
+		if (isActive && !skipCameraOps)
+		{
+			LFPG_WiringClient.TickPreview();
+		}
+		if (canvasProducerActive && canvasFrameReady)
+		{
+			hud.EndFrame();
+		}
 
         if (viewport)
         {

@@ -149,8 +149,9 @@ class LFPG_BTCSessionRegistry
         if (!session)
             return false;
 
-        // Reopen exposes the same process-lifetime pair and preserves replay
-        // state. The watermark lets the client continue without nonce reuse.
+		// Reopen preserves the process pair and watermark, even after response cleanup.
+		if (!session.m_Terminals)
+			session.m_Terminals = new array<ref LFPG_BTCNonceRecord>;
         session.m_Active = true;
 
         serverSessionLow = m_ServerSessionLow;
@@ -158,6 +159,22 @@ class LFPG_BTCSessionRegistry
         highWatermark = session.m_HighestAcceptedSequence;
         return true;
     }
+
+	// Final disconnect only. Keep the UID watermark for the entire process:
+	// deleting it would allow old nonces under the same server pair to execute again.
+	static void ReleaseDisconnected(string uid)
+	{
+		if (!s_Instance || uid == "")
+			return;
+		LFPG_BTCPlayerSession session = s_Instance.m_ByUID.Get(uid);
+		if (!session)
+			return;
+		session.m_Active = false;
+		// ReserveRequest advanced the watermark before any mutation. A discarded
+		// in-flight/terminal nonce stays STALE after reopen; it can never become NEW.
+		session.m_InFlight = null;
+		session.m_Terminals = null;
+	}
 
     protected LFPG_BTCNonceRecord FindTerminal(LFPG_BTCPlayerSession session, int serverSessionLow, int serverSessionHigh, int sequence)
     {
@@ -247,7 +264,7 @@ class LFPG_BTCSessionRegistry
         session.m_Terminals.Insert(record);
         while (session.m_Terminals.Count() > LFPG_BTC_TERMINAL_CACHE_SIZE)
         {
-            session.m_Terminals.Remove(0);
+			session.m_Terminals.RemoveOrdered(0);
         }
     }
 
@@ -380,7 +397,7 @@ class LFPG_BTCSessionRegistry
         session.m_Terminals.Insert(record);
         while (session.m_Terminals.Count() > LFPG_BTC_TERMINAL_CACHE_SIZE)
         {
-            session.m_Terminals.Remove(0);
+			session.m_Terminals.RemoveOrdered(0);
         }
         return true;
     }
