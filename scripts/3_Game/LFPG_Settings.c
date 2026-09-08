@@ -272,14 +272,14 @@ class LFPG_Settings
     }
 
     // v0.7.35 (Gemini 3b): Validate and clamp all numeric settings.
-    // Called after successful JSON deserialization. Logs a warning
+	// Called on the candidate or fresh defaults before publication. Logs a warning
     // for every field that required clamping so admins know their
     // settings.json has out-of-range values.
     // v0.7.36: All Warn strings pre-built to avoid Enforce
     //          "Invalid statement ')'" on long inline concatenation.
-    protected static void ValidateAndClamp()
+	protected static void ValidateAndClamp(LFPG_ServerSettings settings)
     {
-        if (!s_Settings)
+		if (!settings)
             return;
 
         int clamped = 0;
@@ -288,71 +288,63 @@ class LFPG_Settings
         string msg;
 
         // --- ver: must be >= 1 ---
-        if (s_Settings.ver < 1)
+		if (settings.ver < 1)
         {
-            msg = "Settings: ver=" + s_Settings.ver.ToString() + " invalid, reset to 1";
+			msg = "Settings: ver=" + settings.ver.ToString() + " invalid, reset to 1";
             LFPG_Util.Warn(msg);
-            s_Settings.ver = 1;
+			settings.ver = 1;
             clamped = clamped + 1;
         }
 
         // --- MaxWiresPerPlayer ---
-        intVal = ClampInt(s_Settings.MaxWiresPerPlayer,
-                          LFPG_SETTINGS_MIN_WIRES_PLAYER,
-                          LFPG_SETTINGS_MAX_WIRES_PLAYER);
-        if (intVal != s_Settings.MaxWiresPerPlayer)
+		intVal = ClampInt(settings.MaxWiresPerPlayer, LFPG_SETTINGS_MIN_WIRES_PLAYER, LFPG_SETTINGS_MAX_WIRES_PLAYER);
+		if (intVal != settings.MaxWiresPerPlayer)
         {
-            msg = "Settings: MaxWiresPerPlayer=" + s_Settings.MaxWiresPerPlayer.ToString();
+			msg = "Settings: MaxWiresPerPlayer=" + settings.MaxWiresPerPlayer.ToString();
             msg = msg + " clamped to " + intVal.ToString();
             msg = msg + " [" + LFPG_SETTINGS_MIN_WIRES_PLAYER.ToString();
             msg = msg + ".." + LFPG_SETTINGS_MAX_WIRES_PLAYER.ToString() + "]";
             LFPG_Util.Warn(msg);
-            s_Settings.MaxWiresPerPlayer = intVal;
+			settings.MaxWiresPerPlayer = intVal;
             clamped = clamped + 1;
         }
 
         // --- MaxWiresPerDevice ---
-        intVal = ClampInt(s_Settings.MaxWiresPerDevice,
-                          LFPG_SETTINGS_MIN_WIRES_DEVICE,
-                          LFPG_SETTINGS_MAX_WIRES_DEVICE);
-        if (intVal != s_Settings.MaxWiresPerDevice)
+		intVal = ClampInt(settings.MaxWiresPerDevice, LFPG_SETTINGS_MIN_WIRES_DEVICE, LFPG_SETTINGS_MAX_WIRES_DEVICE);
+		if (intVal != settings.MaxWiresPerDevice)
         {
-            msg = "Settings: MaxWiresPerDevice=" + s_Settings.MaxWiresPerDevice.ToString();
+			msg = "Settings: MaxWiresPerDevice=" + settings.MaxWiresPerDevice.ToString();
             msg = msg + " clamped to " + intVal.ToString();
             msg = msg + " [" + LFPG_SETTINGS_MIN_WIRES_DEVICE.ToString();
             msg = msg + ".." + LFPG_SETTINGS_MAX_WIRES_DEVICE.ToString() + "]";
             LFPG_Util.Warn(msg);
-            s_Settings.MaxWiresPerDevice = intVal;
+			settings.MaxWiresPerDevice = intVal;
             clamped = clamped + 1;
         }
 
         // --- RpcCooldownSeconds ---
-        floatVal = ClampFloat(s_Settings.RpcCooldownSeconds,
-                              LFPG_SETTINGS_MIN_RPC_COOLDOWN,
-                              LFPG_SETTINGS_MAX_RPC_COOLDOWN);
-        if (floatVal != s_Settings.RpcCooldownSeconds)
+		floatVal = ClampFloat(settings.RpcCooldownSeconds, LFPG_SETTINGS_MIN_RPC_COOLDOWN, LFPG_SETTINGS_MAX_RPC_COOLDOWN);
+		if (floatVal != settings.RpcCooldownSeconds)
         {
-            msg = "Settings: RpcCooldownSeconds=" + s_Settings.RpcCooldownSeconds.ToString();
+			msg = "Settings: RpcCooldownSeconds=" + settings.RpcCooldownSeconds.ToString();
             msg = msg + " clamped to " + floatVal.ToString();
             msg = msg + " [" + LFPG_SETTINGS_MIN_RPC_COOLDOWN.ToString();
             msg = msg + ".." + LFPG_SETTINGS_MAX_RPC_COOLDOWN.ToString() + "]";
             LFPG_Util.Warn(msg);
-            s_Settings.RpcCooldownSeconds = floatVal;
+			settings.RpcCooldownSeconds = floatVal;
             clamped = clamped + 1;
         }
 
         // --- DeviceBubbleM ---
-        floatVal = ClampFloat(s_Settings.DeviceBubbleM,
-                              LFPG_SETTINGS_MIN_BUBBLE_M,
-                              LFPG_SETTINGS_MAX_BUBBLE_M);
-        if (floatVal != s_Settings.DeviceBubbleM)
+		floatVal = ClampFloat(settings.DeviceBubbleM, LFPG_SETTINGS_MIN_BUBBLE_M, LFPG_SETTINGS_MAX_BUBBLE_M);
+		if (floatVal != settings.DeviceBubbleM)
         {
-            msg = "Settings: DeviceBubbleM=" + s_Settings.DeviceBubbleM.ToString();
+			msg = "Settings: DeviceBubbleM=" + settings.DeviceBubbleM.ToString();
             msg = msg + " clamped to " + floatVal.ToString();
             msg = msg + " [" + LFPG_SETTINGS_MIN_BUBBLE_M.ToString();
             msg = msg + ".." + LFPG_SETTINGS_MAX_BUBBLE_M.ToString() + "]";
             LFPG_Util.Warn(msg);
-            s_Settings.DeviceBubbleM = floatVal;
+			settings.DeviceBubbleM = floatVal;
             clamped = clamped + 1;
         }
 
@@ -363,34 +355,32 @@ class LFPG_Settings
         }
 
         // ---- v4.6: Vanilla compat validation ----
-        floatVal = ClampFloat(s_Settings.VanillaDefaultConsumption,
-                              LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION,
-                              LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION);
-        if (floatVal != s_Settings.VanillaDefaultConsumption)
+		floatVal = ClampFloat(settings.VanillaDefaultConsumption, LFPG_SETTINGS_MIN_VANILLA_CONSUMPTION, LFPG_SETTINGS_MAX_VANILLA_CONSUMPTION);
+		if (floatVal != settings.VanillaDefaultConsumption)
         {
             msg = "Settings: VanillaDefaultConsumption=";
-            msg = msg + s_Settings.VanillaDefaultConsumption.ToString();
+			msg = msg + settings.VanillaDefaultConsumption.ToString();
             msg = msg + " clamped to ";
             msg = msg + floatVal.ToString();
             LFPG_Util.Warn(msg);
-            s_Settings.VanillaDefaultConsumption = floatVal;
+			settings.VanillaDefaultConsumption = floatVal;
         }
 
         // Ensure arrays exist (could be null from malformed JSON)
-        if (!s_Settings.VanillaCustomConsumption)
+		if (!settings.VanillaCustomConsumption)
         {
-            s_Settings.VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
+			settings.VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
         }
-        if (!s_Settings.VanillaBlacklist)
+		if (!settings.VanillaBlacklist)
         {
-            s_Settings.VanillaBlacklist = new array<ref LFPG_VanillaBlacklistEntry>;
+			settings.VanillaBlacklist = new array<ref LFPG_VanillaBlacklistEntry>;
         }
 
         // Validate custom consumption entries
         int vci;
-        for (vci = 0; vci < s_Settings.VanillaCustomConsumption.Count(); vci = vci + 1)
+		for (vci = 0; vci < settings.VanillaCustomConsumption.Count(); vci = vci + 1)
         {
-            LFPG_VanillaConsumptionEntry vce = s_Settings.VanillaCustomConsumption[vci];
+			LFPG_VanillaConsumptionEntry vce = settings.VanillaCustomConsumption[vci];
             if (!vce)
                 continue;
             if (vce.classname == "")
@@ -417,15 +407,15 @@ class LFPG_Settings
         }
 
         // ---- v4.7: Furnace fuel whitelist validation ----
-        if (!s_Settings.FurnaceFuelWhitelist)
+		if (!settings.FurnaceFuelWhitelist)
         {
-            s_Settings.FurnaceFuelWhitelist = new array<ref LFPG_FurnaceFuelEntry>;
+			settings.FurnaceFuelWhitelist = new array<ref LFPG_FurnaceFuelEntry>;
         }
 
         int fwi;
-        for (fwi = 0; fwi < s_Settings.FurnaceFuelWhitelist.Count(); fwi = fwi + 1)
+		for (fwi = 0; fwi < settings.FurnaceFuelWhitelist.Count(); fwi = fwi + 1)
         {
-            LFPG_FurnaceFuelEntry fwe = s_Settings.FurnaceFuelWhitelist[fwi];
+			LFPG_FurnaceFuelEntry fwe = settings.FurnaceFuelWhitelist[fwi];
             if (!fwe)
                 continue;
             if (fwe.classname == "")
@@ -452,9 +442,9 @@ class LFPG_Settings
         }
 
         // Warn: whitelist enabled but empty
-        if (s_Settings.FurnaceFuelWhitelistOnly)
+		if (settings.FurnaceFuelWhitelistOnly)
         {
-            if (s_Settings.FurnaceFuelWhitelist.Count() <= 0)
+			if (settings.FurnaceFuelWhitelist.Count() <= 0)
             {
                 msg = "Settings: FurnaceFuelWhitelistOnly=true but whitelist is empty.";
                 msg = msg + " Furnace will burn items without fuel benefit.";
@@ -463,87 +453,81 @@ class LFPG_Settings
         }
 
         // ---- v4.7: Furnace heat emission validation ----
-        floatVal = ClampFloat(s_Settings.FurnaceHeatFullWarmthRadiusM,
-                              LFPG_SETTINGS_MIN_HEAT_RADIUS,
-                              LFPG_SETTINGS_MAX_HEAT_FULL_R);
-        if (floatVal != s_Settings.FurnaceHeatFullWarmthRadiusM)
+		floatVal = ClampFloat(settings.FurnaceHeatFullWarmthRadiusM, LFPG_SETTINGS_MIN_HEAT_RADIUS, LFPG_SETTINGS_MAX_HEAT_FULL_R);
+		if (floatVal != settings.FurnaceHeatFullWarmthRadiusM)
         {
             msg = "Settings: FurnaceHeatFullWarmthRadiusM=";
-            msg = msg + s_Settings.FurnaceHeatFullWarmthRadiusM.ToString();
+			msg = msg + settings.FurnaceHeatFullWarmthRadiusM.ToString();
             msg = msg + " clamped to ";
             msg = msg + floatVal.ToString();
             LFPG_Util.Warn(msg);
-            s_Settings.FurnaceHeatFullWarmthRadiusM = floatVal;
+			settings.FurnaceHeatFullWarmthRadiusM = floatVal;
         }
 
-        floatVal = ClampFloat(s_Settings.FurnaceHeatFadeOutRadiusM,
-                              LFPG_SETTINGS_MIN_HEAT_RADIUS,
-                              LFPG_SETTINGS_MAX_HEAT_FADE_R);
-        if (floatVal != s_Settings.FurnaceHeatFadeOutRadiusM)
+		floatVal = ClampFloat(settings.FurnaceHeatFadeOutRadiusM, LFPG_SETTINGS_MIN_HEAT_RADIUS, LFPG_SETTINGS_MAX_HEAT_FADE_R);
+		if (floatVal != settings.FurnaceHeatFadeOutRadiusM)
         {
             msg = "Settings: FurnaceHeatFadeOutRadiusM=";
-            msg = msg + s_Settings.FurnaceHeatFadeOutRadiusM.ToString();
+			msg = msg + settings.FurnaceHeatFadeOutRadiusM.ToString();
             msg = msg + " clamped to ";
             msg = msg + floatVal.ToString();
             LFPG_Util.Warn(msg);
-            s_Settings.FurnaceHeatFadeOutRadiusM = floatVal;
+			settings.FurnaceHeatFadeOutRadiusM = floatVal;
         }
 
         // Ensure FullWarmth < FadeOut
-        if (s_Settings.FurnaceHeatFullWarmthRadiusM >= s_Settings.FurnaceHeatFadeOutRadiusM)
+		if (settings.FurnaceHeatFullWarmthRadiusM >= settings.FurnaceHeatFadeOutRadiusM)
         {
             msg = "Settings: FurnaceHeatFullWarmthRadiusM (";
-            msg = msg + s_Settings.FurnaceHeatFullWarmthRadiusM.ToString();
+			msg = msg + settings.FurnaceHeatFullWarmthRadiusM.ToString();
             msg = msg + ") must be < FadeOutRadiusM (";
-            msg = msg + s_Settings.FurnaceHeatFadeOutRadiusM.ToString();
+			msg = msg + settings.FurnaceHeatFadeOutRadiusM.ToString();
             msg = msg + "). Adjusting FadeOut to Full+2.";
             LFPG_Util.Warn(msg);
-            s_Settings.FurnaceHeatFadeOutRadiusM = s_Settings.FurnaceHeatFullWarmthRadiusM + 2.0;
+			settings.FurnaceHeatFadeOutRadiusM = settings.FurnaceHeatFullWarmthRadiusM + 2.0;
         }
 
-        floatVal = ClampFloat(s_Settings.FurnaceHeatStrengthMultiplier,
-                              LFPG_SETTINGS_MIN_HEAT_MULT,
-                              LFPG_SETTINGS_MAX_HEAT_MULT);
-        if (floatVal != s_Settings.FurnaceHeatStrengthMultiplier)
+		floatVal = ClampFloat(settings.FurnaceHeatStrengthMultiplier, LFPG_SETTINGS_MIN_HEAT_MULT, LFPG_SETTINGS_MAX_HEAT_MULT);
+		if (floatVal != settings.FurnaceHeatStrengthMultiplier)
         {
             msg = "Settings: FurnaceHeatStrengthMultiplier=";
-            msg = msg + s_Settings.FurnaceHeatStrengthMultiplier.ToString();
+			msg = msg + settings.FurnaceHeatStrengthMultiplier.ToString();
             msg = msg + " clamped to ";
             msg = msg + floatVal.ToString();
             LFPG_Util.Warn(msg);
-            s_Settings.FurnaceHeatStrengthMultiplier = floatVal;
+			settings.FurnaceHeatStrengthMultiplier = floatVal;
         }
     }
 
-    static void Load()
-    {
-        if (!s_Settings)
-            s_Settings = new LFPG_ServerSettings();
+	static void Load()
+	{
+		LFPG_ServerSettings candidate = new LFPG_ServerSettings();
+		if (!s_LoggedBanner)
+		{
+			s_LoggedBanner = true;
+			LFPG_Util.Info("Loaded (v=" + LFPG_VERSION_STR + ")");
+		}
+		if (!FileExist(SETTINGS_DIR))
+			MakeDirectory(SETTINGS_DIR);
 
-        if (!s_LoggedBanner)
-        {
-            s_LoggedBanner = true;
-            LFPG_Util.Info("Loaded (v=" + LFPG_VERSION_STR + ")");
-        }
+		bool hadArtifacts = FileExist(SETTINGS_FILE) || FileExist(SETTINGS_FILE + ".tmp") || FileExist(SETTINGS_FILE + ".bak.new") || FileExist(SETTINGS_FILE + ".bak");
+		LFPG_FileUtil.EnsureSettingsFileOrRestore(SETTINGS_FILE);
+		string err;
+		bool loaded = false;
+		if (FileExist(SETTINGS_FILE))
+			loaded = JsonFileLoader<LFPG_ServerSettings>.LoadFile(SETTINGS_FILE, candidate, err);
+		if (!loaded)
+		{
+			// A failed native deserialize may have mutated candidate. Discard it.
+			candidate = new LFPG_ServerSettings();
+			if (hadArtifacts)
+				LFPG_Util.Warn("Settings recovery/load failed, using validated defaults; disk artifacts retained. " + err);
+		}
+		ValidateAndClamp(candidate);
+		s_Settings = candidate;
 
-        string err;
-        if (!FileExist(SETTINGS_DIR))
-            MakeDirectory(SETTINGS_DIR);
-
-        // PR-A: typed recovery prefers parseable orphan .tmp over .bak.new/.bak.
-        LFPG_FileUtil.EnsureSettingsFileOrRestore(SETTINGS_FILE);
-
-        if (FileExist(SETTINGS_FILE))
-        {
-            if (!JsonFileLoader<LFPG_ServerSettings>.LoadFile(SETTINGS_FILE, s_Settings, err))
-            {
-                LFPG_Util.Warn("Settings load failed, using defaults. " + err);
-            }
-            else
-            {
-                // v0.7.35 (Gemini 3b): Validate ranges before logging
-                ValidateAndClamp();
-
+		if (loaded)
+		{
                 string msg = "Settings loaded:";
                 msg = msg + " MaxWiresPerPlayer=" + s_Settings.MaxWiresPerPlayer.ToString();
                 msg = msg + " MaxWiresPerDevice=" + s_Settings.MaxWiresPerDevice.ToString();
@@ -585,17 +569,14 @@ class LFPG_Settings
                     msg = msg + " (=" + heatAbs.ToString() + ", campfire=20)";
                 }
                 LFPG_Util.Info(msg);
-            }
-        }
-        else
-        {
-            LFPG_Util.Info("Settings file not found; creating defaults: " + SETTINGS_FILE);
-            Save(); // create defaults
-        }
-
-        // v4.6: Parse blacklist into prefix/exact arrays for fast lookup
-        BuildBlacklistIndex();
-    }
+		}
+		else if (!hadArtifacts)
+		{
+			LFPG_Util.Info("Settings file not found; creating defaults: " + SETTINGS_FILE);
+			Save();
+		}
+		BuildBlacklistIndex();
+	}
 
     static void Save()
     {

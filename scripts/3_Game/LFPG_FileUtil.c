@@ -17,10 +17,10 @@
 //
 // Recovery hierarchy at load time:
 //   1. .tmp parses as typed T -> promote staged.
-//   2. target exists -> use it.
-//   3. .bak.new exists -> restore (previous target between save steps).
-//   4. .bak exists -> restore (older snapshot).
-//   5. nothing -> return false (caller starts fresh).
+//   2. target parses as typed T -> use it.
+//   3. .bak.new parses -> preserve unreadable target, restore staged snapshot.
+//   4. .bak parses -> preserve unreadable target, restore older snapshot.
+//   5. no target/backups -> return false (caller starts fresh).
 //
 // Balances are different: Native rolls RAM back when AtomicSaveBalances
 // returns false. A leftover parseable .tmp must not be promoted unless an
@@ -33,11 +33,39 @@
 //
 // Generic AtomicSave<T> is rejected: Enforce generics cannot pass Class<T>
 // as parameter, so typed instantiation for read-back verify and .tmp parse
-// requires concrete methods per type. ~120 duplicated lines accepted.
+// requires concrete methods per type; path-only save steps are shared.
 // =========================================================
 
 class LFPG_FileUtil
 {
+	protected static const int RECOVERY_WIRES = 1;
+	protected static const int RECOVERY_SETTINGS = 2;
+	protected static const int RECOVERY_BALANCES = 3;
+
+	// Only path operations are shared; typed writes and balances aborts stay local.
+	protected static bool StageCurrentTarget(string targetPath, string bakNewPath)
+	{
+		if (!FileExist(targetPath))
+			return true;
+		if (FileExist(bakNewPath)) DeleteFile(bakNewPath);
+		if (CopyFile(targetPath, bakNewPath))
+			return true;
+		LFPG_Util.Error("[FileUtil] AtomicSave: stage bak.new failed for " + targetPath);
+		return false;
+	}
+
+	protected static void RotateStagedBackup(string bakPath, string bakNewPath)
+	{
+		if (FileExist(bakPath)) DeleteFile(bakPath);
+		if (FileExist(bakNewPath))
+		{
+			if (CopyFile(bakNewPath, bakPath))
+				DeleteFile(bakNewPath);
+			else
+				LFPG_Util.Warn("[FileUtil] AtomicSave: bak rotation failed; leaving bak.new for recovery");
+		}
+	}
+
     // =========================================================
     // ATOMIC SAVE - one method per concrete type
     // =========================================================
@@ -79,16 +107,11 @@ class LFPG_FileUtil
         }
 
         // Step 3: stage current target as .bak.new (do NOT delete .bak yet)
-        if (FileExist(targetPath))
-        {
-            if (FileExist(bakNewPath)) DeleteFile(bakNewPath);
-            if (!CopyFile(targetPath, bakNewPath))
-            {
-                LFPG_Util.Error("[FileUtil] AtomicSave: stage bak.new failed for " + targetPath);
-                DeleteFile(tmpPath);
-                return false;
-            }
-        }
+		if (!StageCurrentTarget(targetPath, bakNewPath))
+		{
+			DeleteFile(tmpPath);
+			return false;
+		}
 
         // Step 4: promote .tmp -> target.
         // Window between DeleteFile(target) and CopyFile(tmp,target) is bounded:
@@ -112,18 +135,7 @@ class LFPG_FileUtil
         }
 
         // Step 5: rotate .bak (old .bak discarded, .bak.new -> .bak).
-        if (FileExist(bakPath)) DeleteFile(bakPath);
-        if (FileExist(bakNewPath))
-        {
-            if (CopyFile(bakNewPath, bakPath))
-            {
-                DeleteFile(bakNewPath);
-            }
-            else
-            {
-                LFPG_Util.Warn("[FileUtil] AtomicSave: bak rotation failed; leaving bak.new for recovery");
-            }
-        }
+		RotateStagedBackup(bakPath, bakNewPath);
 
         // Step 6: cleanup .tmp after target + bak are stable.
         DeleteFile(tmpPath);
@@ -166,16 +178,11 @@ class LFPG_FileUtil
             }
         }
 
-        if (FileExist(targetPath))
-        {
-            if (FileExist(bakNewPath)) DeleteFile(bakNewPath);
-            if (!CopyFile(targetPath, bakNewPath))
-            {
-                LFPG_Util.Error("[FileUtil] AtomicSaveSettings: stage bak.new failed");
-                DeleteFile(tmpPath);
-                return false;
-            }
-        }
+		if (!StageCurrentTarget(targetPath, bakNewPath))
+		{
+			DeleteFile(tmpPath);
+			return false;
+		}
 
         if (FileExist(targetPath)) DeleteFile(targetPath);
         if (!CopyFile(tmpPath, targetPath))
@@ -192,18 +199,7 @@ class LFPG_FileUtil
             return false;
         }
 
-        if (FileExist(bakPath)) DeleteFile(bakPath);
-        if (FileExist(bakNewPath))
-        {
-            if (CopyFile(bakNewPath, bakPath))
-            {
-                DeleteFile(bakNewPath);
-            }
-            else
-            {
-                LFPG_Util.Warn("[FileUtil] AtomicSaveSettings: bak rotation failed; leaving bak.new for recovery");
-            }
-        }
+		RotateStagedBackup(bakPath, bakNewPath);
         DeleteFile(tmpPath);
 
         return true;
@@ -254,16 +250,11 @@ class LFPG_FileUtil
             }
         }
 
-        if (FileExist(targetPath))
-        {
-            if (FileExist(bakNewPath)) DeleteFile(bakNewPath);
-            if (!CopyFile(targetPath, bakNewPath))
-            {
-                LFPG_Util.Error("[FileUtil] AtomicSaveBalances: stage bak.new failed");
-                DiscardAbortedBalancesTmp(tmpPath);
-                return false;
-            }
-        }
+		if (!StageCurrentTarget(targetPath, bakNewPath))
+		{
+			DiscardAbortedBalancesTmp(tmpPath);
+			return false;
+		}
 
         // Marker is written only after the candidate verifies and the previous
         // target is staged. A crash past this line, with target absent and a
@@ -306,18 +297,7 @@ class LFPG_FileUtil
             return false;
         }
 
-        if (FileExist(bakPath)) DeleteFile(bakPath);
-        if (FileExist(bakNewPath))
-        {
-            if (CopyFile(bakNewPath, bakPath))
-            {
-                DeleteFile(bakNewPath);
-            }
-            else
-            {
-                LFPG_Util.Warn("[FileUtil] AtomicSaveBalances: bak rotation failed; leaving bak.new for recovery");
-            }
-        }
+		RotateStagedBackup(bakPath, bakNewPath);
         DeleteFile(tmpPath);
         ClearBalancesSaveIntent(targetPath);
 
@@ -329,8 +309,7 @@ class LFPG_FileUtil
     // =========================================================
 
     // ---- Raw fallback: target / .bak.new / .bak (NO .tmp handling) ----
-    // The 3 typed helpers consume .tmp first (parseable -> promote, else discard).
-    // This helper covers the post-.tmp state.
+	// Compatibility API only; typed loaders use EnsureTypedFileOrRestore.
     static bool EnsureFileOrRestore(string targetPath)
     {
         string bakPath    = targetPath + ".bak";
@@ -357,6 +336,139 @@ class LFPG_FileUtil
 
         return false;
     }
+
+	// A future balances file must reach Native's existing read-only barrier,
+	// even if the current typed deserializer cannot understand its payload.
+	protected static bool IsFutureBalancesFile(string path)
+	{
+		int version = 0;
+		if (!TryReadRawJsonVersion(path, version))
+			return false;
+		return version > 2;
+	}
+
+	protected static bool IsRecoveryFileReadable(string path, int fileType)
+	{
+		if (!FileExist(path))
+			return false;
+		string err;
+		if (fileType == RECOVERY_WIRES)
+		{
+			LFPG_VanillaWireStore wires = new LFPG_VanillaWireStore();
+			return JsonFileLoader<LFPG_VanillaWireStore>.LoadFile(path, wires, err);
+		}
+		if (fileType == RECOVERY_SETTINGS)
+		{
+			LFPG_ServerSettings settings = new LFPG_ServerSettings();
+			return JsonFileLoader<LFPG_ServerSettings>.LoadFile(path, settings, err);
+		}
+		if (fileType == RECOVERY_BALANCES)
+		{
+			if (IsFutureBalancesFile(path))
+				return true;
+			LFPG_BalanceData balances = new LFPG_BalanceData();
+			return JsonFileLoader<LFPG_BalanceData>.LoadFile(path, balances, err);
+		}
+		return false;
+	}
+
+	// Recovery evidence must be complete before deleting an unreadable target.
+	protected static bool RecoveryFilesEqual(string sourcePath, string copyPath)
+	{
+		FileHandle sourceHandle = OpenFile(sourcePath, FileMode.READ);
+		if (sourceHandle == 0)
+			return false;
+		FileHandle copyHandle = OpenFile(copyPath, FileMode.READ);
+		if (copyHandle == 0)
+		{
+			CloseFile(sourceHandle);
+			return false;
+		}
+		string sourceBlock;
+		string copyBlock;
+		int sourceCount;
+		int copyCount;
+		bool equal = true;
+		while (equal)
+		{
+			sourceBlock = "";
+			copyBlock = "";
+			sourceCount = ReadFile(sourceHandle, sourceBlock, 4096);
+			copyCount = ReadFile(copyHandle, copyBlock, 4096);
+			if (sourceCount < 0 || copyCount < 0 || sourceCount != copyCount || sourceBlock != copyBlock)
+				equal = false;
+			if (sourceCount <= 0 || copyCount <= 0)
+				break;
+		}
+		CloseFile(sourceHandle);
+		CloseFile(copyHandle);
+		return equal;
+	}
+
+	protected static bool RestoreTypedBackup(string targetPath, string candidatePath, int fileType)
+	{
+		if (!IsRecoveryFileReadable(candidatePath, fileType))
+			return false;
+		string evidencePath = "";
+		bool hasEvidence = false;
+		if (FileExist(targetPath))
+		{
+			evidencePath = targetPath + ".corrupt.recovery";
+			int evidenceIndex = 0;
+			while (FileExist(evidencePath))
+			{
+				evidenceIndex = evidenceIndex + 1;
+				evidencePath = targetPath + ".corrupt.recovery." + evidenceIndex.ToString();
+			}
+			if (!CopyFile(targetPath, evidencePath) || !RecoveryFilesEqual(targetPath, evidencePath))
+			{
+				LFPG_Util.Error("[FileUtil] Recovery: cannot preserve unreadable target; leaving it untouched: " + targetPath);
+				return false;
+			}
+			hasEvidence = true;
+			if (!DeleteFile(targetPath))
+				return false;
+		}
+		bool copied = CopyFile(candidatePath, targetPath);
+		if (!copied || !RecoveryFilesEqual(candidatePath, targetPath) || !IsRecoveryFileReadable(targetPath, fileType))
+		{
+			// A short copy can still be parseable. Do not expose it as accepted.
+			if (FileExist(targetPath) && !DeleteFile(targetPath))
+			{
+				// The rejected copy stays on disk and EnsureTypedFileOrRestore would report
+				// "artifacts exist". A short but parseable file would then be applied and a
+				// later save would persist it. Put the original bytes back so the consumer
+				// fails on the real damage instead.
+				if (hasEvidence && CopyFile(evidencePath, targetPath) && RecoveryFilesEqual(evidencePath, targetPath))
+					LFPG_Util.Error("[FileUtil] Recovery: rejected copy could not be removed; original bytes restored from evidence: " + targetPath);
+				else
+					LFPG_Util.Error("[FileUtil] Recovery: rejected copy cannot be removed; manual recovery required: " + targetPath);
+			}
+			return false;
+		}
+		LFPG_Util.Warn("[FileUtil] Recovery: restored validated backup: " + candidatePath);
+		return true;
+	}
+
+	// Keep the public bool contract: false means no target/backups at all.
+	// Unrecoverable artifacts still return true so Native attempts LoadFile and
+	// latches s_DiskInhibited instead of treating damaged balances as fresh.
+	protected static bool EnsureTypedFileOrRestore(string targetPath, int fileType)
+	{
+		if (IsRecoveryFileReadable(targetPath, fileType))
+			return true;
+		string bakNewPath = targetPath + ".bak.new";
+		string bakPath = targetPath + ".bak";
+		if (RestoreTypedBackup(targetPath, bakNewPath, fileType))
+			return true;
+		// A future staged backup blocks fallback to an older schema even if
+		// materialization failed. Native will reject the target or missing file.
+		if (fileType == RECOVERY_BALANCES && (IsFutureBalancesFile(targetPath) || IsFutureBalancesFile(bakNewPath)))
+			return true;
+		if (RestoreTypedBackup(targetPath, bakPath, fileType))
+			return true;
+		return FileExist(targetPath) || FileExist(bakNewPath) || FileExist(bakPath);
+	}
 
     // ---- Shared promote logic (post-parse) ----
     // .tmp has been confirmed parseable. Stage current target to .bak.new
@@ -707,7 +819,8 @@ class LFPG_FileUtil
             if (JsonFileLoader<LFPG_VanillaWireStore>.LoadFile(tmpPath, probe, parseErr))
             {
                 LFPG_Util.Warn("[FileUtil] Orphan .tmp parses as LFPG_VanillaWireStore, promoting: " + tmpPath);
-                return PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+				PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+				return EnsureTypedFileOrRestore(targetPath, RECOVERY_WIRES);
             }
             else
             {
@@ -716,7 +829,7 @@ class LFPG_FileUtil
             }
         }
 
-        return EnsureFileOrRestore(targetPath);
+		return EnsureTypedFileOrRestore(targetPath, RECOVERY_WIRES);
     }
 
     // ---- Typed: Server Settings ----
@@ -733,7 +846,8 @@ class LFPG_FileUtil
             if (JsonFileLoader<LFPG_ServerSettings>.LoadFile(tmpPath, probe, parseErr))
             {
                 LFPG_Util.Warn("[FileUtil] Orphan .tmp parses as LFPG_ServerSettings, promoting: " + tmpPath);
-                return PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+				PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+				return EnsureTypedFileOrRestore(targetPath, RECOVERY_SETTINGS);
             }
             else
             {
@@ -742,88 +856,248 @@ class LFPG_FileUtil
             }
         }
 
-        return EnsureFileOrRestore(targetPath);
+		return EnsureTypedFileOrRestore(targetPath, RECOVERY_SETTINGS);
     }
 
-    // Reads the first numeric top-level version marker without typed JSON load.
-    static bool TryReadRawJsonVersion(string targetPath, out int version)
-    {
-        version = 0;
-        if (!FileExist(targetPath))
-            return false;
+	// Header probe, not a JSON validator. Stops at the first top-level integer
+	// ver; typed LoadFile remains responsible for the complete document.
+	// ReadFile bounds each block even for minified files with a huge single line.
+	static bool TryReadRawJsonVersion(string targetPath, out int version)
+	{
+		version = 0;
+		FileHandle handle = OpenFile(targetPath, FileMode.READ);
+		if (handle == 0)
+			return false;
+		bool found = ScanRawJsonVersion(handle, version);
+		CloseFile(handle);
+		return found;
+	}
 
-        FileHandle handle = OpenFile(targetPath, FileMode.READ);
-        if (handle == 0)
-            return false;
-
-        string raw = "";
-        string line = "";
-        while (FGets(handle, line) > 0)
-        {
-            raw = raw + line;
-        }
-        CloseFile(handle);
-
-        string key = "\"ver\"";
-        int keyPos = raw.IndexOf(key);
-        if (keyPos < 0)
-            return false;
-
-        int afterKeyStart = keyPos + key.Length();
-        int afterKeyLength = raw.Length() - afterKeyStart;
-        if (afterKeyLength <= 0)
-            return false;
-
-        string afterKey = raw.Substring(afterKeyStart, afterKeyLength);
-        int colonPos = afterKey.IndexOf(":");
-        if (colonPos < 0)
-            return false;
-
-        int scan = colonPos + 1;
-        int textLength = afterKey.Length();
-        string ch = "";
-        while (scan < textLength)
-        {
-            ch = afterKey.Get(scan);
-            if (ch == " " || ch == "\t" || ch == "\r" || ch == "\n")
-                scan = scan + 1;
-            else
-                break;
-        }
-        if (scan >= textLength)
-            return false;
-
-        int numberStart = scan;
-        ch = afterKey.Get(scan);
-        if (ch == "-")
-            scan = scan + 1;
-
-        bool hasDigit = false;
-        while (scan < textLength)
-        {
-            ch = afterKey.Get(scan);
-            bool isDigit = false;
-            if (ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4")
-                isDigit = true;
-            if (ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9")
-                isDigit = true;
-            if (!isDigit)
-                break;
-            hasDigit = true;
-            scan = scan + 1;
-        }
-        if (!hasDigit)
-            return false;
-
-        int numberLength = scan - numberStart;
-        string numberText = afterKey.Substring(numberStart, numberLength);
-        version = numberText.ToInt();
-        return true;
-    }
+	protected static bool ScanRawJsonVersion(FileHandle handle, out int version)
+	{
+		version = 0;
+		string block;
+		string ch;
+		string key = "";
+		string digits = "0123456789";
+		int count;
+		int i;
+		int depth = 0;
+		int bomRemaining = 0;
+		bool firstByte = true;
+		// 0 root, 1 key, 2 colon, 3 value, 4 skip value, 5 integer, 6 delimiter.
+		int state = 0;
+		int digit;
+		int number = 0;
+		bool inString = false;
+		bool escaped = false;
+		bool captureKey = false;
+		bool longKey = false;
+		bool versionKey = false;
+		bool negative = false;
+		bool hasDigit = false;
+		bool leadingZero = false;
+		bool whitespace;
+		while (true)
+		{
+			block = "";
+			count = ReadFile(handle, block, 4096);
+			if (count <= 0)
+				break;
+			for (i = 0; i < block.Length(); i = i + 1)
+			{
+				ch = block.Get(i);
+				// Accept the UTF-8 BOM used by some administrator editors.
+				if (firstByte)
+				{
+					firstByte = false;
+					if (ch.ToAscii() == 239)
+					{
+						bomRemaining = 2;
+						continue;
+					}
+				}
+				if (bomRemaining == 2)
+				{
+					if (ch.ToAscii() != 187)
+						return false;
+					bomRemaining = 1;
+					continue;
+				}
+				if (bomRemaining == 1)
+				{
+					if (ch.ToAscii() != 191)
+						return false;
+					bomRemaining = 0;
+					continue;
+				}
+				whitespace = ch == " " || ch == "\t" || ch == "\r" || ch == "\n";
+				if (inString)
+				{
+					if (!escaped && ch == "\"")
+					{
+						inString = false;
+						if (captureKey)
+						{
+							// The only escaped codepoints that can form the key ver.
+							key.Replace("\\u0076", "v");
+							key.Replace("\\u0065", "e");
+							key.Replace("\\u0072", "r");
+							versionKey = !longKey && key == "ver";
+							state = 2;
+						}
+						else if (depth == 1)
+							state = 4;
+						continue;
+					}
+					if (captureKey)
+					{
+						if (key.Length() < 18)
+							key = key + ch;
+						else
+							longKey = true;
+					}
+					if (escaped)
+						escaped = false;
+					else if (ch == "\\")
+						escaped = true;
+					continue;
+				}
+				if (depth > 1)
+				{
+					if (ch == "\"")
+					{
+						inString = true;
+						captureKey = false;
+					}
+					else if (ch == "{" || ch == "[")
+						depth = depth + 1;
+					else if (ch == "}" || ch == "]")
+						depth = depth - 1;
+					if (depth == 1)
+						state = 4;
+					continue;
+				}
+				if (state == 0)
+				{
+					if (whitespace)
+						continue;
+					if (ch != "{")
+						return false;
+					depth = 1;
+					state = 1;
+					continue;
+				}
+				if (state == 1)
+				{
+					if (whitespace)
+						continue;
+					if (ch != "\"")
+						return false;
+					inString = true;
+					captureKey = true;
+					key = "";
+					longKey = false;
+					continue;
+				}
+				if (state == 2)
+				{
+					if (whitespace)
+						continue;
+					if (ch != ":")
+						return false;
+					state = 3;
+					continue;
+				}
+				if (state == 3)
+				{
+					if (whitespace)
+						continue;
+					if (versionKey)
+					{
+						state = 5;
+						if (ch == "-")
+						{
+							negative = true;
+							continue;
+						}
+					}
+					else
+					{
+						state = 4;
+						if (ch == "\"")
+						{
+							inString = true;
+							captureKey = false;
+							continue;
+						}
+						if (ch == "{" || ch == "[")
+						{
+							depth = 2;
+							continue;
+						}
+					}
+				}
+				if (state == 4)
+				{
+					if (ch == ",")
+						state = 1;
+					else if (ch == "}")
+						return false;
+					continue;
+				}
+				if (state == 5)
+				{
+					digit = digits.IndexOf(ch);
+					if (digit >= 0)
+					{
+						if (hasDigit && leadingZero)
+							return false;
+						if (!hasDigit)
+							leadingZero = digit == 0;
+						hasDigit = true;
+						// Saturate overflow: a huge positive version stays future.
+						if (number > 214748364 || (number == 214748364 && digit > 7))
+							number = 2147483647;
+						else
+							number = number * 10 + digit;
+						continue;
+					}
+					if (!hasDigit)
+						return false;
+					state = 6;
+				}
+				if (state == 6)
+				{
+					if (whitespace)
+						continue;
+					if (ch != "," && ch != "}")
+						return false;
+					version = number;
+					if (negative)
+						version = 0 - number;
+					return true;
+				}
+			}
+		}
+		// A truncated payload with a complete future integer still needs the
+		// read-only barrier. This result never asserts full JSON validity.
+		if (count == 0 && hasDigit && (state == 5 || state == 6))
+		{
+			version = number;
+			if (negative)
+				version = 0 - number;
+			return true;
+		}
+		return false;
+	}
 
     // ---- Typed: Player Balances ----
     static bool EnsureBalancesFileOrRestore(string targetPath)
     {
+		// Preserve a future target and every sibling before any recovery mutation.
+		if (IsFutureBalancesFile(targetPath))
+			return true;
         LFPG_FaultInject.Touch();
         SweepPreservedBalanceTmpEvidence(targetPath);
         string tmpPath    = targetPath + ".tmp";
@@ -842,7 +1116,7 @@ class LFPG_FileUtil
                 LFPG_Util.Error("[FileUtil] Orphan .tmp beside a live balances target: NOT promoting, the caller rolled this mutation back. Preserving as evidence: " + tmpPath);
                 PreserveOrphanTmpEvidence(tmpPath);
                 ClearBalancesSaveIntent(targetPath);
-                return true;
+				return EnsureTypedFileOrRestore(targetPath, RECOVERY_BALANCES);
             }
 
             bool hasBackup = false;
@@ -861,17 +1135,24 @@ class LFPG_FileUtil
                 LFPG_Util.Error("[FileUtil] Orphan balances .tmp is not an in-flight replace. NOT promoting: " + tmpPath);
                 PreserveOrphanTmpEvidence(tmpPath);
                 ClearBalancesSaveIntent(targetPath);
-                return EnsureFileOrRestore(targetPath);
+				return EnsureTypedFileOrRestore(targetPath, RECOVERY_BALANCES);
             }
+
+			// Materialize future in-flight data for Native to reject read-only.
+			if (IsFutureBalancesFile(tmpPath))
+			{
+				CopyFile(tmpPath, targetPath);
+				return true;
+			}
 
             LFPG_BalanceData probe = new LFPG_BalanceData();
             string parseErr;
             if (JsonFileLoader<LFPG_BalanceData>.LoadFile(tmpPath, probe, parseErr))
             {
                 LFPG_Util.Warn("[FileUtil] In-flight balances .tmp parses as LFPG_BalanceData, promoting: " + tmpPath);
-                bool promoted = PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
+				PromoteOrphanTmp(targetPath, tmpPath, bakPath, bakNewPath);
                 ClearBalancesSaveIntent(targetPath);
-                return promoted;
+				return EnsureTypedFileOrRestore(targetPath, RECOVERY_BALANCES);
             }
             else
             {
@@ -885,6 +1166,6 @@ class LFPG_FileUtil
             ClearBalancesSaveIntent(targetPath);
         }
 
-        return EnsureFileOrRestore(targetPath);
+		return EnsureTypedFileOrRestore(targetPath, RECOVERY_BALANCES);
     }
 };
