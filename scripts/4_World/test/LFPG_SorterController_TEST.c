@@ -1701,6 +1701,20 @@ class LFPG_SorterController_TEST extends ViewController
     // =========================================================
     // v2.6: Preview Items — server-authoritative
     // =========================================================
+	// Cargo notifications invalidate the current result; the existing debounce
+	// and in-flight guard coalesce bursts, including changes during a request.
+	void RefreshCargoPreview()
+	{
+		m_LastMatchedItems = -1;
+		PreviewItems.Clear();
+		RefreshMatchCount();
+		RefreshPreviewCount();
+		if (!m_ShowRules)
+		{
+			RequestPreview();
+		}
+	}
+
     protected void RequestPreview()
     {
         if (!m_IsPaired)
@@ -2239,6 +2253,7 @@ class LFPG_SorterController_TEST extends ViewController
         m_V4CacheBuilt_TEST = true;
     }
 
+#ifdef DIAG_DEVELOPER
     bool McpCanEdit()
     {
         return CanEdit();
@@ -2272,6 +2287,7 @@ class LFPG_SorterController_TEST extends ViewController
         catchAll = outCfg.m_IsCatchAll;
         ruleCount = outCfg.GetRuleCount();
     }
+#endif
 
 };
 #endif

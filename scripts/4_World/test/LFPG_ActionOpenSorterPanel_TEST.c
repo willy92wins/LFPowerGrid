@@ -6,7 +6,7 @@
 //
 // Conditions:
 //   - No item in hand (CCINone)
-//   - Target is LFPG_Sorter_TEST
+//   - Target is exactly LFPG_Sorter_TEST, powered and linked
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
 //
@@ -48,13 +48,15 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
             return false;
 
         string sorterType = "LFPG_Sorter_TEST";
-        if (!targetObj.IsKindOf(sorterType))
-            return false;
+		if (targetObj.GetType() != sorterType)
+			return false;
 
         LFPG_Sorter_TEST sorter = LFPG_Sorter_TEST.Cast(targetObj);
         if (!sorter)
             return false;
 
+		if (!sorter.LFPG_IsPowered())
+			return false;
 
         // Must not be ruined
         if (sorter.IsRuined())
@@ -68,6 +70,8 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
             return false;
 #endif
 
+		if (!sorter.LFPG_IsLinked())
+			return false;
 
         return true;
     }
@@ -87,8 +91,8 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
             return;
 
         string checkType = "LFPG_Sorter_TEST";
-        if (!targetObj.IsKindOf(checkType))
-            return;
+		if (targetObj.GetType() != checkType)
+			return;
 
         int netLow  = 0;
         int netHigh = 0;

@@ -78,6 +78,65 @@ class LFPG_ColorData_TEST extends Managed
     }
 };
 
+// Preserve V3's global capture while using the same scaler for V4.
+// Each operation swaps in this panel's snapshot and restores V3 before returning.
+class LFPG_SorterScaleContext_TEST extends LFPG_UIScaler
+{
+	protected ref array<Widget> m_Widgets;
+	protected ref array<float> m_DesignX;
+	protected ref array<float> m_DesignY;
+	protected ref array<float> m_DesignW;
+	protected ref array<float> m_DesignH;
+	protected bool m_Captured;
+	protected bool m_LoggedOnce;
+
+	void CapturePanel(Widget panelRoot)
+	{
+		SwapState();
+		LFPG_UIScaler.Capture(panelRoot);
+		SwapState();
+	}
+
+	void ApplyPanel(float scale)
+	{
+		SwapState();
+		LFPG_UIScaler.Apply(scale);
+		SwapState();
+	}
+
+	void ResetPanel()
+	{
+		SwapState();
+		LFPG_UIScaler.Reset();
+		SwapState();
+	}
+
+	protected void SwapState()
+	{
+		array<Widget> widgets = s_Widgets;
+		array<float> designX = s_DesignX;
+		array<float> designY = s_DesignY;
+		array<float> designW = s_DesignW;
+		array<float> designH = s_DesignH;
+		bool captured = s_Captured;
+		bool loggedOnce = s_LoggedOnce;
+		s_Widgets = m_Widgets;
+		s_DesignX = m_DesignX;
+		s_DesignY = m_DesignY;
+		s_DesignW = m_DesignW;
+		s_DesignH = m_DesignH;
+		s_Captured = m_Captured;
+		s_LoggedOnce = m_LoggedOnce;
+		m_Widgets = widgets;
+		m_DesignX = designX;
+		m_DesignY = designY;
+		m_DesignW = designW;
+		m_DesignH = designH;
+		m_Captured = captured;
+		m_LoggedOnce = loggedOnce;
+	}
+};
+
 class LFPG_SorterView_TEST extends ScriptView
 {
     protected static ref LFPG_SorterView_TEST s_Instance;
@@ -110,16 +169,19 @@ class LFPG_SorterView_TEST extends ScriptView
     protected bool m_ControlsEnabled;
     // M2: Track first AssignButtonIDs pass (UserIDs don't change)
     protected bool m_ButtonIDsAssigned;
+	protected ref LFPG_SorterScaleContext_TEST m_UIScaler;
 
     // ── Fade-in state (v2.2) ──
     protected float m_FadeAlpha;
     protected bool m_FadingIn;
+#ifdef DIAG_DEVELOPER
     // MCP TEST command hook. Separate layout so ui_reload_layout
     // preview cannot hijack the name. Polled from Update because
     // DispatchUiSetText calls SetText and never runs OnClick.
     protected EditBoxWidget m_McpCmd;
     protected bool m_McpCmdOwned;
     protected bool m_McpCmdCreateFailed;
+#endif
 
     // Widget refs for ApplyColors ONLY (no dupes with Controller)
     // ModalOverlay REMOVED (Bug #1)
@@ -239,8 +301,6 @@ class LFPG_SorterView_TEST extends ScriptView
     TextWidget EditContainsHint;
     TextWidget EditSlotMinHint;
     TextWidget EditSlotMaxHint;
-
-    static const bool S1_PROBE = true;
 
     // ── LFPG Palette v2 (ARGB) — DayZ-adjusted (RGB×1.35 bg, ×1.30 btn, alpha×1.40) ──
     static const int COL_BG_DEEP      = 0xFF131C2B;
@@ -375,12 +435,14 @@ class LFPG_SorterView_TEST extends ScriptView
             ctrl.TickTimers(dt);
         }
 
+#ifdef DIAG_DEVELOPER
         // Read LFPG_MCP_SorterCmd here. ui_set_text writes the widget
         // directly; routing this through OnClick would hit the five guards.
         if (m_McpCmd)
         {
             PollMcpSorterCmd();
         }
+#endif
     }
 
     void LFPG_SorterView_TEST()
@@ -393,9 +455,11 @@ class LFPG_SorterView_TEST extends ScriptView
         m_HoveredBg = null;
         m_FadeAlpha = 1.0;
         m_FadingIn = false;
+#ifdef DIAG_DEVELOPER
         m_McpCmd = null;
         m_McpCmdOwned = false;
         m_McpCmdCreateFailed = false;
+#endif
         m_ColorDataRefs = new array<ref LFPG_ColorData_TEST>();
         m_TintedWidgets = new array<Widget>();
     }
@@ -403,7 +467,9 @@ class LFPG_SorterView_TEST extends ScriptView
     // S1 fix: destructor releases input lock if destroyed while open
     void ~LFPG_SorterView_TEST()
     {
+#ifdef DIAG_DEVELOPER
         DestroyMcpCmdWidget();
+#endif
         if (g_Game)
         {
             // v2.4 Bug D: Restore player actions on destruction
@@ -1313,6 +1379,9 @@ class LFPG_SorterView_TEST extends ScriptView
         if (s_Instance)
             return;
         s_Instance = new LFPG_SorterView_TEST();
+		s_Instance.EnsureViewBindings();
+		s_Instance.m_UIScaler = new LFPG_SorterScaleContext_TEST();
+		s_Instance.m_UIScaler.CapturePanel(s_Instance.SorterPanel);
         Widget root = s_Instance.GetLayoutRoot();
         if (root)
         {
@@ -1430,6 +1499,12 @@ class LFPG_SorterView_TEST extends ScriptView
     // g_Game null guard for safe shutdown.
     static void Cleanup()
     {
+		ScriptInvoker cargoInvoker = LFPG_CargoRefreshSignal.GetInvoker();
+		cargoInvoker.Remove(OnCargoRefresh);
+		if (s_Instance && s_Instance.m_UIScaler)
+		{
+			s_Instance.m_UIScaler.ResetPanel();
+		}
         if (s_Instance)
         {
             s_Instance.m_IsOpen = false;
@@ -1440,6 +1515,18 @@ class LFPG_SorterView_TEST extends ScriptView
         // Explicit delete risked segfault if callback still held ref.
         s_Instance = null;
     }
+
+	// Both cargo refresh SubIds and successful sorts use the 3_Game signal.
+	static void OnCargoRefresh()
+	{
+		if (!IsOpen())
+			return;
+		LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(s_Instance.GetController());
+		if (ctrl)
+		{
+			ctrl.RefreshCargoPreview();
+		}
+	}
 
     static void OnSaveAck(bool success)
     {
@@ -1500,8 +1587,11 @@ class LFPG_SorterView_TEST extends ScriptView
         m_ControlsEnabled = true;
         root.Show(true);
 
-
-
+		float uiScale = LFPG_UIScaler.ComputeScale();
+		if (m_UIScaler)
+		{
+			m_UIScaler.ApplyPanel(uiScale);
+		}
         CenterPanel();
 
         // Fade-in (v2.2)
@@ -1537,8 +1627,10 @@ class LFPG_SorterView_TEST extends ScriptView
         EnsureViewBindings();
         // M2: Assign int IDs to buttons (only first open)
         AssignButtonIDs();
+#ifdef DIAG_DEVELOPER
         m_McpCmdCreateFailed = false;
         EnsureMcpCmdWidget();
+#endif
         LFPG_SorterController_TEST ctrl = LFPG_SorterController_TEST.Cast(GetController());
         if (ctrl)
         {
@@ -1559,7 +1651,11 @@ class LFPG_SorterView_TEST extends ScriptView
         // v3: Initial hint visibility
         RefreshEditHints();
 
-        if (S1_PROBE)
+		ScriptInvoker cargoInvoker = LFPG_CargoRefreshSignal.GetInvoker();
+		cargoInvoker.Remove(OnCargoRefresh);
+		cargoInvoker.Insert(OnCargoRefresh);
+
+		if (LFPG_PERFDIAG_ENABLED)
         {
             RunS1Probe();
         }
@@ -1651,10 +1747,14 @@ class LFPG_SorterView_TEST extends ScriptView
         m_Dragging = false;
         m_FadingIn = false;
         m_HoveredBg = null;
+		ScriptInvoker cargoInvoker = LFPG_CargoRefreshSignal.GetInvoker();
+		cargoInvoker.Remove(OnCargoRefresh);
+#ifdef DIAG_DEVELOPER
         if (m_McpCmd)
         {
             m_McpCmd.Show(false);
         }
+#endif
 
         // FIX 2: Release tag/preview views now (breaks circular refs).
         // Without this, views survive until next Open or full Cleanup.
@@ -1891,6 +1991,7 @@ class LFPG_SorterView_TEST extends ScriptView
     }
 
 
+#ifdef DIAG_DEVELOPER
     // MCP TEST command hook. Lives in LFPG_MCP_SorterCmd.layout, not the
     // panel layout. Polled from Update because ui_set_text calls SetText
     // directly (MCPClientBridge.c DispatchUiSetText) and never OnClick.
@@ -2151,6 +2252,7 @@ class LFPG_SorterView_TEST extends ScriptView
         FPrint(file, json);
         CloseFile(file);
     }
+#endif
 
     LFPG_SorterController_TEST GetSorterController()
     {

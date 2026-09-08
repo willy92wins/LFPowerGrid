@@ -68,6 +68,8 @@ class LFPG_ActionSyncSorter : ActionInteractBase
 #ifndef SERVER
         if (LFPG_SorterView.IsOpen())
             return false;
+		if (LFPG_SorterView_TEST.IsOpen())
+			return false;
 #endif
 
         return true;
@@ -99,6 +101,11 @@ class LFPG_ActionSyncSorter : ActionInteractBase
 
         ScriptRPC rpc = new ScriptRPC();
         int subId = LFPG_RPC_SubId.SORTER_RESYNC;
+		string testSorterType = "LFPG_Sorter_TEST";
+		if (targetObj.GetType() == testSorterType)
+		{
+			subId = LFPG_RPC_SubId.SORTER_TEST_RESYNC;
+		}
         rpc.Write(subId);
         rpc.Write(netLow);
         rpc.Write(netHigh);

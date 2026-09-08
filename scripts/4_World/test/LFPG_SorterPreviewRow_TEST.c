@@ -30,6 +30,7 @@ class LFPG_SorterPreviewRow_TEST extends ScriptView
     TextWidget CatIcon;
     TextWidget ItemName;
     TextWidget SlotText;
+	protected bool m_Scaled;
 
     override string GetLayoutFile()
     {
@@ -75,6 +76,15 @@ class LFPG_SorterPreviewRow_TEST extends ScriptView
         {
             SlotText.SetColor(LFPG_SorterView_TEST.COL_TEXT_MID);
         }
+
+		// Scale each dynamic row once, as in V3.
+		if (!m_Scaled)
+		{
+			Widget rowRoot = GetLayoutRoot();
+			float rowScale = LFPG_UIScaler.ComputeScale();
+			LFPG_UIScaler.ScaleWidget(rowRoot, rowScale);
+			m_Scaled = true;
+		}
     }
 
     protected string GetCatIcon(string catKey)
