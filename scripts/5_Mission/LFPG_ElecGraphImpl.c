@@ -187,6 +187,52 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // Full rebuild from wires
     // ===========================
 
+	// Candidate collection is read-only. Admission and orphan pruning remain below.
+	protected void CollectWiredNodeIds(LFPG_NetworkManager mgr, array<EntityAI> devices, map<string, bool> nodeIds)
+	{
+		#ifdef SERVER
+		for (int deviceIdx = 0; deviceIdx < devices.Count(); deviceIdx = deviceIdx + 1)
+		{
+			EntityAI device = devices[deviceIdx];
+			if (!device || !LFPG_DeviceAPI.HasWireStore(device))
+				continue;
+			string ownerId = LFPG_DeviceAPI.GetOrCreateDeviceId(device);
+			if (ownerId == "")
+				continue;
+			array<ref LFPG_WireData> wires = LFPG_DeviceAPI.GetDeviceWires(device);
+			if (!wires)
+				continue;
+			for (int wireIdx = 0; wireIdx < wires.Count(); wireIdx = wireIdx + 1)
+			{
+				LFPG_WireData wire = wires[wireIdx];
+				if (!wire || wire.m_TargetDeviceId == "")
+					continue;
+				nodeIds.Set(ownerId, true);
+				nodeIds.Set(wire.m_TargetDeviceId, true);
+			}
+		}
+
+		int vanillaCount = mgr.GetVanillaWireOwnerCount();
+		for (int vanillaIdx = 0; vanillaIdx < vanillaCount; vanillaIdx = vanillaIdx + 1)
+		{
+			string vanillaOwnerId = mgr.GetVanillaWireOwnerKey(vanillaIdx);
+			if (vanillaOwnerId == "")
+				continue;
+			array<ref LFPG_WireData> vanillaWires = mgr.GetVanillaWires(vanillaOwnerId);
+			if (!vanillaWires)
+				continue;
+			for (int vanillaWireIdx = 0; vanillaWireIdx < vanillaWires.Count(); vanillaWireIdx = vanillaWireIdx + 1)
+			{
+				LFPG_WireData vanillaWire = vanillaWires[vanillaWireIdx];
+				if (!vanillaWire || vanillaWire.m_TargetDeviceId == "")
+					continue;
+				nodeIds.Set(vanillaOwnerId, true);
+				nodeIds.Set(vanillaWire.m_TargetDeviceId, true);
+			}
+		}
+		#endif
+	}
+
     // Reconstructs the entire graph from existing wire data.
     // Called once at server startup after all loads complete.
     // Does NOT modify the wire data — read only.
@@ -219,9 +265,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         }
         m_DeferredRequeue.Clear();
 
-        // Step 1: Iterate all registered devices to create nodes
+		// Step 1: Hydrate only wire candidates, in the original registry order.
         ref array<EntityAI> allDevices = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevices);
+		map<string, bool> wiredNodeIds = new map<string, bool>;
+		CollectWiredNodeIds(mgr, allDevices, wiredNodeIds);
 
         int di;
         for (di = 0; di < allDevices.Count(); di = di + 1)
@@ -233,6 +281,13 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             string devId = LFPG_DeviceAPI.GetOrCreateDeviceId(devObj);
             if (devId == "")
                 continue;
+
+			if (!wiredNodeIds.Contains(devId))
+			{
+				// This isolated node is no longer constructed and pruned below.
+				m_ChargerLastChargeSec.Remove(devId);
+				continue;
+			}
 
             EnsureNode(devId, devObj);
         }
@@ -425,6 +480,17 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
+	// Count distinct missing endpoints before admitting any new node.
+	protected bool WouldExceedGlobalNodeLimit(string sourceId, string targetId)
+	{
+		int projectedCount = m_NodeCount;
+		if (!m_Nodes.Contains(sourceId))
+			projectedCount = projectedCount + 1;
+		if (targetId != sourceId && !m_Nodes.Contains(targetId))
+			projectedCount = projectedCount + 1;
+		return projectedCount > LFPG_MAX_NODES_GLOBAL;
+	}
+
     override bool OnWireAdded(string sourceId, string targetId, string sourcePort, string targetPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
@@ -440,7 +506,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         // ==========================================
         // PASO 1: Global hard-cap O(1)
         // ==========================================
-        if (m_NodeCount >= LFPG_MAX_NODES_GLOBAL)
+		if (WouldExceedGlobalNodeLimit(sourceId, targetId))
         {
             string capMsg = "[ElecGraph] OnWireAdded REJECTED: global cap (" + m_NodeCount.ToString() + "/" + LFPG_MAX_NODES_GLOBAL.ToString() + ")";
             LFPG_Util.Warn(capMsg);
@@ -1684,7 +1750,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return false;
 
         // Global hard-cap
-        if (m_NodeCount >= LFPG_MAX_NODES_GLOBAL)
+		if (WouldExceedGlobalNodeLimit(sourceId, targetId))
             return true;
 
         int limit = LFPG_MAX_NODES_PER_COMPONENT;
@@ -2032,6 +2098,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     override int ProcessDirtyQueue(int nodeBudget, int edgeBudget)
     {
         #ifdef SERVER
+		int startMs = g_Game.GetTime();
         m_PropagationEdgeAccountingActive = true;
         m_EdgesVisitedThisEpoch = 0;
 
@@ -2070,11 +2137,10 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             // Queue is empty — all propagation is complete, safe to check.
             ValidateConsumerStates(edgeBudget);
 
+			m_LastProcessMs = g_Game.GetTime() - startMs;
             m_PropagationEdgeAccountingActive = false;
             return 0;
         }
-
-        int startMs = g_Game.GetTime();
 
         if (m_ComponentsDirty)
             RebuildComponents();
@@ -2746,18 +2812,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         }
         else if (m_DirtyQueueHead >= LFPG_DIRTY_QUEUE_COMPACT_THRESHOLD)
         {
-            ref array<string> compacted = new array<string>;
-            int ci;
-            for (ci = m_DirtyQueueHead; ci < m_DirtyQueue.Count(); ci = ci + 1)
-            {
-                compacted.Insert(m_DirtyQueue[ci]);
-            }
-            m_DirtyQueue.Clear();
-            int cc;
-            for (cc = 0; cc < compacted.Count(); cc = cc + 1)
-            {
-                m_DirtyQueue.Insert(compacted[cc]);
-            }
+			// Move the pending suffix forward once; retain this array and FIFO order.
+			int ci;
+			for (ci = 0; ci < remaining; ci = ci + 1)
+			{
+				string pendingNodeId = m_DirtyQueue[m_DirtyQueueHead + ci];
+				m_DirtyQueue[ci] = pendingNodeId;
+			}
+			m_DirtyQueue.Resize(remaining);
             m_DirtyQueueHead = 0;
             remaining = m_DirtyQueue.Count();
         }
@@ -3614,6 +3676,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                                         if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
                                         {
                                             ptHasDown = true;
+											break;
                                         }
                                     }
                                 }
