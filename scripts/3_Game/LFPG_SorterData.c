@@ -325,279 +325,223 @@ class LFPG_SortConfig
         return json;
     }
 
-    // ---- JSON deserialization ----
-    // Returns true on success. On failure, config is left empty.
-    bool FromJSON(string json)
-    {
-        ResetAll();
+	// ---- JSON deserialization ----
+	// Publish only a complete document; failed reads preserve the previous config.
+	bool FromJSON(string json)
+	{
+		LFPG_SortConfig parsed = new LFPG_SortConfig();
+		LFPG_SortConfigJSONReader reader = new LFPG_SortConfigJSONReader(json);
+		if (!reader.ReadConfig(parsed))
+			return false;
 
-        if (json == "")
-            return false;
+		m_Outputs = parsed.m_Outputs;
+		return true;
+	}
 
-        // Simple state-machine parser for our known compact format.
-        // We know the structure exactly, so no need for a general JSON parser.
-        // Finds each output block, then each rule within.
+};
 
-        int jsonLen = json.Length();
-        if (jsonLen < 10)
-            return false;
+// Reader for the schema emitted by ToJSON. Every token is consumed at the
+// cursor: a missing field cannot be borrowed from the next rule or output.
+class LFPG_SortConfigJSONReader
+{
+	protected string m_JSON;
+	protected int m_Pos;
 
-        bool parseOk = true;
-        int parsedOutputs = 0;
-        int rulesParsedTotal = 0;
+	void LFPG_SortConfigJSONReader(string json)
+	{
+		m_JSON = json;
+		m_Pos = 0;
+	}
 
-        // JSON needle strings (Enforce: no string literals as function params)
-        string kOArr = "\"o\":[";
-        string kRArr = "\"r\":[";
-        string kOpenBrace = "{";
-        string kCloseBrace = "}";
-        string kCloseBracket = "]";
-        string kTypeKey = "\"t\":";
-        string kComma = ",";
-        string kValKey = "\"v\":\"";
-        string kQuote = "\"";
-        string kCaKey = "\"ca\":";
-        string kTrue = "true";
+	protected void SkipWhitespace()
+	{
+		while (m_Pos < m_JSON.Length())
+		{
+			string ch = m_JSON.Substring(m_Pos, 1);
+			if (ch != " " && ch != "\t" && ch != "\r" && ch != "\n")
+				return;
+			m_Pos = m_Pos + 1;
+		}
+	}
 
-        // Find the outputs array start: "o":[
-        int oArrStart = json.IndexOf(kOArr);
-        if (oArrStart < 0)
-            return false;
+	protected bool Consume(string token)
+	{
+		SkipWhitespace();
+		int tokenLen = token.Length();
+		if (m_Pos + tokenLen > m_JSON.Length())
+			return false;
+		if (m_JSON.Substring(m_Pos, tokenLen) != token)
+			return false;
+		m_Pos = m_Pos + tokenLen;
+		return true;
+	}
 
-        int pos = oArrStart + 5;  // skip past "o":[
-        int outIdx = 0;
+	protected bool ReadString(out string value)
+	{
+		value = "";
+		if (!Consume("\""))
+			return false;
+		int start = m_Pos;
+		while (m_Pos < m_JSON.Length())
+		{
+			string ch = m_JSON.Substring(m_Pos, 1);
+			if (ch == "\"")
+			{
+				if (m_Pos > start)
+					value = m_JSON.Substring(start, m_Pos - start);
+				m_Pos = m_Pos + 1;
+				return true;
+			}
+			// Compact wire strings do not support escapes or raw JSON control bytes.
+			if (ch == "\\" || ch.ToAscii() < 32)
+				return false;
+			m_Pos = m_Pos + 1;
+		}
+		return false;
+	}
 
-        while (pos < jsonLen && outIdx < LFPG_SORT_MAX_OUTPUTS)
-        {
-            // Find next output object start {
-            int objStart = json.IndexOfFrom(pos, kOpenBrace);
-            if (objStart < 0)
-                break;
+	protected bool ReadType(out int ruleType)
+	{
+		SkipWhitespace();
+		int start = m_Pos;
+		if (m_Pos < m_JSON.Length() && m_JSON.Substring(m_Pos, 1) == "-")
+			m_Pos = m_Pos + 1;
+		int digitsStart = m_Pos;
+		string digits = "0123456789";
+		while (m_Pos < m_JSON.Length())
+		{
+			string ch = m_JSON.Substring(m_Pos, 1);
+			if (digits.IndexOf(ch) < 0)
+				break;
+			m_Pos = m_Pos + 1;
+		}
+		if (m_Pos == digitsStart)
+			return false;
+		if (m_Pos - digitsStart > 1 && m_JSON.Substring(digitsStart, 1) == "0")
+			return false;
+		string typeText = m_JSON.Substring(start, m_Pos - start);
+		ruleType = typeText.ToInt();
+		return true;
+	}
 
-            // Find the rules array "r":[
-            int rArrStart = json.IndexOfFrom(objStart, kRArr);
-            if (rArrStart < 0)
-            {
-                parseOk = false;
-                break;
-            }
+	protected bool ReadRule(LFPG_SortOutputConfig output)
+	{
+		if (!Consume("{"))
+			return false;
+		bool hasType = false;
+		bool hasValue = false;
+		int ruleType = 0;
+		string ruleValue = "";
+		while (true)
+		{
+			string key;
+			if (!ReadString(key) || !Consume(":"))
+				return false;
+			if (key == "t" && !hasType)
+			{
+				if (!ReadType(ruleType))
+					return false;
+				hasType = true;
+			}
+			else if (key == "v" && !hasValue)
+			{
+				if (!ReadString(ruleValue))
+					return false;
+				hasValue = true;
+			}
+			else
+				return false;
 
-            int rPos = rArrStart + 5;  // skip past "r":[
+			if (Consume("}"))
+				break;
+			if (!Consume(","))
+				return false;
+		}
+		if (!hasType || !hasValue)
+			return false;
+		return output.AddRule(ruleType, ruleValue);
+	}
 
-            // Parse rules until ]
-            while (rPos < jsonLen)
-            {
-                int rArrEnd = json.IndexOfFrom(rPos, kCloseBracket);
+	protected bool ReadRules(LFPG_SortOutputConfig output)
+	{
+		if (!Consume("["))
+			return false;
+		if (Consume("]"))
+			return true;
+		while (true)
+		{
+			if (!ReadRule(output))
+				return false;
+			if (Consume("]"))
+				return true;
+			if (!Consume(","))
+				return false;
+		}
+		return false;
+	}
 
-                // Find next rule object {
-                int ruleStart = json.IndexOfFrom(rPos, kOpenBrace);
-                if (ruleStart < 0)
-                {
-                    if (rArrEnd < 0)
-                    {
-                        parseOk = false;
-                    }
-                    break;
-                }
+	protected bool ReadOutput(LFPG_SortOutputConfig output)
+	{
+		if (!Consume("{"))
+			return false;
+		bool hasRules = false;
+		bool hasCatchAll = false;
+		while (true)
+		{
+			string key;
+			if (!ReadString(key) || !Consume(":"))
+				return false;
+			if (key == "r" && !hasRules)
+			{
+				if (!ReadRules(output))
+					return false;
+				hasRules = true;
+			}
+			else if (key == "ca" && !hasCatchAll)
+			{
+				if (Consume("true"))
+					output.m_IsCatchAll = true;
+				else if (Consume("false"))
+					output.m_IsCatchAll = false;
+				else
+					return false;
+				hasCatchAll = true;
+			}
+			else
+				return false;
 
-                // Check if we hit ] before { (end of rules array)
-                if (rArrEnd >= 0 && rArrEnd < ruleStart)
-                    break;
+			if (Consume("}"))
+				return hasRules && hasCatchAll;
+			if (!Consume(","))
+				return false;
+		}
+		return false;
+	}
 
-                // Parse "t":N (supports multi-digit types)
-                int tStart = json.IndexOfFrom(ruleStart, kTypeKey);
-                if (tStart < 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-                int tValStart = tStart + 4;
-                if (tValStart >= jsonLen)
-                {
-                    parseOk = false;
-                    break;
-                }
-                int tEnd = json.IndexOfFrom(tValStart, kComma);
-                if (tEnd < 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-                int tLen = tEnd - tValStart;
-                if (tLen <= 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-                string tStr = json.Substring(tValStart, tLen);
-                int ruleType = tStr.ToInt();
-
-                // Parse "v":"..."
-                int vStart = json.IndexOfFrom(tValStart, kValKey);
-                if (vStart < 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-                int vValStart = vStart + 5;
-                if (vValStart >= jsonLen)
-                {
-                    parseOk = false;
-                    break;
-                }
-                int vEnd = json.IndexOfFrom(vValStart, kQuote);
-                if (vEnd < 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-
-                int vLen = vEnd - vValStart;
-                string ruleValue = "";
-                if (vLen > 0)
-                {
-                    ruleValue = json.Substring(vValStart, vLen);
-                }
-
-                // Add rule to current output
-                LFPG_SortOutputConfig outCfg = GetOutput(outIdx);
-                if (outCfg)
-                {
-                    bool addOk = outCfg.AddRule(ruleType, ruleValue);
-                    if (addOk)
-                    {
-                        rulesParsedTotal = rulesParsedTotal + 1;
-                    }
-                    else
-                    {
-                        parseOk = false;
-                    }
-                }
-                else
-                {
-                    parseOk = false;
-                }
-
-                // Skip past this rule's closing }
-                int ruleEnd = json.IndexOfFrom(vEnd, kCloseBrace);
-                if (ruleEnd < 0)
-                {
-                    parseOk = false;
-                    break;
-                }
-                rPos = ruleEnd + 1;
-            }
-
-            // Parse catch-all: "ca":true/false
-            int caStart = json.IndexOfFrom(rArrStart, kCaKey);
-            if (caStart >= 0)
-            {
-                int caValStart = caStart + 5;
-                if (caValStart + 4 <= jsonLen)
-                {
-                    string caVal = json.Substring(caValStart, 4);
-                    LFPG_SortOutputConfig outCfgCa = GetOutput(outIdx);
-                    if (outCfgCa)
-                    {
-                        if (caVal == kTrue)
-                        {
-                            outCfgCa.m_IsCatchAll = true;
-                            rulesParsedTotal = rulesParsedTotal + 1;
-                        }
-                    }
-                    else
-                    {
-                        parseOk = false;
-                    }
-                }
-                else
-                {
-                    parseOk = false;
-                }
-            }
-            else
-            {
-                parseOk = false;
-            }
-
-            // Find end of this output object.
-            // Search from rArrStart (always valid) to avoid using
-            // caStart which may be -1 if "ca" was missing.
-            // The closing } for this output is after both "r":[] and "ca":
-            int searchFrom = rArrStart;
-            if (caStart >= 0)
-            {
-                searchFrom = caStart;
-            }
-            int objEnd = json.IndexOfFrom(searchFrom, kCloseBrace);
-            if (objEnd < 0)
-            {
-                parseOk = false;
-                break;
-            }
-
-            pos = objEnd + 1;
-            outIdx = outIdx + 1;
-            parsedOutputs = parsedOutputs + 1;
-        }
-
-        // PR-E.5 (R21-PR-E-001 FAIL + R21-PR-E-002 WARN): structural tail validation.
-        // After the outputs loop, verify the JSON closes properly:
-        //   1. Outputs array must close with `]`; missing means truncated.
-        //   2. No further `{` may appear before the `]` (catches overflow >MAX outputs
-        //      that the outIdx-bounded loop would otherwise drop silently).
-        //   3. Root object must close with `}` after the `]`; missing means truncated.
-        if (parseOk && parsedOutputs > 0)
-        {
-            int oArrEnd = json.IndexOfFrom(pos, kCloseBracket);
-            if (oArrEnd < 0)
-            {
-                parseOk = false;
-            }
-            else
-            {
-                int nextObjStart = json.IndexOfFrom(pos, kOpenBrace);
-                if (nextObjStart >= 0 && nextObjStart < oArrEnd)
-                {
-                    parseOk = false;
-                }
-                else
-                {
-                    int rootEnd = json.IndexOfFrom(oArrEnd, kCloseBrace);
-                    if (rootEnd < 0)
-                    {
-                        parseOk = false;
-                    }
-                }
-            }
-        }
-
-        if (!parseOk)
-        {
-            string warnIncomplete = "[SorterData.FromJSON] parse incomplete, rejecting";
-            LFPG_Util.Warn(warnIncomplete);
-            return false;
-        }
-        if (parsedOutputs > LFPG_SORT_MAX_OUTPUTS)
-        {
-            string warnOutputs = "[SorterData.FromJSON] too many outputs: ";
-            warnOutputs = warnOutputs + parsedOutputs.ToString();
-            LFPG_Util.Warn(warnOutputs);
-            return false;
-        }
-        if (parsedOutputs == 0)
-        {
-            string warnNoOutputs = "[SorterData.FromJSON] no outputs parsed";
-            LFPG_Util.Warn(warnNoOutputs);
-            return false;
-        }
-        if (rulesParsedTotal == 0)
-        {
-            string warnNoRules = "[SorterData.FromJSON] no rules parsed";
-            LFPG_Util.Warn(warnNoRules);
-            return false;
-        }
-        return true;
-    }
-
+	bool ReadConfig(LFPG_SortConfig config)
+	{
+		if (!Consume("{") || !Consume("\"o\"") || !Consume(":") || !Consume("["))
+			return false;
+		int outputIndex = 0;
+		if (!Consume("]"))
+		{
+			while (true)
+			{
+				if (outputIndex >= LFPG_SORT_MAX_OUTPUTS)
+					return false;
+				LFPG_SortOutputConfig output = config.GetOutput(outputIndex);
+				if (!ReadOutput(output))
+					return false;
+				outputIndex = outputIndex + 1;
+				if (Consume("]"))
+					break;
+				if (!Consume(","))
+					return false;
+			}
+		}
+		if (!Consume("}"))
+			return false;
+		SkipWhitespace();
+		return m_Pos == m_JSON.Length();
+	}
 };
