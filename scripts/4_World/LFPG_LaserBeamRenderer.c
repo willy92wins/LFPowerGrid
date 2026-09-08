@@ -17,7 +17,8 @@
 //
 // Lifecycle:
 //   Init: MissionGameplay.OnInit → Reset()
-//   Tick: MissionGameplay.OnUpdate → DrawFrame() (inside HUD begin/end)
+//   Tick: MissionGameplay.OnUpdate → MaintenanceTick() + DrawFrame()
+//         (DrawFrame inside HUD begin/end)
 //   Cleanup: singleton destruction on mission end
 //
 // No allocations per frame. Pre-allocated screen coord arrays.
@@ -32,6 +33,8 @@ class LFPG_LaserBeamRenderer
     protected ref array<LFPG_LaserDetector> m_ActiveDetectors;
     protected vector m_CullClipA;
     protected vector m_CullClipB;
+    // U6: acumulador del tick de mantenimiento, en segundos.
+    protected float  m_CullAccS;
 
     // ---- Beam visual constants ----
     static const int   LFPG_LASER_BEAM_COLOR     = 0xC0FF0000;  // red, semi-transparent
@@ -64,8 +67,7 @@ class LFPG_LaserBeamRenderer
         m_ActiveDetectors = new array<LFPG_LaserDetector>;
         m_CullClipA = "0 0 0";
         m_CullClipB = "0 0 0";
-        bool repeatCull = true;
-        g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(CullTick, LFPG_LASER_CULL_TICK_MS, repeatCull);
+        m_CullAccS  = 0.0;
     }
 
     void ~LFPG_LaserBeamRenderer()
@@ -75,14 +77,6 @@ class LFPG_LaserBeamRenderer
 
     protected void CleanupInstance()
     {
-        if (g_Game)
-        {
-            ScriptCallQueue cq = g_Game.GetCallQueue(CALL_CATEGORY_GUI);
-            if (cq)
-            {
-                cq.Remove(CullTick);
-            }
-        }
         if (m_Detectors)
         {
             m_Detectors.Clear();
@@ -147,6 +141,24 @@ class LFPG_LaserBeamRenderer
         float dy = point[1] - closestY;
         float dz = point[2] - closestZ;
         return dx * dx + dy * dy + dz * dz;
+    }
+
+    // U6: un solo tick de mantenimiento, gobernado por el frame.
+    // Antes esto era una cadena CallLater repetida en CALL_CATEGORY_GUI que se
+    // registraba en el constructor y habia que desregistrar a mano; una instancia
+    // vieja que sobreviviera al Reset() dejaba el temporizador huerfano. El hub de
+    // frame resuelve el singleton por Get() en cada llamada, asi que ese modo de
+    // fallo desaparece. El acumulador se pone a cero al disparar en vez de restar
+    // el periodo: tras un tiron largo se dispara una vez, no en rafaga.
+    void MaintenanceTick(float timeslice)
+    {
+        m_CullAccS = m_CullAccS + timeslice;
+        float cullPeriodS = LFPG_LASER_CULL_TICK_MS / 1000.0;
+        if (m_CullAccS >= cullPeriodS)
+        {
+            m_CullAccS = 0.0;
+            CullTick();
+        }
     }
 
     protected void CullTick()
