@@ -151,7 +151,6 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
         LFPG_SearchlightLightManager.Reset();
-        LFPG_SorterView.Init();
         // v1.2.3: TEST view is constructed lazily by LFPG_SorterView_TEST.Open().
         LFPG_BTCAtmView.Init();
         LFPG_LaserBeamRenderer.Reset();
@@ -179,15 +178,6 @@ modded class MissionGameplay
         // ESC (key==1) triggers double-ESC pattern.
         // All other keys are swallowed (no super call).
         // EditBox typing uses widget event path, not OnKeyPress.
-        if (LFPG_SorterView.IsOpen())
-        {
-            if (key == 1)
-            {
-                LFPG_SorterView.HandleEscKey();
-            }
-            return;
-        }
-
         if (LFPG_SorterView_TEST.IsOpen())
         {
             if (key == 1)
@@ -230,10 +220,6 @@ modded class MissionGameplay
                 return;
             if (LFPG_BTCAtmView.IsEscCooldown())
                 return;
-            if (LFPG_SorterView.IsOpen())
-                return;
-            if (LFPG_SorterView.IsEscCooldown())
-                return;
             if (LFPG_SorterView_TEST.IsOpen())
                 return;
             if (LFPG_SorterView_TEST.IsEscCooldown())
@@ -253,57 +239,27 @@ modded class MissionGameplay
         // ---- R2: Force-close Sorter UI if player dies or goes unconscious ----
         // SetDisabled(true) would remain stuck without this guard.
         // Pattern: TraderPlus, Expansion Trader use same OnUpdate check.
-        if (LFPG_SorterView.IsOpen())
-        {
-            PlayerBase sorterPlayer = PlayerBase.Cast(g_Game.GetPlayer());
-            bool shouldClose = false;
-            if (!sorterPlayer)
-            {
-                shouldClose = true;
-            }
-            else if (!sorterPlayer.IsAlive())
-            {
-                shouldClose = true;
-            }
-            else if (sorterPlayer.IsUnconscious())
-            {
-                shouldClose = true;
-            }
-            if (shouldClose)
-            {
-                LFPG_SorterView.Close();
-            }
-        }
-
-        if (LFPG_SorterView_TEST.IsOpen())
-        {
-            // Dual-open overlap can only come from the action-RPC race; TEST yields.
-            if (LFPG_SorterView.IsOpen())
-            {
-                LFPG_SorterView_TEST.Close();
-            }
-            else
-            {
-                PlayerBase sorterTestPlayer = PlayerBase.Cast(g_Game.GetPlayer());
-                bool sorterTestShouldClose = false;
-                if (!sorterTestPlayer)
-                {
-                    sorterTestShouldClose = true;
-                }
-                else if (!sorterTestPlayer.IsAlive())
-                {
-                    sorterTestShouldClose = true;
-                }
-                else if (sorterTestPlayer.IsUnconscious())
-                {
-                    sorterTestShouldClose = true;
-                }
-                if (sorterTestShouldClose)
-                {
-                    LFPG_SorterView_TEST.Close();
-                }
-            }
-        }
+		if (LFPG_SorterView_TEST.IsOpen())
+		{
+			PlayerBase sorterTestPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+			bool sorterTestShouldClose = false;
+			if (!sorterTestPlayer)
+			{
+				sorterTestShouldClose = true;
+			}
+			else if (!sorterTestPlayer.IsAlive())
+			{
+				sorterTestShouldClose = true;
+			}
+			else if (sorterTestPlayer.IsUnconscious())
+			{
+				sorterTestShouldClose = true;
+			}
+			if (sorterTestShouldClose)
+			{
+				LFPG_SorterView_TEST.Close();
+			}
+		}
 
         // ---- Force-close BTC ATM UI if player dies or goes unconscious ----
         if (LFPG_BTCAtmView.IsOpen())
@@ -476,7 +432,6 @@ modded class MissionGameplay
         LFPG_CameraViewport.Reset();
         LFPG_SearchlightController.Reset();
         LFPG_SearchlightLightManager.Reset();
-        LFPG_SorterView.Cleanup();
         // Sprint 0 (2026-04-26): V4 TEST view cleanup
         LFPG_SorterView_TEST.Cleanup();
         LFPG_BTCAtmView.Cleanup();

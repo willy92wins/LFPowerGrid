@@ -525,8 +525,6 @@ class ActionLFPG_PortBase : ActionSingleUseBase
         // CCTCursor actions — they fire every frame on whatever
         // the player's cursor points at behind the UI.
 #ifndef SERVER
-        if (LFPG_SorterView.IsOpen())
-            return false;
 		if (LFPG_SorterView_TEST.IsOpen())
 			return false;
 #endif
@@ -1350,7 +1348,7 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
             return false;
 
         // v2.6: Suppress DebugStatus on linked Sorters — the Sorter
-        // has its own full config panel (LFPG_ActionOpenSorterPanel).
+		// has its own full configuration panel.
         // Showing both DebugStatus + Port actions clutters the scroll menu.
         string sorterType = "LFPG_Sorter";
         if (dev.IsKindOf(sorterType))
