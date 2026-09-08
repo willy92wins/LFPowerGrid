@@ -174,7 +174,7 @@ class LFPG_Telemetry
         }
 
         // Preview averages (only meaningful if wiring was active)
-        if (s_SumPrvSpans > 0)
+		if (LFPG_PERFDIAG_ENABLED && s_SumPrvSpans > 0)
         {
             int avgSpans = s_SumPrvSpans / s_FrameCount;
             int avgSubSegs = s_SumPrvSubSegs / s_FrameCount;
@@ -190,11 +190,11 @@ class LFPG_Telemetry
             pLog = pLog + " (behind=" + s_SumPrvCulledBehind.ToString();
             pLog = pLog + " off=" + s_SumPrvCulledOff.ToString() + ")";
             pLog = pLog + " avgProjections=" + avgProjections.ToString();
-            Print("[LF_PowerGrid] " + pLog);
+			LFPG_Util.Info(pLog);
         }
 
         // Render averages (only meaningful if CableRenderer populated data)
-        if (s_SumRndTotal > 0)
+		if (LFPG_PERFDIAG_ENABLED && s_SumRndTotal > 0)
         {
             int avgWires = s_SumRndTotal / s_FrameCount;
             int avgDrawnW = s_SumRndDrawn / s_FrameCount;
@@ -217,7 +217,7 @@ class LFPG_Telemetry
             rLog = rLog + " peakSegs=" + s_PeakRndSegs.ToString();
             rLog = rLog + " budgetPct=" + budgetPct.ToString() + "%";
             rLog = rLog + " occRays=" + s_SumRndOccRays.ToString();
-            Print("[LF_PowerGrid] " + rLog);
+			LFPG_Util.Info(rLog);
         }
 
         // Reset accumulators
