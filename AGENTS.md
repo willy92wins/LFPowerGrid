@@ -31,6 +31,18 @@ Tarda ~60 s sobre el arbol entero y saca **JSON**. Tres cosas que hay que saber 
 sustituye un arranque. Pero **si caza una referencia colgando tras un borrado**, que es justo lo
 que un grep de simbolos se deja. Si borras clases o ficheros, este gate no es opcional.
 
+**Punto ciego MEDIDO el 2026-09-08, y costo un arranque entero:** este linter **NO ve una
+variable no declarada**. Un `obj.m_Campo` donde la clase de `obj` no declara `m_Campo` pasa con
+**0 errores y delta cero**, y despues el cliente muere con `Can't compile "World" script module!`
+y `ACCESS_VIOLATION`. Caso real: `LFPG_CableRenderer.c:2825` incrementaba `tRnd.m_Projections`
+sobre un `LFPG_RenderMetrics`; ese campo existe en `LFPG_PreviewMetrics`, no ahi. Doce lanes y una
+revision adversarial de otra familia pasaron por encima, porque leido parece razonable. Los dos
+arranques, el rojo y el verde, estan en `reviews/2026-09-08-gate-ingame-plan-definitivo/`.
+
+Barrido barato que si lo caza, y cuesta segundos: por cada local tipada `LFPG_X obj = ...` de tu
+diff, comprobar que cada `obj.m_Campo` que uses este declarado en `LFPG_X` o en alguno de sus
+padres. Si tocas muchos ficheros, hazlo **antes** de gastar un ciclo de arranque.
+
 Linea base conocida (2026-09-08, `adfd29c`): **263 ficheros, 0 errores, 47 warnings**. Si te salen
 errores, son tuyos.
 
