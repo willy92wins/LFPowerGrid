@@ -84,6 +84,7 @@ class LFPG_RemoteController : Inventory_Base
     protected bool m_LastPairEvictedOldest;
     protected ref array<string> m_PruneEvictedIds;
     protected ref TManagedRefArray m_PairOrderBuffer;
+	protected int m_OwnerSyncRetriesRemaining = 0;
 
     // ============================================
     // Constructor
@@ -98,6 +99,36 @@ class LFPG_RemoteController : Inventory_Base
         m_PruneEvictedIds = new array<string>;
         m_PairOrderBuffer = new TManagedRefArray;
     }
+
+	// ItemBase dispatches these hooks to nested inventory items as well.
+	override void OnInventoryEnter(Man player)
+	{
+		super.OnInventoryEnter(player);
+		LFPG_QueueOwnerSync();
+	}
+
+	override void OnInventoryExit(Man player)
+	{
+		super.OnInventoryExit(player);
+		m_ClientPairedIds.Clear();
+		m_OwnerSyncRetriesRemaining = 0;
+		if (g_Game)
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SyncToOwner);
+	}
+
+	override void EEDelete(EntityAI parent)
+	{
+		m_OwnerSyncRetriesRemaining = 0;
+		if (g_Game)
+		{
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SyncToOwner);
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetLED1);
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetBtn1);
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetLED2);
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetBtn2);
+		}
+		super.EEDelete(parent);
+	}
 
     // ============================================
     // Actions
@@ -215,6 +246,23 @@ class LFPG_RemoteController : Inventory_Base
 
     protected void LFPG_OrderPairsByLastSeen()
     {
+		// Repeated saves of an already ordered list only need a linear check.
+		// Keep the original sort for changed lists, including its tie policy.
+		bool ordered = true;
+		int previousOrder = 0;
+		for (int orderIndex = 0; orderIndex < m_PairedEntries.Count(); orderIndex = orderIndex + 1)
+		{
+			LFPG_PairedEntry orderedEntry = LFPG_PairedEntry.Cast(m_PairedEntries[orderIndex]);
+			if (!orderedEntry || (orderIndex > 0 && orderedEntry.m_LastSeenOrder <= previousOrder))
+			{
+				ordered = false;
+				break;
+			}
+			previousOrder = orderedEntry.m_LastSeenOrder;
+		}
+		if (ordered)
+			return;
+
         m_PairOrderBuffer.Clear();
         while (m_PairedEntries.Count() > 0)
         {
@@ -361,21 +409,42 @@ class LFPG_RemoteController : Inventory_Base
         #endif
     }
 
-    // Send to whoever currently holds this item
-    void LFPG_SyncToOwner()
-    {
-        #ifdef SERVER
-        PlayerBase owner = PlayerBase.Cast(GetHierarchyRootPlayer());
-        if (!owner)
-            return;
+	protected void LFPG_QueueOwnerSync()
+	{
+		#ifdef SERVER
+		if (!g_Game)
+			return;
+		// One initial send plus five identity/load retries; no periodic timer.
+		m_OwnerSyncRetriesRemaining = 5;
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SyncToOwner);
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_SyncToOwner, LFPG_REMOTE_SYNC_DELAY_MS, false);
+		#endif
+	}
 
-        PlayerIdentity identity = owner.GetIdentity();
-        if (!identity)
-            return;
-
-        LFPG_SyncPairedListToClient(identity);
-        #endif
-    }
+	// Resolve the current owner at execution time, never retain the old one.
+	void LFPG_SyncToOwner()
+	{
+		#ifdef SERVER
+		if (!g_Game)
+			return;
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SyncToOwner);
+		PlayerBase owner = PlayerBase.Cast(GetHierarchyRootPlayer());
+		PlayerIdentity identity;
+		if (owner)
+			identity = owner.GetIdentity();
+		if (identity)
+		{
+			m_OwnerSyncRetriesRemaining = 0;
+			LFPG_SyncPairedListToClient(identity);
+			return;
+		}
+		if (m_OwnerSyncRetriesRemaining > 0)
+		{
+			m_OwnerSyncRetriesRemaining = m_OwnerSyncRetriesRemaining - 1;
+			g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_SyncToOwner, LFPG_REMOTE_SYNC_DELAY_MS, false);
+		}
+		#endif
+	}
 
     // ============================================
     // OnRPC — receive paired list on client
@@ -536,6 +605,8 @@ class LFPG_RemoteController : Inventory_Base
         SetObjectMaterial(LFPG_RC_HS_LED1, LFPG_RC_RVMAT_RED);
         string animBtn1 = "activate_button_1";
         SetAnimationPhase(animBtn1, 1.0);
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetLED1);
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetBtn1);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED1, LFPG_REMOTE_LED_DURATION_MS, false);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn1, LFPG_REMOTE_BTN_DURATION_MS, false);
     }
@@ -556,6 +627,8 @@ class LFPG_RemoteController : Inventory_Base
         SetObjectMaterial(LFPG_RC_HS_LED2, LFPG_RC_RVMAT_GREEN);
         string animBtn2 = "activate_button_2";
         SetAnimationPhase(animBtn2, 1.0);
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetLED2);
+		g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_ResetBtn2);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetLED2, LFPG_REMOTE_LED_DURATION_MS, false);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_ResetBtn2, LFPG_REMOTE_BTN_DURATION_MS, false);
     }
@@ -626,6 +699,14 @@ class LFPG_RemoteController : Inventory_Base
             return false;
         }
 
+		// The original writer (3c75cde) and the capped writer both use v1:
+		// int count, then count * (string deviceId, float x, float y, float z).
+		if (persistVer != LFPG_REMOTE_PERSIST_VER)
+		{
+			LFPG_Util.Error("[LFPG_RemoteController] Unsupported persistence version");
+			return false;
+		}
+
         int count;
         if (!ctx.Read(count))
         {
@@ -634,9 +715,18 @@ class LFPG_RemoteController : Inventory_Base
             return false;
         }
 
-        m_PairedEntries.Clear();
-        m_PruneEvictedIds.Clear();
-        m_LastSeenSerial = 0;
+		if (count < 0)
+		{
+			LFPG_Util.Error("[LFPG_RemoteController] Negative persisted pair count");
+			return false;
+		}
+
+		// Legacy v1 writers had no cap. Consume every tuple to retain alignment.
+		// Stage only the newest CAP valid IDs; bound the diagnostic sample too.
+		TManagedRefArray loadedEntries = new TManagedRefArray;
+		array<string> evictedIds = new array<string>;
+		int loadedSerial = 0;
+		int evictedCount = 0;
 
         int i;
         for (i = 0; i < count; i = i + 1)
@@ -661,51 +751,62 @@ class LFPG_RemoteController : Inventory_Base
             if (!ctx.Read(pz))
                 return false;
 
-            if (devId != "")
-            {
-                if (m_PairedEntries.Count() >= LFPG_REMOTE_PAIR_CAP)
-                {
-                    int oldestIndex = LFPG_FindOldestPairIndex();
-                    if (oldestIndex >= 0)
-                    {
-                        LFPG_PairedEntry oldestEntry = LFPG_PairedEntry.Cast(m_PairedEntries[oldestIndex]);
-                        string oldestId = "<null>";
-                        if (oldestEntry)
-                            oldestId = oldestEntry.m_DeviceId;
-                        m_PruneEvictedIds.Insert(oldestId);
-                        m_PairedEntries.Remove(oldestIndex);
-                    }
-                }
-                LFPG_PairedEntry entry = new LFPG_PairedEntry();
-                entry.m_DeviceId = devId;
-                entry.m_PosX = px;
-                entry.m_PosY = py;
-                entry.m_PosZ = pz;
-                m_LastSeenSerial = m_LastSeenSerial + 1;
-                entry.m_LastSeenOrder = m_LastSeenSerial;
-                m_PairedEntries.Insert(entry);
-            }
-        }
+			if (devId != "")
+			{
+				if (loadedEntries.Count() >= LFPG_REMOTE_PAIR_CAP)
+				{
+					// Preserve legacy array order as well as the eviction policy:
+					// activation traverses this array backwards before the next save.
+					int oldestIndex = 0;
+					LFPG_PairedEntry oldestEntry = LFPG_PairedEntry.Cast(loadedEntries[0]);
+					for (int loadedIndex = 1; loadedIndex < loadedEntries.Count(); loadedIndex = loadedIndex + 1)
+					{
+						LFPG_PairedEntry candidate = LFPG_PairedEntry.Cast(loadedEntries[loadedIndex]);
+						if (candidate.m_LastSeenOrder < oldestEntry.m_LastSeenOrder)
+						{
+							oldestIndex = loadedIndex;
+							oldestEntry = candidate;
+						}
+					}
+					if (evictedIds.Count() < LFPG_REMOTE_PAIR_CAP)
+						evictedIds.Insert(oldestEntry.m_DeviceId);
+					loadedEntries.Remove(oldestIndex);
+					evictedCount = evictedCount + 1;
+				}
+				LFPG_PairedEntry entry = new LFPG_PairedEntry();
+				entry.m_DeviceId = devId;
+				entry.m_PosX = px;
+				entry.m_PosY = py;
+				entry.m_PosZ = pz;
+				loadedSerial = loadedSerial + 1;
+				entry.m_LastSeenOrder = loadedSerial;
+				loadedEntries.Insert(entry);
+			}
+		}
 
-        if (m_PruneEvictedIds.Count() > 0)
-        {
-            string legacyMsg = "[LFPG_RemoteController] Legacy over-cap load evicted oldest IDs: ";
-            int ei;
-            for (ei = 0; ei < m_PruneEvictedIds.Count(); ei = ei + 1)
-            {
-                if (ei > 0)
-                    legacyMsg = legacyMsg + ",";
-                legacyMsg = legacyMsg + m_PruneEvictedIds[ei];
-            }
-            LFPG_Util.Warn(legacyMsg);
-        }
+		// Commit device-local state only after the complete payload was read.
+		m_PairedEntries = loadedEntries;
+		m_LastSeenSerial = loadedSerial;
+		m_PruneEvictedIds.Clear();
+		if (evictedCount > 0)
+		{
+			string legacyMsg = "[LFPG_RemoteController] Legacy over-cap load evicted ";
+			legacyMsg = legacyMsg + evictedCount.ToString() + " IDs; sample: ";
+			for (int ei = 0; ei < evictedIds.Count(); ei = ei + 1)
+			{
+				if (ei > 0)
+					legacyMsg = legacyMsg + ",";
+				legacyMsg = legacyMsg + evictedIds[ei];
+			}
+			LFPG_Util.Warn(legacyMsg);
+		}
         string loadMsg = "[LFPG_RemoteController] OnStoreLoad: ";
         loadMsg = loadMsg + m_PairedEntries.Count().ToString();
         loadMsg = loadMsg + " entries loaded";
         LFPG_Util.Debug(loadMsg);
 
-        // Delayed sync to owner (player might not have identity yet during load)
-        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_SyncToOwner, LFPG_REMOTE_SYNC_DELAY_MS, false);
+		// Coalesces with inventory entry; identity may still be unavailable.
+		LFPG_QueueOwnerSync();
 
         return true;
     }
