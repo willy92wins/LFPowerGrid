@@ -1,0 +1,80 @@
+---------------------------------------------
+Log P:\LFPowerGrid_dev\_server\profiles\script_2026-09-08_12-01-10.log started at 08.09. 12:01:10
+
+SCRIPT       : Module: GameLib; loaded 19x files; 29x classes; used 49/2097 kB (2%) of static memory; defines: "DAYZ_1_29,SERVER_FOR_WINDOWS,SERVER,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,NO_GUI,NO_GUI_INGAME,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STACK_NAME_ASSUMPTION_FIX,CF_GHOSTICONS,CF_MODSTORAGE,CF_SURFACES,CF_MODULES,CF_REF_FIX,CF_BUGFIX_REF,CF_BUGFIX_XML,CF_VIRTUALSTORAGE_FIX,CF_DOUBLYLINKEDNODES,CF_ONUPDATE_RATE_LIMIT,CF_LOG_TIMESTAMP,LFSecure,LFPowerGrid,DayZ,FEATURE_CURSOR,FEATURE_NETWORK_RECONCILIATION,FEATURE_NETWORK_RECONCILATION"; CRC32: 00000000
+SCRIPT       : Registered 315 temporary action enum(s), UAN==315
+SCRIPT       : Module: Game; loaded 693x files; 2026x classes; used 6697/33554 kB (19%) of static memory; defines: "DAYZ_1_29,SERVER_FOR_WINDOWS,SERVER,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,NO_GUI,NO_GUI_INGAME,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STACK_NAME_ASSUMPTION_FIX,CF_GHOSTICONS,CF_MODSTORAGE,CF_SURFACES,CF_MODULES,CF_REF_FIX,CF_BUGFIX_REF,CF_BUGFIX_XML,CF_VIRTUALSTORAGE_FIX,CF_DOUBLYLINKEDNODES,CF_ONUPDATE_RATE_LIMIT,CF_LOG_TIMESTAMP,LFSecure,LFPowerGrid,DayZ,FEATURE_CURSOR,FEATURE_NETWORK_RECONCILIATION,FEATURE_NETWORK_RECONCILATION,DEBUG_SCOPED_FUNCTION_TIMERS,DABSFRAMEWORK_1_51"; CRC32: 00000000
+SCRIPT       : ... Backlit Effects Enabled
+SCRIPT       : Module: World; loaded 2302x files; 5928x classes; used 11957/33554 kB (35%) of static memory; defines: "DAYZ_1_29,SERVER_FOR_WINDOWS,SERVER,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,NO_GUI,NO_GUI_INGAME,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STACK_NAME_ASSUMPTION_FIX,CF_GHOSTICONS,CF_MODSTORAGE,CF_SURFACES,CF_MODULES,CF_REF_FIX,CF_BUGFIX_REF,CF_BUGFIX_XML,CF_VIRTUALSTORAGE_FIX,CF_DOUBLYLINKEDNODES,CF_ONUPDATE_RATE_LIMIT,CF_LOG_TIMESTAMP,LFSecure,LFPowerGrid,DayZ,FEATURE_CURSOR,FEATURE_NETWORK_RECONCILIATION,FEATURE_NETWORK_RECONCILATION"; CRC32: 00000000
+ SCRIPT       : Module: Mission; loaded 249x files; 590x classes; used 5085/33554 kB (15%) of static memory; defines: "DAYZ_1_29,SERVER_FOR_WINDOWS,SERVER,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,NO_GUI,NO_GUI_INGAME,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STACK_NAME_ASSUMPTION_FIX,CF_GHOSTICONS,CF_MODSTORAGE,CF_SURFACES,CF_MODULES,CF_REF_FIX,CF_BUGFIX_REF,CF_BUGFIX_XML,CF_VIRTUALSTORAGE_FIX,CF_DOUBLYLINKEDNODES,CF_ONUPDATE_RATE_LIMIT,CF_LOG_TIMESTAMP,LFSecure,LFPowerGrid,DayZ,FEATURE_CURSOR,FEATURE_NETWORK_RECONCILIATION,FEATURE_NETWORK_RECONCILATION,ENABLE_CAROUSEL"; CRC32: 00000000
+ SCRIPT       : Module: P:\LFPowerGrid_dev\_server\mpmissions\dayzOffline.chernarusplus\init.c; loaded 1x files; 14x classes; used 78/1048 kB (7%) of static memory; defines: "DAYZ_1_29,SERVER_FOR_WINDOWS,SERVER,PLATFORM_WINDOWS,DIAG,DIAG_DEVELOPER,NO_GUI,NO_GUI_INGAME,DabsFramework,DayZ_MCP,sakhal,JM_CommunityFramework,CF_MODULE_CONFIG,CF_EXPRESSION,CF_TRACE_STACK_NAME_ASSUMPTION_FIX,CF_GHOSTICONS,CF_MODSTORAGE,CF_SURFACES,CF_MODULES,CF_REF_FIX,CF_BUGFIX_REF,CF_BUGFIX_XML,CF_VIRTUALSTORAGE_FIX,CF_DOUBLYLINKEDNODES,CF_ONUPDATE_RATE_LIMIT,CF_LOG_TIMESTAMP,LFSecure,LFPowerGrid,DayZ,FEATURE_CURSOR,FEATURE_NETWORK_RECONCILIATION,FEATURE_NETWORK_RECONCILATION"; CRC32: 00000000
+ SCRIPT       : string s =    'Module PluginConfigDebugProfile is not Registred in PluginManager.c!'
+ SCRIPT    (E):    -- Stack trace --
+ SCRIPT    (E):    GetPlugin() scripts/4_World/plugins\pluginmanager.c : 339
+ SCRIPT    (E):    OnInit() scripts/4_World/plugins\pluginbase\pluginitemdiagnostic.c : 94
+ SCRIPT    (E):    PluginsInit() scripts/4_World/plugins\pluginmanager.c : 134
+ SCRIPT    (E):    PluginManagerInit() scripts/4_World/plugins\pluginmanager.c : 302
+ SCRIPT    (E):    MissionBase@211#1() scripts/5_Mission/mission\missionbase.c : 21
+ SCRIPT    (E):    CreateCustomMission() P:\LFPowerGrid_dev\_server\mpmissions\dayzOffline.chernarusplus\init.c : 918
+ SCRIPT    (E):    -----------------
+ SCRIPT       : [LF_PowerGrid] NetworkManager init (server).
+ SCRIPT       : [LF_PowerGrid] [VanillaWires] Loaded 0 entries from 0
+ SCRIPT       : [LF_PowerGrid] [LFPG_BTCConfig] Loaded: enabled=true apiUrl=https://api.binance.com refreshS=60 btcItem=AmmoBox_9x19_25rnd maxBtc=100 withdrawOnly=false balanceMode=auto currencies=4 catalogValid=true
+ SCRIPT       : [LF_PowerGrid] [LFPG_BTCConfig] Currencies sorted (desc): Battery9V=100, Screwdriver=50, DuctTape=10, Nail=1
+ SCRIPT       : [LF_PowerGrid] [LFPG_Balance] Provider registered: Native (priority 0)
+ SCRIPT       : [LF_PowerGrid] [LFPG_Balance] Registered: Native(0)
+ SCRIPT       : [LF_PowerGrid] [LFPG_Balance] Mode=auto -> Active: Native (priority 0)
+ SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Initialized. Base URL: https://api.binance.com
+ SCRIPT       : [LF_PowerGrid] [NM] BTC Price fetcher initialized, tick every 60000ms
+ SCRIPT       : [LF_PowerGrid] [Scheduler] start tick_ms=100
+ SCRIPT       : [LF_PowerGrid] MissionServer OnInit (v1.2.4)
+ SCRIPT       : [GS01] Driver started version=GS01-T5-1
+ SCRIPT       : [DayZ-MCP] config loaded path=$profile:dayz_mcp.json url=http://127.0.0.1:8765/ keylen=43 instlen=36 poll_hz=5
+  SCRIPT       : 12:01:32.580 [WARNING]	File "$mission:storage_1/communityframework/modstorageplayers.bin" was not closed. Always shut down the server gracefully to prevent data loss.
+SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Updated: 67781.90 eur
+SCRIPT       : [LF_PowerGrid] [SelfHeal] Phased validation scheduled
+SCRIPT       : [LF_PowerGrid] [SelfHeal] Vanilla wire pruning deferred until after phased validation
+SCRIPT       : [LF_PowerGrid] [ElecGraph] Rebuilt: 0 nodes, 0 edges, 0 components in 0ms
+SCRIPT       : [LF_PowerGrid] [ElecGraph] PopulateAllNodeElecStates: 0 nodes
+SCRIPT       : [LF_PowerGrid] [ElecGraph] MarkSourcesDirty: queued 0 sources
+SCRIPT       : [LF_PowerGrid] [SelfHeal] Graph warmup phase complete
+SCRIPT       : [LF_PowerGrid] [Propagate] Warmup drain complete
+SCRIPT       : [LF_PowerGrid] [Movement] RebuildTrackedDevices: tracking 0 wired devices
+SCRIPT       : [LF_PowerGrid] [SelfHeal] Startup validation done — RPCs enabled
+SCRIPT       : [LF_PowerGrid] [SelfHeal] phased summary duration_ms=1499 devices=0 owners_pruned=0
+SCRIPT       : [LF_PowerGrid] [DeferredPrune] Starting deferred vanilla wire validation...
+SCRIPT       : [LF_PowerGrid] [DeferredPrune] rebuild=skipped newly_resolved=0 lfpg_pruned=0 vanilla_pruned=0 vanilla_dirty=0
+SCRIPT       : [LF_PowerGrid] [DeferredPrune] summary duration_ms=0 newly_resolved=0 lfpg_pruned=0 vanilla_pruned=0 vanilla_dirty_before_flush=0 rebuild=skipped
+SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Updated: 67746.70 eur (prev: 67781.90 eur)
+ SCRIPT       : EOnClientPrepare: (identity=PlayerIdentity<0x000002B3F93EE3A0>, use_db=1, position=<0,0,0>, yaw=0, preload_timeout=0)
+ SCRIPT       : OnIdentityCreated npNvd-DsBVNJwRka0nfrvDTf0le0xOQqtTxtWiN1Kmw=
+ SCRIPT       : [DF][DEBUG][EventManager]: Sending In Progress info to SurvivorBase<0x000002B3CDA7D670> SurvivorF_Keiko:22928
+ SCRIPT       : [LF_PowerGrid] Loaded (v=1.2.4)
+ SCRIPT       : [LF_PowerGrid] Settings loaded: MaxWiresPerPlayer=128 MaxWiresPerDevice=64 AllowCutOthersWires=false RpcCooldownSeconds=0.5 DeviceBubbleM=25 AtomicVerifyReadback=true HideCablesWithoutReel=false VanillaCompat=true VanillaDefConsumption=20 CustomEntries=1 Blacklist=8 FuelWhitelistOnly=false FuelEntries=2 DCLockDoors=true FurnaceHeat=false
+ SCRIPT       : [LF_PowerGrid] VanillaCompat: blacklist parsed prefixes=1 exact=7
+ SCRIPT       : [LF_PowerGrid] FurnaceFuel: whitelist cached entries=2
+ SCRIPT       : [LF_PowerGrid] FullSync requested by pid=npNvd-DsBVNJwRka0nfrvDTf0le0xOQqtTxtWiN1Kmw=
+SCRIPT       : [LF_PowerGrid] [ERR] LFPG_FAULTINJECT DISARMED reason=no_file
+SCRIPT       : [LF_PowerGrid] [LFPG_Balance_Native] Loaded 1 player balances from $profile:LF_PowerGrid\LF_Balances.json
+SCRIPT       : [LF_PowerGrid] [LFPG_Balance_Native] Orphan sweep pass executed
+SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Updated: 67782.57 eur (prev: 67746.70 eur)
+SCRIPT       : [DayZ-MCP] poll commands=1 sent_tick=330217 callback_tick=330474
+SCRIPT       : [DayZ-MCP] result posted id=1 ok=1 sent_tick=330217 callback_tick=330474 dispatch_tick=330474
+SCRIPT       : [DayZ-MCP] result ack size=11
+SCRIPT       : [DayZ-MCP] poll commands=1 sent_tick=361091 callback_tick=361337
+SCRIPT       : [DayZ-MCP] result posted id=2 ok=1 sent_tick=361091 callback_tick=361337 dispatch_tick=361337
+SCRIPT       : [DayZ-MCP] result ack size=11
+SCRIPT       : [DayZ-MCP] poll commands=1 sent_tick=373342 callback_tick=373619
+SCRIPT       : [DayZ-MCP] world_spawn deferred id=3 from=poll_callback callback_tick=373619
+SCRIPT       : [DayZ-MCP] spawn phase id=3 phase=validate_begin
+SCRIPT       : [DayZ-MCP] spawn phase id=3 phase=validate_return
+SCRIPT       : [DayZ-MCP] spawn phase id=3 phase=create_begin
+SCRIPT       : [DayZ-MCP] spawn phase id=3 phase=create_return
+SCRIPT       : [DayZ-MCP] job queued id=3 kind=spawn deadline_s=180.06
+SCRIPT       : [DayZ-MCP] result posted id=3 ok=1 sent_tick=373342 callback_tick=373619 dispatch_tick=373620
+SCRIPT       : [DayZ-MCP] result ack size=11
+SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Updated: 67790.50 eur (prev: 67782.57 eur)
+SCRIPT       : [DayZ-MCP] poll commands=1 sent_tick=505212 callback_tick=505447
+SCRIPT       : [DayZ-MCP] result posted id=6 ok=1 sent_tick=505212 callback_tick=505447 dispatch_tick=505447
+SCRIPT       : [DayZ-MCP] result ack size=11
+SCRIPT       : [LF_PowerGrid] [LFPG_BTCPrice] Updated: 67784.71 eur (prev: 67790.50 eur)
