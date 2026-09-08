@@ -20,7 +20,7 @@ class Stage1
 };
 class Stage2
 {
-	texture = "\LFPowerGrid\data\laser_detector\laser_detector_grey.paa";
+	texture = "\LFPowerGrid\data\logic_gate\data\memory_cell_grey.paa";
 	uvSource = "tex";
 	class uvTransform
 	{
