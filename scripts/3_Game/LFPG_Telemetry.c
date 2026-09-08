@@ -54,6 +54,9 @@ class LFPG_RenderMetrics
     int m_SegmentsDrawn;    // total segments rendered this frame
     int m_SegmentBudgetMax; // LFPG_MAX_RENDERED_SEGS (for % calc)
     int m_OccRaycastsUsed;  // occlusion raycasts fired this frame
+    int m_Projections;      // GetScreenPos calls this frame (espejo del contador
+                            // homonimo de LFPG_PreviewMetrics; el camino de render
+                            // tambien proyecta y C2/C5 se miden aqui)
 
     void Reset()
     {
@@ -66,6 +69,7 @@ class LFPG_RenderMetrics
         m_SegmentsDrawn = 0;
         m_SegmentBudgetMax = 512;  // mirrors LFPG_MAX_RENDERED_SEGS
         m_OccRaycastsUsed = 0;
+        m_Projections = 0;
     }
 };
 
