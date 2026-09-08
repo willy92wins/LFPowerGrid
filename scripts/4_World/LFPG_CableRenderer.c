@@ -714,6 +714,13 @@ class LFPG_CableRenderer
     // Updated in BuildWire (+) and DestroyWire (-) to avoid O(N) CountTotalSegments.
     protected int m_TotalSegCount;
 
+    // U6: acumuladores del tick de mantenimiento, en segundos. Sustituyen a las
+    // cuatro cadenas CallLater repetidas que se registraban en el constructor.
+    protected float m_CullAccS;
+    protected float m_RetryAccS;
+    protected float m_PurgeAccS;
+    protected float m_ReconcileAccS;
+
     // ---- Occlusion: camera movement detection ----
     // Skip occlusion rechecks when camera is stationary.
     protected vector m_LastCamPos;
@@ -801,23 +808,10 @@ class LFPG_CableRenderer
             m_DeviceBubbleM = LFPG_DEVICE_BUBBLE_M;
         }
 
-        if (!g_Game.IsDedicatedServer())
-        {
-            bool bRepeat = true;
-            // Lightweight culling tick (replaces the old 0.5s full Refresh)
-            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(CullTick, (int)(LFPG_CULL_TICK_S * 1000.0), bRepeat);
-
-            // Retry tick for unresolved wire targets
-            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(RetryTick, (int)(LFPG_RETRY_TICK_S * 1000.0), bRepeat);
-
-            // Periodic negative cache cleanup
-            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(PurgeNegCache, NEG_CACHE_PURGE_INTERVAL_MS, bRepeat);
-
-            // v0.7.38 (Audit #1): Periodic reconciliation for exhausted-retry wires.
-            // Runs every 60s. Detects wires with data but no built segments and
-            // no active retry entry, then re-inserts them for another build attempt.
-            g_Game.GetCallQueue(CALL_CATEGORY_GUI).CallLater(ReconcileTick, LFPG_RECONCILE_TICK_MS, bRepeat);
-        }
+        m_CullAccS      = 0.0;
+        m_RetryAccS     = 0.0;
+        m_PurgeAccS     = 0.0;
+        m_ReconcileAccS = 0.0;
     }
 
     static LFPG_CableRenderer Get()
@@ -835,10 +829,57 @@ class LFPG_CableRenderer
 		return m_TotalSegCount > 0;
     }
 
+    // U6: un solo tick de mantenimiento, gobernado por el frame.
+    // Antes eran cuatro cadenas CallLater repetidas en CALL_CATEGORY_GUI,
+    // registradas en el constructor y desregistradas a mano en CleanupInstance;
+    // una instancia que sobreviviera a Reset() dejaba temporizadores huerfanos
+    // apuntando al objeto viejo. El hub de frame resuelve el singleton por Get()
+    // en cada llamada, asi que ese modo de fallo desaparece.
+    //
+    // Los periodos son los mismos y arrancan a la vez, igual que los CallLater
+    // registrados en el mismo instante, asi que la coincidencia de ticks no cambia.
+    // El acumulador se pone a cero al disparar en vez de restar el periodo: tras un
+    // tiron largo se dispara una vez, no en rafaga.
+    void MaintenanceTick(float timeslice)
+    {
+        m_CullAccS      = m_CullAccS + timeslice;
+        m_RetryAccS     = m_RetryAccS + timeslice;
+        m_PurgeAccS     = m_PurgeAccS + timeslice;
+        m_ReconcileAccS = m_ReconcileAccS + timeslice;
+
+        if (m_CullAccS >= LFPG_CULL_TICK_S)
+        {
+            m_CullAccS = 0.0;
+            CullTick();
+        }
+        if (m_RetryAccS >= LFPG_RETRY_TICK_S)
+        {
+            m_RetryAccS = 0.0;
+            RetryTick();
+        }
+
+        float purgePeriodS = NEG_CACHE_PURGE_INTERVAL_MS / 1000.0;
+        if (m_PurgeAccS >= purgePeriodS)
+        {
+            m_PurgeAccS = 0.0;
+            PurgeNegCache();
+        }
+
+        float reconcilePeriodS = LFPG_RECONCILE_TICK_MS / 1000.0;
+        if (m_ReconcileAccS >= reconcilePeriodS)
+        {
+            m_ReconcileAccS = 0.0;
+            ReconcileTick();
+        }
+    }
+
     // v0.7.9: proper cleanup on destruction.
-    // Deregisters repeating timers, releases all shape segments, and clears maps.
-    // Without this, Reset() during reconnect would leave orphaned CallLater
-    // timers pointing to the old instance, causing duplicate ticks and crashes.
+    // Deregisters the pending one-shot timers, releases all shape segments and
+    // clears maps. Without this, Reset() during reconnect would leave orphaned
+    // CallLater entries pointing to the old instance.
+    // U6: los cuatro ticks repetidos que antes vivian aqui ya no se registran;
+    // los gobierna MaintenanceTick desde el frame, asi que no pueden quedar
+    // huerfanos. Solo quedan los one-shot del batch de sincronizacion.
     void ~LFPG_CableRenderer()
     {
         CleanupInstance();
@@ -851,10 +892,6 @@ class LFPG_CableRenderer
             ScriptCallQueue cq = g_Game.GetCallQueue(CALL_CATEGORY_GUI);
             if (cq)
             {
-                cq.Remove(CullTick);
-                cq.Remove(RetryTick);
-                cq.Remove(PurgeNegCache);
-                cq.Remove(ReconcileTick);
                 cq.Remove(FlushDeviceSyncBatch);
                 cq.Remove(CheckDeviceSyncBatchResponse);
             }

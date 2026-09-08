@@ -231,6 +231,16 @@ modded class MissionGameplay
         super.OnKeyRelease(key);
     }
 
+    // U6: los dos paneles cerraban con este mismo predicado, copiado dos veces.
+    protected bool LFPG_ShouldCloseUI(PlayerBase player)
+    {
+        if (!player)
+            return true;
+        if (!player.IsAlive())
+            return true;
+        return player.IsUnconscious();
+    }
+
     override void OnUpdate(float timeslice)
     {
         super.OnUpdate(timeslice);
@@ -238,61 +248,31 @@ modded class MissionGameplay
         if (g_Game.IsDedicatedServer())
             return;
 
+        // U6: el jugador local se resuelve UNA vez por frame. Antes habia cuatro
+        // GetPlayer() en este mismo OnUpdate, con tres nombres distintos porque en
+        // Enforce los locales son de ambito de funcion y no se pueden redeclarar.
+        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
+
         // ---- R2: Force-close Sorter UI if player dies or goes unconscious ----
         // SetDisabled(true) would remain stuck without this guard.
         // Pattern: TraderPlus, Expansion Trader use same OnUpdate check.
-		if (LFPG_SorterView_TEST.IsOpen())
-		{
-			PlayerBase sorterTestPlayer = PlayerBase.Cast(g_Game.GetPlayer());
-			bool sorterTestShouldClose = false;
-			if (!sorterTestPlayer)
-			{
-				sorterTestShouldClose = true;
-			}
-			else if (!sorterTestPlayer.IsAlive())
-			{
-				sorterTestShouldClose = true;
-			}
-			else if (sorterTestPlayer.IsUnconscious())
-			{
-				sorterTestShouldClose = true;
-			}
-			if (sorterTestShouldClose)
-			{
-				LFPG_SorterView_TEST.Close();
-			}
-		}
+        if (LFPG_SorterView_TEST.IsOpen() && LFPG_ShouldCloseUI(player))
+        {
+            LFPG_SorterView_TEST.Close();
+        }
 
         // ---- Force-close BTC ATM UI if player dies or goes unconscious ----
-        if (LFPG_BTCAtmView.IsOpen())
+        if (LFPG_BTCAtmView.IsOpen() && LFPG_ShouldCloseUI(player))
         {
-            PlayerBase btcPlayer = PlayerBase.Cast(g_Game.GetPlayer());
-            bool btcShouldClose = false;
-            if (!btcPlayer)
-            {
-                btcShouldClose = true;
-            }
-            else if (!btcPlayer.IsAlive())
-            {
-                btcShouldClose = true;
-            }
-            else if (btcPlayer.IsUnconscious())
-            {
-                btcShouldClose = true;
-            }
-            if (btcShouldClose)
-            {
-                LFPG_BTCAtmView.Close();
-            }
+            LFPG_BTCAtmView.Close();
         }
 
         // ---- FullSync: once when player position is valid ----
         if (!m_LFPG_SyncRequested)
         {
-            PlayerBase syncPlayer = PlayerBase.Cast(g_Game.GetPlayer());
-            if (syncPlayer)
+            if (player)
             {
-                vector syncPos = syncPlayer.GetPosition();
+                vector syncPos = player.GetPosition();
                 if (syncPos[0] != 0.0 || syncPos[1] != 0.0 || syncPos[2] != 0.0)
                 {
                     m_LFPG_SyncRequested = true;
@@ -356,6 +336,20 @@ modded class MissionGameplay
 
         LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
         LFPG_LaserBeamRenderer laserR = LFPG_LaserBeamRenderer.Get();
+
+        // U6: mantenimiento de los renderers, gobernado por el frame en vez de por
+        // cinco cadenas CallLater repetidas. Va SIN condicionar a que haya algo que
+        // dibujar: RetryTick y ReconcileTick existen justamente para construir cables
+        // que todavia no se renderizan, y colgarlos de HasRenderableWires los mataria.
+        if (renderer)
+        {
+            renderer.MaintenanceTick(timeslice);
+        }
+        if (laserR)
+        {
+            laserR.MaintenanceTick(timeslice);
+        }
+
         bool cableProducerActive = (renderer && renderer.HasRenderableWires());
         bool laserProducerActive = (laserR && laserR.HasActiveBeams());
         bool canvasProducerActive = (!skipCameraOps && (cableProducerActive || laserProducerActive || isActive));
@@ -411,7 +405,6 @@ modded class MissionGameplay
         if (!isActive)
             return;
 
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
