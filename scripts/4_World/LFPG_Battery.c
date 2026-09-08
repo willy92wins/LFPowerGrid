@@ -60,7 +60,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     protected bool  m_PoweredNet       = false;
     protected bool  m_Overloaded       = false;
     protected bool  m_OutputEnabled    = true;
-    // v4.5: Stored as int (×10) for reliable SyncVar delivery — same
+	// v4.5: Synced as int (×10) for reliable SyncVar delivery — same
     // pattern as m_ChargeRateX10. See Bohemia ticket T198078 (two
     // RegisterNetSyncVariableFloat calls with mismatched bit-widths on the
     // same entity class corrupt the second float on the client). Keeping
@@ -74,6 +74,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     #endif
 
     // ---- Battery state (persisted, not SyncVars) ----
+	// Authoritative float; the X10 SyncVar is only a client display snapshot.
+	protected float m_StoredEnergy = 0.0;
     protected bool m_DischargeEnabled = true;
 
     // ---- Sync tracking (server-only, not persisted) ----
@@ -121,7 +123,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // The kit carries no stored energy; empty the device before dismantling.
     override bool LFPG_BlocksDismantle()
     {
-        return m_StoredEnergyX10 > 0;
+		return LFPG_GetStoredEnergy() > 0.0;
     }
 
     // ============================================
@@ -296,16 +298,15 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
         // Disk format stays float for backward compat with existing saves.
-        float storedForSave = m_StoredEnergyX10 / 10.0;
-        ctx.Write(storedForSave);
+		ctx.Write(m_StoredEnergy);
         ctx.Write(m_DischargeEnabled);
         ctx.Write(m_OutputEnabled);
     }
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-        m_LoadedFromPersistence = true;
-
+		bool dischargeEnabled = true;
+		bool outputEnabled = true;
         float storedFromSave = 0.0;
         if (!ctx.Read(storedFromSave))
         {
@@ -321,39 +322,47 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             storedFromSave = 0.0;
         }
 
-        int loadedX10 = storedFromSave * 10.0;
-        m_StoredEnergyX10 = loadedX10;
-
-        if (!ctx.Read(m_DischargeEnabled))
+		if (!ctx.Read(dischargeEnabled))
         {
             string errDisch = "[LFPG_Battery] OnStoreLoad failed: m_DischargeEnabled";
             LFPG_Util.Error(errDisch);
             return false;
         }
 
-        if (!ctx.Read(m_OutputEnabled))
+		if (!ctx.Read(outputEnabled))
         {
             string errOutput = "[LFPG_Battery] OnStoreLoad failed: m_OutputEnabled";
             LFPG_Util.Error(errOutput);
             return false;
         }
 
+		int loadedX10 = storedFromSave * 10.0;
+		m_StoredEnergy = storedFromSave;
+		m_StoredEnergyX10 = loadedX10;
+		m_DischargeEnabled = dischargeEnabled;
+		m_OutputEnabled = outputEnabled;
+		m_LoadedFromPersistence = true;
         return true;
     }
 
     // ============================================
     // Battery API — read by NetworkManager timer
     // ============================================
-    float LFPG_GetStoredEnergy()
-    {
-        float result = m_StoredEnergyX10;
-        result = result / 10.0;
-        return result;
-    }
+	float LFPG_GetStoredEnergy()
+	{
+		#ifdef SERVER
+		return m_StoredEnergy;
+		#else
+		float result = m_StoredEnergyX10;
+		result = result / 10.0;
+		return result;
+		#endif
+	}
 
     void LFPG_SetStoredEnergy(float val)
     {
         #ifdef SERVER
+		m_StoredEnergy = val;
         int newX10 = val * 10.0;
         m_StoredEnergyX10 = newX10;
 
@@ -501,6 +510,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
 
     void LFPG_InitFreshSpawn()
     {
+		m_StoredEnergy = 0.0;
         m_StoredEnergyX10 = 0;
         SetSynchDirty();
     }

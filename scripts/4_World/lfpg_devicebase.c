@@ -591,7 +591,7 @@ class LFPG_DeviceBase : Inventory_Base
     // Returns kit classname to spawn on dismantle.
     // Default: GetType() + "_Kit" (convention).
     // Override to return "" for non-dismantlable devices
-    // (T2 upgrades, BatteryAdapter, etc.)
+	// (T2 upgrades, etc.)
     // ============================================
     string LFPG_GetKitClassname()
     {

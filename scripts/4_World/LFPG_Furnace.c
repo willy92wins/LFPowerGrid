@@ -60,10 +60,10 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     protected bool  m_Overloaded   = false;
     protected int   m_FuelCurrent  = 0;
 
-    // ---- Burn timing (server-only, not persisted) ----
-    // NM ticks every 5s, burn fires every 30s.
-    // BurnTick checks: if now < m_BurnNextMs, skip.
-    protected int m_BurnNextMs = 0;
+	// Server burn clock: persist the remaining duration, never mission time.
+	// The duration pauses while off; NM polls the running deadline every 5s.
+	protected int m_BurnNextMs = 0;
+	protected int m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
 
     // ---- Client: sound + particle ----
 #ifndef SERVER
@@ -145,7 +145,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
             UniversalTemperatureSourceLambdaConstant utsLambda = new UniversalTemperatureSourceLambdaConstant();
             m_UTSource = new UniversalTemperatureSource(this, m_UTSSettings, utsLambda);
-            // UTS starts inactive; activated in LFPG_OnInitDevice or ToggleFurnace
+			// Device init ran through super before this source existed.
+			LFPG_SetHeatActive(m_SourceOn);
         }
         #endif
     }
@@ -263,8 +264,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (m_SourceOn && m_FuelCurrent > 0)
         {
             int now = g_Game.GetTime();
-            m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
-            if (nm) nm.RegisterFurnace(this);
+			m_BurnNextMs = now + m_BurnRemainingMs;
+			LFPG_BurnTick();
+			if (m_SourceOn && nm) nm.RegisterFurnace(this);
         }
 
         // Safety: source on but no fuel → try auto-consume
@@ -274,7 +276,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (restoreConsumed)
             {
                 int now2 = g_Game.GetTime();
-                m_BurnNextMs = now2 + LFPG_FURNACE_BURN_INTERVAL_MS;
+				m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+				m_BurnNextMs = now2 + m_BurnRemainingMs;
                 if (nm) nm.RegisterFurnace(this);
             }
             else
@@ -291,11 +294,6 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             if (nm) nm.RequestPropagate(m_DeviceId);
         }
 
-        // v4.7: Restore UTS heat if furnace was on
-        if (m_SourceOn)
-        {
-            LFPG_SetHeatActive(true);
-        }
         #endif
     }
 
@@ -304,6 +302,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         #ifdef SERVER
         if (m_SourceOn)
         {
+			m_BurnRemainingMs = LFPG_GetBurnRemainingMs();
             m_SourceOn = false;
             LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
             if (nm) nm.UnregisterFurnace(this);
@@ -331,6 +330,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         #ifdef SERVER
         if (m_SourceOn)
         {
+			m_BurnRemainingMs = LFPG_GetBurnRemainingMs();
             m_SourceOn = false;
             LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
             if (nm) nm.UnregisterFurnace(this);
@@ -423,33 +423,77 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // Persistence: m_SourceOn + m_FuelCurrent
-    // (after wireJSON from WireOwnerBase)
-    // ============================================
-    override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
-    {
-        ctx.Write(m_SourceOn);
-        ctx.Write(m_FuelCurrent);
-    }
+	// Persistence v3: source state, fuel, remaining burn duration in ms.
+	// v1/v2 had no duration; their first restored interval starts in full.
+	// ============================================
+	override int LFPG_GetDevicePersistVersion()
+	{
+		return 3;
+	}
 
-    override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
-    {
-        if (!ctx.Read(m_SourceOn))
-        {
-            string errSrc = "[LFPG_Furnace] OnStoreLoad failed: m_SourceOn";
-            LFPG_Util.Error(errSrc);
-            return false;
-        }
+	protected int LFPG_GetBurnRemainingMs()
+	{
+		int remainingMs = m_BurnRemainingMs;
+		if (m_SourceOn)
+		{
+			remainingMs = m_BurnNextMs - g_Game.GetTime();
+		}
+		if (remainingMs < 0)
+		{
+			remainingMs = 0;
+		}
+		return remainingMs;
+	}
 
-        if (!ctx.Read(m_FuelCurrent))
-        {
-            string errFuel = "[LFPG_Furnace] OnStoreLoad failed: m_FuelCurrent";
-            LFPG_Util.Error(errFuel);
-            return false;
-        }
+	override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
+	{
+		int remainingMs = LFPG_GetBurnRemainingMs();
+		ctx.Write(m_SourceOn);
+		ctx.Write(m_FuelCurrent);
+		ctx.Write(remainingMs);
+	}
 
-        return true;
-    }
+	override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
+	{
+		if (deviceVer < 1 || deviceVer > 3)
+		{
+			LFPG_Util.Error("[LFPG_Furnace] Unsupported persistence version");
+			return false;
+		}
+
+		bool sourceOn = false;
+		int fuelCurrent = 0;
+		int remainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+		if (!ctx.Read(sourceOn))
+		{
+			LFPG_Util.Error("[LFPG_Furnace] OnStoreLoad failed: m_SourceOn");
+			return false;
+		}
+		if (!ctx.Read(fuelCurrent))
+		{
+			LFPG_Util.Error("[LFPG_Furnace] OnStoreLoad failed: m_FuelCurrent");
+			return false;
+		}
+		if (deviceVer == 3)
+		{
+			if (!ctx.Read(remainingMs))
+			{
+				LFPG_Util.Error("[LFPG_Furnace] OnStoreLoad failed: remaining burn duration");
+				return false;
+			}
+			if (remainingMs < 0 || remainingMs > LFPG_FURNACE_BURN_INTERVAL_MS)
+			{
+				LFPG_Util.Error("[LFPG_Furnace] Invalid remaining burn duration");
+				return false;
+			}
+		}
+
+		m_SourceOn = sourceOn;
+		m_FuelCurrent = fuelCurrent;
+		m_BurnRemainingMs = remainingMs;
+		m_BurnNextMs = 0;
+		return true;
+	}
 
     // ============================================
     // Burn tick (called by NM every ~5s, fires burn every 30s)
@@ -467,7 +511,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (now < m_BurnNextMs)
             return;
 
-        m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
+		m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+		m_BurnNextMs = now + m_BurnRemainingMs;
 
         if (m_FuelCurrent > 0)
         {
@@ -511,6 +556,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         #ifdef SERVER
         if (m_SourceOn)
         {
+			m_BurnRemainingMs = LFPG_GetBurnRemainingMs();
             m_SourceOn = false;
             LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
             if (nm) nm.UnregisterFurnace(this);
@@ -539,6 +585,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
                 bool igniteConsumed = LFPG_AutoConsumeLargestItem();
                 if (igniteConsumed)
                 {
+					m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
                     canIgnite = true;
                 }
             }
@@ -547,7 +594,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             {
                 m_SourceOn = true;
                 int now = g_Game.GetTime();
-                m_BurnNextMs = now + LFPG_FURNACE_BURN_INTERVAL_MS;
+				m_BurnNextMs = now + m_BurnRemainingMs;
+				// Settle an overdue interval before exposing power again.
+				LFPG_BurnTick();
+				if (!m_SourceOn)
+					return;
                 LFPG_NetworkManager nm2 = LFPG_NetworkManager.Get();
                 if (nm2) nm2.RegisterFurnace(this);
                 SetSynchDirty();

@@ -81,12 +81,11 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     protected bool  m_DischargeEnabled  = true;
     protected float m_LastSyncedStored  = -1.0;
 
-    // BatteryAdapter cannot be dismantled (can be picked up with F)
-    override string LFPG_GetKitClassname()
-    {
-        string empty = "";
-        return empty;
-    }
+	// Remove the battery, then use a screwdriver to recover the kit.
+	override string LFPG_GetKitClassname()
+	{
+		return "LFPG_BatteryAdapter_Kit";
+	}
 
     // ============================================
     // Constructor — ports + SyncVars

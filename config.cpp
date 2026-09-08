@@ -2570,6 +2570,20 @@ class CfgVehicles
         itemBehaviour = 0;
         carveNavmesh = 0;
     };
+
+	class Land_Radio_PanelPAS;
+
+	class LFPG_GhostPASBroadcaster : Land_Radio_PanelPAS
+	{
+		scope = 1;
+		displayName = "";
+		descriptionShort = "";
+		model = "\dz\gear\tools\stone.p3d";
+		weight = 0;
+		itemSize[] = {0, 0};
+		itemBehaviour = 0;
+		carveNavmesh = 0;
+	};
 };
 
 // =========================================================
