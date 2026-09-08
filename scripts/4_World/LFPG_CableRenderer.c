@@ -94,7 +94,7 @@
 //   Budgeted (max N raycasts/frame), staggered by time,
 //   with hysteresis to prevent flicker at geometry edges.
 //
-// Connection cache: rebuilt on UpsertOwnerBlob only.
+// Connection cache: updated per owner on snapshots, deltas and local purge.
 //   Key: "deviceId|portName|dir"  Value: connected type name
 //   GetConnectionType() is O(1) map lookup.
 //
@@ -106,6 +106,11 @@
 //   Replaced screen-space extension with 3D near-plane clipping via
 //   LFPG_WorldUtil.ClipBehindCamera(). Removed unused extScale variable.
 // =========================================================
+
+class LFPG_ConnectionContributors
+{
+	ref map<string, string> m_ByOwner = new map<string, string>;
+};
 
 class LFPG_OwnerWireState
 {
@@ -137,6 +142,9 @@ class LFPG_OwnerWireState
     // v0.7.9: Consecutive CullTick cycles where ownerObj was null.
     // After threshold, wires are destroyed (device likely deleted/despawned).
     int nullOwnerTicks;
+
+	ref array<string> m_ConnectionKeys = new array<string>;
+	ref map<string, bool> m_CacheDevices = new map<string, bool>;
 };
 
 // Per-wire rendering data: visual sub-segments + wire-level occlusion
@@ -167,10 +175,6 @@ class LFPG_WireSegmentInfo
 
     // v0.7.8: Wire index within the owner (for overload mask bit check).
     int wireIndex;
-
-    // v0.7.9: Pre-computed wire key ("ownerId|wireIdx") to avoid
-    // string concatenation in CullTick's inner loop.
-    string cachedWireKey;
 
     // v0.7.8: Waypoint world positions for joint rendering.
     // Stored at build time. Joints are drawn only at LOD close.
@@ -218,6 +222,9 @@ class LFPG_WireSegmentInfo
     float ultraCacheViewportW;
     float ultraCacheViewportH;
     bool ultraCacheValid;
+	int m_ScreenProjectionRevision;
+	int m_JointProjectionRevision;
+	int m_UltraProjectionRevision;
     int decoratorAllowance;
 
     void LFPG_WireSegmentInfo()
@@ -517,82 +524,6 @@ class LFPG_WireSegmentInfo
         }
     }
 
-    // v0.7.7: Build bounding sphere from all actual sub-segment points.
-    // This properly encloses waypoints and sag, not just endpoints.
-    void BuildBoundingSphere()
-    {
-        if (!segments || segments.Count() == 0)
-        {
-            cachedCenter = (cachedPosA + cachedPosB) * 0.5;
-            cachedRadius = vector.Distance(cachedPosA, cachedPosB) * 0.5;
-            return;
-        }
-
-        // Accumulate all unique points from sub-segments
-        vector sumPos = "0 0 0";
-        int pointCount = 0;
-        int i;
-        LFPG_CableParticle seg;
-
-        // Add first point of first segment (with null guard)
-        // v0.7.36 (L1): segments[0] can be null if first Create() failed.
-        if (segments[0])
-        {
-            sumPos = sumPos + segments[0].m_From;
-            pointCount = pointCount + 1;
-        }
-
-        for (i = 0; i < segments.Count(); i = i + 1)
-        {
-            seg = segments[i];
-            if (!seg || !seg.IsValid())
-                continue;
-
-            sumPos = sumPos + seg.m_To;
-            pointCount = pointCount + 1;
-        }
-
-        if (pointCount == 0)
-        {
-            cachedCenter = (cachedPosA + cachedPosB) * 0.5;
-            cachedRadius = vector.Distance(cachedPosA, cachedPosB) * 0.5;
-            return;
-        }
-
-        // Center = centroid of all points
-        float invCount = 1.0 / pointCount;
-        cachedCenter = sumPos * invCount;
-
-        // Radius = max distance from center to any point
-        float maxDist = 0.0;
-        float d;
-
-        // v0.7.36 (L1): null guard on segments[0] for radius calc
-        if (segments[0])
-        {
-            d = vector.Distance(cachedCenter, segments[0].m_From);
-            if (d > maxDist)
-            {
-                maxDist = d;
-            }
-        }
-
-        for (i = 0; i < segments.Count(); i = i + 1)
-        {
-            seg = segments[i];
-            if (!seg || !seg.IsValid())
-                continue;
-
-            d = vector.Distance(cachedCenter, seg.m_To);
-            if (d > maxDist)
-            {
-                maxDist = d;
-            }
-        }
-
-        cachedRadius = maxDist;
-    }
-
     // Update hysteresis state after occlusion check.
     // blocked = true if ALL sample points are occluded.
     // v0.7.32 (Audit P2): Accept distance to scale recheck interval.
@@ -730,8 +661,10 @@ class LFPG_CableRenderer
     protected ref map<string, int> m_DeviceSyncRetryLow;
     protected ref map<string, int> m_DeviceSyncRetryHigh;
     protected ref map<string, float> m_DeviceSyncRetryDue;
+	protected ref map<string, int> m_DeviceSyncInFlightGeneration;
+	protected ref map<string, bool> m_DeviceSyncRetryAttempted;
     protected ref map<string, int> m_AnnouncedWireGenerations;
-    protected ref map<string, bool> m_KnownCableDevices;
+	protected ref map<string, int> m_KnownCableDevices;
     protected ref array<string> m_DeviceSyncBatchIds;
     protected ref array<string> m_DeviceSyncDropIds;
     protected ref array<string> m_DeviceSyncRetryIds;
@@ -759,11 +692,12 @@ class LFPG_CableRenderer
     // Pre-allocated temp arrays (avoids GC pressure in helpers)
     protected ref array<vector> m_TempPoints;
     protected ref array<vector> m_SagPoints;     // catenaria output buffer
+	protected ref array<vector> m_BoundsPoints;
     protected ref array<string> m_TempKeys;      // reused in DestroyOwnerLines etc.
     protected ref array<string> m_GhostKeys;     // v0.7.38 (L4): reused for ghost owner cleanup
 
-    // Connection cache: key = "deviceId|portName|dir" -> value = type name
-    protected ref map<string, string> m_ConnCache;
+	// Connection cache: key = "deviceId|portName|dir" -> owner contributions.
+	protected ref map<string, ref LFPG_ConnectionContributors> m_ConnCache;
 
     // Negative resolution cache: deviceIds that failed to resolve recently.
     // Avoids re-scanning for unresolvable entities on every RetryTick.
@@ -785,6 +719,10 @@ class LFPG_CableRenderer
     protected vector m_LastCamPos;
     protected vector m_LastCamDir;
     protected bool   m_CamMoved;       // set per frame in DrawFrame
+	protected vector m_ProjectionProbeX;
+	protected vector m_ProjectionProbeY;
+	protected vector m_ProjectionProbeZ;
+	protected int m_ProjectionRevision;
 
     // ---- Occlusion: stagger round-robin ----
     // Distributes raycast cost across frames.
@@ -799,6 +737,7 @@ class LFPG_CableRenderer
     // Indices into m_WireSegments sorted by cachedMinDist descending (far-to-near).
     protected ref array<int>   m_DrawOrder;
     protected ref array<float> m_DrawDist;
+	protected ref array<int> m_FrameDrawOrder;
     // vX (perf): draw order is cached and only rebuilt when its inputs change
     // (CullTick distance update, or wire add/remove) — not every frame.
     protected bool m_DrawOrderDirty;
@@ -815,9 +754,10 @@ class LFPG_CableRenderer
         m_RetryQueue      = new map<string, ref LFPG_RetryEntry>;
         m_TempPoints      = new array<vector>;
         m_SagPoints       = new array<vector>;
+		m_BoundsPoints = new array<vector>;
         m_TempKeys        = new array<string>;
         m_GhostKeys       = new array<string>;
-        m_ConnCache       = new map<string, string>;
+		m_ConnCache = new map<string, ref LFPG_ConnectionContributors>;
         m_NegCache        = new map<string, float>;
         m_PendingDeviceSyncLow = new map<string, int>;
         m_PendingDeviceSyncHigh = new map<string, int>;
@@ -826,8 +766,10 @@ class LFPG_CableRenderer
         m_DeviceSyncRetryLow = new map<string, int>;
         m_DeviceSyncRetryHigh = new map<string, int>;
         m_DeviceSyncRetryDue = new map<string, float>;
+		m_DeviceSyncInFlightGeneration = new map<string, int>;
+		m_DeviceSyncRetryAttempted = new map<string, bool>;
         m_AnnouncedWireGenerations = new map<string, int>;
-        m_KnownCableDevices = new map<string, bool>;
+		m_KnownCableDevices = new map<string, int>;
         m_DeviceSyncBatchIds = new array<string>;
         m_DeviceSyncDropIds = new array<string>;
         m_DeviceSyncRetryIds = new array<string>;
@@ -835,6 +777,7 @@ class LFPG_CableRenderer
         m_LastResolveWasNegCached = false;
         m_DrawOrder       = new array<int>;
         m_DrawDist        = new array<float>;
+		m_FrameDrawOrder = new array<int>;
         m_DrawOrderDirty  = true;
         m_ClipA           = "0 0 0";
         m_ClipB           = "0 0 0";
@@ -889,7 +832,7 @@ class LFPG_CableRenderer
 
     bool HasRenderableWires()
     {
-        return (m_WireSegments && m_WireSegments.Count() > 0);
+		return m_TotalSegCount > 0;
     }
 
     // v0.7.9: proper cleanup on destruction.
@@ -939,6 +882,10 @@ class LFPG_CableRenderer
             m_DeviceSyncRetryHigh.Clear();
         if (m_DeviceSyncRetryDue)
             m_DeviceSyncRetryDue.Clear();
+		if (m_DeviceSyncInFlightGeneration)
+			m_DeviceSyncInFlightGeneration.Clear();
+		if (m_DeviceSyncRetryAttempted)
+			m_DeviceSyncRetryAttempted.Clear();
         if (m_AnnouncedWireGenerations)
             m_AnnouncedWireGenerations.Clear();
         if (m_KnownCableDevices)
@@ -1149,20 +1096,22 @@ class LFPG_CableRenderer
         return result;
     }
 
+	protected void AnnounceWireGeneration(string ownerDeviceId, int generation)
+	{
+		if (generation > ResolveSnapshotGeneration(ownerDeviceId))
+			m_AnnouncedWireGenerations[ownerDeviceId] = generation;
+	}
+
     void UpsertOwnerBlob(string ownerDeviceId, int low, int high, string json)
     {
-        int snapshotGeneration = ResolveSnapshotGeneration(ownerDeviceId);
-        UpsertOwnerBlobInternal(ownerDeviceId, low, high, json, snapshotGeneration);
+		// Legacy blobs carry no generation; never label them with a newer announcement.
+		UpsertOwnerBlobInternal(ownerDeviceId, low, high, json, -1);
     }
 
     void UpsertOwnerBlobV2(string ownerDeviceId, int low, int high, string json, int generation)
     {
         if (ownerDeviceId == "")
             return;
-        if (generation >= 0)
-        {
-            m_AnnouncedWireGenerations[ownerDeviceId] = generation;
-        }
         UpsertOwnerBlobInternal(ownerDeviceId, low, high, json, generation);
     }
 
@@ -1174,10 +1123,18 @@ class LFPG_CableRenderer
         {
             s_DeviceSyncCooldowns = new map<string, float>;
         }
+		if (NeedsDeviceSync(deviceId))
+			return;
         s_DeviceSyncCooldowns[deviceId] = receivedAt;
         m_DeviceSyncRetryLow.Remove(deviceId);
         m_DeviceSyncRetryHigh.Remove(deviceId);
         m_DeviceSyncRetryDue.Remove(deviceId);
+		m_DeviceSyncInFlightGeneration.Remove(deviceId);
+		m_DeviceSyncRetryAttempted.Remove(deviceId);
+		m_PendingDeviceSyncLow.Remove(deviceId);
+		m_PendingDeviceSyncHigh.Remove(deviceId);
+		m_PendingDeviceSyncForced.Remove(deviceId);
+		m_PendingDeviceSyncRetry.Remove(deviceId);
     }
 
     protected void MarkDeviceSyncBlobReceived(string ownerDeviceId, LFPG_OwnerWireState st)
@@ -1205,6 +1162,16 @@ class LFPG_CableRenderer
     {
         if (ownerDeviceId == "")
             return;
+
+		LFPG_OwnerWireState currentState;
+		m_ByOwnerId.Find(ownerDeviceId, currentState);
+		if (currentState && currentState.wireGeneration >= 0)
+		{
+			if (snapshotGeneration < currentState.wireGeneration)
+				return;
+		}
+		if (snapshotGeneration >= 0 && snapshotGeneration < ResolveSnapshotGeneration(ownerDeviceId))
+			return;
 
         m_NegCache.Remove(ownerDeviceId);
 
@@ -1247,7 +1214,8 @@ class LFPG_CableRenderer
             st.lastJson = json;
             if (snapshotGeneration >= 0)
             {
-                st.wireGeneration = snapshotGeneration;
+				st.wireGeneration = snapshotGeneration;
+				AnnounceWireGeneration(ownerDeviceId, snapshotGeneration);
             }
 
             // v0.7.45 (U6): Clear NegCache for ALL target deviceIds in decoded wires.
@@ -1266,8 +1234,6 @@ class LFPG_CableRenderer
                     }
                 }
             }
-            MarkDeviceSyncBlobReceived(ownerDeviceId, st);
-
             // v0.7.35 D2: Reset visual state masks on topology change.
             // Old mask bits may map to different wires after add/remove.
             // CullTick or NotifyOwnerVisualChanged will repopulate from SyncVars.
@@ -1277,7 +1243,8 @@ class LFPG_CableRenderer
             // Topology changed: destroy old segments + clear retries for this owner
             DestroyOwnerLines(ownerDeviceId);
             ClearOwnerRetries(ownerDeviceId);
-            RebuildConnCache();
+			UpdateOwnerConnCache(st);
+			MarkDeviceSyncBlobReceived(ownerDeviceId, st);
 
             // Immediately build wire segments (frozen geometry)
             BuildOwnerWires(ownerDeviceId);
@@ -1301,7 +1268,8 @@ class LFPG_CableRenderer
         {
             if (snapshotGeneration >= 0)
             {
-                st.wireGeneration = snapshotGeneration;
+				st.wireGeneration = snapshotGeneration;
+				AnnounceWireGeneration(ownerDeviceId, snapshotGeneration);
             }
             MarkDeviceSyncBlobReceived(ownerDeviceId, st);
             if (LFPG_LOG_LEVEL >= 2)
@@ -1423,7 +1391,7 @@ class LFPG_CableRenderer
         LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(device);
         if (wireOwner)
         {
-            m_AnnouncedWireGenerations[deviceId] = wireOwner.LFPG_GetWireGeneration();
+			AnnounceWireGeneration(deviceId, wireOwner.LFPG_GetWireGeneration());
         }
 
         if (!NeedsDeviceSync(deviceId))
@@ -1460,6 +1428,13 @@ class LFPG_CableRenderer
     {
         if (deviceId == "" || !g_Game)
             return;
+
+		int inFlightGeneration = -1;
+		if (m_DeviceSyncRetryDue.Contains(deviceId) && m_DeviceSyncInFlightGeneration.Find(deviceId, inFlightGeneration))
+		{
+			if (ResolveSnapshotGeneration(deviceId) <= inFlightGeneration)
+				return;
+		}
 
         if (!s_DeviceSyncCooldowns)
         {
@@ -1504,7 +1479,7 @@ class LFPG_CableRenderer
     {
         if (ownerDeviceId == "")
             return;
-        m_AnnouncedWireGenerations[ownerDeviceId] = generation;
+		AnnounceWireGeneration(ownerDeviceId, generation);
         QueueDeviceSync(ownerDeviceId, low, high, true, false);
     }
 
@@ -1606,17 +1581,16 @@ class LFPG_CableRenderer
                 string sentId = m_DeviceSyncBatchIds[i];
                 bool sentRetry = false;
                 m_PendingDeviceSyncRetry.Find(sentId, sentRetry);
-                if (!sentRetry)
-                {
-                    int retryLow = 0;
-                    int retryHigh = 0;
-                    m_PendingDeviceSyncLow.Find(sentId, retryLow);
-                    m_PendingDeviceSyncHigh.Find(sentId, retryHigh);
-                    m_DeviceSyncRetryLow[sentId] = retryLow;
-                    m_DeviceSyncRetryHigh[sentId] = retryHigh;
-                    m_DeviceSyncRetryDue[sentId] = now + 3.0;
-                    scheduleResponseCheck = true;
-                }
+				int retryLow = 0;
+				int retryHigh = 0;
+				m_PendingDeviceSyncLow.Find(sentId, retryLow);
+				m_PendingDeviceSyncHigh.Find(sentId, retryHigh);
+				m_DeviceSyncRetryLow[sentId] = retryLow;
+				m_DeviceSyncRetryHigh[sentId] = retryHigh;
+				m_DeviceSyncRetryDue[sentId] = now + 3.0;
+				m_DeviceSyncInFlightGeneration[sentId] = ResolveSnapshotGeneration(sentId);
+				m_DeviceSyncRetryAttempted[sentId] = sentRetry;
+				scheduleResponseCheck = true;
                 m_PendingDeviceSyncLow.Remove(sentId);
                 m_PendingDeviceSyncHigh.Remove(sentId);
                 m_PendingDeviceSyncForced.Remove(sentId);
@@ -1663,10 +1637,14 @@ class LFPG_CableRenderer
             int retryNetHigh = 0;
             m_DeviceSyncRetryLow.Find(retryDeviceId, retryNetLow);
             m_DeviceSyncRetryHigh.Find(retryDeviceId, retryNetHigh);
+			bool retryAttempted = false;
+			m_DeviceSyncRetryAttempted.Find(retryDeviceId, retryAttempted);
+			m_DeviceSyncRetryAttempted.Remove(retryDeviceId);
+			m_DeviceSyncInFlightGeneration.Remove(retryDeviceId);
             m_DeviceSyncRetryLow.Remove(retryDeviceId);
             m_DeviceSyncRetryHigh.Remove(retryDeviceId);
             m_DeviceSyncRetryDue.Remove(retryDeviceId);
-            if (NeedsDeviceSync(retryDeviceId))
+			if (!retryAttempted && NeedsDeviceSync(retryDeviceId) && !m_PendingDeviceSyncLow.Contains(retryDeviceId))
             {
                 QueueDeviceSync(retryDeviceId, retryNetLow, retryNetHigh, true, true);
             }
@@ -1733,6 +1711,34 @@ class LFPG_CableRenderer
         return -1;
     }
 
+	protected void RemoveOwnerWire(LFPG_OwnerWireState st, int wireIndex)
+	{
+		string key = st.ownerDeviceId + "|" + wireIndex.ToString();
+		DestroyWire(key);
+		m_RetryQueue.Remove(key);
+		int lastIndex = st.wires.Count() - 1;
+		if (wireIndex != lastIndex)
+		{
+			string lastKey = st.ownerDeviceId + "|" + lastIndex.ToString();
+			LFPG_WireSegmentInfo movedInfo;
+			if (m_WireSegments.Find(lastKey, movedInfo) && movedInfo)
+			{
+				movedInfo.wireIndex = wireIndex;
+				m_WireSegments[key] = movedInfo;
+			}
+			m_WireSegments.Remove(lastKey);
+			LFPG_RetryEntry movedRetry;
+			if (m_RetryQueue.Find(lastKey, movedRetry) && movedRetry)
+			{
+				movedRetry.wireIndex = wireIndex;
+				m_RetryQueue[key] = movedRetry;
+			}
+			m_RetryQueue.Remove(lastKey);
+		}
+		st.wires.Remove(wireIndex);
+		m_DrawOrderDirty = true;
+	}
+
     bool ApplyOwnerDelta(string ownerDeviceId, int low, int high, int generation, array<int> operations, array<string> wireJsons)
     {
         if (ownerDeviceId == "" || !operations || !wireJsons)
@@ -1789,11 +1795,14 @@ class LFPG_CableRenderer
             {
                 if (existingIndex >= 0)
                 {
-                    st.wires.Remove(existingIndex);
+					RemoveOwnerWire(st, existingIndex);
                 }
             }
             else if (existingIndex >= 0)
             {
+				string changedKey = ownerDeviceId + "|" + existingIndex.ToString();
+				DestroyWire(changedKey);
+				m_RetryQueue.Remove(changedKey);
                 st.wires[existingIndex] = applyWire;
             }
             else
@@ -1811,12 +1820,11 @@ class LFPG_CableRenderer
         st.ownerHigh = high;
         st.wireGeneration = generation;
         st.lastJson = "__LFPG_DELTA__";
-        m_AnnouncedWireGenerations[ownerDeviceId] = generation;
+		AnnounceWireGeneration(ownerDeviceId, generation);
         m_NegCache.Remove(ownerDeviceId);
 
-        DestroyOwnerLines(ownerDeviceId);
-        ClearOwnerRetries(ownerDeviceId);
-        RebuildConnCache();
+		UpdateOwnerConnCache(st);
+		MarkDeviceSyncBlobReceived(ownerDeviceId, st);
         BuildOwnerWires(ownerDeviceId);
 
         if (LFPG_PERFDIAG_ENABLED)
@@ -1917,84 +1925,104 @@ class LFPG_CableRenderer
     // ===========================
     // Connection cache (O(1) lookups)
     // ===========================
-    protected void RebuildConnCache()
-    {
-        m_ConnCache.Clear();
-        m_KnownCableDevices.Clear();
+	protected void RemoveOwnerConnCache(LFPG_OwnerWireState st)
+	{
+		if (!st)
+			return;
+		int i;
+		for (i = 0; i < st.m_ConnectionKeys.Count(); i = i + 1)
+		{
+			string key = st.m_ConnectionKeys[i];
+			LFPG_ConnectionContributors entry;
+			if (m_ConnCache.Find(key, entry) && entry)
+			{
+				entry.m_ByOwner.Remove(st.ownerDeviceId);
+				if (entry.m_ByOwner.Count() == 0)
+					m_ConnCache.Remove(key);
+			}
+		}
+		st.m_ConnectionKeys.Clear();
+		for (i = 0; i < st.m_CacheDevices.Count(); i = i + 1)
+		{
+			string deviceId = st.m_CacheDevices.GetKey(i);
+			int count = 0;
+			if (m_KnownCableDevices.Find(deviceId, count))
+			{
+				if (count <= 1)
+					m_KnownCableDevices.Remove(deviceId);
+				else
+					m_KnownCableDevices[deviceId] = count - 1;
+			}
+		}
+		st.m_CacheDevices.Clear();
+	}
 
-        int oi;
-        for (oi = 0; oi < m_ByOwnerId.Count(); oi = oi + 1)
-        {
-            LFPG_OwnerWireState st = m_ByOwnerId.GetElement(oi);
-            if (!st || !st.wires) continue;
+	protected void AddOwnerCacheDevice(LFPG_OwnerWireState st, string deviceId)
+	{
+		if (deviceId == "" || st.m_CacheDevices.Contains(deviceId))
+			return;
+		int count = 0;
+		m_KnownCableDevices.Find(deviceId, count);
+		m_KnownCableDevices[deviceId] = count + 1;
+		st.m_CacheDevices[deviceId] = true;
+	}
 
-            m_KnownCableDevices[st.ownerDeviceId] = true;
+	protected void AddOwnerConnection(LFPG_OwnerWireState st, string key, string typeName)
+	{
+		LFPG_ConnectionContributors entry;
+		if (!m_ConnCache.Find(key, entry) || !entry)
+		{
+			entry = new LFPG_ConnectionContributors();
+			m_ConnCache[key] = entry;
+		}
+		if (!entry.m_ByOwner.Contains(st.ownerDeviceId))
+			st.m_ConnectionKeys.Insert(key);
+		entry.m_ByOwner[st.ownerDeviceId] = typeName;
+	}
 
-            string ownerType = "";
-            EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
-            if (ownerObj)
-            {
-                ownerType = ownerObj.GetType();
-            }
-            else
-            {
-                ownerType = st.ownerDeviceId;
-            }
+	protected void UpdateOwnerConnCache(LFPG_OwnerWireState st)
+	{
+		RemoveOwnerConnCache(st);
+		if (!st || !st.wires)
+			return;
+		AddOwnerCacheDevice(st, st.ownerDeviceId);
+		string ownerType = st.ownerDeviceId;
+		EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
+		if (ownerObj)
+			ownerType = ownerObj.GetType();
+		int w;
+		for (w = 0; w < st.wires.Count(); w = w + 1)
+		{
+			LFPG_WireData wd = st.wires[w];
+			if (!wd)
+				continue;
+			AddOwnerCacheDevice(st, wd.m_TargetDeviceId);
+			string srcPort = wd.m_SourcePort;
+			if (srcPort == "")
+				srcPort = "output_1";
+			string targetType = wd.m_TargetDeviceId;
+			EntityAI targetObj = ResolveDeviceEntityEx(wd.m_TargetDeviceId, wd.m_TargetNetLow, wd.m_TargetNetHigh);
+			if (targetObj)
+				targetType = targetObj.GetType();
+			string outKey = st.ownerDeviceId + "|" + srcPort + "|" + LFPG_PortDir.OUT.ToString();
+			AddOwnerConnection(st, outKey, targetType);
+			string tgtPort = wd.m_TargetPort;
+			if (tgtPort == "")
+				tgtPort = "input_main";
+			string inKey = wd.m_TargetDeviceId + "|" + tgtPort + "|" + LFPG_PortDir.IN.ToString();
+			AddOwnerConnection(st, inKey, ownerType);
+		}
+	}
 
-            int w;
-            for (w = 0; w < st.wires.Count(); w = w + 1)
-            {
-                LFPG_WireData wd = st.wires[w];
-                if (!wd) continue;
-
-                if (wd.m_TargetDeviceId != "")
-                {
-                    m_KnownCableDevices[wd.m_TargetDeviceId] = true;
-                }
-
-                string srcPort = wd.m_SourcePort;
-                if (srcPort == "")
-                {
-                    srcPort = "output_1";
-                }
-
-                string targetType = "";
-                EntityAI tgtObj = ResolveDeviceEntityEx(wd.m_TargetDeviceId, wd.m_TargetNetLow, wd.m_TargetNetHigh);
-                if (tgtObj)
-                {
-                    targetType = tgtObj.GetType();
-                }
-                else
-                {
-                    targetType = wd.m_TargetDeviceId;
-                }
-
-                string outKey = st.ownerDeviceId + "|" + srcPort + "|" + LFPG_PortDir.OUT.ToString();
-                m_ConnCache[outKey] = targetType;
-
-                string tgtPort = wd.m_TargetPort;
-                if (tgtPort == "")
-                {
-                    tgtPort = "input_main";
-                }
-
-                string inKey = wd.m_TargetDeviceId + "|" + tgtPort + "|" + LFPG_PortDir.IN.ToString();
-                m_ConnCache[inKey] = ownerType;
-            }
-        }
-    }
-
-    // O(1) lookup - called from ActionCondition per-frame
-    string GetConnectionType(string deviceId, string portName, int dir)
-    {
-        string key = deviceId + "|" + portName + "|" + dir.ToString();
-        string val;
-        if (m_ConnCache.Find(key, val))
-        {
-            return val;
-        }
-        return "";
-    }
+	// O(1), including ports referenced by more than one cached owner.
+	string GetConnectionType(string deviceId, string portName, int dir)
+	{
+		string key = deviceId + "|" + portName + "|" + dir.ToString();
+		LFPG_ConnectionContributors entry;
+		if (m_ConnCache.Find(key, entry) && entry && entry.m_ByOwner.Count() > 0)
+			return entry.m_ByOwner.GetElement(entry.m_ByOwner.Count() - 1);
+		return "";
+	}
 
     // ===========================
     // Geometry build (event-driven, one-shot)
@@ -2008,6 +2036,14 @@ class LFPG_CableRenderer
         if (!m_ByOwnerId.Find(ownerDeviceId, st) || !st || !st.wires)
             return;
 
+		// Keys follow the authoritative array even when the owner is streamed out.
+		st.cachedWireKeys = new array<string>;
+		int wk;
+		for (wk = 0; wk < st.wires.Count(); wk = wk + 1)
+		{
+			st.cachedWireKeys.Insert(ownerDeviceId + "|" + wk.ToString());
+		}
+
         if (LFPG_LOG_LEVEL >= 2)
         {
             string bowMsg = "[CableRenderer] BuildOwnerWires owner=" + ownerDeviceId + " net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString() + " wires=" + st.wires.Count().ToString();
@@ -2017,7 +2053,7 @@ class LFPG_CableRenderer
         EntityAI ownerObj = EntityAI.Cast(g_Game.GetObjectByNetworkId(st.ownerLow, st.ownerHigh));
         if (!ownerObj)
         {
-            // Owner not yet loaded on client: queue ALL wires for retry
+			// Owner not yet loaded: queue missing geometry without resetting resident state.
             string bowNullMsg = "[CableRenderer] BuildOwnerWires: ownerObj NULL net=" + st.ownerLow.ToString() + ":" + st.ownerHigh.ToString();
             LFPG_Util.Warn(bowNullMsg);
             if (LFPG_DIAG_ENABLED)
@@ -2027,7 +2063,8 @@ class LFPG_CableRenderer
             int rw;
             for (rw = 0; rw < st.wires.Count(); rw = rw + 1)
             {
-                AddRetry(ownerDeviceId, rw, LFPG_RetryReason.TARGET_MISSING);
+				if (!m_WireSegments.Contains(st.cachedWireKeys[rw]))
+					AddRetry(ownerDeviceId, rw, LFPG_RetryReason.TARGET_MISSING);
             }
             return;
         }
@@ -2041,20 +2078,16 @@ class LFPG_CableRenderer
         st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
         st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
 
-        // v0.7.9: Pre-build wire keys for this owner (used by CullTick)
-        st.cachedWireKeys = new array<string>;
-        int wk;
-        for (wk = 0; wk < st.wires.Count(); wk = wk + 1)
-        {
-            st.cachedWireKeys.Insert(ownerDeviceId + "|" + wk.ToString());
-        }
-
         // G5: get render metrics once outside loop
         LFPG_RenderMetrics bldTelRnd = LFPG_Telemetry.GetRender();
 
         int w;
         for (w = 0; w < st.wires.Count(); w = w + 1)
         {
+			string wireKey = st.cachedWireKeys[w];
+			if (m_WireSegments.Contains(wireKey) || m_RetryQueue.Contains(wireKey))
+				continue;
+
             LFPG_WireData wd = st.wires[w];
             if (!wd) continue;
 
@@ -2079,45 +2112,10 @@ class LFPG_CableRenderer
                 LFPG_Diag.ServerEcho("[CableRenderer] target OK type=" + targetObj.GetType() + " pos=" + targetObj.GetPosition().ToString());
             }
 
-            // Compute endpoint positions
-            string srcPort = wd.m_SourcePort;
-            if (srcPort == "")
-            {
-                srcPort = "output_1";
-            }
-            vector a = LFPG_DeviceAPI.GetPortWorldPos(ownerObj, srcPort);
-            vector b = LFPG_DeviceAPI.GetPortWorldPos(targetObj, wd.m_TargetPort);
+			vector a;
+			vector b;
+			PrepareWirePoints(wd, ownerObj, targetObj, a, b);
 
-            a = LFPG_WorldUtil.ClampAboveSurface(a);
-            b = LFPG_WorldUtil.ClampAboveSurface(b);
-
-            if (LFPG_DIAG_ENABLED)
-            {
-                LFPG_Diag.ServerEcho("[CableRenderer] portA=" + a.ToString() + " portB=" + b.ToString());
-            }
-
-            // Build raw point chain
-            m_TempPoints.Clear();
-            m_TempPoints.Insert(a);
-
-            if (wd.m_Waypoints && wd.m_Waypoints.Count() > 0)
-            {
-                int j;
-                for (j = 0; j < wd.m_Waypoints.Count(); j = j + 1)
-                {
-                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], LFPG_SURFACE_CLAMP_M));
-                }
-            }
-            else
-            {
-                // No waypoints: auto midpoint prevents terrain clipping.
-                // Catenaria sag is now applied adaptively per-segment by ApplyCatenaria.
-                m_TempPoints.Insert(LFPG_WorldUtil.AutoMidpointAboveTerrain(a, b));
-            }
-
-            m_TempPoints.Insert(b);
-
-			string wireKey = ownerDeviceId + "|" + w.ToString();
 			if (!BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, w))
 			{
 				AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
@@ -2125,6 +2123,47 @@ class LFPG_CableRenderer
 			}
         }
     }
+
+	protected void PrepareWirePoints(LFPG_WireData wd, EntityAI ownerObj, EntityAI targetObj, out vector a, out vector b)
+	{
+		string srcPort = wd.m_SourcePort;
+		if (srcPort == "")
+			srcPort = "output_1";
+		a = LFPG_WorldUtil.ClampAboveSurface(LFPG_DeviceAPI.GetPortWorldPos(ownerObj, srcPort));
+		b = LFPG_WorldUtil.ClampAboveSurface(LFPG_DeviceAPI.GetPortWorldPos(targetObj, wd.m_TargetPort));
+		m_TempPoints.Clear();
+		m_TempPoints.Insert(a);
+		if (wd.m_Waypoints && wd.m_Waypoints.Count() > 0)
+		{
+			int j;
+			for (j = 0; j < wd.m_Waypoints.Count(); j = j + 1)
+				m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], LFPG_SURFACE_CLAMP_M));
+		}
+		else
+		{
+			m_TempPoints.Insert(LFPG_WorldUtil.AutoMidpointAboveTerrain(a, b));
+		}
+		m_TempPoints.Insert(b);
+	}
+
+	protected void ComputePointBounds(array<vector> points, out vector center, out float radius)
+	{
+		center = "0 0 0";
+		radius = 0.0;
+		if (!points || points.Count() == 0)
+			return;
+		int i;
+		for (i = 0; i < points.Count(); i = i + 1)
+			center = center + points[i];
+		float invCount = 1.0 / points.Count();
+		center = center * invCount;
+		for (i = 0; i < points.Count(); i = i + 1)
+		{
+			float pointDist = vector.Distance(center, points[i]);
+			if (pointDist > radius)
+				radius = pointDist;
+		}
+	}
 
     // Build segments for a single wire. Geometry is frozen after creation.
     // v0.7.9: sagSubs removed — ApplyCatenaria is now self-contained.
@@ -2188,6 +2227,7 @@ class LFPG_CableRenderer
         info.cachedPosA = posA;
         info.cachedPosB = posB;
 
+		m_BoundsPoints.Clear();
         int segCount = m_SagPoints.Count() - 1;
         int createdOk = 0;
         int createdFail = 0;
@@ -2198,6 +2238,9 @@ class LFPG_CableRenderer
             bool created = seg.Create(m_SagPoints[si], m_SagPoints[si + 1]);
             if (created)
             {
+				if (createdOk == 0)
+					m_BoundsPoints.Insert(seg.m_From);
+				m_BoundsPoints.Insert(seg.m_To);
                 info.segments.Insert(seg);
                 createdOk = createdOk + 1;
             }
@@ -2217,8 +2260,12 @@ class LFPG_CableRenderer
 			return false;
         }
 
-        // v0.7.7: compute bounding sphere from actual geometry
-        info.BuildBoundingSphere();
+		// Admission uses planned points; final bounds use only successfully created segments.
+		vector builtCenter;
+		float builtRadius;
+		ComputePointBounds(m_BoundsPoints, builtCenter, builtRadius);
+		info.cachedCenter = builtCenter;
+		info.cachedRadius = builtRadius;
 		PlayerBase buildPlayer = PlayerBase.Cast(g_Game.GetPlayer());
 		if (buildPlayer)
 		{
@@ -2226,10 +2273,6 @@ class LFPG_CableRenderer
 			if (info.cachedMinDist < 0.0)
 				info.cachedMinDist = 0.0;
 		}
-
-        // v0.7.9: build occlusion samples from actual geometry
-        // (must be after segments are created, since it walks the chain)
-        info.BuildOccSamples();
 
         // v0.7.8: store user waypoints for joint rendering
         // v0.7.9: clamp joints same as segment points — prevents misaligned
@@ -2243,6 +2286,9 @@ class LFPG_CableRenderer
                 info.cachedJoints.Insert(LFPG_WorldUtil.ClampAboveSurface(waypoints[wi], LFPG_SURFACE_CLAMP_M));
             }
         }
+
+		// Samples need both the built segments and the clamped waypoint joints.
+		info.BuildOccSamples();
 
         // v0.7.8: set initial cable state
         if (powered)
@@ -2258,9 +2304,6 @@ class LFPG_CableRenderer
         info.wireIndex = wireIdx;
         // v0.7.38 (H6): Stable stagger group from wireIndex.
         info.occStaggerGroup = wireIdx % 3;
-
-        // v0.7.9: pre-compute wire key to avoid string concat in CullTick
-        info.cachedWireKey = wireKey;
 
         m_WireSegments[wireKey] = info;
         m_DrawOrderDirty = true;
@@ -2289,7 +2332,6 @@ class LFPG_CableRenderer
     //   2. Powered state check (if entity available)
     //   3. Bounding sphere culling (v0.7.7)
     //   4. Device bubble culling (v0.7.7)
-    //   5. Owner early-out (v0.7.7)
     //   6. Compute cachedMinDist for LOD/alpha (v0.7.7)
     protected void CullTick()
     {
@@ -2322,9 +2364,6 @@ class LFPG_CableRenderer
 
         // v0.7.11 (A3): Precompute squared thresholds outside loop.
         // Avoids recomputing per-wire; all distance comparisons use DistSq domain.
-        float cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
-        float earlyOutDist = LFPG_CULL_DISTANCE_M + 25.0;
-        float earlyOutDistSq = earlyOutDist * earlyOutDist;
         float bubbleSq = bubbleM * bubbleM;
 
         int i;
@@ -2350,37 +2389,6 @@ class LFPG_CableRenderer
 
                 // v0.7.35 (F1.3): read warning bitmask from owner
 
-                // v0.7.7: Owner early-out.
-                // If the owner entity itself is farther than cull distance + margin,
-                // skip processing all its individual wires (saves iteration).
-                // v0.7.11 (A3): Compare in squared domain — eliminates 1 sqrt per owner.
-                float ownerDistSq = LFPG_WorldUtil.DistSq(pp, ownerObj.GetPosition());
-                if (ownerDistSq > earlyOutDistSq)
-                {
-                    // Hide all wires for this owner
-                    int ew;
-                    for (ew = 0; ew < st.wires.Count(); ew = ew + 1)
-                    {
-                        // v0.7.9: use pre-computed key if available
-                        string ewKey;
-                        if (st.cachedWireKeys && ew < st.cachedWireKeys.Count())
-                        {
-                            ewKey = st.cachedWireKeys[ew];
-                        }
-                        else
-                        {
-                            ewKey = st.ownerDeviceId + "|" + ew.ToString();
-                        }
-                        ref LFPG_WireSegmentInfo ewInfo;
-                        if (m_WireSegments.Find(ewKey, ewInfo) && ewInfo)
-                        {
-                            bool bHide = false;
-                            ewInfo.SetVisible(bHide);
-							ReleaseWireSegments(ewInfo);
-                        }
-                    }
-                    continue; // Skip per-wire checks for this owner
-                }
             }
             else
             {
@@ -2576,6 +2584,9 @@ class LFPG_CableRenderer
                 }
                 DestroyOwnerLines(ghostId);
                 ClearOwnerRetries(ghostId);
+				LFPG_OwnerWireState ghostState;
+				if (m_ByOwnerId.Find(ghostId, ghostState))
+					RemoveOwnerConnCache(ghostState);
                 m_ByOwnerId.Remove(ghostId);
             }
         }
@@ -2660,40 +2671,71 @@ class LFPG_CableRenderer
         for (si = 0; si < wc; si = si + 1)
         {
             ref LFPG_WireSegmentInfo sortWsi = m_WireSegments.GetElement(si);
-			if (!sortWsi || sortWsi.segments.Count() == 0)
+			if (!sortWsi || !sortWsi.visible || sortWsi.segments.Count() == 0)
 				continue;
 
             m_DrawOrder.Insert(si);
             m_DrawDist.Insert(sortWsi.cachedMinDist);
         }
 
-        // Selection sort descending (farthest first). Swaps only — no shifts.
-        int sortCount = m_DrawOrder.Count();
-        int si2;
-        for (si2 = 0; si2 < sortCount - 1; si2 = si2 + 1)
-        {
-            int maxIdx = si2;
-            float maxDist = m_DrawDist[si2];
-            int sj;
-            for (sj = si2 + 1; sj < sortCount; sj = sj + 1)
-            {
-                if (m_DrawDist[sj] > maxDist)
-                {
-                    maxIdx = sj;
-                    maxDist = m_DrawDist[sj];
-                }
-            }
-            if (maxIdx != si2)
-            {
-                int tmpIdx = m_DrawOrder[si2];
-                m_DrawOrder[si2] = m_DrawOrder[maxIdx];
-                m_DrawOrder[maxIdx] = tmpIdx;
-                float tmpDist = m_DrawDist[si2];
-                m_DrawDist[si2] = m_DrawDist[maxIdx];
-                m_DrawDist[maxIdx] = tmpDist;
-            }
-        }
+		// Min-heap extraction leaves descending distances in place: O(n log n).
+		int count = m_DrawOrder.Count();
+		int root;
+		for (root = count / 2 - 1; root >= 0; root = root - 1)
+			SiftDrawHeap(root, count);
+		int end;
+		for (end = count - 1; end > 0; end = end - 1)
+		{
+			SwapDrawEntries(0, end);
+			SiftDrawHeap(0, end);
+		}
     }
+
+	protected void SwapDrawEntries(int a, int b)
+	{
+		int index = m_DrawOrder[a];
+		m_DrawOrder[a] = m_DrawOrder[b];
+		m_DrawOrder[b] = index;
+		float distance = m_DrawDist[a];
+		m_DrawDist[a] = m_DrawDist[b];
+		m_DrawDist[b] = distance;
+	}
+
+	protected void SiftDrawHeap(int root, int count)
+	{
+		int child = root * 2 + 1;
+		while (child < count)
+		{
+			if (child + 1 < count && m_DrawDist[child + 1] < m_DrawDist[child])
+				child = child + 1;
+			if (m_DrawDist[root] <= m_DrawDist[child])
+				return;
+			SwapDrawEntries(root, child);
+			root = child;
+			child = root * 2 + 1;
+		}
+	}
+
+	// CGame exposes active position/direction, but no complete active-camera FOV/roll getter.
+	// Sample its actual projection instead, including scripted cameras and optical zoom.
+	// Three world-axis offsets ensure that at least two probes are off the viewing axis.
+	protected void UpdateProjectionRevision(vector camPos, vector camDir)
+	{
+		vector probeBase = camPos + camDir * 10.0;
+		vector probeX = g_Game.GetScreenPos(probeBase + "1 0 0");
+		vector probeY = g_Game.GetScreenPos(probeBase + "0 1 0");
+		vector probeZ = g_Game.GetScreenPos(probeBase + "0 0 1");
+		bool changed = LFPG_WorldUtil.DistSq(probeX, m_ProjectionProbeX) > 0.0;
+		changed = changed || LFPG_WorldUtil.DistSq(probeY, m_ProjectionProbeY) > 0.0;
+		changed = changed || LFPG_WorldUtil.DistSq(probeZ, m_ProjectionProbeZ) > 0.0;
+		if (changed)
+		{
+			m_ProjectionRevision = m_ProjectionRevision + 1;
+			m_ProjectionProbeX = probeX;
+			m_ProjectionProbeY = probeY;
+			m_ProjectionProbeZ = probeZ;
+		}
+	}
 
     // ===========================
     // DrawFrame - per-frame Canvas 2D rendering
@@ -2713,8 +2755,8 @@ class LFPG_CableRenderer
         if (!hud || !hud.IsReady())
             return;
 
-        if (m_WireSegments.Count() == 0)
-            return;
+		if (!HasRenderableWires())
+			return;
 
         // v0.7.13 (G5): Render telemetry — grab reference once per frame
         LFPG_RenderMetrics tRnd = LFPG_Telemetry.GetRender();
@@ -2738,8 +2780,6 @@ class LFPG_CableRenderer
         {
             m_CamMoved = true;
         }
-        m_LastCamPos = camPos;
-        m_LastCamDir = camDir;
 
         PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
 
@@ -2761,7 +2801,7 @@ class LFPG_CableRenderer
         // v4.5: Server option to hide cables entirely without tools.
         // s_ServerHideCablesNoReel is set via RPC on JIP (SYNC_SERVER_SETTINGS).
         // Check once per frame. Early return skips all drawing but
-        // camera state is still updated above (m_LastCamPos/Dir).
+		// Camera displacement continues accumulating until an occlusion tick consumes it.
         if (!showStateColors && s_ServerHideCablesNoReel)
         {
             return;
@@ -2781,6 +2821,8 @@ class LFPG_CableRenderer
         // instead of calling GetScreenSize again per frame.
         float swF = hud.GetScreenW();
         float shF = hud.GetScreenH();
+		UpdateProjectionRevision(camPos, camDir);
+		tRnd.m_Projections = tRnd.m_Projections + 3;
 
         // v0.7.38 (H3): Proportional ultra-LOD margin.
         // Fixed 200px was too large at 720p and too small at 4K.
@@ -2870,84 +2912,56 @@ class LFPG_CableRenderer
 
         UpdateOcclusionBudget(camPos, camDir, player, nowMs);
 
-        int di;
-        for (di = 0; di < m_DrawOrder.Count(); di = di + 1)
-        {
-            LFPG_WireSegmentInfo resetWsi = m_WireSegments.GetElement(m_DrawOrder[di]);
-            if (resetWsi)
-                resetWsi.decoratorAllowance = 0;
-        }
+		// C2: one near-to-far preparation pass, then far-to-near drawing.
+		// Occluded/behind wires stay in the recheck population, never in this frame's draws.
+		m_FrameDrawOrder.Clear();
+		int decoratorBudgetRemaining = LFPG_CABLE_DECORATOR_BUDGET;
+		int di;
+		for (di = m_DrawOrder.Count() - 1; di >= 0; di = di - 1)
+		{
+			int candidateIndex = m_DrawOrder[di];
+			LFPG_WireSegmentInfo candidate = m_WireSegments.GetElement(candidateIndex);
+			if (!candidate)
+				continue;
+			candidate.decoratorAllowance = 0;
+			tRnd.m_WiresTotal = tRnd.m_WiresTotal + 1;
+			float dcx = candidate.cachedCenter[0] - camPos[0];
+			float dcy = candidate.cachedCenter[1] - camPos[1];
+			float dcz = candidate.cachedCenter[2] - camPos[2];
+			float dot = dcx * camDir[0] + dcy * camDir[1] + dcz * camDir[2];
+			if (!candidate.visible || dot + candidate.cachedRadius < 0.0)
+			{
+				tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
+				continue;
+			}
+			if (candidate.occluded)
+			{
+				tRnd.m_WiresOccluded = tRnd.m_WiresOccluded + 1;
+				continue;
+			}
+			if (candidate.segments.Count() == 0)
+				continue;
+			m_FrameDrawOrder.Insert(candidateIndex);
+			if (candidate.cachedMinDist < LFPG_LOD_CLOSE_M && decoratorBudgetRemaining > 0)
+			{
+				int requestedDecorators = 2;
+				if (candidate.cachedJoints)
+					requestedDecorators = requestedDecorators + candidate.cachedJoints.Count();
+				if (requestedDecorators > decoratorBudgetRemaining)
+					requestedDecorators = decoratorBudgetRemaining;
+				candidate.decoratorAllowance = requestedDecorators;
+				decoratorBudgetRemaining = decoratorBudgetRemaining - requestedDecorators;
+			}
+		}
 
-        // Reserve decorator budget near-to-far without changing line painter order.
-        int decoratorBudgetRemaining = LFPG_CABLE_DECORATOR_BUDGET;
-        for (di = m_DrawOrder.Count() - 1; di >= 0 && decoratorBudgetRemaining > 0; di = di - 1)
-        {
-            LFPG_WireSegmentInfo reserveWsi = m_WireSegments.GetElement(m_DrawOrder[di]);
-            if (!reserveWsi || !reserveWsi.visible || reserveWsi.occluded || reserveWsi.cachedMinDist >= LFPG_LOD_CLOSE_M || reserveWsi.segments.Count() == 0)
-                continue;
-
-            float reserveDcx = reserveWsi.cachedCenter[0] - camPos[0];
-            float reserveDcy = reserveWsi.cachedCenter[1] - camPos[1];
-            float reserveDcz = reserveWsi.cachedCenter[2] - camPos[2];
-            float reserveDot = reserveDcx * camDir[0] + reserveDcy * camDir[1] + reserveDcz * camDir[2];
-            if (reserveDot + reserveWsi.cachedRadius < 0.0)
-                continue;
-
-            int requestedDecorators = 2;
-            if (reserveWsi.cachedJoints)
-                requestedDecorators = requestedDecorators + reserveWsi.cachedJoints.Count();
-            if (requestedDecorators > decoratorBudgetRemaining)
-                requestedDecorators = decoratorBudgetRemaining;
-            reserveWsi.decoratorAllowance = requestedDecorators;
-            decoratorBudgetRemaining = decoratorBudgetRemaining - requestedDecorators;
-        }
-
-        for (di = 0; di < m_DrawOrder.Count(); di = di + 1)
-        {
-            int i = m_DrawOrder[di];
-            ref LFPG_WireSegmentInfo wsi = m_WireSegments.GetElement(i);
-            if (!wsi)
-                continue;
-            int decoratorBudget = wsi.decoratorAllowance;
-
-            // G5: count every wire known to renderer
-            tRnd.m_WiresTotal = tRnd.m_WiresTotal + 1;
-
-            if (!wsi.visible)
-            {
-                tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
-                continue;
-            }
-
-            // v0.7.35 (F2.1): Behind-camera early-out.
-            // Dot product of (wireCenter - camPos) with camDir.
-            // If the entire bounding sphere is behind the camera, skip
-            // projection + drawing entirely. Cost: 3 mul + 3 add + 1 cmp.
-            // Saves all GetScreenPos + drawing for wires behind the player.
-            // Component-wise to avoid vector allocation on heap per wire.
-            {
-                float dcx = wsi.cachedCenter[0] - camPos[0];
-                float dcy = wsi.cachedCenter[1] - camPos[1];
-                float dcz = wsi.cachedCenter[2] - camPos[2];
-                float dot = dcx * camDir[0] + dcy * camDir[1] + dcz * camDir[2];
-                // dot < 0 means center is behind camera.
-                // Add radius to account for sphere extent toward camera.
-                if (dot + wsi.cachedRadius < 0.0)
-                {
-                    tRnd.m_WiresCulled = tRnd.m_WiresCulled + 1;
-                    continue;
-                }
-            }
-
-            if (wsi.occluded)
-            {
-                tRnd.m_WiresOccluded = tRnd.m_WiresOccluded + 1;
-                continue;
-            }
-
-            int segCount = wsi.segments.Count();
-            if (segCount == 0)
-                continue;
+		for (di = m_FrameDrawOrder.Count() - 1; di >= 0; di = di - 1)
+		{
+			int i = m_FrameDrawOrder[di];
+			LFPG_WireSegmentInfo wsi = m_WireSegments.GetElement(i);
+			if (!wsi)
+				continue;
+			int decoratorBudget = wsi.decoratorAllowance;
+			int segCount = wsi.segments.Count();
 
             // ---- LOD tier ----
             float wireDist = wsi.cachedMinDist;
@@ -3054,7 +3068,7 @@ class LFPG_CableRenderer
                 // v4.5: Pre-compute ultra-LOD width with no-reel multiplier.
                 float ulWidthBase = LFPG_DEPTH_WIDTH_MIN * noReelMult;
 
-                bool reuseUltraProjection = (wsi.ultraCacheValid && wsi.ultraCacheCamPos[0] == camPos[0] && wsi.ultraCacheCamPos[1] == camPos[1] && wsi.ultraCacheCamPos[2] == camPos[2] && wsi.ultraCacheCamDir[0] == camDir[0] && wsi.ultraCacheCamDir[1] == camDir[1] && wsi.ultraCacheCamDir[2] == camDir[2] && wsi.ultraCacheViewportW == swF && wsi.ultraCacheViewportH == shF);
+				bool reuseUltraProjection = (wsi.ultraCacheValid && wsi.m_UltraProjectionRevision == m_ProjectionRevision && wsi.ultraCacheCamPos[0] == camPos[0] && wsi.ultraCacheCamPos[1] == camPos[1] && wsi.ultraCacheCamPos[2] == camPos[2] && wsi.ultraCacheCamDir[0] == camDir[0] && wsi.ultraCacheCamDir[1] == camDir[1] && wsi.ultraCacheCamDir[2] == camDir[2] && wsi.ultraCacheViewportW == swF && wsi.ultraCacheViewportH == shF);
                 if (!reuseUltraProjection)
                 {
                     wsi.ultraScreenA = g_Game.GetScreenPos(wsi.cachedPosA);
@@ -3063,6 +3077,7 @@ class LFPG_CableRenderer
                     wsi.ultraCacheCamDir = camDir;
                     wsi.ultraCacheViewportW = swF;
                     wsi.ultraCacheViewportH = shF;
+					wsi.m_UltraProjectionRevision = m_ProjectionRevision;
                     wsi.ultraCacheValid = true;
                 }
                 vector ulA = wsi.ultraScreenA;
@@ -3233,7 +3248,7 @@ class LFPG_CableRenderer
             if (!firstSeg)
                 continue;
 
-            bool reuseScreenProjection = (wsi.screenCacheValid && wsi.cachedScreenPts.Count() == segCount + 1 && wsi.screenCacheCamPos[0] == camPos[0] && wsi.screenCacheCamPos[1] == camPos[1] && wsi.screenCacheCamPos[2] == camPos[2] && wsi.screenCacheCamDir[0] == camDir[0] && wsi.screenCacheCamDir[1] == camDir[1] && wsi.screenCacheCamDir[2] == camDir[2] && wsi.screenCacheSwayY == swayOff && wsi.screenCacheSwayX == swayOffX && wsi.screenCacheViewportW == swF && wsi.screenCacheViewportH == shF);
+			bool reuseScreenProjection = (wsi.screenCacheValid && wsi.m_ScreenProjectionRevision == m_ProjectionRevision && wsi.cachedScreenPts.Count() == segCount + 1 && wsi.screenCacheCamPos[0] == camPos[0] && wsi.screenCacheCamPos[1] == camPos[1] && wsi.screenCacheCamPos[2] == camPos[2] && wsi.screenCacheCamDir[0] == camDir[0] && wsi.screenCacheCamDir[1] == camDir[1] && wsi.screenCacheCamDir[2] == camDir[2] && wsi.screenCacheSwayY == swayOff && wsi.screenCacheSwayX == swayOffX && wsi.screenCacheViewportW == swF && wsi.screenCacheViewportH == shF);
             int s;
             if (!reuseScreenProjection)
             {
@@ -3305,6 +3320,7 @@ class LFPG_CableRenderer
                 wsi.screenCacheSwayX = swayOffX;
                 wsi.screenCacheViewportW = swF;
                 wsi.screenCacheViewportH = shF;
+				wsi.m_ScreenProjectionRevision = m_ProjectionRevision;
                 wsi.screenCacheValid = true;
             }
 
@@ -3573,7 +3589,7 @@ class LFPG_CableRenderer
                             jSize = LFPG_JOINT_SIZE_MAX;
                         }
 
-                        bool reuseJointProjection = (wsi.jointCacheValid && wsi.cachedJointScreenPts.Count() == jCount && wsi.jointCacheCamPos[0] == camPos[0] && wsi.jointCacheCamPos[1] == camPos[1] && wsi.jointCacheCamPos[2] == camPos[2] && wsi.jointCacheCamDir[0] == camDir[0] && wsi.jointCacheCamDir[1] == camDir[1] && wsi.jointCacheCamDir[2] == camDir[2] && wsi.jointCacheViewportW == swF && wsi.jointCacheViewportH == shF);
+						bool reuseJointProjection = (wsi.jointCacheValid && wsi.m_JointProjectionRevision == m_ProjectionRevision && wsi.cachedJointScreenPts.Count() == jCount && wsi.jointCacheCamPos[0] == camPos[0] && wsi.jointCacheCamPos[1] == camPos[1] && wsi.jointCacheCamPos[2] == camPos[2] && wsi.jointCacheCamDir[0] == camDir[0] && wsi.jointCacheCamDir[1] == camDir[1] && wsi.jointCacheCamDir[2] == camDir[2] && wsi.jointCacheViewportW == swF && wsi.jointCacheViewportH == shF);
                         if (!reuseJointProjection)
                         {
                             wsi.cachedJointScreenPts.Clear();
@@ -3586,6 +3602,7 @@ class LFPG_CableRenderer
                             wsi.jointCacheCamDir = camDir;
                             wsi.jointCacheViewportW = swF;
                             wsi.jointCacheViewportH = shF;
+							wsi.m_JointProjectionRevision = m_ProjectionRevision;
                             wsi.jointCacheValid = true;
                         }
 
@@ -3615,6 +3632,12 @@ class LFPG_CableRenderer
     {
         if (nowMs < m_NextOccRaycastTickMs)
             return;
+
+		if (m_CamMoved)
+		{
+			m_LastCamPos = camPos;
+			m_LastCamDir = camDir;
+		}
 
         m_NextOccRaycastTickMs = nowMs + LFPG_OCC_RAYCAST_TICK_MS;
         m_OccStaggerIdx = (m_OccStaggerIdx + 1) % 3;
@@ -3907,35 +3930,9 @@ class LFPG_CableRenderer
                 continue;
             }
 
-            // Both resolved: build the wire
-            string srcPort = wd.m_SourcePort;
-            if (srcPort == "")
-            {
-                srcPort = "output_1";
-            }
-            vector a = LFPG_DeviceAPI.GetPortWorldPos(ownerObj, srcPort);
-            vector b = LFPG_DeviceAPI.GetPortWorldPos(targetObj, wd.m_TargetPort);
-
-            a = LFPG_WorldUtil.ClampAboveSurface(a);
-            b = LFPG_WorldUtil.ClampAboveSurface(b);
-
-            m_TempPoints.Clear();
-            m_TempPoints.Insert(a);
-
-            if (wd.m_Waypoints && wd.m_Waypoints.Count() > 0)
-            {
-                int j;
-                for (j = 0; j < wd.m_Waypoints.Count(); j = j + 1)
-                {
-                    m_TempPoints.Insert(LFPG_WorldUtil.ClampAboveSurface(wd.m_Waypoints[j], LFPG_SURFACE_CLAMP_M));
-                }
-            }
-            else
-            {
-                m_TempPoints.Insert(LFPG_WorldUtil.AutoMidpointAboveTerrain(a, b));
-            }
-
-            m_TempPoints.Insert(b);
+			vector a;
+			vector b;
+			PrepareWirePoints(wd, ownerObj, targetObj, a, b);
 
 			st.lastPowered = IsOwnerActive(ownerObj);
 			st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
@@ -4098,24 +4095,6 @@ class LFPG_CableRenderer
         return 4;
     }
 
-    // Pre-estimate total segments from a raw point chain (for budget checks).
-    // Mirrors GetAdaptiveSubs logic without computing actual geometry.
-    protected int EstimateSegments(array<vector> rawPts)
-    {
-        if (!rawPts || rawPts.Count() < 2)
-            return 0;
-
-        int total = 0;
-        int seg;
-        for (seg = 0; seg < rawPts.Count() - 1; seg = seg + 1)
-        {
-            float segLen = vector.Distance(rawPts[seg], rawPts[seg + 1]);
-            int subs = GetAdaptiveSubs(segLen);
-            total = total + subs + 1;
-        }
-        return total;
-    }
-
     // Compute sag factor for a given segment length.
     // Linear below SAG_QUAD_REF_M, quadratic above (physically correct).
     // Real cable sag: s = wL^2 / (8T). At constant tension, sag ~ L^2.
@@ -4205,7 +4184,6 @@ class LFPG_CableRenderer
 		vector playerPos = player.GetPosition();
 		vector center = "0 0 0";
 		float radius = 0.0;
-		float pointDist;
 		float candidateDist;
 		float residentDist;
 		int i;
@@ -4215,16 +4193,7 @@ class LFPG_CableRenderer
 		int previousCount = 0;
 		int reclaimable = 0;
 		float farthestDist;
-		for (i = 0; i < points.Count(); i = i + 1)
-			center = center + points[i];
-		float invCount = 1.0 / points.Count();
-		center = center * invCount;
-		for (i = 0; i < points.Count(); i = i + 1)
-		{
-			pointDist = vector.Distance(center, points[i]);
-			if (pointDist > radius)
-				radius = pointDist;
-		}
+		ComputePointBounds(points, center, radius);
 		candidateDist = vector.Distance(playerPos, center) - radius;
 		if (candidateDist < 0.0)
 			candidateDist = 0.0;
