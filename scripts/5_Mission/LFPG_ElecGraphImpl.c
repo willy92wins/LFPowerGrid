@@ -78,6 +78,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // m_AllocatedPower changed. ProcessDirtyQueue Step 3 uses this to
     // re-enqueue downstream even when total output is unchanged.
     protected bool m_AllocChanged;
+	// Reused per allocation call; compare final hard and soft power to entry state.
+	protected ref array<float> m_PreviousAllocations;
 
     // v2.0: Soft demand total from last AllocateOutput call.
     // Set by AllocateOutput, read by PDQ demand signal section.
@@ -153,6 +155,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_EdgesVisitedThisEpoch = 0;
         m_PropagationEdgeAccountingActive = false;
         m_AllocChanged = false;
+		m_PreviousAllocations = new array<float>;
         m_LastAllocSoftDemand = 0.0;
 
         // v0.7.31 (Bloque B): Component Watchdog buffers
@@ -3006,15 +3009,25 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 incomingPower = 0.0;
             }
 
+			// PASSTHROUGH uses the same effective input as ProcessDirtyQueue.
+			// Stored generation can power a battery without any incoming edge.
+			float effectivePower = incomingPower;
+			bool canEvaluatePower = hasAnyIncoming;
+			if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+			{
+				effectivePower = effectivePower + node.m_VirtualGeneration;
+				canEvaluatePower = effectivePower > LFPG_PROPAGATION_EPSILON;
+			}
+
             // Determine if this consumer should actually be powered
             bool shouldBePowered = false;
 
-            if (hasAnyIncoming)
+			if (canEvaluatePower)
             {
                 if (node.m_Consumption > LFPG_PROPAGATION_EPSILON)
                 {
                     // Declared consumption: needs enough power to meet demand
-                    if (incomingPower + LFPG_PROPAGATION_EPSILON >= node.m_Consumption)
+					if (effectivePower + LFPG_PROPAGATION_EPSILON >= node.m_Consumption)
                     {
                         shouldBePowered = true;
                     }
@@ -3022,7 +3035,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 else
                 {
                     // Legacy consumer (consumption=0): any power suffices
-                    if (incomingPower > LFPG_PROPAGATION_EPSILON)
+					if (effectivePower > LFPG_PROPAGATION_EPSILON)
                     {
                         shouldBePowered = true;
                     }
@@ -3473,7 +3486,22 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             ref LFPG_ElecNode cpSrcNode;
             if (m_Nodes.Find(cpEdge.m_SourceNodeId, cpSrcNode) && cpSrcNode)
             {
-                if (cpSrcNode.m_OutputPower > LFPG_PROPAGATION_EPSILON)
+				// PASSTHROUGH output is demand, not supply. Count available power
+				// after self-consumption so zero allocations can recover from overload.
+				float supplierPower = cpSrcNode.m_OutputPower;
+				if (cpSrcNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+				{
+					supplierPower = cpSrcNode.m_InputPower + cpSrcNode.m_VirtualGeneration;
+					if (cpSrcNode.m_Consumption > LFPG_PROPAGATION_EPSILON)
+					{
+						supplierPower = supplierPower - cpSrcNode.m_Consumption;
+					}
+					if (cpSrcNode.m_GateClosed)
+					{
+						supplierPower = 0.0;
+					}
+				}
+				if (supplierPower > LFPG_PROPAGATION_EPSILON)
                 {
                     count = count + 1;
                 }
@@ -3654,7 +3682,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             overloaded = true;
         }
 
-        // Pass 2: Set allocations + detect changes.
+		// Pass 2: Snapshot entry allocations and assign the hard portion.
+		m_PreviousAllocations.Clear();
         // v2.0: When soft demand exists and not overloaded, allocate only
         // the hard portion per edge. Soft surplus handled in Pass 3.
         // When totalSoftDemand=0 (99.9% of nodes), newAlloc = edge.m_Demand
@@ -3664,13 +3693,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         for (ai = 0; ai < edgeCount; ai = ai + 1)
         {
             m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+			m_PreviousAllocations.Insert(0.0);
             ref LFPG_ElecEdge allocEdge = outEdges[ai];
             if (!allocEdge)
                 continue;
             if ((allocEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
                 continue;
 
-            float oldAlloc = allocEdge.m_AllocatedPower;
+			m_PreviousAllocations[ai] = allocEdge.m_AllocatedPower;
             float newAlloc = 0.0;
             if (!overloaded)
             {
@@ -3700,19 +3730,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             allocEdge.m_AllocatedPower = newAlloc;
             totalAllocated = totalAllocated + newAlloc;
 
-            // Track allocation change for Step 3 downstream re-enqueue.
-            if (!m_AllocChanged)
-            {
-                float allocDelta = newAlloc - oldAlloc;
-                if (allocDelta < 0.0)
-                {
-                    allocDelta = -allocDelta;
-                }
-                if (allocDelta > LFPG_PROPAGATION_EPSILON)
-                {
-                    m_AllocChanged = true;
-                }
-            }
         }
 
         // v2.0 Pass 3: Distribute surplus to soft demand edges proportionally.
@@ -3758,16 +3775,34 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     softEdge.m_AllocatedPower = prevAlloc + softBonus;
                     totalAllocated = totalAllocated + softBonus;
 
-                    if (!m_AllocChanged)
-                    {
-                        if (softBonus > LFPG_PROPAGATION_EPSILON)
-                        {
-                            m_AllocChanged = true;
-                        }
-                    }
                 }
             }
         }
+
+		// Only the final allocation can trigger downstream re-enqueue.
+		LFPG_ElecEdge finalEdge;
+		float finalDelta;
+		for (int ci = 0; ci < edgeCount; ci = ci + 1)
+		{
+			if (m_AllocChanged)
+				break;
+			m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+			finalEdge = outEdges[ci];
+			if (!finalEdge)
+				continue;
+			if ((finalEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+				continue;
+
+			finalDelta = finalEdge.m_AllocatedPower - m_PreviousAllocations[ci];
+			if (finalDelta < 0.0)
+			{
+				finalDelta = -finalDelta;
+			}
+			if (finalDelta > LFPG_PROPAGATION_EPSILON)
+			{
+				m_AllocChanged = true;
+			}
+		}
 
         // Update node load metrics.
         // v2.0: LoadRatio uses totalAllocated (hard+soft) for accurate display.

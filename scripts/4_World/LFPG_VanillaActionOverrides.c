@@ -175,3 +175,35 @@ modded class ActionTurnOffPowerGenerator
         super.OnExecuteServer(action_data);
     }
 };
+
+// Work callbacks observe CompEM's final state, including fuel exhaustion.
+#ifdef SERVER
+modded class PowerGenerator
+{
+	override void OnWorkStart()
+	{
+		super.OnWorkStart();
+		NotifyLFPGSourceState();
+	}
+
+	override void OnWorkStop()
+	{
+		super.OnWorkStop();
+		NotifyLFPGSourceState();
+	}
+
+	protected void NotifyLFPGSourceState()
+	{
+		// Native sources notify after updating their own source state.
+		if (LFPG_DeviceAPI.IsSource(this))
+			return;
+
+		LFPG_NetworkManager mgr = LFPG_NetworkManager.GetExisting();
+		if (!mgr)
+			return;
+
+		string sourceId = LFPG_DeviceAPI.GetOrCreateDeviceId(this);
+		mgr.RequestPropagate(sourceId);
+	}
+};
+#endif
