@@ -63,7 +63,6 @@ modded class ActionConstructor
         actions.Insert(LFPG_ActionFillPump);
 
         // --- Sorter ---
-        actions.Insert(LFPG_ActionOpenSorterPanel);
         actions.Insert(LFPG_ActionSyncSorter);
         // Sprint 0 (2026-04-26): V4 TEST variant
         actions.Insert(LFPG_ActionOpenSorterPanel_TEST);

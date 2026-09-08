@@ -43,26 +43,6 @@ class LFPG_RPCClientHandler
         {
             HandleCCTVExitConfirm();
         }
-        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_RESPONSE)
-        {
-            HandleSorterConfigResponse(ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_SAVE_ACK)
-        {
-            HandleSorterSaveAck(ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_RESYNC_ACK)
-        {
-            HandleSorterResyncAck(ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_PREVIEW_RESPONSE)
-        {
-            HandleSorterPreviewResponse(ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_SORT_ACK)
-        {
-            HandleSorterSortAck(player, ctx);
-        }
         else if (subId == LFPG_RPC_SubId.SORTER_CARGO_REFRESH)
         {
             HandleSorterCargoRefresh(player);
@@ -500,241 +480,12 @@ class LFPG_RPCClientHandler
         LFPG_DeviceInspector.OnInspectResponse(deviceId, wires);
     }
 
-    static void HandleSorterConfigResponse(ParamsReadContext ctx)
-    {
-        int netLow = 0;
-        int netHigh = 0;
-        string filterJSON = "";
-        string containerName = "";
-        string destName0 = "";
-        string destName1 = "";
-        string destName2 = "";
-        string destName3 = "";
-        string destName4 = "";
-        string destName5 = "";
-
-        if (!ctx.Read(netLow))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read netLow FAIL");
-            return;
-        }
-        if (!ctx.Read(netHigh))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read netHigh FAIL");
-            return;
-        }
-        if (!ctx.Read(filterJSON))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read filterJSON FAIL");
-            return;
-        }
-        if (!ctx.Read(containerName))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read containerName FAIL");
-            return;
-        }
-        if (!ctx.Read(destName0))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName0 FAIL");
-            return;
-        }
-        if (!ctx.Read(destName1))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName1 FAIL");
-            return;
-        }
-        if (!ctx.Read(destName2))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName2 FAIL");
-            return;
-        }
-        if (!ctx.Read(destName3))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName3 FAIL");
-            return;
-        }
-        if (!ctx.Read(destName4))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName4 FAIL");
-            return;
-        }
-        if (!ctx.Read(destName5))
-        {
-            LFPG_Util.Warn("[SorterConfigResponse] read destName5 FAIL");
-            return;
-        }
-
-        // Open the Sorter UI with full data
-        LFPG_SorterView.Open(filterJSON, containerName, destName0, destName1, destName2, destName3, destName4, destName5, netLow, netHigh);
-
-        string logMsg = "[SorterConfigResponse] Opened UI, container=" + containerName;
-        LFPG_Util.Info(logMsg);
-    }
-
-    static void HandleSorterSaveAck(ParamsReadContext ctx)
-    {
-        bool success = false;
-        if (!ctx.Read(success))
-            return;
-
-        LFPG_SorterView.OnSaveAck(success);
-    }
-
-    static void HandleSorterSortAck(PlayerBase player, ParamsReadContext ctx)
-    {
-        bool success = false;
-        int movedCount = 0;
-        if (!ctx.Read(success))
-            return;
-        if (!ctx.Read(movedCount))
-            return;
-
-        LFPG_SorterView.OnSortAck(success, movedCount);
-
-        // v3.2: Force client inventory UI refresh.
-        // LocationSyncMoveEntity on server moves items but client
-        // may not refresh cargo view until relog. UpdateInventoryMenu
-        // is vanilla EntityAI method called after every inventory op.
-        if (success && movedCount > 0)
-        {
-            player.UpdateInventoryMenu();
-
-            // v5.0: Signal 5_Mission to refresh vicinity containers
-            LFPG_CargoRefreshSignal.Request();
-        }
-    }
-
     static void HandleSorterCargoRefresh(PlayerBase player)
     {
         player.UpdateInventoryMenu();
 
         // v5.0: Signal 5_Mission to refresh vicinity containers
         LFPG_CargoRefreshSignal.Request();
-    }
-
-    static void HandleSorterResyncAck(ParamsReadContext ctx)
-    {
-        int ackStatus = LFPG_SORTER_ACK_NONE;
-        string containerName = "";
-        if (!ctx.Read(ackStatus))
-            return;
-        if (!ctx.Read(containerName))
-            return;
-
-        if (!g_Game)
-            return;
-
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (!player)
-            return;
-
-        string msg = "";
-        if (ackStatus == LFPG_SORTER_ACK_REPLACED)
-        {
-            msg = "[LFPG] Sorter linked: ";
-            msg = msg + containerName;
-        }
-        else if (ackStatus == LFPG_SORTER_ACK_KEPT_OLD)
-        {
-            msg = "[LFPG] Sorter already linked: ";
-            msg = msg + containerName;
-        }
-        else
-        {
-            if (containerName != "")
-            {
-                msg = "[LFPG] No new container found; kept: ";
-                msg = msg + containerName;
-            }
-            else
-            {
-                msg = "[LFPG] No container found nearby";
-            }
-        }
-        player.MessageStatus(msg);
-    }
-
-    static void HandleSorterPreviewResponse(ParamsReadContext ctx)
-    {
-        int outputIdx = 0;
-        int totalMatched = 0;
-        int sentCount = 0;
-
-        if (!ctx.Read(outputIdx))
-        {
-            string errOut = "[SorterPreviewResponse] read outputIdx FAIL";
-            LFPG_Util.Warn(errOut);
-            return;
-        }
-        if (!ctx.Read(totalMatched))
-        {
-            string errTotal = "[SorterPreviewResponse] read totalMatched FAIL";
-            LFPG_Util.Warn(errTotal);
-            return;
-        }
-        if (!ctx.Read(sentCount))
-        {
-            string errSent = "[SorterPreviewResponse] read sentCount FAIL";
-            LFPG_Util.Warn(errSent);
-            return;
-        }
-
-        // Sanity cap
-        if (sentCount > LFPG_SORTER_PREVIEW_CAP)
-        {
-            sentCount = LFPG_SORTER_PREVIEW_CAP;
-        }
-
-        array<string> names = new array<string>;
-        array<string> cats = new array<string>;
-        // v4.3: Changed from array<int> to string (formatted "WxH" / "WxH xQ")
-        array<string> infos = new array<string>;
-
-        int si = 0;
-        string itemName = "";
-        string itemCat = "";
-        string itemInfo = "";
-        bool readOk = true;
-
-        for (si = 0; si < sentCount; si = si + 1)
-        {
-            if (!ctx.Read(itemName))
-            {
-                readOk = false;
-                break;
-            }
-            if (!ctx.Read(itemCat))
-            {
-                readOk = false;
-                break;
-            }
-            if (!ctx.Read(itemInfo))
-            {
-                readOk = false;
-                break;
-            }
-            names.Insert(itemName);
-            cats.Insert(itemCat);
-            infos.Insert(itemInfo);
-        }
-
-        if (!readOk)
-        {
-            string errRead = "[SorterPreviewResponse] item read FAIL at index ";
-            errRead = errRead + si.ToString();
-            LFPG_Util.Warn(errRead);
-            return;
-        }
-
-        LFPG_SorterView.OnPreviewData(outputIdx, totalMatched, names, cats, infos);
-
-        string logMsg = "[SorterPreviewResponse] output=";
-        logMsg = logMsg + outputIdx.ToString();
-        logMsg = logMsg + " total=";
-        logMsg = logMsg + totalMatched.ToString();
-        logMsg = logMsg + " received=";
-        logMsg = logMsg + sentCount.ToString();
-        LFPG_Util.Info(logMsg);
     }
 
     static void HandleBTCOpenResponse(ParamsReadContext ctx)
@@ -864,10 +615,8 @@ class LFPG_RPCClientHandler
     }
 
     // ============================================================
-    // V4 TEST handlers (Sprint 0, 2026-04-26)
-    // Clones of V3 sorter handlers, routed to LFPG_SorterView_TEST.
-    // Generated programmatically Ã¢â‚¬â€ edits should propagate to V3
-    // first, then re-run sprint0_patches.py to regenerate.
+	// Shared sorter UI handlers; _TEST RPC names remain stable.
+	// Legacy and _TEST entities use the same panel.
     // ============================================================
     static void HandleSorterTestConfigResponse(ParamsReadContext ctx)
     {

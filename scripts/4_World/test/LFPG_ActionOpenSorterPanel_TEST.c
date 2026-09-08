@@ -6,7 +6,7 @@
 //
 // Conditions:
 //   - No item in hand (CCINone)
-//   - Target is exactly LFPG_Sorter_TEST, powered and linked
+//   - Target is LFPG_Sorter or a derived variant, powered and linked
 //   - Target is not ruined
 //   - Player within LFPG_INTERACT_DIST_M
 //
@@ -17,7 +17,7 @@
 //   Client: receive → LFPG_SorterView_TEST.Open(...)
 //
 // Pattern: ActionInteractBase (same as LFPG_ActionWatchMonitor)
-// Register in LFPG_ActionRegistration + LFPG_Sorter_TEST.SetActions
+// Register in LFPG_ActionRegistration + LFPG_Sorter.SetActions
 // =========================================================
 
 class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
@@ -47,11 +47,7 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         if (!targetObj)
             return false;
 
-        string sorterType = "LFPG_Sorter_TEST";
-		if (targetObj.GetType() != sorterType)
-			return false;
-
-        LFPG_Sorter_TEST sorter = LFPG_Sorter_TEST.Cast(targetObj);
+		LFPG_Sorter sorter = LFPG_Sorter.Cast(targetObj);
         if (!sorter)
             return false;
 
@@ -65,8 +61,6 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         // Don't open if UI is already showing
 #ifndef SERVER
         if (LFPG_SorterView_TEST.IsOpen())
-            return false;
-        if (LFPG_SorterView.IsOpen())
             return false;
 #endif
 
@@ -90,8 +84,8 @@ class LFPG_ActionOpenSorterPanel_TEST : ActionInteractBase
         if (!targetObj)
             return;
 
-        string checkType = "LFPG_Sorter_TEST";
-		if (targetObj.GetType() != checkType)
+		LFPG_Sorter sorter = LFPG_Sorter.Cast(targetObj);
+		if (!sorter)
 			return;
 
         int netLow  = 0;

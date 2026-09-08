@@ -13,9 +13,9 @@
 //   - Sorter UI not already open
 //
 // Flow:
-//   Client: send SORTER_RESYNC(sorterNetLow, sorterNetHigh)
+//   Client: send SORTER_TEST_RESYNC(sorterNetLow, sorterNetHigh)
 //   Server: unlink old → re-scan → link nearest → resolve name
-//   Server: send SORTER_RESYNC_ACK(containerName)
+//   Server: send SORTER_TEST_RESYNC_ACK(containerName)
 //   Client: MessageStatus with result
 //
 // Pattern: ActionInteractBase (CCINone, same as ActionOpenSorterPanel)
@@ -66,8 +66,6 @@ class LFPG_ActionSyncSorter : ActionInteractBase
 
         // Don't allow if UI is open
 #ifndef SERVER
-        if (LFPG_SorterView.IsOpen())
-            return false;
 		if (LFPG_SorterView_TEST.IsOpen())
 			return false;
 #endif
@@ -100,12 +98,7 @@ class LFPG_ActionSyncSorter : ActionInteractBase
             return;
 
         ScriptRPC rpc = new ScriptRPC();
-        int subId = LFPG_RPC_SubId.SORTER_RESYNC;
-		string testSorterType = "LFPG_Sorter_TEST";
-		if (targetObj.GetType() == testSorterType)
-		{
-			subId = LFPG_RPC_SubId.SORTER_TEST_RESYNC;
-		}
+		int subId = LFPG_RPC_SubId.SORTER_TEST_RESYNC;
         rpc.Write(subId);
         rpc.Write(netLow);
         rpc.Write(netHigh);

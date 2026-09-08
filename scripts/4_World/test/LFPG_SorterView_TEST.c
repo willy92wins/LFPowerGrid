@@ -1395,12 +1395,6 @@ class LFPG_SorterView_TEST extends ScriptView
     static void Open(string configJSON, string containerName, string d0, string d1, string d2, string d3, string d4, string d5, int netLow, int netHigh)
     {
         #ifndef SERVER
-        if (LFPG_SorterView.IsOpen())
-        {
-            string dualOpenMsg = "[LFPG_Sorter_TEST] Open blocked: production sorter is already open";
-            Print(dualOpenMsg);
-            return;
-        }
         bool constructedNow = false;
         if (!s_Instance)
         {

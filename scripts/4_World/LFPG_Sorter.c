@@ -108,7 +108,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     override void SetActions()
     {
         super.SetActions();
-        AddAction(LFPG_ActionOpenSorterPanel);
+		AddAction(LFPG_ActionOpenSorterPanel_TEST);
         AddAction(LFPG_ActionSyncSorter);
     }
 
