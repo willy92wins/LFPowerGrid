@@ -1802,7 +1802,7 @@ class CfgVehicles
         hiddenSelectionsTextures[] =
         {
             "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa",
-            "\LFPowerGrid\data\door_controller\data\door_controller_red.paa",
+            "\LFPowerGrid\data\electric_stove\electric_stove_red.paa",
             "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa",
             "\LFPowerGrid\data\door_controller\data\door_controller_grey.paa"
         };
