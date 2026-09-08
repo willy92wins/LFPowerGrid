@@ -2147,8 +2147,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             rpc.Write(json);
             rpc.Write(snapshotGeneration);
             bool bRpcGuaranteed = true;
-            PlayerIdentity noExclude = null;
-            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+			PlayerIdentity recipient = pb.GetIdentity();
+			if (!recipient)
+				continue;
+			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
 
@@ -2304,7 +2306,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool inRange;
         ScriptRPC rpc;
         bool guaranteed = true;
-        PlayerIdentity noExclude = null;
 
         for (playerIndex = 0; playerIndex < m_ReusableBroadcastPlayers.Count(); playerIndex = playerIndex + 1)
         {
@@ -2337,7 +2338,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             rpc.Write(snapshot.m_OwnerHigh);
             rpc.Write(snapshot.m_JSON);
             rpc.Write(snapshot.m_Generation);
-            rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, noExclude);
+			PlayerIdentity recipient = player.GetIdentity();
+			if (!recipient)
+				continue;
+			rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, recipient);
         }
     }
 
@@ -2481,7 +2485,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 rpc.Write(operations[e]);
                 rpc.Write(entryJsons[e]);
             }
-            rpc.Send(pb, LFPG_RPC_CHANNEL, true, null);
+			PlayerIdentity recipient = pb.GetIdentity();
+			if (!recipient)
+				continue;
+			rpc.Send(pb, LFPG_RPC_CHANNEL, true, recipient);
 
             #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
@@ -2614,8 +2621,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             rpc.Write(json);
             rpc.Write(vanillaSnapshotGeneration);
             bool bRpcGuaranteed = true;
-            PlayerIdentity noExclude = null;
-            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+			PlayerIdentity recipient = pb.GetIdentity();
+			if (!recipient)
+				continue;
+			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
 
@@ -2659,8 +2668,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         rpc.Write(json);
         rpc.Write(vanillaUnicastGeneration);
         bool bRpcGuaranteed = true;
-        PlayerIdentity noExclude = null;
-        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+		PlayerIdentity recipient = player.GetIdentity();
+		if (!recipient)
+			return;
+		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
 
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
@@ -2779,8 +2790,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         rpc.Write(json);
         rpc.Write(generation);
         bool guaranteed = true;
-        PlayerIdentity noExclude = null;
-        rpc.Send(m_FullSyncPlayer, LFPG_RPC_CHANNEL, guaranteed, noExclude);
+		if (!m_FullSyncPlayer)
+			return;
+		PlayerIdentity recipient = m_FullSyncPlayer.GetIdentity();
+		if (!recipient)
+			return;
+		rpc.Send(m_FullSyncPlayer, LFPG_RPC_CHANNEL, guaranteed, recipient);
     }
     protected void LFPG_ProcessFullSyncSpread()
     {
@@ -2981,7 +2996,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         rpc.Write(high);
         rpc.Write(json);
         rpc.Write(emptyGeneration);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+		PlayerIdentity recipient = player.GetIdentity();
+		if (!recipient)
+			return;
+		rpc.Send(player, LFPG_RPC_CHANNEL, true, recipient);
 
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
@@ -3023,8 +3041,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         rpc.Write(json);
         rpc.Write(ownerGeneration);
         bool bRpcGuaranteed = true;
-        PlayerIdentity noExclude = null;
-        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
+		PlayerIdentity recipient = player.GetIdentity();
+		if (!recipient)
+			return;
+		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
 
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
