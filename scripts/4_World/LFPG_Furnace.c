@@ -43,6 +43,13 @@ class EffLFPGFurnaceSmoke : EffectParticle
 // DEVICE — SOURCE : LFPG_WireOwnerBase
 // 1 OUT (output_1), 50 u/s while burning
 // ---------------------------------------------------------
+// Immutable config properties shared by both fuel formulas, cached per classname.
+class LFPG_FurnaceFuelConfig : Managed
+{
+	int m_Area = 0;
+	bool m_CanBeSplit = false;
+};
+
 class LFPG_Furnace : LFPG_WireOwnerBase
 {
     // F6 B1: idempotent re-registration point for the OnInit sweep
@@ -59,6 +66,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     protected float m_LoadRatio    = 0.0;
     protected bool  m_Overloaded   = false;
     protected int   m_FuelCurrent  = 0;
+	protected static ref TStringManagedRefMap s_FuelConfig;
 
 	// Server burn clock: persist the remaining duration, never mission time.
 	// The duration pauses while off; NM polls the running deadline every 5s.
@@ -127,6 +135,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     override void EEInit()
     {
         super.EEInit();
+		if (m_LFPG_IsHologramProjection)
+			return;
 
         #ifdef SERVER
         LFPG_ServerSettings st = LFPG_Settings.Get();
@@ -461,6 +471,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 			return false;
 		}
 
+		// v1/v2: bool sourceOn, int fuelCurrent (after WireOwnerBase wireJSON).
+		// v3 appends int remainingMs. No fields are skipped in legacy records.
 		bool sourceOn = false;
 		int fuelCurrent = 0;
 		int remainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
@@ -488,6 +500,16 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 			}
 		}
 
+		// AddFuel and AutoConsume cap live fuel at MAX_FUEL in every schema.
+		// Repair invalid values without dropping the entity or its wire payload.
+		if (fuelCurrent < 0 || fuelCurrent > LFPG_FURNACE_MAX_FUEL)
+		{
+			LFPG_Util.Warn("[LFPG_Furnace] Persisted fuel outside 0..MAX_FUEL; clamping");
+			if (fuelCurrent < 0)
+				fuelCurrent = 0;
+			else
+				fuelCurrent = LFPG_FURNACE_MAX_FUEL;
+		}
 		m_SourceOn = sourceOn;
 		m_FuelCurrent = fuelCurrent;
 		m_BurnRemainingMs = remainingMs;
@@ -621,38 +643,38 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // ============================================
     // Fuel system
     // ============================================
+	protected static LFPG_FurnaceFuelConfig LFPG_GetFuelConfig(string itemType)
+	{
+		if (!s_FuelConfig)
+			s_FuelConfig = new TStringManagedRefMap;
+		Managed cachedConfig;
+		if (s_FuelConfig.Find(itemType, cachedConfig))
+			return LFPG_FurnaceFuelConfig.Cast(cachedConfig);
+
+		LFPG_FurnaceFuelConfig fuelConfig = new LFPG_FurnaceFuelConfig();
+		string cfgPath = "CfgVehicles " + itemType + " itemSize";
+		if (g_Game.ConfigIsExisting(cfgPath))
+		{
+			TIntArray sizeArr = new TIntArray;
+			g_Game.ConfigGetIntArray(cfgPath, sizeArr);
+			if (sizeArr.Count() >= 2)
+				fuelConfig.m_Area = sizeArr[0] * sizeArr[1];
+		}
+		string splitPath = "CfgVehicles " + itemType + " canBeSplit";
+		fuelConfig.m_CanBeSplit = g_Game.ConfigGetInt(splitPath) > 0;
+		s_FuelConfig.Insert(itemType, fuelConfig);
+		return fuelConfig;
+	}
+
     int LFPG_CalcFuelRecursive(EntityAI item)
     {
         if (!item)
             return 0;
 
-        string itemType = item.GetType();
-        string cfgPath = "CfgVehicles ";
-        cfgPath = cfgPath + itemType;
-        cfgPath = cfgPath + " itemSize";
-
-        int w = 0;
-        int h = 0;
-        int qty = 0;
-        int fuel = 0;
-
-        if (g_Game.ConfigIsExisting(cfgPath))
-        {
-            TIntArray sizeArr = new TIntArray;
-            g_Game.ConfigGetIntArray(cfgPath, sizeArr);
-            if (sizeArr.Count() >= 2)
-            {
-                w = sizeArr[0];
-                h = sizeArr[1];
-            }
-        }
-
-        qty = 1;
-        string splitPath = "CfgVehicles ";
-        splitPath = splitPath + itemType;
-        splitPath = splitPath + " canBeSplit";
-        int splitVal = g_Game.ConfigGetInt(splitPath);
-        if (splitVal > 0)
+		LFPG_FurnaceFuelConfig fuelConfig = LFPG_GetFuelConfig(item.GetType());
+		int qty = 1;
+		int fuel = 0;
+		if (fuelConfig.m_CanBeSplit)
         {
             int rawQty = item.GetQuantity();
             if (rawQty > 1)
@@ -661,7 +683,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             }
         }
 
-        fuel = w * h * qty;
+		fuel = fuelConfig.m_Area * qty;
 
         GameInventory inv = item.GetInventory();
         if (!inv) return fuel;
@@ -709,11 +731,8 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         }
 
         int qty = 1;
-        string splitPath = "CfgVehicles ";
-        splitPath = splitPath + itemType;
-        splitPath = splitPath + " canBeSplit";
-        int splitVal = g_Game.ConfigGetInt(splitPath);
-        if (splitVal > 0)
+		LFPG_FurnaceFuelConfig fuelConfig = LFPG_GetFuelConfig(itemType);
+		if (fuelConfig.m_CanBeSplit)
         {
             int rawQty = item.GetQuantity();
             if (rawQty > 1)

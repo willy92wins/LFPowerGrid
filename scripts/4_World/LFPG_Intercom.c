@@ -103,6 +103,12 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected int m_SoundEventSeq   = 0;   // incremental counter — guarantees SyncVar change
     #ifndef SERVER
     protected int m_SoundEventSeqPrev = 0; // client-only: last seen sequence
+	protected bool m_VisualsInitialized = false;
+	protected bool m_VisualPowered = false;
+	protected bool m_VisualSwitchOn = false;
+	protected bool m_VisualRadioInstalled = false;
+	protected bool m_VisualBroadcastEnabled = false;
+	protected int m_VisualFrequencyIndex = 0;
     #endif
     #ifndef SERVER
     protected int m_PerfDiagActionDirtyCount = 0;
@@ -408,33 +414,62 @@ class LFPG_Intercom : LFPG_DeviceBase
 
     override bool LFPG_OnStoreLoadExtra(ParamsReadContext ctx, int ver)
     {
-        if (!ctx.Read(m_SwitchOn))
+		// v1 (DeviceBase migration) and v2: bool switch, bool radio,
+		// bool broadcast, int frequency. The header belongs to DeviceBase.
+		switch (ver)
+		{
+			case 1:
+			case 2:
+				break;
+			default:
+				LFPG_Util.Error("[LFPG_Intercom] Unsupported persistence version");
+				return false;
+		}
+		bool switchOn;
+		bool radioInstalled;
+		bool broadcastEnabled;
+		int frequencyIndex;
+		if (!ctx.Read(switchOn))
         {
             string errSwitch = "[LFPG_Intercom] OnStoreLoad failed: m_SwitchOn";
             LFPG_Util.Error(errSwitch);
             return false;
         }
 
-        if (!ctx.Read(m_RadioInstalled))
+		if (!ctx.Read(radioInstalled))
         {
             string errRadio = "[LFPG_Intercom] OnStoreLoad failed: m_RadioInstalled";
             LFPG_Util.Error(errRadio);
             return false;
         }
 
-        if (!ctx.Read(m_BroadcastEnabled))
+		if (!ctx.Read(broadcastEnabled))
         {
             string errBcast = "[LFPG_Intercom] OnStoreLoad failed: m_BroadcastEnabled";
             LFPG_Util.Error(errBcast);
             return false;
         }
 
-        if (!ctx.Read(m_FrequencyIndex))
+		if (!ctx.Read(frequencyIndex))
         {
             string errFreq = "[LFPG_Intercom] OnStoreLoad failed: m_FrequencyIndex";
             LFPG_Util.Error(errFreq);
             return false;
         }
+
+		// Repair invalid dial values without discarding an otherwise readable entity.
+		if (frequencyIndex < 0 || frequencyIndex >= LFPG_INTERCOM_FREQ_COUNT)
+		{
+			LFPG_Util.Warn("[LFPG_Intercom] Persisted frequency outside 0..6; clamping");
+			if (frequencyIndex < 0)
+				frequencyIndex = 0;
+			else
+				frequencyIndex = LFPG_INTERCOM_FREQ_COUNT - 1;
+		}
+		m_SwitchOn = switchOn;
+		m_RadioInstalled = radioInstalled;
+		m_BroadcastEnabled = broadcastEnabled;
+		m_FrequencyIndex = frequencyIndex;
 
         string loadMsg = "[LFPG_Intercom] Loaded id=";
         loadMsg = loadMsg + m_DeviceId;
@@ -473,6 +508,13 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected void LFPG_UpdateVisuals()
     {
         #ifndef SERVER
+		// Sound sequence updates do not invalidate materials or animation phases.
+		bool visualsUnchanged = m_VisualsInitialized && m_VisualPowered == m_PoweredNet && m_VisualSwitchOn == m_SwitchOn;
+		visualsUnchanged = visualsUnchanged && m_VisualRadioInstalled == m_RadioInstalled && m_VisualBroadcastEnabled == m_BroadcastEnabled;
+		visualsUnchanged = visualsUnchanged && m_VisualFrequencyIndex == m_FrequencyIndex;
+		if (visualsUnchanged)
+			return;
+
         // LED1 (light_led, index 2): Power/Gate state
         if (m_PoweredNet && m_SwitchOn)
         {
@@ -531,6 +573,12 @@ class LFPG_Intercom : LFPG_DeviceBase
             string emptyMat = "";
             SetObjectMaterial(LFPG_INTERCOM_HS_MIC, emptyMat);
         }
+		m_VisualPowered = m_PoweredNet;
+		m_VisualSwitchOn = m_SwitchOn;
+		m_VisualRadioInstalled = m_RadioInstalled;
+		m_VisualBroadcastEnabled = m_BroadcastEnabled;
+		m_VisualFrequencyIndex = m_FrequencyIndex;
+		m_VisualsInitialized = true;
         #endif
     }
 
