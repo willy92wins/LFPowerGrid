@@ -22,6 +22,7 @@ class LFPG_CableHUD
 
     protected CanvasWidget m_Canvas;
     protected bool m_Ready = false;
+	protected bool m_FrameReady = false;
     protected bool m_InitAttempted = false;
 
     protected int m_FrameNum = 0;
@@ -76,6 +77,7 @@ class LFPG_CableHUD
             m_Canvas = null;
         }
         m_Ready = false;
+		m_FrameReady = false;
         m_InitAttempted = false;
     }
 
@@ -94,7 +96,7 @@ class LFPG_CableHUD
 
     bool IsReady()
     {
-        return m_Ready;
+		return m_Ready && m_FrameReady;
     }
 
     // v0.7.9: expose cached screen dimensions for CableRenderer.DrawFrame
@@ -185,6 +187,12 @@ class LFPG_CableHUD
 
     void BeginFrame(bool hasProducers)
     {
+		// Readiness and dimensions describe this frame, independently of widget init.
+		m_FrameReady = false;
+		m_ScreenWF = 0.0;
+		m_ScreenHF = 0.0;
+		m_DegLimX = 0.0;
+		m_DegLimY = 0.0;
         if (!hasProducers)
         {
             if (m_HadActiveProducers && m_Ready && m_Canvas)
@@ -211,10 +219,12 @@ class LFPG_CableHUD
 
         // v0.7.38 (M12): Guard against transient 0x0 resolution (alt-tab, loading,
         // resolution change). Clear canvas first to avoid frozen last-frame artifacts,
-        // then return without updating dimensions (keeps last valid size).
+		// Reject all producers and primitives until a later valid BeginFrame.
         if (curW <= 0 || curH <= 0)
         {
             m_Canvas.Clear();
+			m_ScreenWF = 0.0;
+			m_ScreenHF = 0.0;
             return;
         }
 
@@ -237,6 +247,7 @@ class LFPG_CableHUD
         m_FrameNum = m_FrameNum + 1;
         m_SegmentsDrawn = 0;
         m_SegmentsCulled = 0;
+		m_FrameReady = true;
     }
 
     // v0.7.38 (H2): DrawSegment removed — dead code since v0.7.9.
@@ -245,6 +256,8 @@ class LFPG_CableHUD
 
     void EndFrame()
     {
+		if (!IsReady())
+			return;
         // v0.7.38 (M6): Guard diagnostic log. Counters are redundant with
         // LFPG_Telemetry.m_SegmentsDrawn but kept for HUD-level debugging.
         if (LFPG_DIAG_ENABLED && m_FrameNum % 300 == 0)
@@ -282,7 +295,7 @@ class LFPG_CableHUD
     // Used by WiringClient preview for waypoint markers (avoids GetScreenPos per marker).
     void DrawCrossScreen(float x, float y, int color, float size)
     {
-        if (!m_Ready || !m_Canvas)
+		if (!IsReady() || !m_Canvas)
             return;
 
         // NaN guard
@@ -310,7 +323,7 @@ class LFPG_CableHUD
     // Used by CableRenderer.DrawFrame for multi-pass efficiency.
     void DrawLineScreen(float x1, float y1, float x2, float y2, float width, int color)
     {
-        if (!m_Ready || !m_Canvas)
+		if (!IsReady() || !m_Canvas)
             return;
 
         // v0.7.9: NaN guard — corrupted projection can produce NaN coords
@@ -332,10 +345,10 @@ class LFPG_CableHUD
         m_SegmentsDrawn = m_SegmentsDrawn + 1;
     }
 
-    // v0.7.9: Draw a diamond joint in screen coordinates.
+	// Joint marker: a two-stroke cross, with the same center and radius.
     void DrawJointScreen(float x, float y, float halfSize, int color)
     {
-        if (!m_Ready || !m_Canvas)
+		if (!IsReady() || !m_Canvas)
             return;
 
         // v0.7.10: NaN guard (matches DrawLineScreen/DrawCrossScreen)
@@ -346,18 +359,16 @@ class LFPG_CableHUD
         if (x < -m_DegLimX || x > m_DegLimX || y < -m_DegLimY || y > m_DegLimY)
             return;
 
-        m_Canvas.DrawLine(x, y - halfSize, x + halfSize, y, 2.0, color);
-        m_Canvas.DrawLine(x + halfSize, y, x, y + halfSize, 2.0, color);
-        m_Canvas.DrawLine(x, y + halfSize, x - halfSize, y, 2.0, color);
-        m_Canvas.DrawLine(x - halfSize, y, x, y - halfSize, 2.0, color);
-        m_SegmentsDrawn = m_SegmentsDrawn + 4;
+		m_Canvas.DrawLine(x - halfSize, y, x + halfSize, y, 2.0, color);
+		m_Canvas.DrawLine(x, y - halfSize, x, y + halfSize, 2.0, color);
+		m_SegmentsDrawn = m_SegmentsDrawn + 2;
     }
 
     // v0.7.9: Draw a perpendicular endcap tick in screen coordinates.
     // perpX/perpY: pre-computed perpendicular unit vector in screen space.
     void DrawEndcapScreen(float x, float y, float perpX, float perpY, float halfLen, float width, int color)
     {
-        if (!m_Ready || !m_Canvas)
+		if (!IsReady() || !m_Canvas)
             return;
 
         // v0.7.10: NaN guard (coords + perpendicular vector)

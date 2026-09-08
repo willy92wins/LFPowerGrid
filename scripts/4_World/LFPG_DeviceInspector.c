@@ -92,6 +92,7 @@ class LFPG_DeviceInspector
     // Three attempts at 1000 ms spacing bound retries to about 3 seconds,
     // enough for transient packet loss and well below the shared 5 ops/s budget.
     static const int INSPECT_RPC_MAX_ATTEMPTS = 3;
+	static const float INSPECT_SERVER_REFRESH_MS = 2000.0;
 
     // ---- Widget references ----
     protected Widget m_Root;
@@ -573,6 +574,12 @@ class LFPG_DeviceInspector
             {
                 inst.RequestServerData(player, deviceId, target);
             }
+			else if (inst.m_HasServerData && nowMs - inst.m_LastRPCSendMs >= INSPECT_SERVER_REFRESH_MS)
+			{
+				// Keep the last response visible while refreshing dynamic edge data.
+				inst.m_InspectRequestAttempts = 0;
+				inst.RequestServerData(player, deviceId, target);
+			}
         }
 
         // ---- Update floating position every frame ----
@@ -771,12 +778,14 @@ class LFPG_DeviceInspector
         if (!m_wDeviceName || !m_wDeviceType || !m_wStatusLine || !m_wCapLine || !m_wWiresHeader)
             return;
 
+		float previousLineOffset = GetExtraLineOffset();
+
         // ---- Device name (entity type, cleaned up) ----
         string typeName = device.GetType();
         SetTextDirty(m_wDeviceName, FormatDeviceName(typeName));
 
         // ---- Device type badge ----
-        int devType = LFPG_DeviceAPI.GetDeviceType(device);
+		int devType = m_SnapshotDeviceType;
         string typeStr = Loc("#STR_LFPG_INSPECT_UNKNOWN");
         int typeColor = COL_GRAY;
 
@@ -810,10 +819,10 @@ class LFPG_DeviceInspector
 
         if (devType == LFPG_DeviceType.SOURCE)
         {
-            bool sourceOn = LFPG_DeviceAPI.GetSourceOn(device);
+			bool sourceOn = m_SnapshotBoolA;
             if (sourceOn)
             {
-                float loadRatio = LFPG_DeviceAPI.GetLoadRatio(device);
+				float loadRatio = m_SnapshotFloatA;
                 int loadPct = Math.Round(loadRatio * 100.0);
 
                 if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
@@ -844,7 +853,7 @@ class LFPG_DeviceInspector
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
             // v0.7.47: PASSTHROUGH shows Transmitting / Not Transmitting
-            bool ptPowered = LFPG_DeviceAPI.GetPowered(device);
+			bool ptPowered = m_SnapshotBoolA;
             if (ptPowered)
             {
                 statusText = Loc("#STR_LFPG_INSPECT_TRANSMITTING");
@@ -860,7 +869,7 @@ class LFPG_DeviceInspector
             LFPG_MemoryCell mcInspect = LFPG_MemoryCell.Cast(device);
             if (mcInspect)
             {
-                bool cellOn = mcInspect.LFPG_GetCellActive();
+				bool cellOn = m_SnapshotBoolB;
                 if (ptPowered)
                 {
                     if (cellOn)
@@ -880,7 +889,7 @@ class LFPG_DeviceInspector
         }
         else
         {
-            bool powered = LFPG_DeviceAPI.GetPowered(device);
+			bool powered = m_SnapshotBoolA;
             if (powered)
             {
                 statusText = Loc("#STR_LFPG_INSPECT_POWERED");
@@ -900,28 +909,28 @@ class LFPG_DeviceInspector
         string capText = "";
         if (devType == LFPG_DeviceType.SOURCE)
         {
-            float cap = LFPG_DeviceAPI.GetCapacity(device);
+			float cap = m_SnapshotFloatF;
             capText = Loc("#STR_LFPG_INSPECT_CAPACITY");
             capText = capText + FormatFloat1(cap);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.CONSUMER)
         {
-            float cons = LFPG_DeviceAPI.GetConsumption(device);
+			float cons = m_SnapshotFloatG;
             capText = Loc("#STR_LFPG_INSPECT_CONSUMPTION");
             capText = capText + FormatFloat1(cons);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.CAMERA)
         {
-            float camCons = LFPG_DeviceAPI.GetConsumption(device);
+			float camCons = m_SnapshotFloatG;
             capText = Loc("#STR_LFPG_INSPECT_CONSUMPTION");
             capText = capText + FormatFloat1(camCons);
             capText = capText + " u/s";
         }
         else if (devType == LFPG_DeviceType.PASSTHROUGH)
         {
-            float ptCap = LFPG_DeviceAPI.GetCapacity(device);
+			float ptCap = m_SnapshotFloatF;
             capText = Loc("#STR_LFPG_INSPECT_THROUGHPUT");
             capText = capText + FormatFloat1(ptCap);
             capText = capText + " u/s";
@@ -929,7 +938,7 @@ class LFPG_DeviceInspector
             // v0.8.1: Show "Total Load" = own consumption + sum of outgoing wire demands.
             // Own consumption is 0 for splitter, but future passthroughs (motorized switch)
             // may have self-draw. Outgoing wire data comes from RPC (m_RespWires).
-            float ptOwnCons = LFPG_DeviceAPI.GetConsumption(device);
+			float ptOwnCons = m_SnapshotFloatG;
             float ptDownstream = 0.0;
             if (m_HasServerData && m_RespWires)
             {
@@ -970,9 +979,9 @@ class LFPG_DeviceInspector
             LFPG_WaterPump_T2 t2Pump = LFPG_WaterPump_T2.Cast(device);
             if (t2Pump)
             {
-                float tankLvl = t2Pump.LFPG_GetTankLevel();
-                int tankLiq = t2Pump.LFPG_GetTankLiquidType();
-                bool tankPow = t2Pump.LFPG_GetPoweredNet();
+				float tankLvl = m_SnapshotFloatB;
+				int tankLiq = m_SnapshotIntA;
+				bool tankPow = m_SnapshotBoolB;
 
                 int tankPct = 0;
                 if (LFPG_PUMP_TANK_MAX > 0.0)
@@ -1053,8 +1062,8 @@ class LFPG_DeviceInspector
             LFPG_Furnace furnaceDevice = LFPG_Furnace.Cast(device);
             if (furnaceDevice)
             {
-                int fuelCur = furnaceDevice.LFPG_GetFuelCurrent();
-                bool fuelOn = furnaceDevice.LFPG_GetSourceOn();
+				int fuelCur = m_SnapshotIntA;
+				bool fuelOn = m_SnapshotBoolB;
                 int fuelMax = LFPG_FURNACE_MAX_FUEL;
 
                 // Time remaining from current fuel (Days + Hours)
@@ -1084,7 +1093,7 @@ class LFPG_DeviceInspector
                 fuelText = fuelText + " | " + fuelDays.ToString() + "D " + fuelHours.ToString() + "H";
 
                 // Cargo reserve data (used for both fuel line status + reserve line)
-                int cargoCount = furnaceDevice.LFPG_GetCargoItemCount();
+				int cargoCount = m_SnapshotIntB;
 
                 // Status color (shared with reserve line below)
                 int fuelLineColor = COL_GRAY_DIM;
@@ -1117,7 +1126,7 @@ class LFPG_DeviceInspector
                 {
                     if (cargoCount > 0)
                     {
-                        int cargoFuel = furnaceDevice.LFPG_GetCargoFuelEstimate();
+						int cargoFuel = m_SnapshotIntC;
                         int resSec = cargoFuel * 30;
                         int resDays = resSec / 86400;
                         int resHours = (resSec % 86400) / 3600;
@@ -1161,7 +1170,7 @@ class LFPG_DeviceInspector
                 float linkY = 94.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset;
                 SetPosDirty(m_wLinkLine, 14, linkY);
 
-                EntityAI linkedEnt = sorterInspect.LFPG_GetLinkedContainer();
+				EntityAI linkedEnt = m_SnapshotEntity;
                 if (linkedEnt)
                 {
                     string linkText = "Linked: ";
@@ -1191,10 +1200,10 @@ class LFPG_DeviceInspector
             LFPG_BatteryBase batDevice = LFPG_BatteryBase.Cast(device);
             if (batDevice)
             {
-                float batStored = batDevice.LFPG_GetStoredEnergy();
-                float batMax = batDevice.LFPG_GetMaxStoredEnergy();
-                float batRate = batDevice.LFPG_GetChargeRateCurrent();
-                bool batOutEnabled = batDevice.LFPG_IsOutputEnabled();
+				float batStored = m_SnapshotFloatC;
+				float batMax = m_SnapshotFloatD;
+				float batRate = m_SnapshotFloatE;
+				bool batOutEnabled = m_SnapshotBoolC;
 
                 // Percentage
                 int batPct = 0;
@@ -1283,7 +1292,11 @@ class LFPG_DeviceInspector
 
         // Reposition separator + wires header with extra line offsets
         // (TankLine vs FuelLine+ReserveLine are mutually exclusive sets)
-        float extraLineOffset = m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset;
+		float extraLineOffset = GetExtraLineOffset();
+		if (extraLineOffset != previousLineOffset)
+		{
+			m_WireDataDirty = true;
+		}
         if (m_wSeparator)
         {
             SetPosDirty(m_wSeparator, 12, 93 + extraLineOffset);
@@ -1353,6 +1366,7 @@ class LFPG_DeviceInspector
         EntityAI respTarget = LFPG_DeviceRegistry.Get().FindById(deviceId);
         if (respTarget)
         {
+			inst.ClientDataChanged(respTarget);
             inst.PopulateClientData(respTarget, deviceId);
         }
         else
@@ -1363,6 +1377,11 @@ class LFPG_DeviceInspector
             inst.m_WireDataDirty = false;
         }
     }
+
+	protected float GetExtraLineOffset()
+	{
+		return m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset;
+	}
 
     protected void PopulateWireData()
     {
@@ -1411,14 +1430,16 @@ class LFPG_DeviceInspector
             return;
         }
 
+		float extraLineOffset = GetExtraLineOffset();
+
         // Ensure separator + header are visible (may have been hidden by collapse)
         if (m_wSeparator)
         {
             ShowDirty(m_wSeparator, true);
-            SetPosDirty(m_wSeparator, 12, 93 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
+			SetPosDirty(m_wSeparator, 12, 93 + extraLineOffset);
         }
         ShowDirty(m_wWiresHeader, true);
-        SetPosDirty(m_wWiresHeader, 14, 99 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset);
+		SetPosDirty(m_wWiresHeader, 14, 99 + extraLineOffset);
 
         // Reposition wire slots with tank/fuel offset
         int ri;
@@ -1427,7 +1448,7 @@ class LFPG_DeviceInspector
             TextWidget rSlot = m_wWireSlots[ri];
             if (rSlot)
             {
-                float rY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + (ri * LFPG_INSPECT_WIRE_ROW_H);
+				float rY = LFPG_INSPECT_PANEL_BASE_H + 2.0 + extraLineOffset + (ri * LFPG_INSPECT_WIRE_ROW_H);
                 SetPosDirty(rSlot, 14, rY);
             }
         }
@@ -1587,7 +1608,7 @@ class LFPG_DeviceInspector
         // Previously missing m_LinkLineOffset + m_BatteryLineOffset
         // caused panel clipping when Sorter LinkLine or Battery
         // charge line were visible alongside wire rows.
-        h = h + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset;
+		h = h + GetExtraLineOffset();
         ApplyPanelSize(h);
     }
 
@@ -1596,7 +1617,7 @@ class LFPG_DeviceInspector
     protected void ResizePanelCompact()
     {
         // v4.3 (Audit fix F3): Include ALL dynamic line offsets (same as ResizePanelHeight).
-        ApplyPanelSize(LFPG_INSPECT_COMPACT_H + m_TankLineOffset + m_FuelLineOffset + m_ReserveLineOffset + m_LinkLineOffset + m_BatteryLineOffset);
+		ApplyPanelSize(LFPG_INSPECT_COMPACT_H + GetExtraLineOffset());
     }
 
     // Shared resize implementation: sets panel, background, and accent bar heights.

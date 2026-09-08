@@ -294,14 +294,6 @@ class LFPG_CameraViewport
         m_wRecLabel    = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wRec));
         m_wTimestamp   = TextWidget.Cast(m_OverlayRoot.FindAnyWidget(wTs));
 
-        // Screen dimensions for positioning
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float sw = scrW;
-        float sh = scrH;
-        float scale = sh / 1080.0;
-
         // Overlay tint disabled — scanlines + vignette give enough camera effect.
         // Widget kept in layout for future tuning. Alpha=0 = invisible.
         if (m_wGreyOverlay)
@@ -316,23 +308,15 @@ class LFPG_CameraViewport
         int dimGreen   = ARGB(180, 40, 200, 40);
 
         // CamLabel: top-left
-        float labelH = 28.0 * scale;
-        float margin = 16.0 * scale;
         if (m_wCamLabel)
         {
-            m_wCamLabel.SetPos(margin, margin);
-            m_wCamLabel.SetSize(400.0 * scale, labelH);
             m_wCamLabel.SetColor(greenColor);
             m_wCamLabel.SetText("CAM-000000  [1/1]");
         }
 
         // RecLabel: top-right
-        float recW = 60.0 * scale;
         if (m_wRecLabel)
         {
-            float recX = sw - margin - recW;
-            m_wRecLabel.SetPos(recX, margin);
-            m_wRecLabel.SetSize(recW, labelH);
             m_wRecLabel.SetColor(redColor);
             m_wRecLabel.SetText("REC");
         }
@@ -340,19 +324,46 @@ class LFPG_CameraViewport
         // TimestampLabel: bottom-left
         if (m_wTimestamp)
         {
-            float tsY = sh - margin - labelH;
-            m_wTimestamp.SetPos(margin, tsY);
-            m_wTimestamp.SetSize(300.0 * scale, labelH);
             m_wTimestamp.SetColor(dimGreen);
             m_wTimestamp.SetText("0000-00-00  00:00");
         }
 
+		int scrW = 0;
+		int scrH = 0;
+		GetScreenSize(scrW, scrH);
+		LayoutOverlayLabels(scrW, scrH);
         m_OverlayRoot.Show(false);
 
         LFPG_Util.Debug("[CameraViewport] DIAG: InitWidgets complete");
         LFPG_Util.Info("[CameraViewport] Overlay widgets created (hidden)");
         return true;
     }
+
+	protected void LayoutOverlayLabels(int screenW, int screenH)
+	{
+		if (screenW <= 0 || screenH <= 0)
+			return;
+
+		float scale = screenH / 1080.0;
+		float labelH = 28.0 * scale;
+		float margin = 16.0 * scale;
+		float recW = 60.0 * scale;
+		if (m_wCamLabel)
+		{
+			m_wCamLabel.SetPos(margin, margin);
+			m_wCamLabel.SetSize(400.0 * scale, labelH);
+		}
+		if (m_wRecLabel)
+		{
+			m_wRecLabel.SetPos(screenW - margin - recW, margin);
+			m_wRecLabel.SetSize(recW, labelH);
+		}
+		if (m_wTimestamp)
+		{
+			m_wTimestamp.SetPos(margin, screenH - margin - labelH);
+			m_wTimestamp.SetSize(300.0 * scale, labelH);
+		}
+	}
 
     protected void DestroyWidgets()
     {
@@ -1137,6 +1148,7 @@ class LFPG_CameraViewport
         if (m_ScanOverlayBuilt && scrW == m_ScanOverlayW && scrH == m_ScanOverlayH)
             return;
 
+		LayoutOverlayLabels(scrW, scrH);
         m_wScanCanvas.Clear();
         m_ScanOverlayBuilt = true;
         m_ScanOverlayW = scrW;

@@ -28,7 +28,7 @@ class LFPG_LaserBeamRenderer
     protected static ref LFPG_LaserBeamRenderer s_Instance;
 
     // Registered laser detectors (populated by device EEInit/EEDelete)
-    protected ref array<LFPG_LaserDetector> m_Detectors;
+	protected ref map<LFPG_LaserDetector, bool> m_Detectors;
     protected ref array<LFPG_LaserDetector> m_ActiveDetectors;
     protected vector m_CullClipA;
     protected vector m_CullClipB;
@@ -60,7 +60,7 @@ class LFPG_LaserBeamRenderer
 
     void LFPG_LaserBeamRenderer()
     {
-        m_Detectors = new array<LFPG_LaserDetector>;
+		m_Detectors = new map<LFPG_LaserDetector, bool>;
         m_ActiveDetectors = new array<LFPG_LaserDetector>;
         m_CullClipA = "0 0 0";
         m_CullClipB = "0 0 0";
@@ -94,32 +94,27 @@ class LFPG_LaserBeamRenderer
     }
 
     // ---- Registration (called by LFPG_LaserDetector) ----
-    void RegisterDetector(LFPG_LaserDetector detector)
-    {
-        if (!detector)
-            return;
-        if (m_Detectors.Find(detector) < 0)
-        {
-            m_Detectors.Insert(detector);
-            CullTick();
-        }
-    }
+	void RegisterDetector(LFPG_LaserDetector detector)
+	{
+		if (!detector || m_Detectors.Contains(detector))
+			return;
 
-    void UnregisterDetector(LFPG_LaserDetector detector)
-    {
-        if (!detector)
-            return;
-        int idx = m_Detectors.Find(detector);
-        if (idx >= 0)
-        {
-            m_Detectors.Remove(idx);
-        }
-        int activeIdx = m_ActiveDetectors.Find(detector);
-        if (activeIdx >= 0)
-        {
-            m_ActiveDetectors.Remove(activeIdx);
-        }
-    }
+		m_Detectors.Set(detector, true);
+		// Admit only the newcomer immediately; DrawFrame validates its live state.
+		m_ActiveDetectors.Insert(detector);
+	}
+
+	void UnregisterDetector(LFPG_LaserDetector detector)
+	{
+		if (!detector)
+			return;
+		m_Detectors.Remove(detector);
+		int activeIdx = m_ActiveDetectors.Find(detector);
+		if (activeIdx >= 0)
+		{
+			m_ActiveDetectors.Remove(activeIdx);
+		}
+	}
 
     bool HasActiveBeams()
     {
@@ -159,23 +154,18 @@ class LFPG_LaserBeamRenderer
         if (!m_Detectors || !m_ActiveDetectors)
             return;
 
+		m_ActiveDetectors.Clear();
         PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
         if (!player)
             return;
 
-        m_ActiveDetectors.Clear();
         vector camPos = g_Game.GetCurrentCameraPosition();
-        vector camDir = g_Game.GetCurrentCameraDirection();
         float cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
-        int screenW = 0;
-        int screenH = 0;
-        GetScreenSize(screenW, screenH);
-        float margin = 100.0;
 
         int i;
         for (i = 0; i < m_Detectors.Count(); i = i + 1)
         {
-            LFPG_LaserDetector detector = m_Detectors[i];
+			LFPG_LaserDetector detector = m_Detectors.GetKey(i);
             if (!detector || !detector.LFPG_IsPowered() || detector.LFPG_GetBeamLength() < 0.05)
                 continue;
 
@@ -185,23 +175,8 @@ class LFPG_LaserBeamRenderer
             if (distSq > cullDistSq)
                 continue;
 
-            vector startScreen = g_Game.GetScreenPos(start);
-            vector endScreen = g_Game.GetScreenPos(end);
-            bool startBehind = (startScreen[2] < LFPG_BEHIND_CAM_Z);
-            bool endBehind = (endScreen[2] < LFPG_BEHIND_CAM_Z);
-            if (startBehind && endBehind)
-                continue;
-            if (startBehind)
-                startScreen = LFPG_WorldUtil.ClipBehindCamera(start, end, camPos, camDir);
-            if (endBehind)
-                endScreen = LFPG_WorldUtil.ClipBehindCamera(end, start, camPos, camDir);
-
-            bool segmentVisible = true;
-            if (screenW > 0 && screenH > 0)
-                segmentVisible = LFPG_WorldUtil.ClipSegToScreen(startScreen[0], startScreen[1], endScreen[0], endScreen[1], -margin, -margin, screenW + margin, screenH + margin, m_CullClipA, m_CullClipB);
-            if (!segmentVisible)
-                continue;
-
+			// Distance/power candidates survive camera turns. Frustum clipping belongs
+			// to DrawFrame so a newly visible beam is reconsidered on that frame.
             m_ActiveDetectors.Insert(detector);
         }
     }
