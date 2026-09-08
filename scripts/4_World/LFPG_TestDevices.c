@@ -60,6 +60,9 @@ class LFPG_Generator : PowerGenerator
 
     // Wires owned by this device (output side)
     protected ref array<ref LFPG_WireData> m_Wires;
+	protected string m_WireJSONCache;
+	protected bool m_WireJSONCacheValid = false;
+	protected ref array<ref LFPG_WireData> m_WireJSONSnapshot;
 
     // Source state (replicated)
     protected bool m_SourceOn = false;
@@ -95,6 +98,7 @@ class LFPG_Generator : PowerGenerator
     void LFPG_Generator()
     {
         m_Wires = new array<ref LFPG_WireData>;
+		m_WireJSONSnapshot = new array<ref LFPG_WireData>;
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_SourceOn");
@@ -707,8 +711,85 @@ class LFPG_Generator : PowerGenerator
 
     string LFPG_GetWiresJSON()
     {
-        return LFPG_WireHelper.GetJSON(m_Wires);
+		// GetWires exposes mutable entries to legacy callers. Compare a deep snapshot
+		// so retained array references cannot leave a generation-only cache stale.
+		if (!m_WireJSONCacheValid || !LFPG_WireJSONSnapshotMatches())
+		{
+			LFPG_WireHelper.SerializeJSON(m_Wires, m_WireJSONCache);
+			m_WireJSONCacheValid = false;
+			if (m_WireJSONCache != "")
+			{
+				LFPG_CaptureWireJSONSnapshot();
+				m_WireJSONCacheValid = true;
+			}
+		}
+		return m_WireJSONCache;
     }
+
+	protected bool LFPG_WireJSONSnapshotMatches()
+	{
+		if (m_Wires.Count() != m_WireJSONSnapshot.Count())
+			return false;
+		for (int wireIndex = 0; wireIndex < m_Wires.Count(); wireIndex = wireIndex + 1)
+		{
+			LFPG_WireData wire = m_Wires[wireIndex];
+			LFPG_WireData saved = m_WireJSONSnapshot[wireIndex];
+			if (!wire || !saved)
+			{
+				if (wire != saved)
+					return false;
+				continue;
+			}
+			if (wire.m_TargetDeviceId != saved.m_TargetDeviceId || wire.m_TargetPort != saved.m_TargetPort || wire.m_SourcePort != saved.m_SourcePort)
+				return false;
+			if (wire.m_CreatorId != saved.m_CreatorId || wire.m_Priority != saved.m_Priority || wire.m_Flags != saved.m_Flags)
+				return false;
+			if (wire.m_TargetNetLow != saved.m_TargetNetLow || wire.m_TargetNetHigh != saved.m_TargetNetHigh)
+				return false;
+			if (!wire.m_Waypoints || !saved.m_Waypoints)
+			{
+				if (wire.m_Waypoints != saved.m_Waypoints)
+					return false;
+				continue;
+			}
+			if (wire.m_Waypoints.Count() != saved.m_Waypoints.Count())
+				return false;
+			for (int pointIndex = 0; pointIndex < wire.m_Waypoints.Count(); pointIndex = pointIndex + 1)
+			{
+				if (wire.m_Waypoints[pointIndex] != saved.m_Waypoints[pointIndex])
+					return false;
+			}
+		}
+		return true;
+	}
+
+	protected void LFPG_CaptureWireJSONSnapshot()
+	{
+		m_WireJSONSnapshot.Clear();
+		for (int wireIndex = 0; wireIndex < m_Wires.Count(); wireIndex = wireIndex + 1)
+		{
+			LFPG_WireData wire = m_Wires[wireIndex];
+			if (!wire)
+			{
+				m_WireJSONSnapshot.Insert(null);
+				continue;
+			}
+			LFPG_WireData saved = new LFPG_WireData();
+			saved.m_TargetDeviceId = wire.m_TargetDeviceId;
+			saved.m_TargetPort = wire.m_TargetPort;
+			saved.m_SourcePort = wire.m_SourcePort;
+			saved.m_CreatorId = wire.m_CreatorId;
+			saved.m_Priority = wire.m_Priority;
+			saved.m_Flags = wire.m_Flags;
+			saved.m_TargetNetLow = wire.m_TargetNetLow;
+			saved.m_TargetNetHigh = wire.m_TargetNetHigh;
+			if (wire.m_Waypoints)
+				saved.m_Waypoints.Copy(wire.m_Waypoints);
+			else
+				saved.m_Waypoints = null;
+			m_WireJSONSnapshot.Insert(saved);
+		}
+	}
 
     bool LFPG_AddWire(LFPG_WireData wd)
     {
@@ -730,6 +811,7 @@ class LFPG_Generator : PowerGenerator
         bool result = LFPG_WireHelper.AddWire(m_Wires, wd);
         if (result)
         {
+			m_WireJSONCacheValid = false;
             #ifdef SERVER
             SetSynchDirty();
             #endif
@@ -742,6 +824,7 @@ class LFPG_Generator : PowerGenerator
         bool result = LFPG_WireHelper.ClearAll(m_Wires);
         if (result)
         {
+			m_WireJSONCacheValid = false;
             #ifdef SERVER
             SetSynchDirty();
             #endif
@@ -754,6 +837,7 @@ class LFPG_Generator : PowerGenerator
         bool result = LFPG_WireHelper.ClearForCreator(m_Wires, creatorId);
         if (result)
         {
+			m_WireJSONCacheValid = false;
             #ifdef SERVER
             SetSynchDirty();
             #endif
@@ -783,6 +867,7 @@ class LFPG_Generator : PowerGenerator
         bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);
         if (result)
         {
+			m_WireJSONCacheValid = false;
             #ifdef SERVER
             SetSynchDirty();
             #endif
@@ -842,6 +927,7 @@ class LFPG_Generator : PowerGenerator
             return false;
         }
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_Generator");
+		m_WireJSONCacheValid = false;
 
         return true;
     }

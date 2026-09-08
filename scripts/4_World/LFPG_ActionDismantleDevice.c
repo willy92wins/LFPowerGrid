@@ -195,6 +195,10 @@ class LFPG_ActionDismantleDevice : ActionContinuousBase
             return;
         }
 
+		// Preserve relative health across different device/kit hitpoint maxima.
+		float deviceHealth = device.GetHealth01("", "Health");
+		kit.SetHealth01("", "Health", deviceHealth);
+
         kit.SetPosition(playerPos);
         kit.PlaceOnSurface();
 

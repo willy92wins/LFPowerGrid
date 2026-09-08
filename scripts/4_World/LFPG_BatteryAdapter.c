@@ -70,6 +70,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     protected bool  m_Overloaded        = false;
     // v4.5: Int SyncVar (×10) — see T198078 note in LFPG_Battery.c.
     protected int   m_StoredEnergyX10   = 0;
+	protected int m_MaxStoredEnergyX10 = 0;
     protected int   m_ChargeRateX10    = 0;
     #ifndef SERVER
     protected int   m_PerfDiagChargeRateDirtyCount = 0;
@@ -112,6 +113,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         // Adapter max ≈ truck battery 30000 × 2 (factor) × 10 = 600000 worst.
         RegisterNetSyncVariableInt(varStored, 0, 1000000);
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
+		RegisterNetSyncVariableInt("m_MaxStoredEnergyX10", 0, 1000000);
     }
 
     // ============================================
@@ -166,11 +168,15 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 
     override float LFPG_GetCapacity()
     {
-        if (m_BatteryType == 1)
+		int batteryType = m_BatteryType;
+		#ifndef SERVER
+		batteryType = LFPG_ClassifyBattery(LFPG_GetBatteryForRead());
+		#endif
+		if (batteryType == 1)
         {
             return LFPG_ADAPTER_CAR_MAX_OUTPUT;
         }
-        if (m_BatteryType == 2)
+		if (batteryType == 2)
         {
             return LFPG_ADAPTER_TRUCK_MAX_OUTPUT;
         }
@@ -322,6 +328,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         m_AttachedBattery = null;
         m_BatteryType = 0;
         m_StoredEnergyX10 = 0;
+		m_MaxStoredEnergyX10 = 0;
         m_ChargeRateX10 = 0;
         m_LastSyncedStored = -1.0;
         m_DischargeEnabled = true;
@@ -433,6 +440,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         if (!m_AttachedBattery)
         {
             m_StoredEnergyX10 = 0;
+			m_MaxStoredEnergyX10 = 0;
             SetSynchDirty();
             return;
         }
@@ -441,6 +449,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         if (!em)
         {
             m_StoredEnergyX10 = 0;
+			m_MaxStoredEnergyX10 = 0;
             SetSynchDirty();
             return;
         }
@@ -449,6 +458,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         float lfpgEnergy = compemEnergy * LFPG_ADAPTER_FACTOR;
         int refreshedX10 = lfpgEnergy * 10.0;
         m_StoredEnergyX10 = refreshedX10;
+		m_MaxStoredEnergyX10 = em.GetEnergyMax() * LFPG_ADAPTER_FACTOR * 10.0;
         m_LastSyncedStored = lfpgEnergy;
         SetSynchDirty();
         #endif
@@ -474,6 +484,7 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     // ============================================
     float LFPG_GetStoredEnergy()
     {
+		#ifdef SERVER
         if (!m_AttachedBattery)
             return 0.0;
 
@@ -484,6 +495,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         float compemEnergy = em.GetEnergy();
         float lfpgEnergy = compemEnergy * LFPG_ADAPTER_FACTOR;
         return lfpgEnergy;
+		#endif
+		return m_StoredEnergyX10 / 10.0;
     }
 
     void LFPG_SetStoredEnergy(float val)
@@ -527,6 +540,13 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
             }
         }
 
+		int maxStoredX10 = maxStored * 10.0;
+		if (m_MaxStoredEnergyX10 != maxStoredX10)
+		{
+			m_MaxStoredEnergyX10 = maxStoredX10;
+			needsSync = true;
+		}
+
         if (needsSync)
         {
             m_LastSyncedStored = val;
@@ -535,27 +555,44 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         #endif
     }
 
+	// Classify the replicated attachment without relying on server-only fields.
+	protected EntityAI LFPG_GetBatteryForRead()
+	{
+		EntityAI battery = FindAttachmentBySlotName("CarBattery");
+		if (!battery)
+			battery = FindAttachmentBySlotName("TruckBattery");
+		return battery;
+	}
+
     float LFPG_GetMaxStoredEnergy()
     {
-        if (!m_AttachedBattery)
-            return 0.0;
+		#ifdef SERVER
+		if (!m_AttachedBattery)
+			return 0.0;
 
-        ComponentEnergyManager em = m_AttachedBattery.GetCompEM();
+		ComponentEnergyManager em = m_AttachedBattery.GetCompEM();
         if (!em)
             return 0.0;
 
         float compemMax = em.GetEnergyMax();
         float lfpgMax = compemMax * LFPG_ADAPTER_FACTOR;
         return lfpgMax;
+		#endif
+		// CompEM assumes health=100 on clients; use the server-computed limit.
+		return m_MaxStoredEnergyX10 / 10.0;
     }
 
     float LFPG_GetMaxChargeRate()
     {
-        if (m_BatteryType == 1)
+		int batteryType = m_BatteryType;
+		#ifndef SERVER
+		batteryType = LFPG_ClassifyBattery(LFPG_GetBatteryForRead());
+		#endif
+		if (batteryType == 1)
         {
             return LFPG_ADAPTER_CAR_CHARGE_RATE;
         }
-        if (m_BatteryType == 2)
+		if (batteryType == 2)
         {
             return LFPG_ADAPTER_TRUCK_CHARGE_RATE;
         }
@@ -564,11 +601,15 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 
     float LFPG_GetMaxDischargeRate()
     {
-        if (m_BatteryType == 1)
+		int batteryType = m_BatteryType;
+		#ifndef SERVER
+		batteryType = LFPG_ClassifyBattery(LFPG_GetBatteryForRead());
+		#endif
+		if (batteryType == 1)
         {
             return LFPG_ADAPTER_CAR_DISCHARGE_RATE;
         }
-        if (m_BatteryType == 2)
+		if (batteryType == 2)
         {
             return LFPG_ADAPTER_TRUCK_DISCHARGE_RATE;
         }
