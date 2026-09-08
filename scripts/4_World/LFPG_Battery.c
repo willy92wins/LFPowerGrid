@@ -123,7 +123,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // The kit carries no stored energy; empty the device before dismantling.
     override bool LFPG_BlocksDismantle()
     {
-		return LFPG_GetStoredEnergy() > 0.0;
+        return m_StoredEnergyX10 > 0;
     }
 
     // ============================================
