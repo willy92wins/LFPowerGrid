@@ -1,0 +1,762 @@
+diff --git a/scripts/4_World/LFPG_CableRenderer.c b/scripts/4_World/LFPG_CableRenderer.c
+index 00683ce..71006a9 100644
+--- a/scripts/4_World/LFPG_CableRenderer.c
++++ b/scripts/4_World/LFPG_CableRenderer.c
+@@ -2105,9 +2105,6 @@ class LFPG_CableRenderer
+             st.cachedWireKeys.Insert(ownerDeviceId + "|" + wk.ToString());
+         }
+ 
+-        // Segment budget
+-        int totalSegs = m_TotalSegCount;
+-
+         // G5: get render metrics once outside loop
+         LFPG_RenderMetrics bldTelRnd = LFPG_Telemetry.GetRender();
+ 
+@@ -2176,25 +2173,12 @@ class LFPG_CableRenderer
+ 
+             m_TempPoints.Insert(b);
+ 
+-            // v0.7.9: budget estimation uses adaptive subdivision count
+-            string wireKey = ownerDeviceId + "|" + w.ToString();
+-            int estSegs = EstimateSegments(m_TempPoints);
+-            if (totalSegs + estSegs > LFPG_MAX_RENDERED_SEGS)
+-            {
+-                if (LFPG_LOG_LEVEL >= 2)
+-                {
+-                    string budgMsg = "[CableRenderer] Over segment budget, queue retry " + wireKey;
+-                    LFPG_Util.Debug(budgMsg);
+-                }
+-                AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
+-                // G5: wire skipped by segment budget
+-                bldTelRnd.m_WiresBudget = bldTelRnd.m_WiresBudget + 1;
+-                continue;
+-            }
+-            totalSegs = totalSegs + estSegs;
+-
+-            // Create frozen wire segments
+-            BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, w);
++			string wireKey = ownerDeviceId + "|" + w.ToString();
++			if (!BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, w))
++			{
++				AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
++				bldTelRnd.m_WiresBudget = bldTelRnd.m_WiresBudget + 1;
++			}
+         }
+     }
+ 
+@@ -2202,15 +2186,14 @@ class LFPG_CableRenderer
+     // v0.7.9: sagSubs removed — ApplyCatenaria is now self-contained.
+     // waypoints: user-placed waypoints (for joint rendering at LOD close).
+     // wireIdx: index of this wire in the owner's wire array (for overload mask).
+-    protected void BuildWire(string wireKey, array<vector> pts, bool powered, vector posA, vector posB, array<vector> waypoints, int wireIdx)
+-    {
+-        DestroyWire(wireKey);
++	protected bool BuildWire(string wireKey, array<vector> pts, bool powered, vector posA, vector posB, array<vector> waypoints, int wireIdx)
++	{
+ 
+         if (pts.Count() < 2)
+         {
+             string ptsMsg = "[CableRenderer] BuildWire: pts < 2 for " + wireKey;
+             LFPG_Util.Warn(ptsMsg);
+-            return;
++			return false;
+         }
+ 
+         // v0.7.9: Compact near-duplicate points (< 5cm apart).
+@@ -2239,7 +2222,7 @@ class LFPG_CableRenderer
+         {
+             string ptsCMsg = "[CableRenderer] BuildWire: pts < 2 after compact for " + wireKey;
+             LFPG_Util.Warn(ptsCMsg);
+-            return;
++			return false;
+         }
+ 
+         ApplyCatenaria(pts);
+@@ -2248,10 +2231,15 @@ class LFPG_CableRenderer
+         {
+             string sagMsg = "[CableRenderer] BuildWire: sagPoints < 2 for " + wireKey;
+             LFPG_Util.Warn(sagMsg);
+-            return;
++			return false;
+         }
+ 
+-        ref LFPG_WireSegmentInfo info = new LFPG_WireSegmentInfo();
++		// Admission uses the exact post-compaction, post-sag segment count.
++		if (!ReserveWireSegments(wireKey, m_SagPoints, posA, posB))
++			return false;
++		DestroyWire(wireKey);
++
++		LFPG_WireSegmentInfo info = new LFPG_WireSegmentInfo();
+         info.powered = powered;
+         info.cachedPosA = posA;
+         info.cachedPosB = posB;
+@@ -2282,11 +2270,18 @@ class LFPG_CableRenderer
+         {
+             string noSegMsg = "[CableRenderer] BuildWire: no valid segments for " + wireKey;
+             LFPG_Util.Warn(noSegMsg);
+-            return;
++			return false;
+         }
+ 
+         // v0.7.7: compute bounding sphere from actual geometry
+         info.BuildBoundingSphere();
++		PlayerBase buildPlayer = PlayerBase.Cast(g_Game.GetPlayer());
++		if (buildPlayer)
++		{
++			info.cachedMinDist = vector.Distance(buildPlayer.GetPosition(), info.cachedCenter) - info.cachedRadius;
++			if (info.cachedMinDist < 0.0)
++				info.cachedMinDist = 0.0;
++		}
+ 
+         // v0.7.9: build occlusion samples from actual geometry
+         // (must be after segments are created, since it walks the chain)
+@@ -2338,6 +2333,7 @@ class LFPG_CableRenderer
+             string failMsg = "[CableRenderer] BuildWire " + wireKey + " FAILED segs=" + createdFail.ToString();
+             LFPG_Util.Warn(failMsg);
+         }
++		return true;
+     }
+ 
+     // ===========================
+@@ -2436,6 +2432,7 @@ class LFPG_CableRenderer
+                         {
+                             bool bHide = false;
+                             ewInfo.SetVisible(bHide);
++							ReleaseWireSegments(ewInfo);
+                         }
+                     }
+                     continue; // Skip per-wire checks for this owner
+@@ -2467,6 +2464,7 @@ class LFPG_CableRenderer
+                     {
+                         bool bHideHw = false;
+                         hwInfo.SetVisible(bHideHw);
++						ReleaseWireSegments(hwInfo);
+                     }
+                 }
+ 
+@@ -2491,7 +2489,11 @@ class LFPG_CableRenderer
+                         ref LFPG_WireSegmentInfo twInfo;
+                         if (m_WireSegments.Find(twKey, twInfo) && twInfo)
+                         {
+-                            if (twInfo.cachedMinDist < LFPG_CULL_DISTANCE_M)
++							float missingOwnerDist = vector.Distance(pp, twInfo.cachedCenter) - twInfo.cachedRadius;
++							if (missingOwnerDist < 0.0)
++								missingOwnerDist = 0.0;
++							twInfo.cachedMinDist = missingOwnerDist;
++							if (twInfo.cachedMinDist < LFPG_CULL_DISTANCE_M)
+                             {
+                                 anyWireNearPlayer = true;
+                                 break;
+@@ -2525,8 +2527,11 @@ class LFPG_CableRenderer
+                 }
+ 
+                 ref LFPG_WireSegmentInfo info;
+-                if (!m_WireSegments.Find(wireKey, info) || !info)
+-                    continue; // Not built yet (pending retry)
++				if (!m_WireSegments.Find(wireKey, info) || !info)
++				{
++					AddRetry(st.ownerDeviceId, w, LFPG_RetryReason.BUDGET);
++					continue;
++				}
+ 
+                 // v0.7.38 (L9): Bounding sphere culling is sufficient for visibility.
+                 // Endpoints are inside the sphere by definition, so separate
+@@ -2580,6 +2585,10 @@ class LFPG_CableRenderer
+ 
+                 // Update visibility (SetVisible is a no-op if state unchanged)
+                 info.SetVisible(shouldBeVisible);
++				if (!shouldBeVisible)
++					ReleaseWireSegments(info);
++				else if (info.segments.Count() == 0)
++					AddRetry(st.ownerDeviceId, w, LFPG_RetryReason.BUDGET);
+ 
+                 // Update powered flag
+                 info.powered = st.lastPowered;
+@@ -2707,8 +2716,8 @@ class LFPG_CableRenderer
+         for (si = 0; si < wc; si = si + 1)
+         {
+             ref LFPG_WireSegmentInfo sortWsi = m_WireSegments.GetElement(si);
+-            if (!sortWsi)
+-                continue;
++			if (!sortWsi || sortWsi.segments.Count() == 0)
++				continue;
+ 
+             m_DrawOrder.Insert(si);
+             m_DrawDist.Insert(sortWsi.cachedMinDist);
+@@ -3854,9 +3863,6 @@ class LFPG_CableRenderer
+             m_TempKeys.Insert(m_RetryQueue.GetKey(i));
+         }
+ 
+-        // Segment budget
+-        int totalSegs = m_TotalSegCount;
+-
+         // G5: get render metrics once outside loop
+         LFPG_RenderMetrics retTelRnd = LFPG_Telemetry.GetRender();
+ 
+@@ -3987,27 +3993,15 @@ class LFPG_CableRenderer
+ 
+             m_TempPoints.Insert(b);
+ 
+-            // v0.7.9: adaptive budget estimation
+-            int estSegs = EstimateSegments(m_TempPoints);
+-            if (totalSegs + estSegs > LFPG_MAX_RENDERED_SEGS)
+-            {
+-                // Budget exceeded. If this was a TARGET_MISSING entry whose target
+-                // is now found, convert to BUDGET so it stops counting retries.
+-                if (entry.reason == LFPG_RetryReason.TARGET_MISSING)
+-                {
+-                    entry.reason = LFPG_RetryReason.BUDGET;
+-                }
+-                // G5: wire skipped by segment budget (retry path)
+-                retTelRnd.m_WiresBudget = retTelRnd.m_WiresBudget + 1;
+-                continue; // Over budget, retry next tick (no retryCount increment)
+-            }
+-
+-            totalSegs = totalSegs + estSegs;
+-
+-            st.lastPowered = IsOwnerActive(ownerObj);
+-            st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
+-            st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
+-            BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex);
++			st.lastPowered = IsOwnerActive(ownerObj);
++			st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
++			st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
++			if (!BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex))
++			{
++				entry.reason = LFPG_RetryReason.BUDGET;
++				retTelRnd.m_WiresBudget = retTelRnd.m_WiresBudget + 1;
++				continue;
++			}
+ 
+             m_RetryQueue.Remove(wireKey);
+ 
+@@ -4244,6 +4238,102 @@ class LFPG_CableRenderer
+     // Segment budget (v0.7.9: incremental via m_TotalSegCount)
+     // ===========================
+ 
++	// Keep bounds when releasing capacity; CullTick can rebuild on re-entry.
++	protected void ReleaseWireSegments(LFPG_WireSegmentInfo info)
++	{
++		if (!info || !info.segments || info.segments.Count() == 0)
++			return;
++		m_TotalSegCount = m_TotalSegCount - info.segments.Count();
++		info.DestroyAll();
++		m_DrawOrderDirty = true;
++	}
++
++	// Under pressure, release invisible geometry first, then farther wires.
++	// Empty metadata entries reserve no live segments.
++	protected bool ReserveWireSegments(string wireKey, array<vector> points, vector posA, vector posB)
++	{
++		PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
++		if (!player || !points || points.Count() < 2)
++			return false;
++		int required = points.Count() - 1;
++		if (required > LFPG_MAX_RENDERED_SEGS)
++			return false;
++		vector playerPos = player.GetPosition();
++		vector center = "0 0 0";
++		float radius = 0.0;
++		float pointDist;
++		float candidateDist;
++		float residentDist;
++		int i;
++		LFPG_WireSegmentInfo resident;
++		LFPG_WireSegmentInfo victim;
++		LFPG_WireSegmentInfo previous;
++		int previousCount = 0;
++		int reclaimable = 0;
++		float farthestDist;
++		for (i = 0; i < points.Count(); i = i + 1)
++			center = center + points[i];
++		float invCount = 1.0 / points.Count();
++		center = center * invCount;
++		for (i = 0; i < points.Count(); i = i + 1)
++		{
++			pointDist = vector.Distance(center, points[i]);
++			if (pointDist > radius)
++				radius = pointDist;
++		}
++		candidateDist = vector.Distance(playerPos, center) - radius;
++		if (candidateDist < 0.0)
++			candidateDist = 0.0;
++		if (candidateDist > LFPG_CULL_DISTANCE_M)
++			return false;
++		if (m_DeviceBubbleM > 0.0 && vector.Distance(playerPos, posA) > m_DeviceBubbleM && vector.Distance(playerPos, posB) > m_DeviceBubbleM)
++			return false;
++		if (m_WireSegments.Find(wireKey, previous) && previous && previous.segments)
++			previousCount = previous.segments.Count();
++		if (m_TotalSegCount - previousCount + required <= LFPG_MAX_RENDERED_SEGS)
++			return true;
++
++		// Preflight avoids eviction when nearer residents still leave no room.
++		for (i = 0; i < m_WireSegments.Count(); i = i + 1)
++		{
++			resident = m_WireSegments.GetElement(i);
++			if (!resident || resident == previous || resident.segments.Count() == 0)
++				continue;
++			residentDist = vector.Distance(playerPos, resident.cachedCenter) - resident.cachedRadius;
++			if (!resident.visible || residentDist > candidateDist)
++				reclaimable = reclaimable + resident.segments.Count();
++		}
++		if (m_TotalSegCount - previousCount + required - reclaimable > LFPG_MAX_RENDERED_SEGS)
++			return false;
++
++		while (m_TotalSegCount - previousCount + required > LFPG_MAX_RENDERED_SEGS)
++		{
++			victim = null;
++			farthestDist = candidateDist;
++			for (i = 0; i < m_WireSegments.Count(); i = i + 1)
++			{
++				resident = m_WireSegments.GetElement(i);
++				if (!resident || resident == previous || resident.segments.Count() == 0)
++					continue;
++				if (!resident.visible)
++				{
++					victim = resident;
++					break;
++				}
++				residentDist = vector.Distance(playerPos, resident.cachedCenter) - resident.cachedRadius;
++				if (residentDist > farthestDist)
++				{
++					farthestDist = residentDist;
++					victim = resident;
++				}
++			}
++			if (!victim)
++				return false;
++			ReleaseWireSegments(victim);
++		}
++		return true;
++	}
++
+     // ===========================
+     // Wire segment cleanup
+     // ===========================
+diff --git a/scripts/4_World/LFPG_CameraViewport.c b/scripts/4_World/LFPG_CameraViewport.c
+index 1ef4e67..3609e2c 100644
+--- a/scripts/4_World/LFPG_CameraViewport.c
++++ b/scripts/4_World/LFPG_CameraViewport.c
+@@ -137,8 +137,12 @@ class LFPG_CameraViewport
+     // DoExitCleanup() called from RPC → cleanup camera + set phase=0
+     protected int       m_ExitPhase;
+ 
+-    // Timeout for waiting state (safety: force cleanup if server doesn't respond)
++	// Timeout only warns; camera release requires observed restoration.
+     protected float     m_ExitWaitTimer;
++	protected static int s_NextSessionId;
++	protected int m_SessionId;
++	protected int m_ExitSessionId;
++	protected bool m_ExitTimeoutWarned;
+ 
+     // ---- Inspector cooldown (post-exit) ----
+     protected int       m_ExitCooldown;
+@@ -383,6 +387,11 @@ class LFPG_CameraViewport
+             return;
+         }
+ 
++		s_NextSessionId = s_NextSessionId + 1;
++		m_SessionId = s_NextSessionId;
++		m_ExitSessionId = 0;
++		m_ExitTimeoutWarned = false;
++
+         // Dispatch supplies the original RPC target even while g_Game.GetPlayer() is null.
+         m_PlayerRef = player;
+ 
+@@ -697,6 +706,9 @@ class LFPG_CameraViewport
+     protected void ForceCleanup()
+     {
+         LFPG_Util.Debug("[CameraViewport] DIAG: ForceCleanup");
++		m_SessionId = 0;
++		m_ExitSessionId = 0;
++		m_ExitTimeoutWarned = false;
+         m_Active    = false;
+         m_ExitPhase = 0;
+         m_ExitWaitTimer = 0.0;
+@@ -745,22 +757,47 @@ class LFPG_CameraViewport
+     }
+ 
+     // =========================================================
+-    // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM or timeout.
+-    // Server has already called SelectPlayer(sender, player)
+-    // → engine updated internal camera pointer.
+-    // NOW safe to deactivate and release the spectator camera.
+-    //
+-    // v1.3.2: Camera deactivation restored here (was in Phase 1
+-    // in v1.3.1 → crash). HIC re-enable stays in Phase 1.
+-    // Kept idempotent — safe to call multiple times.
+-    // =========================================================
+-    void DoExitCleanup()
+-    {
+-        // A duplicated confirm after the terminal transition is a strict no-op.
+-        if (!m_Active && m_ExitPhase == 0 && !m_ViewCamObj && !m_PlayerRef)
+-            return;
+-
+-        LFPG_Util.Debug("[CameraViewport] DIAG: DoExitCleanup — server confirmed");
++	// A legacy confirmation has no session token. Treat it as a hint and
++	// require observable engine restoration before touching camera state.
++	// =========================================================
++	void DoExitCleanup()
++	{
++		if (m_SessionId <= 0)
++			return;
++		if (m_ExitPhase == 0)
++		{
++			// Server-initiated exit is valid only after the pawn is restored.
++			// A late confirm while a new spectator session is active is ignored.
++			if (!m_Active || !HasPlayerCameraRestored())
++				return;
++			m_ExitPhase = 2;
++		}
++		m_ExitSessionId = m_SessionId;
++		TryCompleteExit(m_ExitSessionId);
++	}
++
++	protected bool HasPlayerCameraRestored()
++	{
++		PlayerBase restoredPlayer = PlayerBase.Cast(g_Game.GetPlayer());
++		if (!restoredPlayer)
++			return false;
++		if (m_PlayerRef && restoredPlayer != m_PlayerRef)
++			return false;
++		// Camera.GetCurrentCamera returns null for the player's own camera.
++		if (Camera.GetCurrentCamera())
++			return false;
++		if (!restoredPlayer.GetCurrentCamera())
++			return false;
++		return true;
++	}
++
++	protected void TryCompleteExit(int sessionId)
++	{
++		if (sessionId <= 0 || sessionId != m_SessionId || sessionId != m_ExitSessionId || m_ExitPhase == 0)
++			return;
++		if (!HasPlayerCameraRestored())
++			return;
++		LFPG_Util.Debug("[CameraViewport] Exit cleanup: player camera restoration observed");
+ 
+         m_Active = false;
+         m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
+@@ -813,7 +850,9 @@ class LFPG_CameraViewport
+         m_ExitPhase = 0;
+         m_ExitWaitTimer = 0.0;
+ 
+-        LFPG_Util.Info("[CameraViewport] DoExitCleanup complete — camera released");
++		m_ExitSessionId = 0;
++		m_ExitTimeoutWarned = false;
++		LFPG_Util.Info("[CameraViewport] DoExitCleanup complete - camera released");
+     }
+ 
+     // =========================================================
+@@ -830,6 +869,13 @@ class LFPG_CameraViewport
+     // =========================================================
+     void Tick(float timeslice)
+     {
++		// Also observe server-initiated exits if their confirm preceded replication.
++		if (m_Active && m_ExitPhase == 0 && HasPlayerCameraRestored())
++		{
++			m_ExitSessionId = m_SessionId;
++			m_ExitPhase = 2;
++		}
++
+         // Vital-state loss is a terminal transition and joins the existing exit FSM.
+         if (m_Active && m_ExitPhase == 0)
+         {
+@@ -840,19 +886,21 @@ class LFPG_CameraViewport
+             }
+         }
+ 
+-        // ---- Phase 2: waiting for server confirmation ----
+-        // DON'T touch camera here. Server is processing SelectPlayer.
+-        // DoExitCleanup() will be called from RPC handler.
+-        // Timeout safety: if server never responds (5s), force cleanup.
+-        if (m_ExitPhase == 2)
+-        {
+-            m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
+-            if (m_ExitWaitTimer >= 5.0)
+-            {
+-                LFPG_Util.Warn("[CameraViewport] Exit timeout — forcing cleanup");
+-                DoExitCleanup();
+-            }
+-        }
++		// Phase 2: restoration can arrive before or after the legacy confirm.
++		// A timeout is diagnostic only; it never deactivates an unrestored camera.
++		if (m_ExitPhase == 2)
++		{
++			TryCompleteExit(m_ExitSessionId);
++			if (m_ExitPhase == 2)
++			{
++				m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
++				if (m_ExitWaitTimer >= 5.0 && !m_ExitTimeoutWarned)
++				{
++					m_ExitTimeoutWarned = true;
++					LFPG_Util.Warn("[CameraViewport] Exit timeout - still waiting for player camera restoration");
++				}
++			}
++		}
+ 
+         // ---- Phase 1: send exit request to server ----
+         // Camera STAYS ACTIVE until DoExitCleanup (after server confirm).
+@@ -891,7 +939,7 @@ class LFPG_CameraViewport
+             // The vital-state auto-exit above enters phase 1 precisely when
+             // m_PlayerRef is null, so the local-player fallback of DoExitCleanup
+             // is required here too; without it input stays disabled until the
+-            // confirmation RPC or the 5s timeout.
++			// observed player camera restoration.
+             HumanInputController phase1Hic = null;
+             if (m_PlayerRef)
+             {
+@@ -922,8 +970,10 @@ class LFPG_CameraViewport
+                 LFPG_Util.Debug("[CameraViewport] DIAG: RPC EXIT_REQUEST sent");
+             }
+ 
+-            m_ExitWaitTimer = 0.0;
+-            m_ExitPhase = 2;
++			m_ExitWaitTimer = 0.0;
++			m_ExitSessionId = m_SessionId;
++			m_ExitTimeoutWarned = false;
++			m_ExitPhase = 2;
+             LFPG_Util.Info("[CameraViewport] Phase 1 complete — waiting for server confirm");
+         }
+ 
+diff --git a/scripts/5_Mission/LFPG_NetworkManagerImpl.c b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+index cdf3787..0a7ae00 100644
+--- a/scripts/5_Mission/LFPG_NetworkManagerImpl.c
++++ b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+@@ -6190,11 +6190,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+                 }
+             }
+ 
+-            if (budgetExhausted)
+-            {
+-                m_SorterCursor = sorterIndex;
+-                break;
+-            }
++			if (budgetExhausted)
++			{
++				// Keep this sorter's resume state, but give the next sorter a turn.
++				m_SorterCursor = sorterIndex + 1;
++				if (m_SorterCursor >= total)
++					m_SorterCursor = 0;
++				break;
++			}
+         }
+ 
+         dirtyDestCommitCount = 0;
+diff --git a/scripts/5_Mission/LFPG_SorterLogic.c b/scripts/5_Mission/LFPG_SorterLogic.c
+index e6b4cbf..2bf375d 100644
+--- a/scripts/5_Mission/LFPG_SorterLogic.c
++++ b/scripts/5_Mission/LFPG_SorterLogic.c
+@@ -1096,7 +1096,7 @@ class LFPG_SorterLogic
+     //   3. Compute optimal grid positions (virtual 2D bin-pack)
+     //   4. Multi-pass in-place moves: each pass tries to move
+     //      items whose target cell is free. Successful moves
+-    //      free cells for the next pass. Bounded by N passes.
++	//      free cells for the next pass, within the fixed work limits.
+     //   5. Items that cannot reach optimal position (deadlock)
+     //      stay in their current cargo slot — no items on ground.
+     //
+@@ -1128,11 +1128,20 @@ class LFPG_SorterLogic
+         if (totalItems <= 0)
+             return 0;
+ 
+-        // --- Phase 1: Collect all items with dimensions ---
+-        ref array<EntityAI> items = new array<EntityAI>;
+-        ref array<int> itemWidths = new array<int>;
+-        ref array<int> itemHeights = new array<int>;
+-        ref array<int> itemAreas = new array<int>;
++		// Bound synchronous preparation before allocating or moving anything.
++		// Large/modded cargo keeps its existing layout.
++		if (totalItems > 64 || gridW > 1024 || gridH > 1024)
++			return 0;
++		if (gridW * gridH > 1024)
++			return 0;
++		int cellChecksRemaining = 16384;
++		int moveChecksRemaining = 200;
++
++		// --- Phase 1: Collect all items with dimensions ---
++		array<EntityAI> items = new array<EntityAI>;
++		array<int> itemWidths = new array<int>;
++		array<int> itemHeights = new array<int>;
++		array<int> itemAreas = new array<int>;
+ 
+         int ci = 0;
+         int iw = 0;
+@@ -1145,7 +1154,9 @@ class LFPG_SorterLogic
+             if (!cItem)
+                 continue;
+ 
+-            GetItemSlotDimensions(cItem, iw, ih);
++			GetItemSlotDimensions(cItem, iw, ih);
++			if (iw <= 0 || ih <= 0 || iw > 1024 || ih > 1024)
++				return 0;
+             items.Insert(cItem);
+             itemWidths.Insert(iw);
+             itemHeights.Insert(ih);
+@@ -1157,7 +1168,7 @@ class LFPG_SorterLogic
+             return 0;
+ 
+         // --- Phase 2: Sort indices by area descending (insertion sort) ---
+-        ref array<int> sortedIdx = new array<int>;
++		array<int> sortedIdx = new array<int>;
+         int si = 0;
+         for (si = 0; si < n; si = si + 1)
+         {
+@@ -1183,7 +1194,7 @@ class LFPG_SorterLogic
+ 
+         // --- Phase 3: Create virtual 2D grid (row-major) ---
+         int gridSize = gridW * gridH;
+-        ref array<bool> grid = new array<bool>;
++		array<bool> grid = new array<bool>;
+         int gi = 0;
+         for (gi = 0; gi < gridSize; gi = gi + 1)
+         {
+@@ -1191,10 +1202,10 @@ class LFPG_SorterLogic
+         }
+ 
+         // --- Phase 4: Compute optimal placements greedily ---
+-        ref array<int> placedRow = new array<int>;
+-        ref array<int> placedCol = new array<int>;
+-        ref array<bool> placedFlip = new array<bool>;
+-        ref array<bool> placedOk = new array<bool>;
++		array<int> placedRow = new array<int>;
++		array<int> placedCol = new array<int>;
++		array<bool> placedFlip = new array<bool>;
++		array<bool> placedOk = new array<bool>;
+ 
+         for (si = 0; si < n; si = si + 1)
+         {
+@@ -1216,7 +1227,9 @@ class LFPG_SorterLogic
+             ph = itemHeights[idx];
+             placed = false;
+ 
+-            placed = TryPlaceOnGrid(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx);
++			placed = TryPlaceOnGridBudgeted(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx, cellChecksRemaining);
++			if (cellChecksRemaining <= 0)
++				return 0;
+             if (placed)
+             {
+                 placedFlip[idx] = false;
+@@ -1226,7 +1239,9 @@ class LFPG_SorterLogic
+ 
+             if (!placed && pw != ph)
+             {
+-                placed = TryPlaceOnGrid(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx);
++				placed = TryPlaceOnGridBudgeted(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx, cellChecksRemaining);
++				if (cellChecksRemaining <= 0)
++					return 0;
+                 if (placed)
+                 {
+                     placedFlip[idx] = true;
+@@ -1241,29 +1256,32 @@ class LFPG_SorterLogic
+         // If target cells are occupied by another item, the move
+         // fails (LocationSyncMoveEntity returns false) and we retry
+         // next pass. Successful moves free cells for subsequent items.
+-        // Bounded by N passes (each pass resolves at least 1 if any
+-        // progress is possible). Deadlocked items stay in place.
+-        ref array<bool> done = new array<bool>;
++		// At most four passes and 200 item visits across all passes.
++		// Unresolved items stay in place; completed moves remain valid.
++		array<bool> done = new array<bool>;
+         for (si = 0; si < n; si = si + 1)
+         {
+             done.Insert(false);
+         }
+ 
+         int repositioned = 0;
+-        int maxPasses = n;
++		int maxPasses = n;
++		if (maxPasses > 4)
++			maxPasses = 4;
+         int pass = 0;
+         bool progress = false;
+-        InventoryLocation il_src = null;
+-        InventoryLocation il_dst = null;
++		InventoryLocation ilSrc = new InventoryLocation;
++		InventoryLocation ilDst = new InventoryLocation;
+         bool moveOk = false;
+ 
+-        for (pass = 0; pass < maxPasses; pass = pass + 1)
++		for (pass = 0; pass < maxPasses && moveChecksRemaining > 0; pass = pass + 1)
+         {
+             progress = false;
+ 
+-            for (si = 0; si < n; si = si + 1)
+-            {
+-                idx = sortedIdx[si];
++			for (si = 0; si < n && moveChecksRemaining > 0; si = si + 1)
++			{
++				moveChecksRemaining = moveChecksRemaining - 1;
++				idx = sortedIdx[si];
+ 
+                 if (done[idx])
+                     continue;
+@@ -1287,13 +1305,12 @@ class LFPG_SorterLogic
+                     continue;
+                 }
+ 
+-                il_src = new InventoryLocation;
+-                cItem.GetInventory().GetCurrentInventoryLocation(il_src);
++				if (!cItem.GetInventory().GetCurrentInventoryLocation(ilSrc))
++					continue;
+ 
+-                il_dst = new InventoryLocation;
+-                il_dst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
++				ilDst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
+ 
+-                moveOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
++				moveOk = GameInventory.LocationSyncMoveEntity(ilSrc, ilDst);
+                 if (moveOk)
+                 {
+                     done[idx] = true;
+@@ -1330,6 +1347,50 @@ class LFPG_SorterLogic
+         #endif
+     }
+ 
++	// A shared cell-probe allowance covers both orientations and all items.
++	protected static bool TryPlaceOnGridBudgeted(array<bool> grid, int gridW, int gridH, int itemW, int itemH, array<int> placedRow, array<int> placedCol, int idx, inout int checksRemaining)
++	{
++		if (itemW <= 0 || itemH <= 0 || itemW > gridW || itemH > gridH)
++			return false;
++		int row;
++		int col;
++		int dr;
++		int dc;
++		int cellIdx;
++		bool fits;
++		for (row = 0; row <= gridH - itemH; row = row + 1)
++		{
++			for (col = 0; col <= gridW - itemW; col = col + 1)
++			{
++				fits = true;
++				for (dr = 0; dr < itemH; dr = dr + 1)
++				{
++					for (dc = 0; dc < itemW; dc = dc + 1)
++					{
++						if (checksRemaining <= 0)
++							return false;
++						checksRemaining = checksRemaining - 1;
++						cellIdx = (row + dr) * gridW + col + dc;
++						if (grid[cellIdx])
++						{
++							fits = false;
++							break;
++						}
++					}
++					if (!fits)
++						break;
++				}
++				if (fits)
++				{
++					placedRow[idx] = row;
++					placedCol[idx] = col;
++					return true;
++				}
++			}
++		}
++		return false;
++	}
++
+     // ---------------------------------------------------------
+     // TryPlaceOnGrid: scans the virtual grid for a free rect
+     // of size w×h. Returns true if found, sets placedRow/Col.

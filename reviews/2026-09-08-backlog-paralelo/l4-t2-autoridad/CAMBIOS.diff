@@ -1,0 +1,746 @@
+diff --git a/scripts/5_Mission/LFPG_NetworkManagerImpl.c b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+index cdf3787..947e901 100644
+--- a/scripts/5_Mission/LFPG_NetworkManagerImpl.c
++++ b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+@@ -2147,8 +2147,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+             rpc.Write(json);
+             rpc.Write(snapshotGeneration);
+             bool bRpcGuaranteed = true;
+-            PlayerIdentity noExclude = null;
+-            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
++			PlayerIdentity recipient = pb.GetIdentity();
++			if (!recipient)
++				continue;
++			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
+         }
+     }
+ 
+@@ -2304,7 +2306,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+         bool inRange;
+         ScriptRPC rpc;
+         bool guaranteed = true;
+-        PlayerIdentity noExclude = null;
+ 
+         for (playerIndex = 0; playerIndex < m_ReusableBroadcastPlayers.Count(); playerIndex = playerIndex + 1)
+         {
+@@ -2337,7 +2338,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+             rpc.Write(snapshot.m_OwnerHigh);
+             rpc.Write(snapshot.m_JSON);
+             rpc.Write(snapshot.m_Generation);
+-            rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, noExclude);
++			PlayerIdentity recipient = player.GetIdentity();
++			if (!recipient)
++				continue;
++			rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, recipient);
+         }
+     }
+ 
+@@ -2481,7 +2485,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+                 rpc.Write(operations[e]);
+                 rpc.Write(entryJsons[e]);
+             }
+-            rpc.Send(pb, LFPG_RPC_CHANNEL, true, null);
++			PlayerIdentity recipient = pb.GetIdentity();
++			if (!recipient)
++				continue;
++			rpc.Send(pb, LFPG_RPC_CHANNEL, true, recipient);
+ 
+             #ifndef SERVER
+             if (LFPG_PERFDIAG_ENABLED)
+@@ -2614,8 +2621,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+             rpc.Write(json);
+             rpc.Write(vanillaSnapshotGeneration);
+             bool bRpcGuaranteed = true;
+-            PlayerIdentity noExclude = null;
+-            rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
++			PlayerIdentity recipient = pb.GetIdentity();
++			if (!recipient)
++				continue;
++			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
+         }
+     }
+ 
+@@ -2659,8 +2668,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+         rpc.Write(json);
+         rpc.Write(vanillaUnicastGeneration);
+         bool bRpcGuaranteed = true;
+-        PlayerIdentity noExclude = null;
+-        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
++		PlayerIdentity recipient = player.GetIdentity();
++		if (!recipient)
++			return;
++		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
+ 
+         #ifndef SERVER
+         if (LFPG_PERFDIAG_ENABLED)
+@@ -2779,8 +2790,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+         rpc.Write(json);
+         rpc.Write(generation);
+         bool guaranteed = true;
+-        PlayerIdentity noExclude = null;
+-        rpc.Send(m_FullSyncPlayer, LFPG_RPC_CHANNEL, guaranteed, noExclude);
++		if (!m_FullSyncPlayer)
++			return;
++		PlayerIdentity recipient = m_FullSyncPlayer.GetIdentity();
++		if (!recipient)
++			return;
++		rpc.Send(m_FullSyncPlayer, LFPG_RPC_CHANNEL, guaranteed, recipient);
+     }
+     protected void LFPG_ProcessFullSyncSpread()
+     {
+@@ -2981,7 +2996,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+         rpc.Write(high);
+         rpc.Write(json);
+         rpc.Write(emptyGeneration);
+-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
++		PlayerIdentity recipient = player.GetIdentity();
++		if (!recipient)
++			return;
++		rpc.Send(player, LFPG_RPC_CHANNEL, true, recipient);
+ 
+         #ifndef SERVER
+         if (LFPG_PERFDIAG_ENABLED)
+@@ -3023,8 +3041,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+         rpc.Write(json);
+         rpc.Write(ownerGeneration);
+         bool bRpcGuaranteed = true;
+-        PlayerIdentity noExclude = null;
+-        rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, noExclude);
++		PlayerIdentity recipient = player.GetIdentity();
++		if (!recipient)
++			return;
++		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
+ 
+         #ifndef SERVER
+         if (LFPG_PERFDIAG_ENABLED)
+diff --git a/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c b/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
+index 98ff6e7..24b8ef9 100644
+--- a/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
++++ b/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
+@@ -392,6 +392,25 @@ class LFPG_RPCServerHandlerImpl
+             return;
+         }
+ 
++		// SEC20: reject undeclared names/directions before any registry or wire mutation.
++		bool srcIsLFPG = (LFPG_DeviceAPI.GetDeviceId(srcObj) != "");
++		bool dstIsLFPG = (LFPG_DeviceAPI.GetDeviceId(dstObj) != "");
++		if (!FinishWiringPortAllowed(srcObj, srcPort, LFPG_PortDir.OUT, srcIsLFPG))
++		{
++			PlayerBase.LFPG_SendClientMsg(player, "Invalid source port.");
++			return;
++		}
++		if (!FinishWiringPortAllowed(dstObj, dstPort, LFPG_PortDir.IN, dstIsLFPG))
++		{
++			PlayerBase.LFPG_SendClientMsg(player, "Invalid target port.");
++			return;
++		}
++		if (srcIsLFPG && !LFPG_DeviceAPI.CanConnectTo(srcObj, dstObj, srcPort, dstPort))
++		{
++			PlayerBase.LFPG_SendClientMsg(player, "Cannot connect these devices.");
++			return;
++		}
++
+         // Generate/verify device IDs (vanilla gets position-based IDs)
+         string srcRealId = LFPG_DeviceAPI.GetOrCreateDeviceId(srcObj);
+         string dstRealId = LFPG_DeviceAPI.GetOrCreateDeviceId(dstObj);
+@@ -461,40 +480,6 @@ class LFPG_RPCServerHandlerImpl
+             return;
+         }
+ 
+-        // Port validation: only for LFPG-native devices (vanilla has no ports)
+-        bool srcIsLFPG = (LFPG_DeviceAPI.GetDeviceId(srcObj) != "");
+-        bool dstIsLFPG = (LFPG_DeviceAPI.GetDeviceId(dstObj) != "");
+-
+-        if (srcIsLFPG)
+-        {
+-            if (!LFPG_DeviceAPI.HasPort(srcObj, srcPort, LFPG_PortDir.OUT))
+-            {
+-                LFPG_Util.Warn("[FinishWiring-Server] denied (src missing port " + srcPort + ")");
+-                PlayerBase.LFPG_SendClientMsg(player, "Invalid source port.");
+-                return;
+-            }
+-        }
+-        if (dstIsLFPG)
+-        {
+-            if (!LFPG_DeviceAPI.HasPort(dstObj, dstPort, LFPG_PortDir.IN))
+-            {
+-                LFPG_Util.Warn("[FinishWiring-Server] denied (dst missing port " + dstPort + ")");
+-                PlayerBase.LFPG_SendClientMsg(player, "Invalid target port.");
+-                return;
+-            }
+-        }
+-
+-        // CanConnectTo only for LFPG sources (vanilla sources skip this)
+-        if (srcIsLFPG)
+-        {
+-            if (!LFPG_DeviceAPI.CanConnectTo(srcObj, dstObj, srcPort, dstPort))
+-            {
+-                LFPG_Util.Warn("[FinishWiring-Server] denied (CanConnectTo false)");
+-                PlayerBase.LFPG_SendClientMsg(player, "Cannot connect these devices.");
+-                return;
+-            }
+-        }
+-
+         // Validate wire geometry
+         vector startPos = srcObj.GetPosition();
+         if (srcIsLFPG)
+@@ -540,7 +525,6 @@ class LFPG_RPCServerHandlerImpl
+ 
+         // Resolve source as LFPG or vanilla
+         bool isLfpgOwner = LFPG_DeviceAPI.HasWireStore(srcObj);
+-        bool anyRemoved = false;
+ 
+         // ============================================================
+         // COMPONENT SIZE CHECK (v0.7.36, Audit Feb2026): reject wire
+@@ -583,212 +567,301 @@ class LFPG_RPCServerHandlerImpl
+         }
+         LFPG_NetworkManager.Get().LockPort(portLockKey);
+ 
+-        // ============================================================
+-        // REPLACEMENT PHASE: remove ALL conflicting wires BEFORE adding
+-        // v0.7.34 (Bloque E): Atomic mutation â€” prevents premature node
+-        // deletion between remove + add (same-target replace bug).
+-        // ============================================================
+-
+-        // v0.7.34: Begin atomic mutation batch
+-        LFPG_NetworkManager.Get().BeginGraphMutation();
+-
+-        ref array<int> srcDeltaOps = new array<int>;
+-        ref array<ref LFPG_WireData> srcDeltaWires = new array<ref LFPG_WireData>;
+-        bool lfpgSourceRemoved = false;
+-        LFPG_WireOwnerBase srcWireOwner = LFPG_WireOwnerBase.Cast(srcObj);
+-
+-        // 1) Source port replacement: 1 wire per output port.
+-        //    Remove any existing wire from this source:port.
+-        if (isLfpgOwner)
+-        {
+-            array<ref LFPG_WireData> srcWires = LFPG_DeviceAPI.GetDeviceWires(srcObj);
+-            if (srcWires)
+-            {
+-                int sw = srcWires.Count() - 1;
+-                while (sw >= 0)
+-                {
+-                    LFPG_WireData srcExisting = srcWires[sw];
+-                    if (srcExisting && srcExisting.m_SourcePort == srcPort)
+-                    {
+-                        LFPG_Util.Info("[Replace-Src] Removed " + srcRealId + ":" + srcPort + " -> " + srcExisting.m_TargetDeviceId + ":" + srcExisting.m_TargetPort);
+-
+-                        // v0.7.34 (Bloque E): Notify graph of wire removal.
+-                        // Without this, old edge stays stale in the graph.
+-                        LFPG_NetworkManager.Get().NotifyGraphWireRemoved(
+-                            srcRealId, srcExisting.m_TargetDeviceId,
+-                            srcPort, srcExisting.m_TargetPort);
+-
+-                        // Incremental reverse index and player count update
+-                        LFPG_NetworkManager.Get().ReverseIdxRemove(srcExisting.m_TargetDeviceId, srcExisting.m_TargetPort, srcRealId);
+-                        LFPG_NetworkManager.Get().PlayerWireCountAdd(srcExisting.m_CreatorId, -1);
+-                        srcDeltaOps.Insert(LFPG_WireDeltaOp.REMOVE);
+-                        srcDeltaWires.Insert(srcExisting);
+-                        srcWires.Remove(sw);
+-                        anyRemoved = true;
+-                        lfpgSourceRemoved = true;
+-                    }
+-                    sw = sw - 1;
+-                }
+-            }
+-        }
+-        else
+-        {
+-            array<ref LFPG_WireData> vSrcWires = LFPG_NetworkManager.Get().GetVanillaWires(srcRealId);
+-            if (vSrcWires)
+-            {
+-                int vsw = vSrcWires.Count() - 1;
+-                while (vsw >= 0)
+-                {
+-                    LFPG_WireData vExisting = vSrcWires[vsw];
+-                    if (vExisting)
+-                    {
+-                        string vExistPort = vExisting.m_SourcePort;
+-                        if (vExistPort == "")
+-                        {
+-                            vExistPort = "output_1";
+-                        }
+-                        if (vExistPort == srcPort)
+-                        {
+-                            LFPG_Util.Info("[Replace-Src] Removed vanilla " + srcRealId + ":" + srcPort + " -> " + vExisting.m_TargetDeviceId);
+-
+-                            // v0.7.34 (Bloque E): Notify graph of wire removal.
+-                            LFPG_NetworkManager.Get().NotifyGraphWireRemoved(
+-                                srcRealId, vExisting.m_TargetDeviceId,
+-                                vExistPort, vExisting.m_TargetPort);
+-
+-                            // Incremental reverse index and player count update
+-                            LFPG_NetworkManager.Get().ReverseIdxRemove(vExisting.m_TargetDeviceId, vExisting.m_TargetPort, srcRealId);
+-                            LFPG_NetworkManager.Get().PlayerWireCountAdd(vExisting.m_CreatorId, -1);
+-                            vSrcWires.Remove(vsw);
+-                            anyRemoved = true;
+-                        }
+-                    }
+-                    vsw = vsw - 1;
+-                }
+-            }
+-        }
+-
+-        // 2) Input port replacement: 1 wire per input port.
+-        //    Remove any wire from ANY source that targets this input port.
+-        //    Reverse index already updated incrementally above (no full rebuild needed).
+-        //    v0.7.3: removed redundant SaveVanillaWires() here. AddVanillaWire()
+-        //    saves on success, and any in-memory removal will be captured by the
+-        //    next save event (wire mutation, self-heal, or server shutdown).
+-        int existingIn = LFPG_NetworkManager.Get().CountWiresTargeting(dstRealId, dstPort);
+-        if (existingIn > 0)
+-        {
+-            int removedIn = LFPG_NetworkManager.Get().RemoveWiresTargeting(dstRealId, dstPort);
+-            LFPG_Util.Info("[Replace-In] Removed " + removedIn.ToString() + " wire(s) targeting " + dstRealId + ":" + dstPort);
+-            anyRemoved = true;
+-        }
+-
+-        // ============================================================
+-        // STORE the new wire
+-        // ============================================================
+-        bool stored = false;
+-        if (isLfpgOwner)
+-        {
+-            stored = LFPG_DeviceAPI.AddDeviceWire(srcObj, wd);
+-            if (stored)
+-            {
+-                // Incremental updates for LFPG wire (vanilla handled inside AddVanillaWire)
+-                LFPG_NetworkManager.Get().ReverseIdxAdd(dstRealId, dstPort, srcRealId);
+-                LFPG_NetworkManager.Get().PlayerWireCountAdd(wd.m_CreatorId, 1);
+-            }
+-        }
+-        else
+-        {
+-            stored = LFPG_NetworkManager.Get().AddVanillaWire(srcRealId, wd);
+-        }
+-
+-        if (!stored)
+-        {
+-            // v0.7.34 (Bloque E): Close mutation batch on early exit
+-            LFPG_NetworkManager.Get().EndGraphMutation();
+-
+-            // v0.7.38 (RC-01): Release port lock
+-            LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+-
+-            // v0.7.33 (Fix #18b): If vanilla wires were removed during replacement phase
+-            // but the new wire failed to store, we must still persist the removal.
+-            // Without this, server restart would resurrect the removed wire.
+-            if (anyRemoved && !isLfpgOwner)
+-            {
+-                LFPG_NetworkManager.Get().MarkVanillaDirty();
+-            }
+-            if (anyRemoved)
+-            {
+-                LFPG_NetworkManager.Get().FlushVanillaIfDirty();
+-            }
+-            if (lfpgSourceRemoved && srcWireOwner)
+-            {
+-                srcWireOwner.LFPG_CommitWireMutation();
+-                LFPG_NetworkManager.Get().BroadcastOwnerWireDelta(srcObj, srcDeltaOps, srcDeltaWires);
+-            }
+-
+-            // v0.7.38 (RC-06): If replacement removed wires but AddWire failed,
+-            // the graph and reverse index are inconsistent. Force a full rebuild
+-            // to restore data integrity from the authoritative wire arrays.
+-            if (anyRemoved)
+-            {
+-                LFPG_Util.Warn("[FinishWiring-Server] RC-06: store failed after replacement â€” forcing rebuild");
+-                LFPG_NetworkManager.Get().PostBulkRebuildAndPropagate();
+-            }
+-
+-            LFPG_Util.Warn("[FinishWiring-Server] wire storage failed (duplicate or cap)");
+-            PlayerBase.LFPG_SendClientMsg(player, "Wire already exists or device is full.");
+-            return;
+-        }
+-
+-        LFPG_Util.Info("[FinishWiring-Server] SUCCESS: " + srcRealId + ":" + srcPort + " -> " + dstRealId + ":" + dstPort + " wps=" + wpCount.ToString());
+-
+-        // Reverse index already updated incrementally above
+-
+-        // Sync wire data to clients for cable rendering
+-        if (isLfpgOwner)
+-        {
+-            srcDeltaOps.Insert(LFPG_WireDeltaOp.ADD);
+-            srcDeltaWires.Insert(wd);
+-            LFPG_NetworkManager.Get().BroadcastOwnerWireDelta(EntityAI.Cast(srcObj), srcDeltaOps, srcDeltaWires);
+-        }
+-        else
+-        {
+-            LFPG_NetworkManager.Get().BroadcastVanillaWires(srcRealId, srcObj);
+-            // Vanilla stores use a bounded 5s write-behind window.
+-            LFPG_NetworkManager.Get().MarkVanillaDirty();
+-        }
+-
+-        // Propagate power to all consumers (LFPG and vanilla via SetPowered)
+-        // Sprint 4.2 S2: graph update first, then request propagation.
+-        // NotifyGraphWireAdded adds the edge and marks both endpoints dirty.
+-        // RequestPropagate additionally refreshes source state from entity.
+-        bool edgeAdded = LFPG_NetworkManager.Get().NotifyGraphWireAdded(srcRealId, dstRealId, srcPort, dstPort, wd);
+-
+-        // v0.7.34 (Bloque E): Close atomic mutation batch.
+-        // All removes + the add are now committed atomically.
+-        // Deferred orphan cleanup runs here â€” nodes that lost edges
+-        // during remove but gained new ones during add are preserved.
+-        LFPG_NetworkManager.Get().EndGraphMutation();
+-
+-        // v0.7.38 (RC-01): Release port lock
+-        LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+-
+-        if (!edgeAdded)
+-        {
+-            // Edge not inserted (node cap or missing node). Wire data is stored
+-            // but graph doesn't have the edge. Deferred orphan cleanup in
+-            // EndGraphMutation above may have deleted the target node (it had
+-            // no incoming edge from our perspective). Force full rebuild to
+-            // reconcile graph with wire data. This is a rare edge case
+-            // (requires saturating LFPG_MAX_NODES_GLOBAL).
+-            LFPG_Util.Warn("[FinishWiring-Server] Graph edge not inserted (limit or missing node) â€” forcing rebuild");
+-            LFPG_NetworkManager.Get().PostBulkRebuildAndPropagate();
+-        }
+-        else
+-        {
+-            LFPG_NetworkManager.Get().RequestPropagate(srcRealId);
+-        }
+-    }
++		LFPG_FinishWiringState finish = new LFPG_FinishWiringState();
++		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
++		LFPG_ServerSettings finishSettings = LFPG_Settings.Get();
++		bool allowOthers = false;
++		if (finishSettings)
++			allowOthers = finishSettings.AllowCutOthersWires;
++		string creatorId = sender.GetPlainId();
++		if (!FinishWiringCollect(finish, srcObj, srcRealId, srcPort, dstRealId, dstPort, creatorId, allowOthers))
++		{
++			manager.UnlockPort(portLockKey);
++			PlayerBase.LFPG_SendClientMsg(player, "Cannot replace these wires.");
++			return;
++		}
++
++		LFPG_ElecGraph graph = manager.GetGraph();
++		if (!graph || !FinishWiringGraphAllows(finish, graph, srcRealId, dstRealId, srcPort, dstPort))
++		{
++			manager.UnlockPort(portLockKey);
++			PlayerBase.LFPG_SendClientMsg(player, "Connection rejected: graph unavailable or full.");
++			return;
++		}
++
++		// Reserve the edge with the old connections intact. The raw graph API
++		// does not refresh sprinklers from a store that has not committed yet.
++		manager.BeginGraphMutation();
++		bool edgeAdded = graph.OnWireAdded(srcRealId, dstRealId, srcPort, dstPort, wd);
++		if (!edgeAdded)
++		{
++			manager.EndGraphMutation();
++			manager.UnlockPort(portLockKey);
++			PlayerBase.LFPG_SendClientMsg(player, "Connection rejected.");
++			return;
++		}
++
++		// SEC03: actual store admission precedes every old-wire deletion.
++		// At a cap, reject even a replacement that could fit after deletion.
++		bool stored = false;
++		if (isLfpgOwner)
++			stored = LFPG_DeviceAPI.AddDeviceWire(srcObj, wd);
++		else
++			stored = manager.AddVanillaWire(srcRealId, wd);
++		if (!stored)
++		{
++			graph.OnWireRemoved(srcRealId, dstRealId, srcPort, dstPort);
++			manager.EndGraphMutation();
++			manager.UnlockPort(portLockKey);
++			PlayerBase.LFPG_SendClientMsg(player, "Wire already exists or device is full.");
++			return;
++		}
++		if (isLfpgOwner)
++		{
++			manager.ReverseIdxAdd(dstRealId, dstPort, srcRealId);
++			manager.PlayerWireCountAdd(wd.m_CreatorId, 1);
++		}
++
++		// No fallible admission remains. Remove only the rows checked above.
++		// All stores reach their final state before any functional notification.
++		int ownerIndex;
++		int removedIndex;
++		LFPG_FinishWiringOwner ownerState;
++		LFPG_WireData removedWire;
++		for (ownerIndex = 0; ownerIndex < finish.m_Owners.Count(); ownerIndex = ownerIndex + 1)
++		{
++			ownerState = finish.m_Owners[ownerIndex];
++			for (removedIndex = ownerState.m_RemovedIndices.Count() - 1; removedIndex >= 0; removedIndex = removedIndex - 1)
++				ownerState.m_Wires.Remove(ownerState.m_RemovedIndices[removedIndex]);
++		}
++		for (ownerIndex = 0; ownerIndex < finish.m_Owners.Count(); ownerIndex = ownerIndex + 1)
++		{
++			ownerState = finish.m_Owners[ownerIndex];
++			for (removedIndex = 0; removedIndex < ownerState.m_RemovedWires.Count(); removedIndex = removedIndex + 1)
++			{
++				removedWire = ownerState.m_RemovedWires[removedIndex];
++				string removedPort = FinishWiringSourcePort(removedWire, ownerState.m_IsNative);
++				manager.NotifyGraphWireRemoved(ownerState.m_Id, removedWire.m_TargetDeviceId, removedPort, removedWire.m_TargetPort);
++				manager.ReverseIdxRemove(removedWire.m_TargetDeviceId, removedWire.m_TargetPort, ownerState.m_Id);
++				manager.PlayerWireCountAdd(removedWire.m_CreatorId, -1);
++			}
++		}
++		manager.EndGraphMutation();
++		manager.UnlockPort(portLockKey);
++		manager.TrackDeviceForPolling(srcRealId);
++		manager.TrackDeviceForPolling(dstRealId);
++		manager.LFPG_RefreshPumpSprinklerLink(srcRealId, "");
++		manager.RequestPropagate(srcRealId);
++
++		// SEC20: publication only after both stores and graph have committed.
++		finish.m_Source.m_DeltaOps.Insert(LFPG_WireDeltaOp.ADD);
++		finish.m_Source.m_RemovedWires.Insert(wd);
++		for (ownerIndex = 0; ownerIndex < finish.m_Owners.Count(); ownerIndex = ownerIndex + 1)
++		{
++			ownerState = finish.m_Owners[ownerIndex];
++			if (ownerState.m_IsNative)
++			{
++				LFPG_WireOwnerBase nativeOwner = LFPG_WireOwnerBase.Cast(ownerState.m_Obj);
++				if (nativeOwner && ownerState.m_RemovedIndices.Count() > 0)
++				{
++					if (ownerState == finish.m_Source)
++						nativeOwner.LFPG_InvalidateWireJSONCache();
++					else
++						nativeOwner.LFPG_CommitWireMutation();
++				}
++				if (!nativeOwner && ownerState.m_RemovedIndices.Count() > 0)
++					ownerState.m_Obj.SetSynchDirty();
++				manager.BroadcastOwnerWireDelta(ownerState.m_Obj, ownerState.m_DeltaOps, ownerState.m_RemovedWires);
++			}
++			else
++			{
++				manager.MarkVanillaDirty();
++				FinishWiringPublishVanilla(ownerState);
++			}
++		}
++		LFPG_Util.Info("[FinishWiring-Server] SUCCESS: " + srcRealId + ":" + srcPort + " -> " + dstRealId + ":" + dstPort + " wps=" + wpCount.ToString());
++	}
++
++	protected static bool FinishWiringPortAllowed(EntityAI obj, string port, int direction, bool isNative)
++	{
++		if (!obj || port == "")
++			return false;
++		if (isNative)
++			return LFPG_DeviceAPI.HasPort(obj, port, direction);
++		int portCount = LFPG_DeviceAPI.GetPortCount(obj);
++		for (int portIndex = 0; portIndex < portCount; portIndex = portIndex + 1)
++		{
++			if (LFPG_DeviceAPI.GetPortDir(obj, portIndex) == direction && LFPG_DeviceAPI.GetPortName(obj, portIndex) == port)
++				return true;
++		}
++		return false;
++	}
++
++	protected static string FinishWiringSourcePort(LFPG_WireData wire, bool isNative)
++	{
++		if (!isNative && wire.m_SourcePort == "")
++			return LFPG_PORT_OUTPUT_1;
++		return wire.m_SourcePort;
++	}
++
++	protected static bool FinishWiringCollectOwner(LFPG_FinishWiringState finish, EntityAI obj, string ownerId, bool isNative, string srcId, string srcPort, string dstId, string dstPort, string creatorId, bool allowOthers)
++	{
++		LFPG_FinishWiringOwner ownerState = new LFPG_FinishWiringOwner();
++		ownerState.m_Obj = obj;
++		ownerState.m_Id = ownerId;
++		ownerState.m_IsNative = isNative;
++		if (isNative)
++			ownerState.m_Wires = LFPG_DeviceAPI.GetDeviceWires(obj);
++		else
++			ownerState.m_Wires = LFPG_NetworkManager.Get().GetVanillaWires(ownerId);
++		if (isNative && !ownerState.m_Wires)
++			return false;
++		bool isSource = ownerId == srcId;
++		if (ownerState.m_Wires)
++		{
++			for (int wireIndex = 0; wireIndex < ownerState.m_Wires.Count(); wireIndex = wireIndex + 1)
++			{
++				LFPG_WireData wire = ownerState.m_Wires[wireIndex];
++				if (!wire)
++					continue;
++				bool conflict = isSource && FinishWiringSourcePort(wire, isNative) == srcPort;
++				if (wire.m_TargetDeviceId == dstId && IncomingPortIndexKey(wire.m_TargetPort) == dstPort)
++					conflict = true;
++				if (!conflict)
++					continue;
++				// SEC02: same own/unclaimed policy as the cut path, never skip a denial.
++				if (!LFPG_WireHelper.CanCreatorCutWire(wire, creatorId, allowOthers))
++					return false;
++				if (!obj)
++					return false;
++				ownerState.m_RemovedIndices.Insert(wireIndex);
++				ownerState.m_RemovedWires.Insert(wire);
++				ownerState.m_DeltaOps.Insert(LFPG_WireDeltaOp.REMOVE);
++				EntityAI removedTarget = LFPG_DeviceRegistry.Get().FindById(wire.m_TargetDeviceId);
++				if (!removedTarget)
++					removedTarget = LFPG_DeviceAPI.ResolveVanillaDevice(wire.m_TargetDeviceId);
++				if (!removedTarget)
++					return false;
++				ownerState.m_TargetPositions.Insert(removedTarget.GetPosition());
++			}
++		}
++		int deltaCount = ownerState.m_DeltaOps.Count();
++		if (isSource)
++			deltaCount = deltaCount + 1;
++		if (isNative && deltaCount > LFPG_WIRE_DELTA_MAX_ENTRIES)
++			return false;
++		if (isSource || deltaCount > 0)
++			finish.m_Owners.Insert(ownerState);
++		if (isSource)
++			finish.m_Source = ownerState;
++		return true;
++	}
++
++	protected static bool FinishWiringCollect(LFPG_FinishWiringState finish, EntityAI srcObj, string srcId, string srcPort, string dstId, string dstPort, string creatorId, bool allowOthers)
++	{
++		if (creatorId == "")
++			return false;
++		// Scan authoritative stores, including vanilla owners absent from the registry.
++		// The reverse index alone cannot prove there is no foreign incoming wire.
++		LFPG_DeviceRegistry registry = LFPG_DeviceRegistry.Get();
++		array<EntityAI> devices = new array<EntityAI>;
++		registry.GetAll(devices);
++		if (devices.Find(srcObj) < 0)
++			return false;
++		for (int deviceIndex = 0; deviceIndex < devices.Count(); deviceIndex = deviceIndex + 1)
++		{
++			EntityAI device = devices[deviceIndex];
++			if (!device || !LFPG_DeviceAPI.HasWireStore(device))
++				continue;
++			string deviceId = LFPG_DeviceAPI.GetDeviceId(device);
++			if (deviceId == "")
++				return false;
++			if (!FinishWiringCollectOwner(finish, device, deviceId, true, srcId, srcPort, dstId, dstPort, creatorId, allowOthers))
++				return false;
++		}
++		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
++		int vanillaCount = manager.GetVanillaWireOwnerCount();
++		for (int vanillaIndex = 0; vanillaIndex < vanillaCount; vanillaIndex = vanillaIndex + 1)
++		{
++			string vanillaId = manager.GetVanillaWireOwnerKey(vanillaIndex);
++			EntityAI vanillaObj = registry.FindById(vanillaId);
++			if (!vanillaObj)
++				vanillaObj = LFPG_DeviceAPI.ResolveVanillaDevice(vanillaId);
++			if (vanillaObj && LFPG_DeviceAPI.HasWireStore(vanillaObj))
++				return false;
++			if (!FinishWiringCollectOwner(finish, vanillaObj, vanillaId, false, srcId, srcPort, dstId, dstPort, creatorId, allowOthers))
++				return false;
++		}
++		if (!finish.m_Source)
++		{
++			if (LFPG_DeviceAPI.HasWireStore(srcObj))
++				return false;
++			if (!FinishWiringCollectOwner(finish, srcObj, srcId, false, srcId, srcPort, dstId, dstPort, creatorId, allowOthers))
++				return false;
++		}
++		return true;
++	}
++
++	protected static bool FinishWiringGraphAllows(LFPG_FinishWiringState finish, LFPG_ElecGraph graph, string srcId, string dstId, string srcPort, string dstPort)
++	{
++		// AddEdgeInternal checks these only AFTER EnsureNode. Check here first
++		// so rejection cannot create an orphan or remove a pre-existing duplicate.
++		finish.m_Outgoing = graph.GetOutgoing(srcId);
++		finish.m_Incoming = graph.GetIncoming(dstId);
++		if (finish.m_Incoming && finish.m_Incoming.Count() >= LFPG_MAX_EDGES_PER_NODE)
++			return false;
++		if (finish.m_Outgoing)
++		{
++			if (finish.m_Outgoing.Count() >= LFPG_MAX_EDGES_PER_NODE)
++				return false;
++			for (int edgeIndex = 0; edgeIndex < finish.m_Outgoing.Count(); edgeIndex = edgeIndex + 1)
++			{
++				LFPG_ElecEdge edge = finish.m_Outgoing[edgeIndex];
++				if (edge && edge.m_TargetNodeId == dstId && edge.m_SourcePort == srcPort && edge.m_TargetPort == dstPort)
++					return false;
++			}
++		}
++		return true;
++	}
++
++	protected static void FinishWiringPublishVanilla(LFPG_FinishWiringOwner ownerState)
++	{
++		// Include removed endpoints. Unicast reads the committed store even
++		// during FullSync; its deferred vanilla sends also serialize live stores.
++		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
++		ownerState.m_Wires = manager.GetVanillaWires(ownerState.m_Id);
++		ownerState.m_TargetPositions.Insert(ownerState.m_Obj.GetPosition());
++		if (ownerState.m_Wires)
++		{
++			for (int wireIndex = 0; wireIndex < ownerState.m_Wires.Count(); wireIndex = wireIndex + 1)
++			{
++				LFPG_WireData wire = ownerState.m_Wires[wireIndex];
++				if (!wire)
++					continue;
++				EntityAI target = LFPG_DeviceRegistry.Get().FindById(wire.m_TargetDeviceId);
++				if (target)
++					ownerState.m_TargetPositions.Insert(target.GetPosition());
++			}
++		}
++		array<Man> players = new array<Man>;
++		g_Game.GetPlayers(players);
++		float syncDistance = LFPG_CULL_DISTANCE_M + 20.0;
++		float syncDistanceSq = syncDistance * syncDistance;
++		for (int playerIndex = 0; playerIndex < players.Count(); playerIndex = playerIndex + 1)
++		{
++			PlayerBase observer = PlayerBase.Cast(players[playerIndex]);
++			if (!observer || !observer.GetIdentity())
++				continue;
++			for (int positionIndex = 0; positionIndex < ownerState.m_TargetPositions.Count(); positionIndex = positionIndex + 1)
++			{
++				if (LFPG_WorldUtil.DistSq(observer.GetPosition(), ownerState.m_TargetPositions[positionIndex]) <= syncDistanceSq)
++				{
++					manager.SendVanillaWiresTo(observer, ownerState.m_Id, ownerState.m_Obj);
++					break;
++				}
++			}
++		}
++	}
+ 
+     static void HandleCutWires(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+     {
+@@ -1955,6 +2028,9 @@ class LFPG_RPCServerHandlerImpl
+     static void SendServerSettingsTo(PlayerBase target)
+     {
+         if (!target) return;
++		PlayerIdentity recipient = target.GetIdentity();
++		if (!recipient)
++			return;
+ 
+         LFPG_ServerSettings st = LFPG_Settings.Get();
+         bool hideFlag = false;
+@@ -1966,7 +2042,7 @@ class LFPG_RPCServerHandlerImpl
+         ScriptRPC rpc = new ScriptRPC();
+         rpc.Write((int)LFPG_RPC_SubId.SYNC_SERVER_SETTINGS);
+         rpc.Write(hideFlag);
+-        rpc.Send(target, LFPG_RPC_CHANNEL, true, null);
++		rpc.Send(target, LFPG_RPC_CHANNEL, true, recipient);
+ 
+         string logMsg = "[LFPG] Sent server settings: HideCablesWithoutReel=";
+         logMsg = logMsg + hideFlag.ToString();
+@@ -3001,3 +3077,24 @@ class LFPG_RPCServerHandlerImpl
+     }
+ 
+ };
++
++// Request-local state, kept in members to retain wire/edge references during mutation.
++class LFPG_FinishWiringOwner
++{
++	EntityAI m_Obj;
++	string m_Id;
++	bool m_IsNative;
++	ref array<ref LFPG_WireData> m_Wires;
++	ref array<ref LFPG_WireData> m_RemovedWires = new array<ref LFPG_WireData>;
++	ref array<int> m_RemovedIndices = new array<int>;
++	ref array<int> m_DeltaOps = new array<int>;
++	ref array<vector> m_TargetPositions = new array<vector>;
++}
++
++class LFPG_FinishWiringState
++{
++	ref array<ref LFPG_FinishWiringOwner> m_Owners = new array<ref LFPG_FinishWiringOwner>;
++	ref LFPG_FinishWiringOwner m_Source;
++	ref array<ref LFPG_ElecEdge> m_Outgoing;
++	ref array<ref LFPG_ElecEdge> m_Incoming;
++}
