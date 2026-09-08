@@ -12,10 +12,14 @@ class LFPG_DeviceRegistry
     protected static ref LFPG_DeviceRegistry s_Instance;
 
     protected ref TStringManagedMap m_ById;
+	protected ref map<string, bool> m_AmbiguousIds;
+	protected ref array<EntityAI> m_AllRegistered;
 
     void LFPG_DeviceRegistry()
     {
         m_ById = new TStringManagedMap;
+		m_AmbiguousIds = new map<string, bool>;
+		m_AllRegistered = new array<EntityAI>;
     }
 
     static LFPG_DeviceRegistry Get()
@@ -30,12 +34,49 @@ class LFPG_DeviceRegistry
         if (!obj || deviceId == "")
             return;
 
+		if (m_AllRegistered.Find(obj) < 0)
+			m_AllRegistered.Insert(obj);
+
+		if (m_AmbiguousIds.Contains(deviceId))
+			return;
+
+		Managed currentRaw;
+		if (m_ById.Find(deviceId, currentRaw))
+		{
+			EntityAI current = EntityAI.Cast(currentRaw);
+			if (!current)
+			{
+				m_ById.Remove(deviceId);
+				m_ById[deviceId] = obj;
+				return;
+			}
+			if (current == obj)
+				return;
+
+			if (m_AllRegistered.Find(current) < 0)
+				m_AllRegistered.Insert(current);
+			m_ById.Remove(deviceId);
+			m_AmbiguousIds.Set(deviceId, true);
+			LFPG_Util.Error("[DeviceRegistry] Ambiguous live deviceId latched until restart: " + deviceId);
+			return;
+		}
+
         m_ById[deviceId] = obj;
     }
 
     void Unregister(string deviceId, EntityAI objExpected = null)
     {
         if (deviceId == "")
+			return;
+
+		if (objExpected)
+		{
+			int trackedIndex = m_AllRegistered.Find(objExpected);
+			if (trackedIndex >= 0)
+				m_AllRegistered.RemoveOrdered(trackedIndex);
+		}
+
+		if (m_AmbiguousIds.Contains(deviceId))
             return;
 
         Managed currentRaw;
@@ -54,6 +95,9 @@ class LFPG_DeviceRegistry
     // One null-check per lookup — zero overhead for valid refs.
     EntityAI FindById(string deviceId)
     {
+		if (m_AmbiguousIds.Contains(deviceId))
+			return null;
+
         Managed objRaw;
         if (m_ById.Find(deviceId, objRaw))
         {
@@ -67,6 +111,13 @@ class LFPG_DeviceRegistry
         }
         return null;
     }
+
+	bool IsAmbiguous(string deviceId)
+	{
+		if (deviceId == "")
+			return false;
+		return m_AmbiguousIds.Contains(deviceId);
+	}
 
     // v0.7.44 (Level 4, hallazgo 1a): Filter null refs in GetAll.
     // v0.9.3: Deduplicate by entity pointer — same entity can be registered
@@ -111,6 +162,24 @@ class LFPG_DeviceRegistry
         }
     }
 
+	void GetAllRegisteredForSafety(array<EntityAI> outArr)
+	{
+		if (!outArr)
+		{
+			LFPG_Util.Warn("DeviceRegistry.GetAllRegisteredForSafety called with null outArr");
+			return;
+		}
+
+		outArr.Clear();
+		int safetyIndex = 0;
+		for (safetyIndex = 0; safetyIndex < m_AllRegistered.Count(); safetyIndex = safetyIndex + 1)
+		{
+			EntityAI safetyEntity = m_AllRegistered[safetyIndex];
+			if (safetyEntity)
+				outArr.Insert(safetyEntity);
+		}
+	}
+
     // v0.7.4: remove entries where the entity reference has been
     // invalidated by the engine (despawn, streaming, forced deletion
     // without EEDelete). Called during self-heal.
@@ -134,9 +203,20 @@ class LFPG_DeviceRegistry
             m_ById.Remove(nullKeys[k]);
         }
 
-        if (nullKeys.Count() > 0)
+		int safetyPruned = 0;
+		int safetyIndex = m_AllRegistered.Count() - 1;
+		for (safetyIndex = m_AllRegistered.Count() - 1; safetyIndex >= 0; safetyIndex = safetyIndex - 1)
         {
-            LFPG_Util.Info("[DeviceRegistry] Pruned " + nullKeys.Count().ToString() + " null entries");
+			if (!m_AllRegistered[safetyIndex])
+			{
+				m_AllRegistered.RemoveOrdered(safetyIndex);
+				safetyPruned = safetyPruned + 1;
+			}
+		}
+
+		if (nullKeys.Count() > 0 || safetyPruned > 0)
+		{
+			LFPG_Util.Info("[DeviceRegistry] Pruned " + nullKeys.Count().ToString() + " null canonical entries and " + safetyPruned.ToString() + " safety refs");
         }
 
         return nullKeys.Count();

@@ -21,11 +21,14 @@ class LFPG_Util
     // per (sender plain id + key) so different bug-categories do not mask
     // each other. Default 1 s.
     protected static ref map<string, ref LFPG_RateLimiter> s_WarnRateLimits;
+	protected static ref array<string> s_StaleWarnRateLimitKeys;
 
     static void RateLimitedWarn(PlayerIdentity sender, string key, string msg, float cooldownSeconds = 1.0)
     {
         if (!sender) { Warn(msg); return; }
         if (!s_WarnRateLimits) s_WarnRateLimits = new map<string, ref LFPG_RateLimiter>();
+		if (!s_StaleWarnRateLimitKeys)
+			s_StaleWarnRateLimitKeys = new array<string>();
         string mapKey = sender.GetPlainId() + ":" + key;
         LFPG_RateLimiter limiter = s_WarnRateLimits.Get(mapKey);
         if (!limiter)
@@ -37,6 +40,27 @@ class LFPG_Util
         if (limiter.Allow(nowSec, cooldownSeconds))
             Warn(msg);
     }
+
+	static int PurgeStaleWarnRateLimits(float nowSeconds, float staleSeconds)
+	{
+		if (!s_WarnRateLimits) return 0;
+		if (!s_StaleWarnRateLimitKeys) return 0;
+
+		s_StaleWarnRateLimitKeys.Clear();
+		int warnIndex;
+		for (warnIndex = 0; warnIndex < s_WarnRateLimits.Count(); warnIndex = warnIndex + 1)
+		{
+			LFPG_RateLimiter limiter = s_WarnRateLimits.GetElement(warnIndex);
+			if (!limiter || nowSeconds - limiter.GetNextAllowed() > staleSeconds)
+				s_StaleWarnRateLimitKeys.Insert(s_WarnRateLimits.GetKey(warnIndex));
+		}
+
+		int removed = s_StaleWarnRateLimitKeys.Count();
+		int staleIndex;
+		for (staleIndex = 0; staleIndex < removed; staleIndex = staleIndex + 1)
+			s_WarnRateLimits.Remove(s_StaleWarnRateLimitKeys[staleIndex]);
+		return removed;
+	}
 
     // Log-safe rendering of a player id. Vanilla marks the plaintext id as
     // unusable in logs (3_game/gameplay.c:369-370), but the balances ledger

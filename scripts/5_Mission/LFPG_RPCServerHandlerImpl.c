@@ -105,14 +105,6 @@ class LFPG_RPCServerHandlerImpl
         {
             HandleInspectDevice(player, sender, ctx, LFPG_RPCGuard.POLICY_INSPECT_READ);
         }
-        else if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
-        {
-            HandleCameraLink(player, sender, ctx);
-        }
-        else if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
-        {
-            HandleCameraUnlink(player, sender, ctx);
-        }
         else if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
         {
             HandleRequestCameraList(player, sender, ctx);
@@ -567,6 +559,13 @@ class LFPG_RPCServerHandlerImpl
         }
         LFPG_NetworkManager.Get().LockPort(portLockKey);
 
+		if (LFPG_DeviceRegistry.Get().IsAmbiguous(srcRealId) || LFPG_DeviceRegistry.Get().IsAmbiguous(dstRealId))
+		{
+			LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+			PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on ambiguous devices.");
+			return;
+		}
+
 		LFPG_FinishWiringState finish = new LFPG_FinishWiringState();
 		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
 		LFPG_ServerSettings finishSettings = LFPG_Settings.Get();
@@ -729,6 +728,12 @@ class LFPG_RPCServerHandlerImpl
 					conflict = true;
 				if (!conflict)
 					continue;
+				// Ambiguous owners must remain visible to this authorization scan.
+				LFPG_DeviceRegistry ownerRegistry = LFPG_DeviceRegistry.Get();
+				if (ownerRegistry.IsAmbiguous(ownerId) || ownerRegistry.IsAmbiguous(wire.m_TargetDeviceId))
+					return false;
+				if (isNative && ownerRegistry.FindById(ownerId) != obj)
+					return false;
 				// SEC02: same own/unclaimed policy as the cut path, never skip a denial.
 				if (!LFPG_WireHelper.CanCreatorCutWire(wire, creatorId, allowOthers))
 					return false;
@@ -765,7 +770,7 @@ class LFPG_RPCServerHandlerImpl
 		// The reverse index alone cannot prove there is no foreign incoming wire.
 		LFPG_DeviceRegistry registry = LFPG_DeviceRegistry.Get();
 		array<EntityAI> devices = new array<EntityAI>;
-		registry.GetAll(devices);
+		registry.GetAllRegisteredForSafety(devices);
 		if (devices.Find(srcObj) < 0)
 			return false;
 		for (int deviceIndex = 0; deviceIndex < devices.Count(); deviceIndex = deviceIndex + 1)
@@ -1065,28 +1070,6 @@ class LFPG_RPCServerHandlerImpl
         }
     }
 
-    static void HandleCameraLink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
-    {
-        // v0.9.1: DEPRECATED â€” camera linking is now physical (cables).
-        // Read params to drain the stream (avoid corruption).
-        int discardLow = 0;
-        int discardHigh = 0;
-        ctx.Read(discardLow);
-        ctx.Read(discardHigh);
-        LFPG_Util.Warn("[CameraLink] DEPRECATED RPC received â€” ignoring");
-    }
-
-    static void HandleCameraUnlink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
-    {
-        // v0.9.1: DEPRECATED â€” camera unlinking is now physical (cut cable).
-        // Read params to drain the stream (avoid corruption).
-        int discardLow = 0;
-        int discardHigh = 0;
-        ctx.Read(discardLow);
-        ctx.Read(discardHigh);
-        LFPG_Util.Warn("[CameraUnlink] DEPRECATED RPC received â€” ignoring");
-    }
-
     static void HandleRequestCameraList(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         if (!sender)
@@ -1254,6 +1237,9 @@ class LFPG_RPCServerHandlerImpl
             PlayerBase.LFPG_SendClientMsg(player, "No hay camaras detectables.");
             return;
         }
+
+		if (player.IsInVehicle())
+			return;
 
         LFPG_ControlSessionRecord cameraSession = sessions.BeginCCTV(sender, player, monitor, monNetLow, monNetHigh, camCount, camPositions, camOrientations, camLabels);
         if (!cameraSession)
@@ -1582,6 +1568,8 @@ class LFPG_RPCServerHandlerImpl
         if (!sl.LFPG_IsOperator(record.m_PlayerNetLow, record.m_PlayerNetHigh))
             return;
 
+		sessions.RenewSearchlightLease(record);
+
         float nowSeconds = g_Game.GetTime() * 0.001;
         if (!sessions.AllowSearchlightAim(record, nowSeconds))
             return;
@@ -1643,7 +1631,7 @@ class LFPG_RPCServerHandlerImpl
         if (!sessions)
             return;
 
-        // Receipt of an exit arms recovery; a healthy session otherwise has no deadline.
+		// Receipt of an exit bounds recovery without extending the activity lease.
         sessions.ArmSearchlightExitDeadline(sender, netLow, netHigh);
 
         // Reject invalid numeric input before object resolution or authorization.

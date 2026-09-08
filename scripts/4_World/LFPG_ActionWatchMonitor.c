@@ -75,6 +75,9 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
         if (!monitor.LFPG_IsPowered())
             return false;
 
+		if (player.IsInVehicle())
+			return false;
+
 #ifndef SERVER
         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
         if (vp && vp.IsActive())

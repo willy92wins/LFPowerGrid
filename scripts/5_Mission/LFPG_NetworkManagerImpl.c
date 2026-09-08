@@ -738,9 +738,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 
                 if (opsInWindow >= LFPG_RPC_MAX_OPS_PER_SEC)
                 {
-                    string swLog = "[RateLimiter] Sliding window exceeded for " + pid;
+					string swLog = "[RateLimiter] Sliding window exceeded for " + LFPG_Util.LogUid(pid);
                     swLog = swLog + " ops=" + opsInWindow.ToString();
-                    LFPG_Util.Warn(swLog);
+					LFPG_Util.RateLimitedWarn(ident, "global_sliding_window", swLog);
                     return false;
                 }
             }
@@ -808,9 +808,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RateOpsInWindow.Remove(staleKey);
         }
 
-        if (removed > 0)
+		int warnRemoved = LFPG_Util.PurgeStaleWarnRateLimits(GetGame().GetTickTime(), RATE_LIMITER_STALE_SEC);
+		if (removed > 0 || warnRemoved > 0)
         {
-            string purgeMsg = "[RateLimiter] Purged " + removed.ToString() + " stale entries";
+			string purgeMsg = "[RateLimiter] Purged cooldown=" + removed.ToString() + " warn=" + warnRemoved.ToString() + " stale entries";
             LFPG_Util.Info(purgeMsg);
         }
 
