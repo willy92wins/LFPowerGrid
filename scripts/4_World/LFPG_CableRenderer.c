@@ -2105,9 +2105,6 @@ class LFPG_CableRenderer
             st.cachedWireKeys.Insert(ownerDeviceId + "|" + wk.ToString());
         }
 
-        // Segment budget
-        int totalSegs = m_TotalSegCount;
-
         // G5: get render metrics once outside loop
         LFPG_RenderMetrics bldTelRnd = LFPG_Telemetry.GetRender();
 
@@ -2176,25 +2173,12 @@ class LFPG_CableRenderer
 
             m_TempPoints.Insert(b);
 
-            // v0.7.9: budget estimation uses adaptive subdivision count
-            string wireKey = ownerDeviceId + "|" + w.ToString();
-            int estSegs = EstimateSegments(m_TempPoints);
-            if (totalSegs + estSegs > LFPG_MAX_RENDERED_SEGS)
-            {
-                if (LFPG_LOG_LEVEL >= 2)
-                {
-                    string budgMsg = "[CableRenderer] Over segment budget, queue retry " + wireKey;
-                    LFPG_Util.Debug(budgMsg);
-                }
-                AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
-                // G5: wire skipped by segment budget
-                bldTelRnd.m_WiresBudget = bldTelRnd.m_WiresBudget + 1;
-                continue;
-            }
-            totalSegs = totalSegs + estSegs;
-
-            // Create frozen wire segments
-            BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, w);
+			string wireKey = ownerDeviceId + "|" + w.ToString();
+			if (!BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, w))
+			{
+				AddRetry(ownerDeviceId, w, LFPG_RetryReason.BUDGET);
+				bldTelRnd.m_WiresBudget = bldTelRnd.m_WiresBudget + 1;
+			}
         }
     }
 
@@ -2202,15 +2186,14 @@ class LFPG_CableRenderer
     // v0.7.9: sagSubs removed — ApplyCatenaria is now self-contained.
     // waypoints: user-placed waypoints (for joint rendering at LOD close).
     // wireIdx: index of this wire in the owner's wire array (for overload mask).
-    protected void BuildWire(string wireKey, array<vector> pts, bool powered, vector posA, vector posB, array<vector> waypoints, int wireIdx)
-    {
-        DestroyWire(wireKey);
+	protected bool BuildWire(string wireKey, array<vector> pts, bool powered, vector posA, vector posB, array<vector> waypoints, int wireIdx)
+	{
 
         if (pts.Count() < 2)
         {
             string ptsMsg = "[CableRenderer] BuildWire: pts < 2 for " + wireKey;
             LFPG_Util.Warn(ptsMsg);
-            return;
+			return false;
         }
 
         // v0.7.9: Compact near-duplicate points (< 5cm apart).
@@ -2239,7 +2222,7 @@ class LFPG_CableRenderer
         {
             string ptsCMsg = "[CableRenderer] BuildWire: pts < 2 after compact for " + wireKey;
             LFPG_Util.Warn(ptsCMsg);
-            return;
+			return false;
         }
 
         ApplyCatenaria(pts);
@@ -2248,10 +2231,15 @@ class LFPG_CableRenderer
         {
             string sagMsg = "[CableRenderer] BuildWire: sagPoints < 2 for " + wireKey;
             LFPG_Util.Warn(sagMsg);
-            return;
+			return false;
         }
 
-        ref LFPG_WireSegmentInfo info = new LFPG_WireSegmentInfo();
+		// Admission uses the exact post-compaction, post-sag segment count.
+		if (!ReserveWireSegments(wireKey, m_SagPoints, posA, posB))
+			return false;
+		DestroyWire(wireKey);
+
+		LFPG_WireSegmentInfo info = new LFPG_WireSegmentInfo();
         info.powered = powered;
         info.cachedPosA = posA;
         info.cachedPosB = posB;
@@ -2282,11 +2270,18 @@ class LFPG_CableRenderer
         {
             string noSegMsg = "[CableRenderer] BuildWire: no valid segments for " + wireKey;
             LFPG_Util.Warn(noSegMsg);
-            return;
+			return false;
         }
 
         // v0.7.7: compute bounding sphere from actual geometry
         info.BuildBoundingSphere();
+		PlayerBase buildPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+		if (buildPlayer)
+		{
+			info.cachedMinDist = vector.Distance(buildPlayer.GetPosition(), info.cachedCenter) - info.cachedRadius;
+			if (info.cachedMinDist < 0.0)
+				info.cachedMinDist = 0.0;
+		}
 
         // v0.7.9: build occlusion samples from actual geometry
         // (must be after segments are created, since it walks the chain)
@@ -2338,6 +2333,7 @@ class LFPG_CableRenderer
             string failMsg = "[CableRenderer] BuildWire " + wireKey + " FAILED segs=" + createdFail.ToString();
             LFPG_Util.Warn(failMsg);
         }
+		return true;
     }
 
     // ===========================
@@ -2436,6 +2432,7 @@ class LFPG_CableRenderer
                         {
                             bool bHide = false;
                             ewInfo.SetVisible(bHide);
+							ReleaseWireSegments(ewInfo);
                         }
                     }
                     continue; // Skip per-wire checks for this owner
@@ -2467,6 +2464,7 @@ class LFPG_CableRenderer
                     {
                         bool bHideHw = false;
                         hwInfo.SetVisible(bHideHw);
+						ReleaseWireSegments(hwInfo);
                     }
                 }
 
@@ -2491,7 +2489,11 @@ class LFPG_CableRenderer
                         ref LFPG_WireSegmentInfo twInfo;
                         if (m_WireSegments.Find(twKey, twInfo) && twInfo)
                         {
-                            if (twInfo.cachedMinDist < LFPG_CULL_DISTANCE_M)
+							float missingOwnerDist = vector.Distance(pp, twInfo.cachedCenter) - twInfo.cachedRadius;
+							if (missingOwnerDist < 0.0)
+								missingOwnerDist = 0.0;
+							twInfo.cachedMinDist = missingOwnerDist;
+							if (twInfo.cachedMinDist < LFPG_CULL_DISTANCE_M)
                             {
                                 anyWireNearPlayer = true;
                                 break;
@@ -2525,8 +2527,11 @@ class LFPG_CableRenderer
                 }
 
                 ref LFPG_WireSegmentInfo info;
-                if (!m_WireSegments.Find(wireKey, info) || !info)
-                    continue; // Not built yet (pending retry)
+				if (!m_WireSegments.Find(wireKey, info) || !info)
+				{
+					AddRetry(st.ownerDeviceId, w, LFPG_RetryReason.BUDGET);
+					continue;
+				}
 
                 // v0.7.38 (L9): Bounding sphere culling is sufficient for visibility.
                 // Endpoints are inside the sphere by definition, so separate
@@ -2580,6 +2585,10 @@ class LFPG_CableRenderer
 
                 // Update visibility (SetVisible is a no-op if state unchanged)
                 info.SetVisible(shouldBeVisible);
+				if (!shouldBeVisible)
+					ReleaseWireSegments(info);
+				else if (info.segments.Count() == 0)
+					AddRetry(st.ownerDeviceId, w, LFPG_RetryReason.BUDGET);
 
                 // Update powered flag
                 info.powered = st.lastPowered;
@@ -2707,8 +2716,8 @@ class LFPG_CableRenderer
         for (si = 0; si < wc; si = si + 1)
         {
             ref LFPG_WireSegmentInfo sortWsi = m_WireSegments.GetElement(si);
-            if (!sortWsi)
-                continue;
+			if (!sortWsi || sortWsi.segments.Count() == 0)
+				continue;
 
             m_DrawOrder.Insert(si);
             m_DrawDist.Insert(sortWsi.cachedMinDist);
@@ -3854,9 +3863,6 @@ class LFPG_CableRenderer
             m_TempKeys.Insert(m_RetryQueue.GetKey(i));
         }
 
-        // Segment budget
-        int totalSegs = m_TotalSegCount;
-
         // G5: get render metrics once outside loop
         LFPG_RenderMetrics retTelRnd = LFPG_Telemetry.GetRender();
 
@@ -3987,27 +3993,15 @@ class LFPG_CableRenderer
 
             m_TempPoints.Insert(b);
 
-            // v0.7.9: adaptive budget estimation
-            int estSegs = EstimateSegments(m_TempPoints);
-            if (totalSegs + estSegs > LFPG_MAX_RENDERED_SEGS)
-            {
-                // Budget exceeded. If this was a TARGET_MISSING entry whose target
-                // is now found, convert to BUDGET so it stops counting retries.
-                if (entry.reason == LFPG_RetryReason.TARGET_MISSING)
-                {
-                    entry.reason = LFPG_RetryReason.BUDGET;
-                }
-                // G5: wire skipped by segment budget (retry path)
-                retTelRnd.m_WiresBudget = retTelRnd.m_WiresBudget + 1;
-                continue; // Over budget, retry next tick (no retryCount increment)
-            }
-
-            totalSegs = totalSegs + estSegs;
-
-            st.lastPowered = IsOwnerActive(ownerObj);
-            st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
-            st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
-            BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex);
+			st.lastPowered = IsOwnerActive(ownerObj);
+			st.lastLoadRatio = LFPG_DeviceAPI.GetLoadRatio(ownerObj);
+			st.lastOverloaded = LFPG_DeviceAPI.GetOverloaded(ownerObj);
+			if (!BuildWire(wireKey, m_TempPoints, st.lastPowered, a, b, wd.m_Waypoints, entry.wireIndex))
+			{
+				entry.reason = LFPG_RetryReason.BUDGET;
+				retTelRnd.m_WiresBudget = retTelRnd.m_WiresBudget + 1;
+				continue;
+			}
 
             m_RetryQueue.Remove(wireKey);
 
@@ -4243,6 +4237,102 @@ class LFPG_CableRenderer
     // ===========================
     // Segment budget (v0.7.9: incremental via m_TotalSegCount)
     // ===========================
+
+	// Keep bounds when releasing capacity; CullTick can rebuild on re-entry.
+	protected void ReleaseWireSegments(LFPG_WireSegmentInfo info)
+	{
+		if (!info || !info.segments || info.segments.Count() == 0)
+			return;
+		m_TotalSegCount = m_TotalSegCount - info.segments.Count();
+		info.DestroyAll();
+		m_DrawOrderDirty = true;
+	}
+
+	// Under pressure, release invisible geometry first, then farther wires.
+	// Empty metadata entries reserve no live segments.
+	protected bool ReserveWireSegments(string wireKey, array<vector> points, vector posA, vector posB)
+	{
+		PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
+		if (!player || !points || points.Count() < 2)
+			return false;
+		int required = points.Count() - 1;
+		if (required > LFPG_MAX_RENDERED_SEGS)
+			return false;
+		vector playerPos = player.GetPosition();
+		vector center = "0 0 0";
+		float radius = 0.0;
+		float pointDist;
+		float candidateDist;
+		float residentDist;
+		int i;
+		LFPG_WireSegmentInfo resident;
+		LFPG_WireSegmentInfo victim;
+		LFPG_WireSegmentInfo previous;
+		int previousCount = 0;
+		int reclaimable = 0;
+		float farthestDist;
+		for (i = 0; i < points.Count(); i = i + 1)
+			center = center + points[i];
+		float invCount = 1.0 / points.Count();
+		center = center * invCount;
+		for (i = 0; i < points.Count(); i = i + 1)
+		{
+			pointDist = vector.Distance(center, points[i]);
+			if (pointDist > radius)
+				radius = pointDist;
+		}
+		candidateDist = vector.Distance(playerPos, center) - radius;
+		if (candidateDist < 0.0)
+			candidateDist = 0.0;
+		if (candidateDist > LFPG_CULL_DISTANCE_M)
+			return false;
+		if (m_DeviceBubbleM > 0.0 && vector.Distance(playerPos, posA) > m_DeviceBubbleM && vector.Distance(playerPos, posB) > m_DeviceBubbleM)
+			return false;
+		if (m_WireSegments.Find(wireKey, previous) && previous && previous.segments)
+			previousCount = previous.segments.Count();
+		if (m_TotalSegCount - previousCount + required <= LFPG_MAX_RENDERED_SEGS)
+			return true;
+
+		// Preflight avoids eviction when nearer residents still leave no room.
+		for (i = 0; i < m_WireSegments.Count(); i = i + 1)
+		{
+			resident = m_WireSegments.GetElement(i);
+			if (!resident || resident == previous || resident.segments.Count() == 0)
+				continue;
+			residentDist = vector.Distance(playerPos, resident.cachedCenter) - resident.cachedRadius;
+			if (!resident.visible || residentDist > candidateDist)
+				reclaimable = reclaimable + resident.segments.Count();
+		}
+		if (m_TotalSegCount - previousCount + required - reclaimable > LFPG_MAX_RENDERED_SEGS)
+			return false;
+
+		while (m_TotalSegCount - previousCount + required > LFPG_MAX_RENDERED_SEGS)
+		{
+			victim = null;
+			farthestDist = candidateDist;
+			for (i = 0; i < m_WireSegments.Count(); i = i + 1)
+			{
+				resident = m_WireSegments.GetElement(i);
+				if (!resident || resident == previous || resident.segments.Count() == 0)
+					continue;
+				if (!resident.visible)
+				{
+					victim = resident;
+					break;
+				}
+				residentDist = vector.Distance(playerPos, resident.cachedCenter) - resident.cachedRadius;
+				if (residentDist > farthestDist)
+				{
+					farthestDist = residentDist;
+					victim = resident;
+				}
+			}
+			if (!victim)
+				return false;
+			ReleaseWireSegments(victim);
+		}
+		return true;
+	}
 
     // ===========================
     // Wire segment cleanup

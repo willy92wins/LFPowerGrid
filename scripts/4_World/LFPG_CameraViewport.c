@@ -137,8 +137,12 @@ class LFPG_CameraViewport
     // DoExitCleanup() called from RPC → cleanup camera + set phase=0
     protected int       m_ExitPhase;
 
-    // Timeout for waiting state (safety: force cleanup if server doesn't respond)
+	// Timeout only warns; camera release requires observed restoration.
     protected float     m_ExitWaitTimer;
+	protected static int s_NextSessionId;
+	protected int m_SessionId;
+	protected int m_ExitSessionId;
+	protected bool m_ExitTimeoutWarned;
 
     // ---- Inspector cooldown (post-exit) ----
     protected int       m_ExitCooldown;
@@ -382,6 +386,11 @@ class LFPG_CameraViewport
             LFPG_Util.Warn("[CameraViewport] EnterFromList: exit in progress, ignoring");
             return;
         }
+
+		s_NextSessionId = s_NextSessionId + 1;
+		m_SessionId = s_NextSessionId;
+		m_ExitSessionId = 0;
+		m_ExitTimeoutWarned = false;
 
         // Dispatch supplies the original RPC target even while g_Game.GetPlayer() is null.
         m_PlayerRef = player;
@@ -697,6 +706,9 @@ class LFPG_CameraViewport
     protected void ForceCleanup()
     {
         LFPG_Util.Debug("[CameraViewport] DIAG: ForceCleanup");
+		m_SessionId = 0;
+		m_ExitSessionId = 0;
+		m_ExitTimeoutWarned = false;
         m_Active    = false;
         m_ExitPhase = 0;
         m_ExitWaitTimer = 0.0;
@@ -745,22 +757,47 @@ class LFPG_CameraViewport
     }
 
     // =========================================================
-    // DoExitCleanup — called from RPC CCTV_EXIT_CONFIRM or timeout.
-    // Server has already called SelectPlayer(sender, player)
-    // → engine updated internal camera pointer.
-    // NOW safe to deactivate and release the spectator camera.
-    //
-    // v1.3.2: Camera deactivation restored here (was in Phase 1
-    // in v1.3.1 → crash). HIC re-enable stays in Phase 1.
-    // Kept idempotent — safe to call multiple times.
-    // =========================================================
-    void DoExitCleanup()
-    {
-        // A duplicated confirm after the terminal transition is a strict no-op.
-        if (!m_Active && m_ExitPhase == 0 && !m_ViewCamObj && !m_PlayerRef)
-            return;
+	// A legacy confirmation has no session token. Treat it as a hint and
+	// require observable engine restoration before touching camera state.
+	// =========================================================
+	void DoExitCleanup()
+	{
+		if (m_SessionId <= 0)
+			return;
+		if (m_ExitPhase == 0)
+		{
+			// Server-initiated exit is valid only after the pawn is restored.
+			// A late confirm while a new spectator session is active is ignored.
+			if (!m_Active || !HasPlayerCameraRestored())
+				return;
+			m_ExitPhase = 2;
+		}
+		m_ExitSessionId = m_SessionId;
+		TryCompleteExit(m_ExitSessionId);
+	}
 
-        LFPG_Util.Debug("[CameraViewport] DIAG: DoExitCleanup — server confirmed");
+	protected bool HasPlayerCameraRestored()
+	{
+		PlayerBase restoredPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+		if (!restoredPlayer)
+			return false;
+		if (m_PlayerRef && restoredPlayer != m_PlayerRef)
+			return false;
+		// Camera.GetCurrentCamera returns null for the player's own camera.
+		if (Camera.GetCurrentCamera())
+			return false;
+		if (!restoredPlayer.GetCurrentCamera())
+			return false;
+		return true;
+	}
+
+	protected void TryCompleteExit(int sessionId)
+	{
+		if (sessionId <= 0 || sessionId != m_SessionId || sessionId != m_ExitSessionId || m_ExitPhase == 0)
+			return;
+		if (!HasPlayerCameraRestored())
+			return;
+		LFPG_Util.Debug("[CameraViewport] Exit cleanup: player camera restoration observed");
 
         m_Active = false;
         m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
@@ -813,7 +850,9 @@ class LFPG_CameraViewport
         m_ExitPhase = 0;
         m_ExitWaitTimer = 0.0;
 
-        LFPG_Util.Info("[CameraViewport] DoExitCleanup complete — camera released");
+		m_ExitSessionId = 0;
+		m_ExitTimeoutWarned = false;
+		LFPG_Util.Info("[CameraViewport] DoExitCleanup complete - camera released");
     }
 
     // =========================================================
@@ -830,6 +869,13 @@ class LFPG_CameraViewport
     // =========================================================
     void Tick(float timeslice)
     {
+		// Also observe server-initiated exits if their confirm preceded replication.
+		if (m_Active && m_ExitPhase == 0 && HasPlayerCameraRestored())
+		{
+			m_ExitSessionId = m_SessionId;
+			m_ExitPhase = 2;
+		}
+
         // Vital-state loss is a terminal transition and joins the existing exit FSM.
         if (m_Active && m_ExitPhase == 0)
         {
@@ -840,19 +886,21 @@ class LFPG_CameraViewport
             }
         }
 
-        // ---- Phase 2: waiting for server confirmation ----
-        // DON'T touch camera here. Server is processing SelectPlayer.
-        // DoExitCleanup() will be called from RPC handler.
-        // Timeout safety: if server never responds (5s), force cleanup.
-        if (m_ExitPhase == 2)
-        {
-            m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
-            if (m_ExitWaitTimer >= 5.0)
-            {
-                LFPG_Util.Warn("[CameraViewport] Exit timeout — forcing cleanup");
-                DoExitCleanup();
-            }
-        }
+		// Phase 2: restoration can arrive before or after the legacy confirm.
+		// A timeout is diagnostic only; it never deactivates an unrestored camera.
+		if (m_ExitPhase == 2)
+		{
+			TryCompleteExit(m_ExitSessionId);
+			if (m_ExitPhase == 2)
+			{
+				m_ExitWaitTimer = m_ExitWaitTimer + timeslice;
+				if (m_ExitWaitTimer >= 5.0 && !m_ExitTimeoutWarned)
+				{
+					m_ExitTimeoutWarned = true;
+					LFPG_Util.Warn("[CameraViewport] Exit timeout - still waiting for player camera restoration");
+				}
+			}
+		}
 
         // ---- Phase 1: send exit request to server ----
         // Camera STAYS ACTIVE until DoExitCleanup (after server confirm).
@@ -891,7 +939,7 @@ class LFPG_CameraViewport
             // The vital-state auto-exit above enters phase 1 precisely when
             // m_PlayerRef is null, so the local-player fallback of DoExitCleanup
             // is required here too; without it input stays disabled until the
-            // confirmation RPC or the 5s timeout.
+			// observed player camera restoration.
             HumanInputController phase1Hic = null;
             if (m_PlayerRef)
             {
@@ -922,8 +970,10 @@ class LFPG_CameraViewport
                 LFPG_Util.Debug("[CameraViewport] DIAG: RPC EXIT_REQUEST sent");
             }
 
-            m_ExitWaitTimer = 0.0;
-            m_ExitPhase = 2;
+			m_ExitWaitTimer = 0.0;
+			m_ExitSessionId = m_SessionId;
+			m_ExitTimeoutWarned = false;
+			m_ExitPhase = 2;
             LFPG_Util.Info("[CameraViewport] Phase 1 complete — waiting for server confirm");
         }
 
