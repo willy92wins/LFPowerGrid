@@ -6190,11 +6190,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
 
-            if (budgetExhausted)
-            {
-                m_SorterCursor = sorterIndex;
-                break;
-            }
+			if (budgetExhausted)
+			{
+				// Keep this sorter's resume state, but give the next sorter a turn.
+				m_SorterCursor = sorterIndex + 1;
+				if (m_SorterCursor >= total)
+					m_SorterCursor = 0;
+				break;
+			}
         }
 
         dirtyDestCommitCount = 0;

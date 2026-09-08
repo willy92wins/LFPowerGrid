@@ -1096,7 +1096,7 @@ class LFPG_SorterLogic
     //   3. Compute optimal grid positions (virtual 2D bin-pack)
     //   4. Multi-pass in-place moves: each pass tries to move
     //      items whose target cell is free. Successful moves
-    //      free cells for the next pass. Bounded by N passes.
+	//      free cells for the next pass, within the fixed work limits.
     //   5. Items that cannot reach optimal position (deadlock)
     //      stay in their current cargo slot — no items on ground.
     //
@@ -1128,11 +1128,20 @@ class LFPG_SorterLogic
         if (totalItems <= 0)
             return 0;
 
-        // --- Phase 1: Collect all items with dimensions ---
-        ref array<EntityAI> items = new array<EntityAI>;
-        ref array<int> itemWidths = new array<int>;
-        ref array<int> itemHeights = new array<int>;
-        ref array<int> itemAreas = new array<int>;
+		// Bound synchronous preparation before allocating or moving anything.
+		// Large/modded cargo keeps its existing layout.
+		if (totalItems > 64 || gridW > 1024 || gridH > 1024)
+			return 0;
+		if (gridW * gridH > 1024)
+			return 0;
+		int cellChecksRemaining = 16384;
+		int moveChecksRemaining = 200;
+
+		// --- Phase 1: Collect all items with dimensions ---
+		array<EntityAI> items = new array<EntityAI>;
+		array<int> itemWidths = new array<int>;
+		array<int> itemHeights = new array<int>;
+		array<int> itemAreas = new array<int>;
 
         int ci = 0;
         int iw = 0;
@@ -1145,7 +1154,9 @@ class LFPG_SorterLogic
             if (!cItem)
                 continue;
 
-            GetItemSlotDimensions(cItem, iw, ih);
+			GetItemSlotDimensions(cItem, iw, ih);
+			if (iw <= 0 || ih <= 0 || iw > 1024 || ih > 1024)
+				return 0;
             items.Insert(cItem);
             itemWidths.Insert(iw);
             itemHeights.Insert(ih);
@@ -1157,7 +1168,7 @@ class LFPG_SorterLogic
             return 0;
 
         // --- Phase 2: Sort indices by area descending (insertion sort) ---
-        ref array<int> sortedIdx = new array<int>;
+		array<int> sortedIdx = new array<int>;
         int si = 0;
         for (si = 0; si < n; si = si + 1)
         {
@@ -1183,7 +1194,7 @@ class LFPG_SorterLogic
 
         // --- Phase 3: Create virtual 2D grid (row-major) ---
         int gridSize = gridW * gridH;
-        ref array<bool> grid = new array<bool>;
+		array<bool> grid = new array<bool>;
         int gi = 0;
         for (gi = 0; gi < gridSize; gi = gi + 1)
         {
@@ -1191,10 +1202,10 @@ class LFPG_SorterLogic
         }
 
         // --- Phase 4: Compute optimal placements greedily ---
-        ref array<int> placedRow = new array<int>;
-        ref array<int> placedCol = new array<int>;
-        ref array<bool> placedFlip = new array<bool>;
-        ref array<bool> placedOk = new array<bool>;
+		array<int> placedRow = new array<int>;
+		array<int> placedCol = new array<int>;
+		array<bool> placedFlip = new array<bool>;
+		array<bool> placedOk = new array<bool>;
 
         for (si = 0; si < n; si = si + 1)
         {
@@ -1216,7 +1227,9 @@ class LFPG_SorterLogic
             ph = itemHeights[idx];
             placed = false;
 
-            placed = TryPlaceOnGrid(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx);
+			placed = TryPlaceOnGridBudgeted(grid, gridW, gridH, pw, ph, placedRow, placedCol, idx, cellChecksRemaining);
+			if (cellChecksRemaining <= 0)
+				return 0;
             if (placed)
             {
                 placedFlip[idx] = false;
@@ -1226,7 +1239,9 @@ class LFPG_SorterLogic
 
             if (!placed && pw != ph)
             {
-                placed = TryPlaceOnGrid(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx);
+				placed = TryPlaceOnGridBudgeted(grid, gridW, gridH, ph, pw, placedRow, placedCol, idx, cellChecksRemaining);
+				if (cellChecksRemaining <= 0)
+					return 0;
                 if (placed)
                 {
                     placedFlip[idx] = true;
@@ -1241,29 +1256,32 @@ class LFPG_SorterLogic
         // If target cells are occupied by another item, the move
         // fails (LocationSyncMoveEntity returns false) and we retry
         // next pass. Successful moves free cells for subsequent items.
-        // Bounded by N passes (each pass resolves at least 1 if any
-        // progress is possible). Deadlocked items stay in place.
-        ref array<bool> done = new array<bool>;
+		// At most four passes and 200 item visits across all passes.
+		// Unresolved items stay in place; completed moves remain valid.
+		array<bool> done = new array<bool>;
         for (si = 0; si < n; si = si + 1)
         {
             done.Insert(false);
         }
 
         int repositioned = 0;
-        int maxPasses = n;
+		int maxPasses = n;
+		if (maxPasses > 4)
+			maxPasses = 4;
         int pass = 0;
         bool progress = false;
-        InventoryLocation il_src = null;
-        InventoryLocation il_dst = null;
+		InventoryLocation ilSrc = new InventoryLocation;
+		InventoryLocation ilDst = new InventoryLocation;
         bool moveOk = false;
 
-        for (pass = 0; pass < maxPasses; pass = pass + 1)
+		for (pass = 0; pass < maxPasses && moveChecksRemaining > 0; pass = pass + 1)
         {
             progress = false;
 
-            for (si = 0; si < n; si = si + 1)
-            {
-                idx = sortedIdx[si];
+			for (si = 0; si < n && moveChecksRemaining > 0; si = si + 1)
+			{
+				moveChecksRemaining = moveChecksRemaining - 1;
+				idx = sortedIdx[si];
 
                 if (done[idx])
                     continue;
@@ -1287,13 +1305,12 @@ class LFPG_SorterLogic
                     continue;
                 }
 
-                il_src = new InventoryLocation;
-                cItem.GetInventory().GetCurrentInventoryLocation(il_src);
+				if (!cItem.GetInventory().GetCurrentInventoryLocation(ilSrc))
+					continue;
 
-                il_dst = new InventoryLocation;
-                il_dst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
+				ilDst.SetCargo(container, cItem, 0, placedRow[idx], placedCol[idx], placedFlip[idx]);
 
-                moveOk = GameInventory.LocationSyncMoveEntity(il_src, il_dst);
+				moveOk = GameInventory.LocationSyncMoveEntity(ilSrc, ilDst);
                 if (moveOk)
                 {
                     done[idx] = true;
@@ -1329,6 +1346,50 @@ class LFPG_SorterLogic
         return 0;
         #endif
     }
+
+	// A shared cell-probe allowance covers both orientations and all items.
+	protected static bool TryPlaceOnGridBudgeted(array<bool> grid, int gridW, int gridH, int itemW, int itemH, array<int> placedRow, array<int> placedCol, int idx, inout int checksRemaining)
+	{
+		if (itemW <= 0 || itemH <= 0 || itemW > gridW || itemH > gridH)
+			return false;
+		int row;
+		int col;
+		int dr;
+		int dc;
+		int cellIdx;
+		bool fits;
+		for (row = 0; row <= gridH - itemH; row = row + 1)
+		{
+			for (col = 0; col <= gridW - itemW; col = col + 1)
+			{
+				fits = true;
+				for (dr = 0; dr < itemH; dr = dr + 1)
+				{
+					for (dc = 0; dc < itemW; dc = dc + 1)
+					{
+						if (checksRemaining <= 0)
+							return false;
+						checksRemaining = checksRemaining - 1;
+						cellIdx = (row + dr) * gridW + col + dc;
+						if (grid[cellIdx])
+						{
+							fits = false;
+							break;
+						}
+					}
+					if (!fits)
+						break;
+				}
+				if (fits)
+				{
+					placedRow[idx] = row;
+					placedCol[idx] = col;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 
     // ---------------------------------------------------------
     // TryPlaceOnGrid: scans the virtual grid for a free rect
