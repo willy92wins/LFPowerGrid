@@ -1,0 +1,607 @@
+diff --git a/scripts/3_Game/LFPG_Defines.c b/scripts/3_Game/LFPG_Defines.c
+index ace6ada..9f1ff47 100644
+--- a/scripts/3_Game/LFPG_Defines.c
++++ b/scripts/3_Game/LFPG_Defines.c
+@@ -738,6 +738,8 @@ static const float LFPG_SEARCHLIGHT_PITCH_MIN         = -90.0;   // degrees (scr
+ static const float LFPG_SEARCHLIGHT_PITCH_MAX         = 90.0;    // degrees (scroll up)
+ static const float LFPG_SEARCHLIGHT_SCROLL_STEP       = 1.0;     // degrees per scroll tick
+ static const float LFPG_SEARCHLIGHT_RPC_THROTTLE_MS   = 150.0;   // ms between aim RPCs
++static const float LFPG_SEARCHLIGHT_HEARTBEAT_MS      = 2000.0;  // ms between activity heartbeats
++static const int   LFPG_SEARCHLIGHT_LEASE_MS          = 10000;   // server activity lease
+ static const float LFPG_SEARCHLIGHT_AIM_DEADZONE_DEG  = 0.25;    // client send threshold
+ static const float LFPG_SEARCHLIGHT_SPLASH_RAYCAST_MS = 500.0;   // server physics cadence
+ static const float LFPG_SEARCHLIGHT_GRAB_RADIUS_M     = 2.5;     // auto-exit distance
+diff --git a/scripts/3_Game/LFPG_Util.c b/scripts/3_Game/LFPG_Util.c
+index adb62c2..fc6564a 100644
+--- a/scripts/3_Game/LFPG_Util.c
++++ b/scripts/3_Game/LFPG_Util.c
+@@ -21,11 +21,14 @@ class LFPG_Util
+     // per (sender plain id + key) so different bug-categories do not mask
+     // each other. Default 1 s.
+     protected static ref map<string, ref LFPG_RateLimiter> s_WarnRateLimits;
++	protected static ref array<string> s_StaleWarnRateLimitKeys;
+ 
+     static void RateLimitedWarn(PlayerIdentity sender, string key, string msg, float cooldownSeconds = 1.0)
+     {
+         if (!sender) { Warn(msg); return; }
+         if (!s_WarnRateLimits) s_WarnRateLimits = new map<string, ref LFPG_RateLimiter>();
++		if (!s_StaleWarnRateLimitKeys)
++			s_StaleWarnRateLimitKeys = new array<string>();
+         string mapKey = sender.GetPlainId() + ":" + key;
+         LFPG_RateLimiter limiter = s_WarnRateLimits.Get(mapKey);
+         if (!limiter)
+@@ -38,6 +41,27 @@ class LFPG_Util
+             Warn(msg);
+     }
+ 
++	static int PurgeStaleWarnRateLimits(float nowSeconds, float staleSeconds)
++	{
++		if (!s_WarnRateLimits) return 0;
++		if (!s_StaleWarnRateLimitKeys) return 0;
++
++		s_StaleWarnRateLimitKeys.Clear();
++		int warnIndex;
++		for (warnIndex = 0; warnIndex < s_WarnRateLimits.Count(); warnIndex = warnIndex + 1)
++		{
++			LFPG_RateLimiter limiter = s_WarnRateLimits.GetElement(warnIndex);
++			if (!limiter || nowSeconds - limiter.GetNextAllowed() > staleSeconds)
++				s_StaleWarnRateLimitKeys.Insert(s_WarnRateLimits.GetKey(warnIndex));
++		}
++
++		int removed = s_StaleWarnRateLimitKeys.Count();
++		int staleIndex;
++		for (staleIndex = 0; staleIndex < removed; staleIndex = staleIndex + 1)
++			s_WarnRateLimits.Remove(s_StaleWarnRateLimitKeys[staleIndex]);
++		return removed;
++	}
++
+     // Log-safe rendering of a player id. Vanilla marks the plaintext id as
+     // unusable in logs (3_game/gameplay.c:369-370), but the balances ledger
+     // keys on it durably, so the stored value cannot change without a data
+diff --git a/scripts/4_World/LFPG_ActionWatchMonitor.c b/scripts/4_World/LFPG_ActionWatchMonitor.c
+index bb3ec1b..99f5f55 100644
+--- a/scripts/4_World/LFPG_ActionWatchMonitor.c
++++ b/scripts/4_World/LFPG_ActionWatchMonitor.c
+@@ -75,6 +75,9 @@ class LFPG_ActionWatchMonitor : ActionInteractBase
+         if (!monitor.LFPG_IsPowered())
+             return false;
+ 
++		if (player.IsInVehicle())
++			return false;
++
+ #ifndef SERVER
+         LFPG_CameraViewport vp = LFPG_CameraViewport.Get();
+         if (vp && vp.IsActive())
+diff --git a/scripts/4_World/LFPG_AtmStock.c b/scripts/4_World/LFPG_AtmStock.c
+index 3339dba..200326c 100644
+--- a/scripts/4_World/LFPG_AtmStock.c
++++ b/scripts/4_World/LFPG_AtmStock.c
+@@ -16,6 +16,8 @@ class LFPG_AtmStock
+ {
+     static bool CanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+     {
++		if (deviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++			return false;
+         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
+         if (!mw)
+             return false;
+@@ -24,6 +26,8 @@ class LFPG_AtmStock
+ 
+     static bool PrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
+     {
++		if (deviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++			return false;
+         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
+         if (!mw)
+             return false;
+@@ -33,20 +37,26 @@ class LFPG_AtmStock
+     // ATMs whose AfterStoreLoad landed before the mission was reachable.
+     // Non-owning references: a deleted ATM leaves a null the drain skips.
+     protected static ref array<LFPG_BTCAtmBase> s_PendingReconcile;
++	protected static bool s_ReconcileReady;
++	protected static MissionBaseWorld s_ReadyMission;
+ 
+     static void ReconcileLoadedAtm(LFPG_BTCAtmBase atm)
+     {
+         if (!atm)
+             return;
+         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
+-        if (mw)
++		if (mw && s_ReconcileReady && s_ReadyMission == mw)
+         {
++			string readyDeviceId = atm.LFPG_GetDeviceId();
++			if (readyDeviceId == "" || LFPG_DeviceRegistry.Get().IsAmbiguous(readyDeviceId))
++				return;
+             mw.LFPG_AtmReconcileLoaded(atm);
+             return;
+         }
+         if (!s_PendingReconcile)
+             s_PendingReconcile = new array<LFPG_BTCAtmBase>;
+-        s_PendingReconcile.Insert(atm);
++		if (s_PendingReconcile.Find(atm) < 0)
++			s_PendingReconcile.Insert(atm);
+     }
+ 
+     // Called by MissionServer right after super.OnInit(). Empty in the normal
+@@ -54,7 +64,11 @@ class LFPG_AtmStock
+     // reachable, which is the ordering this net exists to survive.
+     static void DrainPendingReconcile(MissionBaseWorld mw)
+     {
+-        if (!mw || !s_PendingReconcile)
++		if (!mw)
++			return;
++		s_ReadyMission = mw;
++		s_ReconcileReady = true;
++		if (!s_PendingReconcile)
+             return;
+         int pending = s_PendingReconcile.Count();
+         if (pending > 0)
+@@ -64,7 +78,11 @@ class LFPG_AtmStock
+         {
+             LFPG_BTCAtmBase queued = s_PendingReconcile[i];
+             if (queued)
+-                mw.LFPG_AtmReconcileLoaded(queued);
++			{
++				string queuedDeviceId = queued.LFPG_GetDeviceId();
++				if (queuedDeviceId != "" && !LFPG_DeviceRegistry.Get().IsAmbiguous(queuedDeviceId))
++					mw.LFPG_AtmReconcileLoaded(queued);
++			}
+         }
+         s_PendingReconcile.Clear();
+     }
+diff --git a/scripts/4_World/LFPG_DeviceRegistry.c b/scripts/4_World/LFPG_DeviceRegistry.c
+index 4de3b3c..1b97379 100644
+--- a/scripts/4_World/LFPG_DeviceRegistry.c
++++ b/scripts/4_World/LFPG_DeviceRegistry.c
+@@ -12,10 +12,14 @@ class LFPG_DeviceRegistry
+     protected static ref LFPG_DeviceRegistry s_Instance;
+ 
+     protected ref TStringManagedMap m_ById;
++	protected ref map<string, bool> m_AmbiguousIds;
++	protected ref array<EntityAI> m_AllRegistered;
+ 
+     void LFPG_DeviceRegistry()
+     {
+         m_ById = new TStringManagedMap;
++		m_AmbiguousIds = new map<string, bool>;
++		m_AllRegistered = new array<EntityAI>;
+     }
+ 
+     static LFPG_DeviceRegistry Get()
+@@ -30,12 +34,49 @@ class LFPG_DeviceRegistry
+         if (!obj || deviceId == "")
+             return;
+ 
++		if (m_AllRegistered.Find(obj) < 0)
++			m_AllRegistered.Insert(obj);
++
++		if (m_AmbiguousIds.Contains(deviceId))
++			return;
++
++		Managed currentRaw;
++		if (m_ById.Find(deviceId, currentRaw))
++		{
++			EntityAI current = EntityAI.Cast(currentRaw);
++			if (!current)
++			{
++				m_ById.Remove(deviceId);
++				m_ById[deviceId] = obj;
++				return;
++			}
++			if (current == obj)
++				return;
++
++			if (m_AllRegistered.Find(current) < 0)
++				m_AllRegistered.Insert(current);
++			m_ById.Remove(deviceId);
++			m_AmbiguousIds.Set(deviceId, true);
++			LFPG_Util.Error("[DeviceRegistry] Ambiguous live deviceId latched until restart: " + deviceId);
++			return;
++		}
++
+         m_ById[deviceId] = obj;
+     }
+ 
+     void Unregister(string deviceId, EntityAI objExpected = null)
+     {
+         if (deviceId == "")
++			return;
++
++		if (objExpected)
++		{
++			int trackedIndex = m_AllRegistered.Find(objExpected);
++			if (trackedIndex >= 0)
++				m_AllRegistered.RemoveOrdered(trackedIndex);
++		}
++
++		if (m_AmbiguousIds.Contains(deviceId))
+             return;
+ 
+         Managed currentRaw;
+@@ -54,6 +95,9 @@ class LFPG_DeviceRegistry
+     // One null-check per lookup — zero overhead for valid refs.
+     EntityAI FindById(string deviceId)
+     {
++		if (m_AmbiguousIds.Contains(deviceId))
++			return null;
++
+         Managed objRaw;
+         if (m_ById.Find(deviceId, objRaw))
+         {
+@@ -68,6 +112,13 @@ class LFPG_DeviceRegistry
+         return null;
+     }
+ 
++	bool IsAmbiguous(string deviceId)
++	{
++		if (deviceId == "")
++			return false;
++		return m_AmbiguousIds.Contains(deviceId);
++	}
++
+     // v0.7.44 (Level 4, hallazgo 1a): Filter null refs in GetAll.
+     // v0.9.3: Deduplicate by entity pointer — same entity can be registered
+     // under multiple keys if TryRegister misses cleanup of old key.
+@@ -111,6 +162,24 @@ class LFPG_DeviceRegistry
+         }
+     }
+ 
++	void GetAllRegisteredForSafety(array<EntityAI> outArr)
++	{
++		if (!outArr)
++		{
++			LFPG_Util.Warn("DeviceRegistry.GetAllRegisteredForSafety called with null outArr");
++			return;
++		}
++
++		outArr.Clear();
++		int safetyIndex = 0;
++		for (safetyIndex = 0; safetyIndex < m_AllRegistered.Count(); safetyIndex = safetyIndex + 1)
++		{
++			EntityAI safetyEntity = m_AllRegistered[safetyIndex];
++			if (safetyEntity)
++				outArr.Insert(safetyEntity);
++		}
++	}
++
+     // v0.7.4: remove entries where the entity reference has been
+     // invalidated by the engine (despawn, streaming, forced deletion
+     // without EEDelete). Called during self-heal.
+@@ -134,9 +203,20 @@ class LFPG_DeviceRegistry
+             m_ById.Remove(nullKeys[k]);
+         }
+ 
+-        if (nullKeys.Count() > 0)
++		int safetyPruned = 0;
++		int safetyIndex = m_AllRegistered.Count() - 1;
++		for (safetyIndex = m_AllRegistered.Count() - 1; safetyIndex >= 0; safetyIndex = safetyIndex - 1)
+         {
+-            LFPG_Util.Info("[DeviceRegistry] Pruned " + nullKeys.Count().ToString() + " null entries");
++			if (!m_AllRegistered[safetyIndex])
++			{
++				m_AllRegistered.RemoveOrdered(safetyIndex);
++				safetyPruned = safetyPruned + 1;
++			}
++		}
++
++		if (nullKeys.Count() > 0 || safetyPruned > 0)
++		{
++			LFPG_Util.Info("[DeviceRegistry] Pruned " + nullKeys.Count().ToString() + " null canonical entries and " + safetyPruned.ToString() + " safety refs");
+         }
+ 
+         return nullKeys.Count();
+diff --git a/scripts/4_World/LFPG_RPCGuard.c b/scripts/4_World/LFPG_RPCGuard.c
+index 2d375a5..533e5cd 100644
+--- a/scripts/4_World/LFPG_RPCGuard.c
++++ b/scripts/4_World/LFPG_RPCGuard.c
+@@ -42,10 +42,6 @@ class LFPG_RPCGuard
+ 
+         if (subId == LFPG_RPC_SubId.CCTV_EXIT_REQUEST)
+             return POLICY_CCTV_SESSION;
+-        if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
+-            return POLICY_CCTV_SESSION;
+-        if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
+-            return POLICY_CCTV_SESSION;
+         if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
+             return POLICY_CCTV_SESSION;
+ 
+diff --git a/scripts/4_World/LFPG_SearchlightController.c b/scripts/4_World/LFPG_SearchlightController.c
+index df91a17..894af50 100644
+--- a/scripts/4_World/LFPG_SearchlightController.c
++++ b/scripts/4_World/LFPG_SearchlightController.c
+@@ -350,9 +350,11 @@ class LFPG_SearchlightController
+         // ---- Local prediction: immediate visual feedback ----
+         m_TargetSl.LFPG_ApplyAimLocal(m_AimYaw, m_AimPitch);
+ 
+-        // ---- RPC throttle ----
++		// ---- RPC throttle and activity heartbeat ----
+         m_RpcAccum = m_RpcAccum + timeslice * 1000.0;
+-        if (m_AimDirty && m_RpcAccum >= LFPG_SEARCHLIGHT_RPC_THROTTLE_MS)
++		bool aimThrottleReady = m_AimDirty && m_RpcAccum >= LFPG_SEARCHLIGHT_RPC_THROTTLE_MS;
++		bool heartbeatDue = m_RpcAccum >= LFPG_SEARCHLIGHT_HEARTBEAT_MS;
++		if (aimThrottleReady || heartbeatDue)
+         {
+             m_RpcAccum = 0.0;
+             m_AimDirty = false;
+diff --git a/scripts/5_Mission/LFPG_BTCSessionRegistry.c b/scripts/5_Mission/LFPG_BTCSessionRegistry.c
+index 2efa319..4be2fe7 100644
+--- a/scripts/5_Mission/LFPG_BTCSessionRegistry.c
++++ b/scripts/5_Mission/LFPG_BTCSessionRegistry.c
+@@ -17,6 +17,7 @@ static const int LFPG_BTC_WARN_WINDOW_MS = 60000;
+ static const int LFPG_BTC_WARN_MAX_PER_WINDOW = 3;
+ static const int LFPG_BTC_SEQUENCE_CAP = 2000000000;
+ static const int LFPG_BTC_SEQUENCE_EXHAUSTION_GUARD = 1000;
++static const int LFPG_BTC_MAX_FORWARD_GAP = 1000000;
+ 
+ class LFPG_BTCSessionResponse
+ {
+@@ -290,6 +291,12 @@ class LFPG_BTCSessionRegistry
+             return LFPG_BTC_NONCE_IN_FLIGHT;
+         }
+ 
++		if (sequence <= session.m_HighestAcceptedSequence)
++			return LFPG_BTC_NONCE_STALE;
++		int forwardGap = sequence - session.m_HighestAcceptedSequence;
++		if (forwardGap > LFPG_BTC_MAX_FORWARD_GAP)
++			return LFPG_BTC_NONCE_INVALID;
++
+         // BTC handlers execute synchronously in one frame. A surviving
+         // in-flight record when a later sequence arrives is therefore orphaned.
+         // If any handler starts deferring work with CallLater, this rule is no
+@@ -297,8 +304,6 @@ class LFPG_BTCSessionRegistry
+         if (inFlight && sequence > inFlight.m_Sequence)
+             SealOrphanedInFlight(session);
+ 
+-        if (sequence <= session.m_HighestAcceptedSequence)
+-            return LFPG_BTC_NONCE_STALE;
+         // Reaching this guard requires approximately two billion mutations for
+         // one UID in one server lifetime, which the action rate limit prevents.
+         if (session.m_HighestAcceptedSequence > LFPG_BTC_SEQUENCE_CAP - LFPG_BTC_SEQUENCE_EXHAUSTION_GUARD)
+@@ -323,6 +328,9 @@ class LFPG_BTCSessionRegistry
+             return false;
+         }
+         if (sequence <= session.m_HighestAcceptedSequence)
++			return false;
++		int reserveForwardGap = sequence - session.m_HighestAcceptedSequence;
++		if (reserveForwardGap > LFPG_BTC_MAX_FORWARD_GAP)
+             return false;
+         if (session.m_InFlight)
+             return false;
+diff --git a/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c b/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
+index ccf3762..3bbdd5d 100644
+--- a/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
++++ b/scripts/5_Mission/LFPG_BalanceProvider_NativeImpl.c
+@@ -411,6 +411,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+         EnsureClaimState();
+         if (!IsClaimStoreWritable())
+             return false;
++		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++			return false;
+ 
+         string uid = GetUID(player);
+         if (uid == "")
+@@ -503,6 +505,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+         EnsureClaimState();
+         if (!IsClaimStoreWritable())
+             return false;
++		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++			return false;
+         if (!HasDeviceClaims(deviceId))
+             return true;
+         if (!s_ReconciledDevices.Contains(deviceId))
+@@ -529,6 +533,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+         EnsureClaimState();
+         if (!IsClaimStoreWritable())
+             return false;
++		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++			return false;
+         if (!HasDeviceClaims(deviceId))
+             return true;
+         if (!s_ReconciledDevices.Contains(deviceId))
+@@ -1268,6 +1274,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+         string deviceId = atm.LFPG_GetDeviceId();
+         if (deviceId == "")
+             return;
++		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++		{
++			LogClaimError("[LFPG_Balance_Native] Loaded ATM reconcile blocked by ambiguous deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
++			return;
++		}
+         array<ref LFPG_BalanceClaim> chain = CollectDeviceClaims(deviceId);
+         if (chain.Count() == 0)
+         {
+@@ -1490,6 +1501,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
+             string deviceId = deviceIds[deviceIndex];
+             if (s_OrphanObservedThisBoot.Contains(deviceId))
+                 continue;
++			if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
++				continue;
+ 
+             EntityAI device = null;
+             if (deviceId != "")
+diff --git a/scripts/5_Mission/LFPG_ControlSessionRegistry.c b/scripts/5_Mission/LFPG_ControlSessionRegistry.c
+index a51f90f..b71d41d 100644
+--- a/scripts/5_Mission/LFPG_ControlSessionRegistry.c
++++ b/scripts/5_Mission/LFPG_ControlSessionRegistry.c
+@@ -133,7 +133,7 @@ class LFPG_ControlSessionRegistry
+         record.m_DeviceNetHigh = deviceNetHigh;
+         record.m_PlayerNetLow = playerNetLow;
+         record.m_PlayerNetHigh = playerNetHigh;
+-        record.m_DeadlineMs = 0;
++		record.m_DeadlineMs = g_Game.GetTime() + LFPG_SEARCHLIGHT_LEASE_MS;
+         record.m_SearchlightYaw = yaw;
+         record.m_SearchlightPitch = pitch;
+         record.m_AimLimiter = new LFPG_RateLimiter();
+@@ -149,6 +149,18 @@ class LFPG_ControlSessionRegistry
+         return record.m_AimLimiter.Allow(nowSeconds, LFPG_SEARCHLIGHT_AIM_COOLDOWN_S);
+     }
+ 
++	void RenewSearchlightLease(LFPG_ControlSessionRecord record)
++	{
++		if (!record)
++			return;
++		if (record.m_Kind != LFPG_CONTROL_KIND_SEARCHLIGHT)
++			return;
++		if (record.m_State != LFPG_CONTROL_STATE_ENTERING && record.m_State != LFPG_CONTROL_STATE_ACTIVE)
++			return;
++
++		record.m_DeadlineMs = g_Game.GetTime() + LFPG_SEARCHLIGHT_LEASE_MS;
++	}
++
+     bool AllowCCTVReplay(LFPG_ControlSessionRecord record, float nowSeconds)
+     {
+         if (!record || !record.m_ReplayLimiter)
+@@ -172,8 +184,10 @@ class LFPG_ControlSessionRegistry
+         if (!Matches(record, LFPG_CONTROL_KIND_SEARCHLIGHT, deviceNetLow, deviceNetHigh))
+             return false;
+ 
+-        if (record.m_DeadlineMs <= 0)
+-            record.m_DeadlineMs = g_Game.GetTime() + LFPG_CONTROL_SESSION_TIMEOUT_MS;
++		// An invalid/repeated EXIT may shorten recovery, never renew activity.
++		int exitDeadlineMs = g_Game.GetTime() + LFPG_CONTROL_SESSION_TIMEOUT_MS;
++		if (record.m_DeadlineMs <= 0 || record.m_DeadlineMs > exitDeadlineMs)
++			record.m_DeadlineMs = exitDeadlineMs;
+         return true;
+     }
+ 
+diff --git a/scripts/5_Mission/LFPG_NetworkManagerImpl.c b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+index 8f7a5d8..7855911 100644
+--- a/scripts/5_Mission/LFPG_NetworkManagerImpl.c
++++ b/scripts/5_Mission/LFPG_NetworkManagerImpl.c
+@@ -738,9 +738,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+ 
+                 if (opsInWindow >= LFPG_RPC_MAX_OPS_PER_SEC)
+                 {
+-                    string swLog = "[RateLimiter] Sliding window exceeded for " + pid;
++					string swLog = "[RateLimiter] Sliding window exceeded for " + LFPG_Util.LogUid(pid);
+                     swLog = swLog + " ops=" + opsInWindow.ToString();
+-                    LFPG_Util.Warn(swLog);
++					LFPG_Util.RateLimitedWarn(ident, "global_sliding_window", swLog);
+                     return false;
+                 }
+             }
+@@ -808,9 +808,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
+             m_RateOpsInWindow.Remove(staleKey);
+         }
+ 
+-        if (removed > 0)
++		int warnRemoved = LFPG_Util.PurgeStaleWarnRateLimits(GetGame().GetTickTime(), RATE_LIMITER_STALE_SEC);
++		if (removed > 0 || warnRemoved > 0)
+         {
+-            string purgeMsg = "[RateLimiter] Purged " + removed.ToString() + " stale entries";
++			string purgeMsg = "[RateLimiter] Purged cooldown=" + removed.ToString() + " warn=" + warnRemoved.ToString() + " stale entries";
+             LFPG_Util.Info(purgeMsg);
+         }
+ 
+diff --git a/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c b/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
+index 24b8ef9..3577cf5 100644
+--- a/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
++++ b/scripts/5_Mission/LFPG_RPCServerHandlerImpl.c
+@@ -105,14 +105,6 @@ class LFPG_RPCServerHandlerImpl
+         {
+             HandleInspectDevice(player, sender, ctx, LFPG_RPCGuard.POLICY_INSPECT_READ);
+         }
+-        else if (subId == LFPG_RPC_SubId.CAMERA_CYCLE)
+-        {
+-            HandleCameraLink(player, sender, ctx);
+-        }
+-        else if (subId == LFPG_RPC_SubId.CAMERA_UNLINK)
+-        {
+-            HandleCameraUnlink(player, sender, ctx);
+-        }
+         else if (subId == LFPG_RPC_SubId.REQUEST_CAMERA_LIST)
+         {
+             HandleRequestCameraList(player, sender, ctx);
+@@ -567,6 +559,13 @@ class LFPG_RPCServerHandlerImpl
+         }
+         LFPG_NetworkManager.Get().LockPort(portLockKey);
+ 
++		if (LFPG_DeviceRegistry.Get().IsAmbiguous(srcRealId) || LFPG_DeviceRegistry.Get().IsAmbiguous(dstRealId))
++		{
++			LFPG_NetworkManager.Get().UnlockPort(portLockKey);
++			PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on ambiguous devices.");
++			return;
++		}
++
+ 		LFPG_FinishWiringState finish = new LFPG_FinishWiringState();
+ 		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
+ 		LFPG_ServerSettings finishSettings = LFPG_Settings.Get();
+@@ -729,6 +728,12 @@ class LFPG_RPCServerHandlerImpl
+ 					conflict = true;
+ 				if (!conflict)
+ 					continue;
++				// Ambiguous owners must remain visible to this authorization scan.
++				LFPG_DeviceRegistry ownerRegistry = LFPG_DeviceRegistry.Get();
++				if (ownerRegistry.IsAmbiguous(ownerId) || ownerRegistry.IsAmbiguous(wire.m_TargetDeviceId))
++					return false;
++				if (isNative && ownerRegistry.FindById(ownerId) != obj)
++					return false;
+ 				// SEC02: same own/unclaimed policy as the cut path, never skip a denial.
+ 				if (!LFPG_WireHelper.CanCreatorCutWire(wire, creatorId, allowOthers))
+ 					return false;
+@@ -765,7 +770,7 @@ class LFPG_RPCServerHandlerImpl
+ 		// The reverse index alone cannot prove there is no foreign incoming wire.
+ 		LFPG_DeviceRegistry registry = LFPG_DeviceRegistry.Get();
+ 		array<EntityAI> devices = new array<EntityAI>;
+-		registry.GetAll(devices);
++		registry.GetAllRegisteredForSafety(devices);
+ 		if (devices.Find(srcObj) < 0)
+ 			return false;
+ 		for (int deviceIndex = 0; deviceIndex < devices.Count(); deviceIndex = deviceIndex + 1)
+@@ -1065,28 +1070,6 @@ class LFPG_RPCServerHandlerImpl
+         }
+     }
+ 
+-    static void HandleCameraLink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+-    {
+-        // v0.9.1: DEPRECATED â€” camera linking is now physical (cables).
+-        // Read params to drain the stream (avoid corruption).
+-        int discardLow = 0;
+-        int discardHigh = 0;
+-        ctx.Read(discardLow);
+-        ctx.Read(discardHigh);
+-        LFPG_Util.Warn("[CameraLink] DEPRECATED RPC received â€” ignoring");
+-    }
+-
+-    static void HandleCameraUnlink(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+-    {
+-        // v0.9.1: DEPRECATED â€” camera unlinking is now physical (cut cable).
+-        // Read params to drain the stream (avoid corruption).
+-        int discardLow = 0;
+-        int discardHigh = 0;
+-        ctx.Read(discardLow);
+-        ctx.Read(discardHigh);
+-        LFPG_Util.Warn("[CameraUnlink] DEPRECATED RPC received â€” ignoring");
+-    }
+-
+     static void HandleRequestCameraList(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+     {
+         if (!sender)
+@@ -1255,6 +1238,9 @@ class LFPG_RPCServerHandlerImpl
+             return;
+         }
+ 
++		if (player.IsInVehicle())
++			return;
++
+         LFPG_ControlSessionRecord cameraSession = sessions.BeginCCTV(sender, player, monitor, monNetLow, monNetHigh, camCount, camPositions, camOrientations, camLabels);
+         if (!cameraSession)
+         {
+@@ -1582,6 +1568,8 @@ class LFPG_RPCServerHandlerImpl
+         if (!sl.LFPG_IsOperator(record.m_PlayerNetLow, record.m_PlayerNetHigh))
+             return;
+ 
++		sessions.RenewSearchlightLease(record);
++
+         float nowSeconds = g_Game.GetTime() * 0.001;
+         if (!sessions.AllowSearchlightAim(record, nowSeconds))
+             return;
+@@ -1643,7 +1631,7 @@ class LFPG_RPCServerHandlerImpl
+         if (!sessions)
+             return;
+ 
+-        // Receipt of an exit arms recovery; a healthy session otherwise has no deadline.
++		// Receipt of an exit bounds recovery without extending the activity lease.
+         sessions.ArmSearchlightExitDeadline(sender, netLow, netHigh);
+ 
+         // Reject invalid numeric input before object resolution or authorization.

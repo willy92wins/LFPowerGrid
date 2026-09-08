@@ -1,0 +1,174 @@
+diff --git a/scripts/3_Game/LFPG_Migrators.c b/scripts/3_Game/LFPG_Migrators.c
+index c82a5a3..4f79dd8 100644
+--- a/scripts/3_Game/LFPG_Migrators.c
++++ b/scripts/3_Game/LFPG_Migrators.c
+@@ -1,8 +1,8 @@
+ // =========================================================
+ // LF_PowerGrid - persistence schema migrators (v0.7.15, Sprint 3 P1)
+ //
+-// Chained migration: each migrator transforms data from version N to N+1.
+-// DeserializeJSON calls MigrateBlob() which applies all needed steps.
++// Legacy version helpers: apply the v1 -> v2 bump without changing wire fields.
++// Newer schema versions are returned unchanged; validation belongs to loaders.
+ //
+ // Migration chain:
+ //   v1 (original) → v2 (Sprint 3: infrastructure + sanitization)
+@@ -34,9 +34,8 @@
+ 
+ class LFPG_Migrators
+ {
+-    // Apply all necessary migrations to a PersistBlob.
+-    // Called from DeserializeJSON after initial parse.
+-    // Returns the final version number.
++	// Apply the legacy version bump without validating or rewriting wire fields.
++	// Returns the version; newer schemas are left unchanged.
+     static int MigrateBlob(LFPG_PersistBlob blob)
+     {
+         if (!blob)
+@@ -51,10 +50,10 @@ class LFPG_Migrators
+             return ver;
+         }
+ 
+-        // Apply chained migrations
++		// v1 -> v2 changes only the version; loaders validate wire data.
+         if (ver < 2)
+         {
+-            MigrateV1ToV2(blob);
++			LFPG_Util.Info("[Migrators] Migrating PersistBlob v1 → v2");
+             ver = 2;
+         }
+ 
+@@ -80,29 +79,11 @@ class LFPG_Migrators
+ 
+         if (ver < 2)
+         {
+-            MigrateVanillaV1ToV2(store);
++			LFPG_Util.Info("[Migrators] Migrating VanillaWireStore v1 → v2");
+             ver = 2;
+         }
+ 
+         store.ver = ver;
+         return ver;
+     }
+-
+-    // ---- v1 → v2: Infrastructure migration ----
+-    // No schema changes. Establishes the migration chain.
+-    // Applies sanitization that v1 data may need (NaN, range, dedup).
+-    // Sanitization is done in ValidateWireData (called by DeserializeJSON),
+-    // so this migrator just bumps the version.
+-    protected static void MigrateV1ToV2(LFPG_PersistBlob blob)
+-    {
+-        LFPG_Util.Info("[Migrators] Migrating PersistBlob v1 → v2");
+-        // No field changes — sanitization handled by ValidateWireData
+-        // Version bump signals that data has passed through v2 sanitization
+-    }
+-
+-    protected static void MigrateVanillaV1ToV2(LFPG_VanillaWireStore store)
+-    {
+-        LFPG_Util.Info("[Migrators] Migrating VanillaWireStore v1 → v2");
+-        // No field changes — sanitization handled by ValidateVanillaEntry
+-    }
+ };
+diff --git a/scripts/3_Game/LFPG_Telemetry.c b/scripts/3_Game/LFPG_Telemetry.c
+index 73f816f..dfb9621 100644
+--- a/scripts/3_Game/LFPG_Telemetry.c
++++ b/scripts/3_Game/LFPG_Telemetry.c
+@@ -174,7 +174,7 @@ class LFPG_Telemetry
+         }
+ 
+         // Preview averages (only meaningful if wiring was active)
+-        if (s_SumPrvSpans > 0)
++		if (LFPG_PERFDIAG_ENABLED && s_SumPrvSpans > 0)
+         {
+             int avgSpans = s_SumPrvSpans / s_FrameCount;
+             int avgSubSegs = s_SumPrvSubSegs / s_FrameCount;
+@@ -190,11 +190,11 @@ class LFPG_Telemetry
+             pLog = pLog + " (behind=" + s_SumPrvCulledBehind.ToString();
+             pLog = pLog + " off=" + s_SumPrvCulledOff.ToString() + ")";
+             pLog = pLog + " avgProjections=" + avgProjections.ToString();
+-            Print("[LF_PowerGrid] " + pLog);
++			LFPG_Util.Info(pLog);
+         }
+ 
+         // Render averages (only meaningful if CableRenderer populated data)
+-        if (s_SumRndTotal > 0)
++		if (LFPG_PERFDIAG_ENABLED && s_SumRndTotal > 0)
+         {
+             int avgWires = s_SumRndTotal / s_FrameCount;
+             int avgDrawnW = s_SumRndDrawn / s_FrameCount;
+@@ -217,7 +217,7 @@ class LFPG_Telemetry
+             rLog = rLog + " peakSegs=" + s_PeakRndSegs.ToString();
+             rLog = rLog + " budgetPct=" + budgetPct.ToString() + "%";
+             rLog = rLog + " occRays=" + s_SumRndOccRays.ToString();
+-            Print("[LF_PowerGrid] " + rLog);
++			LFPG_Util.Info(rLog);
+         }
+ 
+         // Reset accumulators
+diff --git a/scripts/4_World/LFPG_CableRenderer.c b/scripts/4_World/LFPG_CableRenderer.c
+index 71006a9..6dad129 100644
+--- a/scripts/4_World/LFPG_CableRenderer.c
++++ b/scripts/4_World/LFPG_CableRenderer.c
+@@ -996,62 +996,6 @@ class LFPG_CableRenderer
+     // ===========================
+     // Entity resolution (client-side)
+     // ===========================
+-    protected EntityAI ResolveDeviceEntity(string deviceId)
+-    {
+-        if (deviceId == "")
+-            return null;
+-
+-        // 1. DeviceRegistry (works for LFPG devices on client)
+-        EntityAI found = LFPG_DeviceRegistry.Get().FindById(deviceId);
+-        if (found)
+-        {
+-            if (LFPG_DIAG_ENABLED)
+-            {
+-                LFPG_Diag.ServerEcho("[Resolve] HIT registry id=" + deviceId + " type=" + found.GetType());
+-            }
+-            return found;
+-        }
+-
+-        // 2. Check negative cache: skip if recently failed
+-        float failTime = 0.0;
+-        float nowMs = g_Game.GetTime();
+-        if (m_NegCache.Find(deviceId, failTime))
+-        {
+-            float age = nowMs - failTime;
+-            if (age < NEG_CACHE_TTL_MS)
+-            {
+-                if (LFPG_DIAG_ENABLED)
+-                {
+-                    LFPG_Diag.ServerEcho("[Resolve] NegCache block id=" + deviceId + " age=" + age.ToString());
+-                }
+-                return null;
+-            }
+-            m_NegCache.Remove(deviceId);
+-        }
+-
+-        // 3. Vanilla position-based ID: "vp:TYPE:QX:QY:QZ"
+-        if (deviceId.IndexOf("vp:") == 0)
+-        {
+-            EntityAI vObj = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
+-            if (vObj)
+-            {
+-                if (LFPG_DIAG_ENABLED)
+-                {
+-                    LFPG_Diag.ServerEcho("[Resolve] HIT vanilla id=" + deviceId + " type=" + vObj.GetType());
+-                }
+-                return vObj;
+-            }
+-        }
+-
+-        // 4. Resolution failed
+-        m_NegCache[deviceId] = nowMs;
+-        if (LFPG_DIAG_ENABLED)
+-        {
+-            LFPG_Diag.ServerEcho("[Resolve] MISS id=" + deviceId + " -> NegCache");
+-        }
+-        return null;
+-    }
+-
+     // v0.7.45 (Patch 3C): Extended resolver with NetworkID fallback.
+     // Tries DeviceRegistry first, then NetworkID (bypasses NegCache),
+     // then vanilla spatial, then NegCache check as last resort.

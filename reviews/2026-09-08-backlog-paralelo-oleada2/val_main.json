@@ -1,0 +1,459 @@
+{
+  "addon_root": "C:\\Users\\guill\\OneDrive\\Documentos\\DayZ Projects\\LFPowerGrid",
+  "status": "WARN",
+  "errors": [],
+  "warnings": [
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\3_Game\\LFPG_FaultInject.c",
+      "line": 19,
+      "message": "[WARN] scripts\\3_Game\\LFPG_FaultInject.c line 19: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\LFPG_ActionOpenSorterPanel.c",
+      "line": 56,
+      "message": "[WARN] scripts\\4_World\\LFPG_ActionOpenSorterPanel.c line 56: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\LFPG_ActionOpenSorterPanel.c",
+      "line": 102,
+      "message": "[WARN] scripts\\4_World\\LFPG_ActionOpenSorterPanel.c line 102: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_ActionPairSensor.c",
+      "line": 95,
+      "message": "[WARN] scripts\\4_World\\LFPG_ActionPairSensor.c line 95: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\LFPG_ActionSyncSorter.c",
+      "line": 105,
+      "message": "[WARN] scripts\\4_World\\LFPG_ActionSyncSorter.c line 105: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_Battery.c",
+      "line": 355,
+      "message": "[WARN] scripts\\4_World\\LFPG_Battery.c line 355: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_BTCAtm.c",
+      "line": 128,
+      "message": "[WARN] scripts\\4_World\\LFPG_BTCAtm.c line 128: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_BTCAtm.c",
+      "line": 153,
+      "message": "[WARN] scripts\\4_World\\LFPG_BTCAtm.c line 153: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_BTCAtm.c",
+      "line": 175,
+      "message": "[WARN] scripts\\4_World\\LFPG_BTCAtm.c line 175: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_DeviceLifecycle.c",
+      "line": 137,
+      "message": "[WARN] scripts\\4_World\\LFPG_DeviceLifecycle.c line 137: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_Furnace.c",
+      "line": 876,
+      "message": "[WARN] scripts\\4_World\\LFPG_Furnace.c line 876: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\LFPG_IDevice.c",
+      "line": 213,
+      "message": "[WARN] scripts\\4_World\\LFPG_IDevice.c line 213: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_LaserDetector.c",
+      "line": 301,
+      "message": "[WARN] scripts\\4_World\\LFPG_LaserDetector.c line 301: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_LaserDetector.c",
+      "line": 421,
+      "message": "[WARN] scripts\\4_World\\LFPG_LaserDetector.c line 421: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_MotionSensor.c",
+      "line": 584,
+      "message": "[WARN] scripts\\4_World\\LFPG_MotionSensor.c line 584: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_MotionSensor.c",
+      "line": 627,
+      "message": "[WARN] scripts\\4_World\\LFPG_MotionSensor.c line 627: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_MotionSensor.c",
+      "line": 665,
+      "message": "[WARN] scripts\\4_World\\LFPG_MotionSensor.c line 665: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_PlayerRPC.c",
+      "line": 99,
+      "message": "[WARN] scripts\\4_World\\LFPG_PlayerRPC.c line 99: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_PressurePad.c",
+      "line": 226,
+      "message": "[WARN] scripts\\4_World\\LFPG_PressurePad.c line 226: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_PumpHelper.c",
+      "line": 127,
+      "message": "[WARN] scripts\\4_World\\LFPG_PumpHelper.c line 127: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_RemoteController.c",
+      "line": 129,
+      "message": "[WARN] scripts\\4_World\\LFPG_RemoteController.c line 129: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_RemoteController.c",
+      "line": 317,
+      "message": "[WARN] scripts\\4_World\\LFPG_RemoteController.c line 317: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_RemoteController.c",
+      "line": 526,
+      "message": "[WARN] scripts\\4_World\\LFPG_RemoteController.c line 526: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\4_World\\LFPG_RPCClientHandler.c",
+      "line": 761,
+      "message": "[WARN] scripts\\4_World\\LFPG_RPCClientHandler.c line 761: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\4_World\\LFPG_RPCClientHandler.c",
+      "line": 764,
+      "message": "[WARN] scripts\\4_World\\LFPG_RPCClientHandler.c line 764: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\4_World\\LFPG_RPCClientHandler.c",
+      "line": 825,
+      "message": "[WARN] scripts\\4_World\\LFPG_RPCClientHandler.c line 825: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_Sorter.c",
+      "line": 446,
+      "message": "[WARN] scripts\\4_World\\LFPG_Sorter.c line 446: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\4_World\\LFPG_Sorter.c",
+      "line": 667,
+      "message": "[WARN] scripts\\4_World\\LFPG_Sorter.c line 667: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\test\\LFPG_ActionOpenSorterPanel_TEST.c",
+      "line": 51,
+      "message": "[WARN] scripts\\4_World\\test\\LFPG_ActionOpenSorterPanel_TEST.c line 51: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\4_World\\test\\LFPG_ActionOpenSorterPanel_TEST.c",
+      "line": 94,
+      "message": "[WARN] scripts\\4_World\\test\\LFPG_ActionOpenSorterPanel_TEST.c line 94: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-GETTYPE-EXACT-MATCH",
+      "file": "scripts\\5_Mission\\LFPG_BTCHelper.c",
+      "line": 383,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_BTCHelper.c line 383: `.GetType()` compared with `==`/`!=`. Exact match fails on inherited or modded variants; the server may silently reject actions whose client check uses IsKindOf (pitfalls-advanced.md:257-274, SKILL.md rules 31-32). Use `obj.IsKindOf(\"TypeName\")` for full inheritance-chain checks.",
+      "severity": "WARN",
+      "rule_id": "ES-GETTYPE-EXACT-MATCH"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 423,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 423: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 786,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 786: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1114,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1114: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1416,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1416: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1467,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1467: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1491,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1491: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1621,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1621: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1761,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1761: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1829,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1829: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 1875,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 1875: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 2776,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 2776: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 3268,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 3268: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 3853,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 3853: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_ElecGraphImpl.c",
+      "line": 3907,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_ElecGraphImpl.c line 3907: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 969,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 969: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 983,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 983: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 1009,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 1009: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 1301,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 1301: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 1723,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 1723: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_NetworkManagerImpl.c",
+      "line": 4254,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_NetworkManagerImpl.c line 4254: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c",
+      "line": 1074,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c line 1074: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c",
+      "line": 1075,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c line 1075: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c",
+      "line": 1085,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c line 1085: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-CTX-READ-UNCHECKED",
+      "file": "scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c",
+      "line": 1086,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_RPCServerHandlerImpl.c line 1086: ctx.Read() return not checked. Recommended: 'if (!ctx.Read(...)) ...'.",
+      "severity": "WARN",
+      "rule_id": "ES-CTX-READ-UNCHECKED"
+    },
+    {
+      "check": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN",
+      "file": "scripts\\5_Mission\\LFPG_SorterLogic.c",
+      "line": 1345,
+      "message": "[WARN] scripts\\5_Mission\\LFPG_SorterLogic.c line 1345: unsupported preprocessor pattern for ES-EMPTY-IFDEF. Phase 1 supports only '#ifdef <macro>'/'#ifndef <macro>' paired with '#endif'; #if/#elif/#else and complex conditions are not analyzed.",
+      "severity": "WARN",
+      "rule_id": "ES-EMPTY-IFDEF-UNSUPPORTED-PATTERN"
+    }
+  ],
+  "info": {
+    "files_scanned": 271,
+    "elapsed_ms": 50459
+  }
+}
