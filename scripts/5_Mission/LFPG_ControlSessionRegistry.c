@@ -425,6 +425,21 @@ class LFPG_ControlSessionRegistry
                     {
                         terminal = true;
                     }
+					else
+					{
+						// El radio de agarre es HORIZONTAL, no 3D: asi lo aplican el AIM del servidor
+						// (LFPG_RPCServerHandlerImpl.c:1550) y el auto-exit del cliente
+						// (LFPG_SearchlightController.c:235). Con DistSq 3D, un operador a 2,5 m en
+						// una ladera seguiria siendo aceptado por AIM y expulsado por este tick.
+						vector playerPos = record.m_Player.GetPosition();
+						vector lightPos = record.m_Searchlight.GetPosition();
+						float dx = playerPos[0] - lightPos[0];
+						float dz = playerPos[2] - lightPos[2];
+						float distanceSq = dx * dx + dz * dz;
+						float radiusSq = LFPG_SEARCHLIGHT_GRAB_RADIUS_M * LFPG_SEARCHLIGHT_GRAB_RADIUS_M;
+						if (!(distanceSq <= radiusSq))
+							terminal = true;
+					}
                 }
                 else
                 {

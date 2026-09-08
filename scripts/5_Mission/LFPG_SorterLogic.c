@@ -507,14 +507,9 @@ class LFPG_SorterLogic
         string ruleLower;
         bool hasHardline;
         int slotSize;
-        int dashPos;
-        string minStr;
-        string maxStr;
-        int minVal;
-        int maxVal;
-        int remainLen;
+		int minVal;
+		int maxVal;
         string kHardlineCfg = "CfgPatches ExpansionHardline";
-        string kDash = "-";
 
         if (rule.m_Type == LFPG_SORT_FILTER_CATEGORY)
         {
@@ -573,19 +568,8 @@ class LFPG_SorterLogic
         {
             slotSize = GetItemSlotSize(item);
 
-            // Parse "min-max" from rule.m_Value
-            dashPos = rule.m_Value.IndexOf(kDash);
-            if (dashPos < 0)
-                return false;
-
-            minStr = rule.m_Value.Substring(0, dashPos);
-            remainLen = rule.m_Value.Length() - dashPos - 1;
-            if (remainLen <= 0)
-                return false;
-
-            maxStr = rule.m_Value.Substring(dashPos + 1, remainLen);
-            minVal = minStr.ToInt();
-            maxVal = maxStr.ToInt();
+			if (!GetSlotRuleRange(rule.m_Value, minVal, maxVal))
+				return false;
 
             if (slotSize >= minVal && slotSize <= maxVal)
                 return true;
@@ -603,6 +587,9 @@ class LFPG_SorterLogic
     protected static ref map<string, string> s_LowerTypeCache;
     protected static ref map<string, int> s_SlotWidthCache;
     protected static ref map<string, int> s_SlotHeightCache;
+	protected static const int s_SlotRuleCacheLimit = 256;
+	protected static ref map<string, int> s_SlotRuleMinCache;
+	protected static ref map<string, int> s_SlotRuleMaxCache;
 
     static void InitCaches()
     {
@@ -614,7 +601,49 @@ class LFPG_SorterLogic
             s_SlotWidthCache = new map<string, int>;
         if (!s_SlotHeightCache)
             s_SlotHeightCache = new map<string, int>;
+		if (!s_SlotRuleMinCache)
+			s_SlotRuleMinCache = new map<string, int>;
+		if (!s_SlotRuleMaxCache)
+			s_SlotRuleMaxCache = new map<string, int>;
     }
+
+	// Key by value, not rule identity: edited/reloaded rules cannot reuse stale bounds.
+	// No permissions, cargo capacity or topology are cached here.
+	protected static bool GetSlotRuleRange(string value, out int minVal, out int maxVal)
+	{
+		bool canCache = s_SlotRuleMinCache && s_SlotRuleMaxCache && value.Length() <= 64;
+		if (canCache && s_SlotRuleMinCache.Contains(value))
+		{
+			minVal = s_SlotRuleMinCache.Get(value);
+			maxVal = s_SlotRuleMaxCache.Get(value);
+			return minVal <= maxVal;
+		}
+
+		// An inverted interval caches malformed input as a non-match.
+		minVal = 1;
+		maxVal = 0;
+		int dashPos = value.IndexOf("-");
+		int remainLen = value.Length() - dashPos - 1;
+		if (dashPos >= 0 && remainLen > 0)
+		{
+			string minStr = value.Substring(0, dashPos);
+			string maxStr = value.Substring(dashPos + 1, remainLen);
+			minVal = minStr.ToInt();
+			maxVal = maxStr.ToInt();
+		}
+
+		if (canCache)
+		{
+			if (s_SlotRuleMinCache.Count() >= s_SlotRuleCacheLimit)
+			{
+				s_SlotRuleMinCache.Clear();
+				s_SlotRuleMaxCache.Clear();
+			}
+			s_SlotRuleMinCache.Set(value, minVal);
+			s_SlotRuleMaxCache.Set(value, maxVal);
+		}
+		return minVal <= maxVal;
+	}
 
     protected static string GetLowerTypeName(EntityAI item)
     {
@@ -744,10 +773,10 @@ class LFPG_SorterLogic
         k = "Bayonet_SKS";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        // Wraps/lights
+		// The ghillie suit is clothing; weapon lights remain attachments.
         k = "GhillieSuit_ColorBase";
         if (item.IsKindOf(k))
-            return LFPG_SORT_CAT_ATTACHMENT;
+			return LFPG_SORT_CAT_CLOTHING;
         k = "UniversalLight";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
@@ -968,6 +997,21 @@ class LFPG_SorterLogic
     //   output index → output port → wire → target Sorter → its container
     // Returns null if wire/target missing.
     // ---------------------------------------------------------
+	// Resolve the live link at use time; power and cargo permissions are separate.
+	static EntityAI ResolveLinkedContainer(LFPG_Sorter sorter)
+	{
+		if (!sorter)
+			return null;
+		EntityAI container = sorter.LFPG_GetLinkedContainer();
+		if (!container)
+			return null;
+		float distanceSq = LFPG_WorldUtil.DistSq(sorter.GetPosition(), container.GetPosition());
+		float radiusSq = LFPG_SORTER_LINK_RADIUS * LFPG_SORTER_LINK_RADIUS;
+		if (distanceSq <= radiusSq)
+			return container;
+		return null;
+	}
+
     static EntityAI ResolveOutputContainer(LFPG_Sorter sorter, int outputIdx)
     {
         if (!sorter)
@@ -1008,8 +1052,8 @@ class LFPG_SorterLogic
         if (!targetSorter)
             return null;
 
-        // 4. Get the target Sorter's linked container
-        return targetSorter.LFPG_GetLinkedContainer();
+		// S15: a resolved NetworkID alone does not keep a moved link in range.
+		return ResolveLinkedContainer(targetSorter);
     }
 
     // ---------------------------------------------------------
