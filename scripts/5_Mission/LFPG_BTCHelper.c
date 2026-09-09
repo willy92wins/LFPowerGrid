@@ -2592,12 +2592,16 @@ class LFPG_BTCHelper
         float stagedRemainder = GreedyChange(player, eurAmount, withdrawPlan, false);
         if (stagedRemainder > 0.001)
         {
-            withdrawPlan.AbortOutputs();
+            // Keep the represented amount after the exact debit; never refund the remainder.
+            float deliveredCash = removed - stagedRemainder;
             int errStage = LFPG_BTC_ERR_INVENTORY_FULL;
+            if (deliveredCash > 0.0)
+                errStage = LFPG_BTC_OK;
             int debitedBal = atmPb.GetBalance(player);
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errStage, atm.LFPG_GetBtcStock(), debitedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-            LFPG_Util.Warn("[BTCWithdrawCash] delivery failed after debit; outputs aborted, no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " debited=" + removed.ToString() + " remainder=" + stagedRemainder.ToString());
-            PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal failed after debit. Cash was not refunded; report this to an administrator.");
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errStage, atm.LFPG_GetBtcStock(), debitedBal, 0, deliveredCash, serverSessionLow, serverSessionHigh, sequence);
+            LFPG_Util.Warn("[BTCWithdrawCash] incomplete delivery after debit; no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " debited=" + removed.ToString() + " delivered=" + deliveredCash.ToString() + " lost_remainder=" + stagedRemainder.ToString());
+            string partialCashMsg = "Cash withdrawal: debited " + removed.ToString() + " EUR, delivered " + deliveredCash.ToString() + " EUR, lost " + stagedRemainder.ToString() + " EUR. The remainder was not refunded; report this to an administrator.";
+            PlayerBase.LFPG_SendClientMsg(player, partialCashMsg);
             return;
         }
 
