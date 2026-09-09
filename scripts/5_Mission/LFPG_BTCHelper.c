@@ -608,11 +608,12 @@ class LFPG_BTCHelper
         return 0;
     }
 
-    static int StageItemsForPlayer(PlayerBase player, string classname, int amount, LFPG_BTCInventoryPlan outputPlan)
+    static int StageItemsForPlayer(PlayerBase player, string classname, int amount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
         if (amount <= 0)
             return 0;
-        ProbeAndCacheStack(player, classname);
+        if (allowStackProbe)
+            ProbeAndCacheStack(player, classname);
         int entities = EstimateItemEntities(classname, amount);
         if (entities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -788,7 +789,7 @@ class LFPG_BTCHelper
         return created;
     }
 
-    static float GreedyChange(PlayerBase player, float eurAmount, LFPG_BTCInventoryPlan outputPlan)
+    static float GreedyChange(PlayerBase player, float eurAmount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
         if (eurAmount <= 0.0)
             return 0.0;
@@ -803,7 +804,8 @@ class LFPG_BTCHelper
         int intAmount = (int)eurAmount;
         float fractional = eurAmount - intAmount;
 
-        WarmupCurrencyStackCache(player);
+        if (allowStackProbe)
+            WarmupCurrencyStackCache(player);
         int changeEntities = EstimateGreedyChangeEntities(intAmount);
         if (changeEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -846,7 +848,7 @@ class LFPG_BTCHelper
             if (billCount <= 0)
                 continue;
 
-            createdBills = StageItemsForPlayer(player, cur.classname, billCount, outputPlan);
+            createdBills = StageItemsForPlayer(player, cur.classname, billCount, outputPlan, allowStackProbe);
             eurGiven = createdBills * cur.value;
             remaining = remaining - eurGiven;
         }
@@ -2159,7 +2161,7 @@ class LFPG_BTCHelper
         }
 
         string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
-        ProbeAndCacheStack(player, btcClassname);
+        // Missing stack capacities default to one without creating value.
         int withdrawEntities = EstimateItemEntities(btcClassname, btcAmount);
         if (withdrawEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -2175,9 +2177,19 @@ class LFPG_BTCHelper
             return;
         }
 
-        // Stage physical delivery before the claim fold and stock commit.
+        // Persist the full stock debit before creating any physical output.
+        bool stockRemoved = atm.LFPG_RemoveBtcStock(btcAmount);
+        if (!stockRemoved)
+        {
+            int errClaimFold = LFPG_BTC_ERR_INVALID;
+            int blockedStock = atm.LFPG_GetBtcStock();
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errClaimFold, blockedStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            return;
+        }
+
+        LFPG_Util.Info("[BTCWithdraw] stock debited before delivery uid=" + LFPG_Util.LogUid(sender.GetId()) + " deviceId=" + atm.LFPG_GetDeviceId() + " amount=" + btcAmount.ToString());
         LFPG_BTCInventoryPlan btcWithdrawPlan = new LFPG_BTCInventoryPlan();
-        int created = StageItemsForPlayer(player, btcClassname, btcAmount, btcWithdrawPlan);
+        int created = StageItemsForPlayer(player, btcClassname, btcAmount, btcWithdrawPlan, false);
 
         if (created <= 0)
         {
@@ -2185,18 +2197,14 @@ class LFPG_BTCHelper
             int errInvW = LFPG_BTC_ERR_INVENTORY_FULL;
             int curStockW = atm.LFPG_GetBtcStock();
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errInvW, curStockW, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-            LFPG_Util.Warn("[BTCWithdraw] inventory full, no items created");
+            LFPG_Util.Warn("[BTCWithdraw] delivery failed after stock debit; no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " amount=" + btcAmount.ToString());
+            PlayerBase.LFPG_SendClientMsg(player, "BTC withdrawal failed after debit. Stock was not refunded; report this to an administrator.");
             return;
         }
-
-        bool stockRemoved = atm.LFPG_RemoveBtcStock(created);
-        if (!stockRemoved)
+        if (created < btcAmount)
         {
-            btcWithdrawPlan.AbortOutputs();
-            int errClaimFold = LFPG_BTC_ERR_INVALID;
-            int blockedStock = atm.LFPG_GetBtcStock();
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errClaimFold, blockedStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-            return;
+            LFPG_Util.Warn("[BTCWithdraw] partial delivery after full stock debit; no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " debited=" + btcAmount.ToString() + " delivered=" + created.ToString());
+            PlayerBase.LFPG_SendClientMsg(player, "BTC withdrawal delivered only part of the debited stock. The remainder was not refunded; report this to an administrator.");
         }
 
         // Updated state
@@ -2550,7 +2558,7 @@ class LFPG_BTCHelper
             return;
         }
 
-        WarmupCurrencyStackCache(player);
+        // Missing stack capacities default to one without creating value.
         int withdrawCashEntities = EstimateGreedyChangeEntities(eurAmount);
         if (withdrawCashEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -2566,32 +2574,30 @@ class LFPG_BTCHelper
             return;
         }
 
-        // BTC handlers are synchronous in one frame and the nonce registry owns
-        // the per-player IN_FLIGHT slot, so the staged references cannot overlap
-        // another accepted mutation before this commit or abort completes.
+        // Debit before materialization. Failed delivery never restores value.
+        int removed = atmPb.RemoveBalance(player, eurAmount);
+        if (removed != eurAmount)
+        {
+            int failedBal = atmPb.GetBalance(player);
+            int errDurability = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errDurability, atm.LFPG_GetBtcStock(), failedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            LFPG_Util.Error("[BTCWithdrawCash] debit was not exact; no delivery or refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " requested=" + eurAmount.ToString() + " removed=" + removed.ToString());
+            if (removed > 0)
+                PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal stopped after a partial debit. No cash was delivered or refunded; report this to an administrator.");
+            return;
+        }
+
+        LFPG_Util.Info("[BTCWithdrawCash] balance debited before delivery uid=" + LFPG_Util.LogUid(sender.GetId()) + " deviceId=" + atm.LFPG_GetDeviceId() + " amount=" + removed.ToString());
         LFPG_BTCInventoryPlan withdrawPlan = new LFPG_BTCInventoryPlan();
-        float stagedRemainder = GreedyChange(player, eurAmount, withdrawPlan);
+        float stagedRemainder = GreedyChange(player, eurAmount, withdrawPlan, false);
         if (stagedRemainder > 0.001)
         {
             withdrawPlan.AbortOutputs();
             int errStage = LFPG_BTC_ERR_INVENTORY_FULL;
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errStage, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
-
-        int removed = atmPb.RemoveBalance(player, eurAmount);
-        if (removed != eurAmount)
-        {
-            withdrawPlan.AbortOutputs();
-            if (removed > 0)
-            {
-                int refundedDebit = atmPb.AddBalance(player, removed);
-                if (refundedDebit != removed)
-                    LFPG_Util.Error("[BTCWithdrawCash] partial debit refund was not durable/exact");
-            }
-            int failedBal = atmPb.GetBalance(player);
-            int errDurability = LFPG_BTC_ERR_INVALID;
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errDurability, atm.LFPG_GetBtcStock(), failedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            int debitedBal = atmPb.GetBalance(player);
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errStage, atm.LFPG_GetBtcStock(), debitedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            LFPG_Util.Warn("[BTCWithdrawCash] delivery failed after debit; outputs aborted, no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " debited=" + removed.ToString() + " remainder=" + stagedRemainder.ToString());
+            PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal failed after debit. Cash was not refunded; report this to an administrator.");
             return;
         }
 
