@@ -2508,24 +2508,24 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
+        LFPG_BalanceProvider atmPb = LFPG_BalanceRegistry.GetActive();
+        int currentBal = 0;
+        if (atmPb)
+        {
+            currentBal = atmPb.GetBalance(player);
+        }
+
         int maxEurOpW = LFPG_BTCConfig.GetMaxEurPerOperation();
         if (eurAmount > maxEurOpW)
         {
             int errLargeWC = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errLargeWC, atm.LFPG_GetBtcStock(), 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errLargeWC, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             string warnLargeWC = "[BTCWithdrawCash] amount rejected (> cap): requested=";
             warnLargeWC = warnLargeWC + eurAmount.ToString();
             warnLargeWC = warnLargeWC + " cap=";
             warnLargeWC = warnLargeWC + maxEurOpW.ToString();
             LFPG_Util.Warn(warnLargeWC);
             return;
-        }
-
-        LFPG_BalanceProvider atmPb = LFPG_BalanceRegistry.GetActive();
-        int currentBal = 0;
-        if (atmPb)
-        {
-            currentBal = atmPb.GetBalance(player);
         }
 
         if (!atm.LFPG_IsATMPowered())
@@ -2690,11 +2690,20 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
+        // Capture one provider before any physical side effect. The same
+        // instance performs credit and any compensating debit.
+        LFPG_BalanceProvider atmPb = LFPG_BalanceRegistry.GetActive();
+        int earlyBal = 0;
+        if (atmPb)
+        {
+            earlyBal = atmPb.GetBalance(player);
+        }
+
         int maxEurOpD = LFPG_BTCConfig.GetMaxEurPerOperation();
         if (eurAmount > maxEurOpD)
         {
             int errLargeDC = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
-            SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errLargeDC, atm.LFPG_GetBtcStock(), 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errLargeDC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             string warnLargeDC = "[BTCDepositCash] amount rejected (> cap): requested=";
             warnLargeDC = warnLargeDC + eurAmount.ToString();
             warnLargeDC = warnLargeDC + " cap=";
@@ -2703,17 +2712,12 @@ class LFPG_BTCHelper
             return;
         }
 
-        // Capture one provider before any physical side effect. The same
-        // instance performs credit and any compensating debit.
-        LFPG_BalanceProvider atmPb = LFPG_BalanceRegistry.GetActive();
-        int earlyBal = 0;
         if (!atmPb)
         {
             int errProvider = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errProvider, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-        earlyBal = atmPb.GetBalance(player);
 
         if (!atm.LFPG_IsATMPowered())
         {
