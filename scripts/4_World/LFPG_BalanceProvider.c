@@ -7,9 +7,9 @@
 // Providers register at startup with a name and priority.
 // The registry resolves the active provider based on the
 // balanceMode setting in LF_BTCAtm.json:
-//   "auto"     -> highest priority supported provider
+//   "auto"     -> highest priority supported provider, no fallback after exclusion
 //   "native"   → force LFPG native (always available)
-//   "lbmaster" -> LBmaster, with Native fallback if unsupported
+//   "lbmaster" -> LBmaster, unavailable if its banking API is missing
 //
 // Future providers (Expansion, Trader+, etc.) just need a
 // new class extending LFPG_BalanceProvider and calling
@@ -124,9 +124,8 @@ class LFPG_BalanceRegistry
             s_Active = FindByName("LBmaster");
             if (!s_Active)
             {
-                string errLB = "[LFPG_Balance] Mode=lbmaster requested but LBmaster banking API is unavailable (missing provider or Core without banking). Falling back to Native; requested configuration is NOT being honored. Native and LBmaster use separate wallets; no balances are migrated.";
+                string errLB = "[LFPG_Balance] Mode=lbmaster requested but LBmaster banking API is unavailable (missing provider or Core without banking). Requested configuration CANNOT be served. Account operations disabled; wallet switching intentionally disabled. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.";
                 LFPG_Util.Error(errLB);
-                s_Active = FindByName("Native");
             }
         }
         else
@@ -153,7 +152,7 @@ class LFPG_BalanceRegistry
         {
             string noMsg = "[LFPG_Balance] Mode=";
             noMsg = noMsg + balanceMode;
-            noMsg = noMsg + " -> No active provider! BTC ATM balance operations will fail.";
+            noMsg = noMsg + " -> No active provider. Account operations disabled; wallet unchanged intentionally. Physical BTC stock operations remain available. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.";
             LFPG_Util.Error(noMsg);
         }
 
@@ -252,9 +251,11 @@ class LFPG_BalanceRegistry
                 best = prov;
             }
         }
-        if (skippedUnsupported && best)
+        if (skippedUnsupported)
         {
-            LFPG_Util.Warn("[LFPG_Balance] Mode=auto -> Active: " + best.GetName() + ". Fallback uses a separate wallet; no balances are migrated.");
+            // A supported fallback may hold unrelated or previously migrated balances.
+            LFPG_Util.Warn("[LFPG_Balance] Mode=auto: no eligible banking provider remains after exclusion; fallback to another wallet intentionally disabled. Account operations disabled. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.");
+            return null;
         }
         return best;
     }
