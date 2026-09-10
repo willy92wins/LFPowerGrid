@@ -1355,6 +1355,9 @@ class LFPG_RPCServerHandlerImpl
         int commitKind = 0;
         bool aimLimiterOk = false;
         float nowSeconds = 0.0;
+        Object cameraObject = null;
+        LFPG_Camera camera = null;
+        string expectedDeviceId = "";
         if (!ctx.Read(cameraNetLow))
             return;
         if (!ctx.Read(cameraNetHigh))
@@ -1391,27 +1394,24 @@ class LFPG_RPCServerHandlerImpl
         if (!record.m_Player)
             return;
 
-        nowSeconds = g_Game.GetTime() * 0.001;
-        aimLimiterOk = false;
-        if (commitKind == LFPG_CCTV_AIM_KIND_FINAL)
+        // Ordinary still pays the 50 ms bucket before entity lookup, same
+        // as before. The one-shot final token is not spent until the
+        // allowlisted entity and its frozen deviceId are confirmed, and
+        // not at all when clamped yaw/pitch already match stored PTZ.
+        if (commitKind == LFPG_CCTV_AIM_KIND_ORDINARY)
         {
-            aimLimiterOk = sessions.ConsumeCCTVAimFinal(record, cameraIndex);
-            if (!aimLimiterOk)
-                aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
-        }
-        else
-        {
+            nowSeconds = g_Game.GetTime() * 0.001;
             aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
+            if (!aimLimiterOk)
+                return;
         }
-        if (!aimLimiterOk)
-            return;
 
-        Object cameraObject = g_Game.GetObjectByNetworkId(cameraNetLow, cameraNetHigh);
-        LFPG_Camera camera = LFPG_Camera.Cast(cameraObject);
+        cameraObject = g_Game.GetObjectByNetworkId(cameraNetLow, cameraNetHigh);
+        camera = LFPG_Camera.Cast(cameraObject);
         if (!camera || camera.IsRuined())
             return;
 
-        string expectedDeviceId = sessions.GetCCTVCameraDeviceId(record, cameraIndex);
+        expectedDeviceId = sessions.GetCCTVCameraDeviceId(record, cameraIndex);
         if (expectedDeviceId == "" || camera.LFPG_GetDeviceId() != expectedDeviceId)
         {
             LFPG_Util.RateLimitedWarn(sender, "cctv_aim_camera_reused", "[CCTV_AIM] Camera NetworkID no longer matches the active session");
@@ -1426,6 +1426,19 @@ class LFPG_RPCServerHandlerImpl
             aimPitch = LFPG_CCTV_PITCH_LIMIT;
         if (aimPitch < -LFPG_CCTV_PITCH_LIMIT)
             aimPitch = -LFPG_CCTV_PITCH_LIMIT;
+
+        if (commitKind == LFPG_CCTV_AIM_KIND_FINAL)
+        {
+            if (camera.LFPG_GetPTZYaw() == aimYaw && camera.LFPG_GetPTZPitch() == aimPitch)
+                return;
+
+            nowSeconds = g_Game.GetTime() * 0.001;
+            aimLimiterOk = sessions.ConsumeCCTVAimFinal(record, cameraIndex);
+            if (!aimLimiterOk)
+                aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
+            if (!aimLimiterOk)
+                return;
+        }
 
         // Last writer wins. Two operators on two monitors may aim the same
         // camera. There is no live AIM server->client, and a viewport does

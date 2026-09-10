@@ -820,10 +820,14 @@ class LFPG_CameraViewport
     // Solo se llama desde Reset().
     // NO envía RPC — durante disconnect el network no es fiable.
     // El servidor limpia identities huérfanas automáticamente.
+    // A pending ordinary is dropped here. Last-PTZ delivery is not
+    // promised on disconnect.
     // =========================================================
     protected void ForceCleanup()
     {
         LFPG_Util.Debug("[CameraViewport] DIAG: ForceCleanup");
+        if (m_AimDirty)
+            LFPG_Util.Info("[CameraViewport] Dropping pending PTZ; ForceCleanup does not send AIM");
 		m_SessionId = 0;
 		m_ExitSessionId = 0;
 		m_ExitTimeoutWarned = false;
@@ -920,6 +924,14 @@ class LFPG_CameraViewport
 			return;
 		LFPG_Util.Debug("[CameraViewport] Exit cleanup: player camera restoration observed");
 
+        // Phase 1 already sent a final and cleared dirty. Reaching here
+        // still dirty means the server closed the session (power, timeout,
+        // death) without a client phase-1. FinishCCTV has already dropped
+        // the record, so a late AIM would miss the allowlist and still
+        // charge AllowPlayerAction. The pending ordinary is dropped.
+        if (m_AimDirty)
+            LFPG_Util.Info("[CameraViewport] Dropping pending PTZ; server already closed the CCTV session");
+
         m_Active = false;
         m_ExitCooldown = LFPG_CCTV_EXIT_COOLDOWN;
 
@@ -993,7 +1005,12 @@ class LFPG_CameraViewport
     // =========================================================
     void Tick(float timeslice)
     {
-		// Also observe server-initiated exits if their confirm preceded replication.
+		// Server-initiated teardown restores the pawn without a client
+		// phase-1. That path cannot emit a final AIM: FinishCCTV has
+		// already dropped the session. Last-PTZ delivery is guaranteed
+		// only for a client-coordinated cycle/exit (phase 1) while the
+		// session is still live. A pending ordinary is dropped in
+		// TryCompleteExit.
 		if (m_Active && m_ExitPhase == 0 && HasPlayerCameraRestored())
 		{
 			m_ExitSessionId = m_SessionId;

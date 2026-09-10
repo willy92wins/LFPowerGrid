@@ -199,7 +199,9 @@ class LFPG_ControlSessionRegistry
 
     // One final AIM per camera per CCTV session. Mirrors SEARCHLIGHT_EXIT_V2:
     // the stream limiter is skipped for a single leave/cycle write, then
-    // further finals fall through to the ordinary 50 ms bucket.
+    // further finals fall through to the ordinary 50 ms bucket. The AIM
+    // handler must call this only after entity + deviceId checks, and not
+    // for a final whose clamped yaw/pitch already match stored PTZ.
     bool ConsumeCCTVAimFinal(LFPG_ControlSessionRecord record, int cameraIndex)
     {
         if (!record || !record.m_CameraFinalAimConsumed)
@@ -424,6 +426,10 @@ class LFPG_ControlSessionRegistry
 
         // A disconnected identity is represented by a null engine reference.
         // In that case the record is dropped without an invalid SelectPlayer call.
+        // Server-initiated Tick teardown (power, timeout, death) restores the
+        // pawn and drops the record in this same call. A later client AIM
+        // misses the allowlist. Last-PTZ delivery is guaranteed only for a
+        // client-coordinated cycle/exit while the session is still live.
         if (record.m_Identity && record.m_Player)
         {
             g_Game.SelectPlayer(record.m_Identity, record.m_Player);
