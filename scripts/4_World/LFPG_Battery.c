@@ -79,7 +79,10 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     protected bool m_DischargeEnabled = true;
 
     // ---- Sync tracking (server-only, not persisted) ----
+    // Inspector server refresh is 2000 ms; do not dirty faster than that.
+    static const int STORED_ENERGY_SYNC_MIN_MS = 2000;
     protected float m_LastSyncedStored = -1.0;
+    protected int m_LastStoredSyncMs = -1;
 
     // ---- Fresh spawn detection ----
     protected bool m_LoadedFromPersistence = false;
@@ -371,6 +374,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         float maxStored = LFPG_GetMaxStoredEnergy();
         float threshold = maxStored * LFPG_BATTERY_SYNC_THRESHOLD_PCT;
         bool needsSync = false;
+        int nowMs = g_Game.GetTime();
+        int elapsedMs = 0;
+        int lastSyncedX10 = 0;
 
         if (m_LastSyncedStored < 0.0)
         {
@@ -388,6 +394,23 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
                 needsSync = true;
             }
 
+            // Percentage threshold scales with capacity. Publish a changed
+            // X10 at least every STORED_ENERGY_SYNC_MIN_MS so the inspector
+            // is not stuck on a frozen number while charge is moving.
+            lastSyncedX10 = m_LastSyncedStored * 10.0;
+            if (newX10 != lastSyncedX10)
+            {
+                elapsedMs = nowMs - m_LastStoredSyncMs;
+                if (elapsedMs < 0)
+                {
+                    elapsedMs = STORED_ENERGY_SYNC_MIN_MS;
+                }
+                if (elapsedMs >= STORED_ENERGY_SYNC_MIN_MS)
+                {
+                    needsSync = true;
+                }
+            }
+
             if (val < LFPG_PROPAGATION_EPSILON && m_LastSyncedStored > LFPG_PROPAGATION_EPSILON)
             {
                 needsSync = true;
@@ -402,6 +425,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         if (needsSync)
         {
             m_LastSyncedStored = val;
+            m_LastStoredSyncMs = nowMs;
             SetSynchDirty();
             // v4.2: Sync quantity bar alongside SyncVars.
             // With isPassiveDevice=1 + canWork=0, vanilla CompEM never
