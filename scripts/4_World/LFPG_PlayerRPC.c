@@ -53,8 +53,10 @@ modded class MissionBaseWorld
 
 modded class PlayerBase
 {
-    // Runtime-only server cooldown shared by ATM availability notices.
+    // Runtime-only server cooldown for the account-unavailable ATM notice.
     int m_LFPG_LastBalanceNoticeMs = -10000;
+    // Runtime-only server cooldown for the retained-stock ATM notice.
+    int m_LFPG_LastRetainedStockNoticeMs = -10000;
 
     // COT pattern: prevent vanilla OnSelectPlayer + ResetGUI side effects
     // during SelectPlayer(sender, NULL). Flag on BOTH PlayerBase AND Mission.
