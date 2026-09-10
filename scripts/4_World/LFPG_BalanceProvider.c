@@ -7,13 +7,14 @@
 // Providers register at startup with a name and priority.
 // The registry resolves the active provider based on the
 // balanceMode setting in LF_BTCAtm.json:
-//   "auto"     → highest priority registered provider
+//   "auto"     -> highest priority supported provider
 //   "native"   → force LFPG native (always available)
-//   "lbmaster" → force LBmaster (disabled if mod absent)
+//   "lbmaster" -> LBmaster, with Native fallback if unsupported
 //
 // Future providers (Expansion, Trader+, etc.) just need a
 // new class extending LFPG_BalanceProvider and calling
 // LFPG_BalanceRegistry.Register() with their priority.
+// Optional integrations can override the read-only IsSupported check.
 // =========================================================
 
 class LFPG_BalanceProvider
@@ -38,6 +39,12 @@ class LFPG_BalanceProvider
     }
 
     // --- API: override in subclasses ---
+
+    // Preserve existing providers; optional APIs override this without account access.
+    bool IsSupported()
+    {
+        return true;
+    }
 
     int GetBalance(PlayerBase player)
     {
@@ -117,8 +124,9 @@ class LFPG_BalanceRegistry
             s_Active = FindByName("LBmaster");
             if (!s_Active)
             {
-                string errLB = "[LFPG_Balance] Mode=lbmaster but LBmaster provider not registered! ATM will be disabled.";
+                string errLB = "[LFPG_Balance] Mode=lbmaster requested but LBmaster banking API is unavailable (missing provider or Core without banking). Falling back to Native; requested configuration is NOT being honored. Native and LBmaster use separate wallets; no balances are migrated.";
                 LFPG_Util.Error(errLB);
+                s_Active = FindByName("Native");
             }
         }
         else
@@ -180,7 +188,7 @@ class LFPG_BalanceRegistry
         return s_Active;
     }
 
-    // Convenience: is there a working provider?
+    // The active provider passed the installation capability check at Init.
     static bool IsAvailable()
     {
         if (s_Active)
@@ -205,7 +213,7 @@ class LFPG_BalanceRegistry
                 continue;
 
             string provName = prov.GetName();
-            if (provName == name)
+            if (provName == name && prov.IsSupported())
                 return prov;
         }
         return null;
@@ -221,6 +229,7 @@ class LFPG_BalanceRegistry
             return null;
 
         LFPG_BalanceProvider best = null;
+        bool skippedUnsupported = false;
         int bestPrio = -1;
         int i = 0;
         for (i = 0; i < count; i = i + 1)
@@ -229,12 +238,23 @@ class LFPG_BalanceRegistry
             if (!prov)
                 continue;
 
+            if (!prov.IsSupported())
+            {
+                skippedUnsupported = true;
+                LFPG_Util.Warn("[LFPG_Balance] Mode=auto: excluding " + prov.GetName() + "; banking API unavailable. Core alone does not provide LBmaster banking.");
+                continue;
+            }
+
             int prio = prov.GetPriority();
             if (prio > bestPrio)
             {
                 bestPrio = prio;
                 best = prov;
             }
+        }
+        if (skippedUnsupported && best)
+        {
+            LFPG_Util.Warn("[LFPG_Balance] Mode=auto -> Active: " + best.GetName() + ". Fallback uses a separate wallet; no balances are migrated.");
         }
         return best;
     }
