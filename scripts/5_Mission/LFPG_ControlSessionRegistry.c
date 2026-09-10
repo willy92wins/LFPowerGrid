@@ -41,6 +41,8 @@ class LFPG_ControlSessionRecord
     ref array<string> m_CameraDeviceIds;
     ref array<float> m_CameraYaws;
     ref array<float> m_CameraPitches;
+    // One-shot final AIM token per allowlisted camera. 0 = unused, 1 = consumed.
+    ref array<int> m_CameraFinalAimConsumed;
 
     float m_SearchlightYaw;
     float m_SearchlightPitch;
@@ -117,6 +119,13 @@ class LFPG_ControlSessionRegistry
         record.m_CameraDeviceIds = cameraDeviceIds;
         record.m_CameraYaws = cameraYaws;
         record.m_CameraPitches = cameraPitches;
+        record.m_CameraFinalAimConsumed = new array<int>;
+        int finalIndex = 0;
+        while (finalIndex < cameraCount)
+        {
+            record.m_CameraFinalAimConsumed.Insert(0);
+            finalIndex = finalIndex + 1;
+        }
         record.m_AimLimiter = new LFPG_RateLimiter();
         record.m_ReplayLimiter = new LFPG_RateLimiter();
         m_ByUID.Set(uid, record);
@@ -186,6 +195,22 @@ class LFPG_ControlSessionRegistry
             return false;
 
         return record.m_AimLimiter.Allow(nowSeconds, LFPG_CCTV_AIM_COOLDOWN_S);
+    }
+
+    // One final AIM per camera per CCTV session. Mirrors SEARCHLIGHT_EXIT_V2:
+    // the stream limiter is skipped for a single leave/cycle write, then
+    // further finals fall through to the ordinary 50 ms bucket.
+    bool ConsumeCCTVAimFinal(LFPG_ControlSessionRecord record, int cameraIndex)
+    {
+        if (!record || !record.m_CameraFinalAimConsumed)
+            return false;
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraFinalAimConsumed.Count())
+            return false;
+        if (record.m_CameraFinalAimConsumed[cameraIndex] != 0)
+            return false;
+
+        record.m_CameraFinalAimConsumed[cameraIndex] = 1;
+        return true;
     }
 
     int FindCCTVCameraIndex(LFPG_ControlSessionRecord record, int cameraNetLow, int cameraNetHigh)

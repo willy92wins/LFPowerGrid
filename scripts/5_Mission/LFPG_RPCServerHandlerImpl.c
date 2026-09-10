@@ -1352,6 +1352,9 @@ class LFPG_RPCServerHandlerImpl
         int cameraNetHigh = 0;
         float aimYaw = 0.0;
         float aimPitch = 0.0;
+        int commitKind = 0;
+        bool aimLimiterOk = false;
+        float nowSeconds = 0.0;
         if (!ctx.Read(cameraNetLow))
             return;
         if (!ctx.Read(cameraNetHigh))
@@ -1359,6 +1362,10 @@ class LFPG_RPCServerHandlerImpl
         if (!ctx.Read(aimYaw))
             return;
         if (!ctx.Read(aimPitch))
+            return;
+        if (!ctx.Read(commitKind))
+            return;
+        if (commitKind != LFPG_CCTV_AIM_KIND_ORDINARY && commitKind != LFPG_CCTV_AIM_KIND_FINAL)
             return;
 
         if (LFPG_Camera.LFPG_IsInvalidPTZValue(aimYaw) || LFPG_Camera.LFPG_IsInvalidPTZValue(aimPitch))
@@ -1384,8 +1391,19 @@ class LFPG_RPCServerHandlerImpl
         if (!record.m_Player)
             return;
 
-        float nowSeconds = g_Game.GetTime() * 0.001;
-        if (!sessions.AllowCCTVAim(record, nowSeconds))
+        nowSeconds = g_Game.GetTime() * 0.001;
+        aimLimiterOk = false;
+        if (commitKind == LFPG_CCTV_AIM_KIND_FINAL)
+        {
+            aimLimiterOk = sessions.ConsumeCCTVAimFinal(record, cameraIndex);
+            if (!aimLimiterOk)
+                aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
+        }
+        else
+        {
+            aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
+        }
+        if (!aimLimiterOk)
             return;
 
         Object cameraObject = g_Game.GetObjectByNetworkId(cameraNetLow, cameraNetHigh);
@@ -1409,6 +1427,10 @@ class LFPG_RPCServerHandlerImpl
         if (aimPitch < -LFPG_CCTV_PITCH_LIMIT)
             aimPitch = -LFPG_CCTV_PITCH_LIMIT;
 
+        // Last writer wins. Two operators on two monitors may aim the same
+        // camera. There is no live AIM server->client, and a viewport does
+        // not consume PTZ SyncVars during a session. Replay caches are
+        // updated here; a live viewport can keep showing its local prediction.
         camera.LFPG_SetPTZ(aimYaw, aimPitch);
         sessions.UpdateAllCCTVAimCaches(cameraNetLow, cameraNetHigh, aimYaw, aimPitch);
     }

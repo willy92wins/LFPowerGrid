@@ -338,7 +338,7 @@ enum LFPG_RPC_SubId
     SYNC_OWNER_WIRES_DELTA      = 72,  // v1.2.3: server->client generation-checked wire mutation delta
     SYNC_OWNER_WIRES_V2         = 73,  // v1.2.3: server->client owner snapshot with explicit generation
     SEARCHLIGHT_EXIT_V2         = 74,  // v1.2.3: client->server final aim plus searchlight exit
-    CCTV_AIM                    = 75   // Client->Server: committed camera PTZ offsets
+    CCTV_AIM                    = 75   // Client->Server: committed camera PTZ + kind (0 ordinary / 1 final)
 };
 
 enum LFPG_WireDeltaOp
@@ -753,7 +753,11 @@ static const float LFPG_SEARCHLIGHT_AIM_COOLDOWN_S    = 0.120;
 static const float LFPG_CCTV_REPLAY_COOLDOWN_S        = 1.0;
 // CCTV AIM is coalesced on the client (key-up / cycle / exit), not streamed
 // per frame. 50 ms is a flood cap, below human WASD key-up cadence.
+// Kind 1 (final) skips this bucket once per camera per session so a
+// leave/cycle write is not dropped after a recent ordinary commit.
 static const float LFPG_CCTV_AIM_COOLDOWN_S           = 0.050;
+static const int   LFPG_CCTV_AIM_KIND_ORDINARY        = 0;
+static const int   LFPG_CCTV_AIM_KIND_FINAL           = 1;
 static const float LFPG_CCTV_YAW_LIMIT                = 90.0;
 static const float LFPG_CCTV_PITCH_LIMIT              = 45.0;
 static const float LFPG_SEARCHLIGHT_SPLASH_RANGE_M    = 100.0;   // server raycast range
