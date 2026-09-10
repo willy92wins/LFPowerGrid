@@ -387,6 +387,45 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         return ChainHasPhysicalEvidence(CollectDeviceClaims(deviceId));
     }
 
+    protected static bool ChainHasRetainedPhysical(array<ref LFPG_BalanceClaim> chain)
+    {
+        if (!chain)
+            return false;
+        int i = 0;
+        LFPG_BalanceClaim claim = null;
+        for (i = 0; i < chain.Count(); i = i + 1)
+        {
+            claim = chain[i];
+            if (!claim)
+                continue;
+            if (claim.debit != 0)
+                continue;
+            if (claim.state == LFPG_CLAIM_RETAINED)
+                return true;
+        }
+        return false;
+    }
+
+    // RETAINED physical only. PENDING is the in-flight segment; the broader
+    // DeviceHasPhysicalEvidence predicate would refuse a live mutation against itself.
+    static bool DeviceHasRetainedPhysicalEvidence(string deviceId)
+    {
+        EnsureLoaded();
+        return ChainHasRetainedPhysical(CollectDeviceClaims(deviceId));
+    }
+
+    protected static bool StockOutflowBlockedByRetainedEvidence(string deviceId, int stockBefore, int stockTarget)
+    {
+        if (stockTarget >= stockBefore)
+            return false;
+        if (deviceId == "")
+            return false;
+        if (!DeviceHasRetainedPhysicalEvidence(deviceId))
+            return false;
+        LogClaimError("[LFPG_Balance_Native] Stock outflow rejected: retained physical evidence deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+        return true;
+    }
+
     protected static string FormatClaimSnapshot(LFPG_BalanceClaim claim)
     {
         if (!claim)
@@ -683,6 +722,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
+        if (StockOutflowBlockedByRetainedEvidence(deviceId, stockBefore, stockTarget))
+            return false;
         if (!HasDeviceClaims(deviceId))
             return true;
         if (!s_ReconciledDevices.Contains(deviceId))
@@ -711,6 +752,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
+        if (StockOutflowBlockedByRetainedEvidence(deviceId, stockBefore, stockTarget))
+            return false;
         if (HasDeviceClaims(deviceId) && !s_ReconciledDevices.Contains(deviceId))
         {
             LogClaimError("[LFPG_Balance_Native] Stock mutation denied while claim chain is unresolved deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
