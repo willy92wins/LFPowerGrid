@@ -535,73 +535,49 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
-        if (!HasDeviceClaims(deviceId))
-            return true;
-        if (!s_ReconciledDevices.Contains(deviceId))
+        if (HasDeviceClaims(deviceId) && !s_ReconciledDevices.Contains(deviceId))
         {
             LogClaimError("[LFPG_Balance_Native] Stock mutation denied while claim chain is unresolved deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
             return false;
         }
-        if (FindLastPendingDeviceClaimIndex(deviceId) < 0)
-            return true;
-
-        int previousTarget = 0;
-        if (!TryGetLastDeviceTarget(deviceId, previousTarget))
-            return false;
-        if (previousTarget != stockBefore)
+        if (FindLastPendingDeviceClaimIndex(deviceId) >= 0)
         {
-            LogClaimError("[LFPG_Balance_Native] Stock mutation denied: timeline tip does not match live stock deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
-            return false;
+            int previousTarget = 0;
+            if (!TryGetLastDeviceTarget(deviceId, previousTarget))
+                return false;
+            if (previousTarget != stockBefore)
+            {
+                LogClaimError("[LFPG_Balance_Native] Stock mutation denied: timeline tip does not match live stock deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+                return false;
+            }
         }
 
-        int tipIndex = FindLastPendingDeviceClaimIndex(deviceId);
-        if (tipIndex < 0)
-            return false;
-        LFPG_BalanceClaim tip = s_Claims[tipIndex];
-        if (!tip)
-            return false;
-
+        // Keep every physical transition, including the first and direction changes.
         bool dirtyBefore = s_CompoundActionDirty;
-        bool fusedPhysical = (tip.debit == 0);
-        int previousTipTarget = 0;
-        LFPG_BalanceClaim physical = tip;
-        if (fusedPhysical)
-        {
-            previousTipTarget = tip.stockTarget;
-            tip.stockTarget = stockTarget;
-        }
-        else
-        {
-            physical = new LFPG_BalanceClaim();
-            physical.uid = "";
-            physical.deviceId = deviceId;
-            physical.debit = 0;
-            physical.stockBefore = stockBefore;
-            physical.stockTarget = stockTarget;
-            physical.state = LFPG_CLAIM_PENDING;
-            physical.bootsSinceRefund = 0;
-            physical.orphanBoots = 0;
-            physical.ambigBoots = 0;
-            s_Claims.Insert(physical);
-        }
+        LFPG_BalanceClaim physical = new LFPG_BalanceClaim();
+        physical.uid = "";
+        physical.deviceId = deviceId;
+        physical.debit = 0;
+        physical.stockBefore = stockBefore;
+        physical.stockTarget = stockTarget;
+        physical.state = LFPG_CLAIM_PENDING;
+        physical.bootsSinceRefund = 0;
+        physical.orphanBoots = 0;
+        physical.ambigBoots = 0;
+        s_Claims.Insert(physical);
 
         if (!SaveToDisk())
         {
-            if (fusedPhysical)
-            {
-                tip.stockTarget = previousTipTarget;
-            }
-            else
-            {
-                int insertedPhysicalIndex = s_Claims.Find(physical);
-                if (insertedPhysicalIndex >= 0)
-                    s_Claims.RemoveOrdered(insertedPhysicalIndex);
-            }
+            int insertedPhysicalIndex = s_Claims.Find(physical);
+            if (insertedPhysicalIndex >= 0)
+                s_Claims.RemoveOrdered(insertedPhysicalIndex);
             s_CompoundActionDirty = dirtyBefore;
             LogClaimError("[LFPG_Balance_Native] Stock timeline segment denied: target was not durable deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
             return false;
         }
         s_CompoundActionDirty = dirtyBefore;
+        // A first live segment has no unresolved boot chain to reconcile.
+        s_ReconciledDevices.Set(deviceId, true);
         return true;
     }
     protected static bool ResetDeviceOrphanBoots(string deviceId)
