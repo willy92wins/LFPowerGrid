@@ -1108,11 +1108,11 @@ class LFPG_BTCHelper
             return;
 
         int nowMs = g_Game.GetTime();
-        int lastNoticeMs = player.m_LFPG_LastBalanceNoticeMs;
+        int lastNoticeMs = player.m_LFPG_LastRetainedStockNoticeMs;
         if (nowMs >= lastNoticeMs && nowMs - lastNoticeMs < 10000)
             return;
 
-        player.m_LFPG_LastBalanceNoticeMs = nowMs;
+        player.m_LFPG_LastRetainedStockNoticeMs = nowMs;
         PlayerBase.LFPG_SendClientMsg(player, "This ATM cannot deliver BTC until an administrator reviews it.");
     }
 

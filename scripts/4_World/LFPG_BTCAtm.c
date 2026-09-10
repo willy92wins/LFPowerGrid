@@ -293,6 +293,13 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
             LFPG_Util.Error("[LFPG_BTCAtm] kill drop unavailable; stock retained=" + stockBefore.ToString() + " deviceId=" + deviceId);
             return;
         }
+        // Fail-closed before the first CreateObjectEx. Rolling back minted
+        // drops after a denied debit can leave BTC in the world with no claim.
+        if (!LFPG_AtmStock.CanPrepareStockMutation(deviceId, stockBefore, 0))
+        {
+            LFPG_Util.Error("[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stockBefore.ToString() + " deviceId=" + deviceId);
+            return;
+        }
         string classname = LFPG_BTCConfig.GetBtcItemClassname();
         if (classname == "")
         {
