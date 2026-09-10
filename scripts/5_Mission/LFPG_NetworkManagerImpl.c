@@ -387,6 +387,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     // Avoids per-call heap allocation of player list and target position list.
     protected ref array<Man>      m_ReusableBroadcastPlayers;
     protected ref array<vector>   m_ReusableBroadcastPositions;
+    protected ref array<string>   m_ReusableReversePorts;
+    protected ref array<EntityAI> m_ReusableCutAllDevices;
+    protected ref array<ref LFPG_WireData> m_ReusableCutAllFallbackWires;
     #ifndef SERVER
     protected int m_PerfDiagOwnerSnapshotUnicastCount;
     #endif
@@ -497,6 +500,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_ReusableDisappearedIds = new array<string>;
         m_ReusableBroadcastPlayers = new array<Man>;
         m_ReusableBroadcastPositions = new array<vector>;
+        m_ReusableReversePorts = new array<string>;
+        m_ReusableCutAllDevices = new array<EntityAI>;
+        m_ReusableCutAllFallbackWires = new array<ref LFPG_WireData>;
         m_StaleRateLimiterKeys = new array<string>;
         m_SchedPurgeMs = 0;
         m_SchedFlushMs = 0;
@@ -3498,10 +3504,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_VanillaWires.Remove(deviceId);
 
 		// The entity is gone: retain the index scan to cover ports absent from the graph.
+		// Reuse the member port list; do not allocate a prefix-scan array per disappearance.
 		string keyPrefix = deviceId + "|";
 		int prefixLength = keyPrefix.Length();
-		array<string> portsToClean = new array<string>;
-		for (int reverseIndex = 0; reverseIndex < m_ReverseIdx.Count(); reverseIndex = reverseIndex + 1)
+		m_ReusableReversePorts.Clear();
+		int reverseIndex;
+		for (reverseIndex = 0; reverseIndex < m_ReverseIdx.Count(); reverseIndex = reverseIndex + 1)
 		{
 			string reverseKey = m_ReverseIdx.GetKey(reverseIndex);
 			if (reverseKey.IndexOf(keyPrefix) != 0)
@@ -3510,11 +3518,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			int portLength = reverseKey.Length() - prefixLength;
 			if (portLength > 0)
 				targetPort = reverseKey.Substring(prefixLength, portLength);
-			portsToClean.Insert(targetPort);
+			m_ReusableReversePorts.Insert(targetPort);
 		}
-		for (int portIndex = 0; portIndex < portsToClean.Count(); portIndex = portIndex + 1)
+		int portIndex;
+		for (portIndex = 0; portIndex < m_ReusableReversePorts.Count(); portIndex = portIndex + 1)
 		{
-			if (RemoveWiresTargeting(deviceId, portsToClean[portIndex]) > 0)
+			if (RemoveWiresTargeting(deviceId, m_ReusableReversePorts[portIndex]) > 0)
 				anyChanged = true;
 		}
 
@@ -4979,12 +4988,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (!reverseIndexConsistent)
         {
             LFPG_Util.Warn("[CutAll] Reverse index mismatch detected; running global fallback scan");
-            array<EntityAI> allDevs = new array<EntityAI>;
-            LFPG_DeviceRegistry.Get().GetAll(allDevs);
+            m_ReusableCutAllDevices.Clear();
+            LFPG_DeviceRegistry.Get().GetAll(m_ReusableCutAllDevices);
             int di;
-            for (di = 0; di < allDevs.Count(); di = di + 1)
+            for (di = 0; di < m_ReusableCutAllDevices.Count(); di = di + 1)
             {
-                EntityAI srcDev = allDevs[di];
+                EntityAI srcDev = m_ReusableCutAllDevices[di];
                 if (!srcDev)
                     continue;
                 if (srcDev == device)
@@ -4998,7 +5007,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     continue;
 
                 bool srcChanged = false;
-                ref array<ref LFPG_WireData> fallbackRemovedWires = new array<ref LFPG_WireData>;
+                m_ReusableCutAllFallbackWires.Clear();
                 int sw = srcWires.Count() - 1;
                 while (sw >= 0)
                 {
@@ -5008,7 +5017,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         string cutFbMsg = "[CutAll-Fallback] Found stale wire: " + srcId + " -> " + deviceId;
                         LFPG_Util.Warn(cutFbMsg);
                         PlayerWireCountAdd(swd.m_CreatorId, -1);
-                        fallbackRemovedWires.Insert(swd);
+                        m_ReusableCutAllFallbackWires.Insert(swd);
                         srcWires.Remove(sw);
                         srcChanged = true;
                         anyChanged = true;
@@ -5024,7 +5033,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         srcWireOwner.LFPG_CommitWireMutation();
                     }
                     srcDev.SetSynchDirty();
-                    QueueBroadcastOwnerSnapshotFromWires(srcDev, fallbackRemovedWires);
+                    QueueBroadcastOwnerSnapshotFromWires(srcDev, m_ReusableCutAllFallbackWires);
+                    m_ReusableCutAllFallbackWires.Clear();
                 }
             }
 
@@ -5499,6 +5509,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     doTankFill = true;
                 }
             }
+        }
+
+        // Early-out only after the stamp above. Returning before it defers fill
+        // work: the next tick with a pump present applies the whole idle period.
+        if (m_RegisteredSprinklers.Count() == 0 && m_RegisteredT1Pumps.Count() == 0 && m_RegisteredT2Pumps.Count() == 0)
+        {
+            return;
         }
 
         // ============================================================
@@ -5983,7 +6000,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         EntityAI resumeItem;
         EntityAI dirtyDestination;
         EntityAI dirtySource;
-        float linkDistance;
+        float linkDistanceSq;
+        float linkRadiusSq;
 
         total = m_RegisteredSorters.Count();
         if (total == 0)
@@ -6001,6 +6019,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_TickAffectedContainers.Clear();
         m_TickDirtyDestinations.Clear();
         m_TickDirtySources.Clear();
+        linkRadiusSq = LFPG_SORTER_LINK_RADIUS * LFPG_SORTER_LINK_RADIUS;
         ruleChecksTick = 0;
         configMissesTick = 0;
         deferralsTick = 0;
@@ -6038,8 +6057,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             inputContainer = sorter.LFPG_GetLinkedContainer();
             if (inputContainer)
             {
-                linkDistance = vector.Distance(sorter.GetPosition(), inputContainer.GetPosition());
-                if (linkDistance > LFPG_SORTER_LINK_RADIUS)
+                linkDistanceSq = LFPG_WorldUtil.DistSq(sorter.GetPosition(), inputContainer.GetPosition());
+                if (linkDistanceSq > linkRadiusSq)
                 {
                     sorter.LFPG_UnlinkContainer();
                     LFPG_ClearSorterResume(sorterIndex);
@@ -6048,7 +6067,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         string unlinkMsg = "[Sorter] Auto-unlink: container beyond ";
                         unlinkMsg = unlinkMsg + LFPG_SORTER_LINK_RADIUS.ToString();
                         unlinkMsg = unlinkMsg + "m (was ";
-                        unlinkMsg = unlinkMsg + linkDistance.ToString();
+                        unlinkMsg = unlinkMsg + Math.Sqrt(linkDistanceSq).ToString();
                         unlinkMsg = unlinkMsg + "m)";
                         LFPG_Util.Info(unlinkMsg);
                     }
