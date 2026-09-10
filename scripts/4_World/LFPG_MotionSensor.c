@@ -668,7 +668,11 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         EntityAI hitRoot;
         EntityAI targetRoot;
 
-        hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, m_RayResults, hitWith, this, bSorted, bGround, ObjIntersectFire, rayRadius);
+        // NEARESTCONTACT is explicit because the target test below depends on it:
+        // the results set then holds only the nearest contact, so finding the target
+        // there means nothing blocks the ray. Switching to ALLOBJECTS would put every
+        // hit in the set and let the sensor see through a nearer wall.
+        hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, m_RayResults, hitWith, this, bSorted, bGround, ObjIntersectFire, rayRadius, CollisionFlags.NEARESTCONTACT);
 
         if (!hit)
         {
