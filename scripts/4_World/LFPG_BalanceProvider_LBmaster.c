@@ -15,6 +15,13 @@ class LFPG_BalanceProvider_LBmaster extends LFPG_BalanceProvider
         m_Priority = 10;
     }
 
+    override bool IsSupported()
+    {
+        // Core returns false; banking overrides this without accessing a player.
+        LB_ATM_Playerbase capabilityProbe = new LB_ATM_Playerbase(null);
+        return capabilityProbe.IsBankingAvailable();
+    }
+
     override int GetBalance(PlayerBase player)
     {
         if (!player)

@@ -1084,6 +1084,22 @@ class LFPG_BTCHelper
     // BTC ATM: Server Handlers (use BalanceRegistry)
     // =========================================================
 
+    protected static void NotifyBalanceUnavailable(PlayerBase player)
+    {
+        if (!g_Game || !g_Game.IsServer() || !player)
+            return;
+        if (!player.GetIdentity())
+            return;
+
+        int nowMs = g_Game.GetTime();
+        int lastNoticeMs = player.m_LFPG_LastBalanceNoticeMs;
+        if (nowMs >= lastNoticeMs && nowMs - lastNoticeMs < 10000)
+            return;
+
+        player.m_LFPG_LastBalanceNoticeMs = nowMs;
+        PlayerBase.LFPG_SendClientMsg(player, "Account money is unavailable on this server. No valid banking provider is available, and your wallet has not been switched. Contact an administrator. Physical BTC remains available.");
+    }
+
     static void HandleBTCOpenRequest(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -1117,6 +1133,10 @@ class LFPG_BTCHelper
             PlayerBase.LFPG_SendClientMsg(player, errPower);
             return;
         }
+
+        // Keep the stock-only ATM paths accessible without selecting a wallet.
+        if (!LFPG_BalanceRegistry.IsAvailable())
+            NotifyBalanceUnavailable(player);
 
         float price = -1.0;
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
@@ -1228,6 +1248,7 @@ class LFPG_BTCHelper
 
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
+            NotifyBalanceUnavailable(player);
             int errNoBp = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
@@ -1576,6 +1597,7 @@ class LFPG_BTCHelper
 
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
+            NotifyBalanceUnavailable(player);
             LFPG_Util.Error("[BTCSell] sell-intent marker present but no balance provider; leaving marker for admin");
             return;
         }
@@ -1714,6 +1736,7 @@ class LFPG_BTCHelper
 
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
+            NotifyBalanceUnavailable(player);
             int errNoBp = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
@@ -2595,6 +2618,7 @@ class LFPG_BTCHelper
 
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
+            NotifyBalanceUnavailable(player);
             int errNoBp = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
@@ -2792,6 +2816,7 @@ class LFPG_BTCHelper
 
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
+            NotifyBalanceUnavailable(player);
             int errNoBp = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;

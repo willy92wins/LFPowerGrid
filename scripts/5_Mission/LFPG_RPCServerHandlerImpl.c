@@ -333,13 +333,21 @@ class LFPG_RPCServerHandlerImpl
         // Universal validation: source must be energy source, dest must be consumer
         if (!LFPG_DeviceAPI.IsEnergySource(srcObj))
         {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (src not energy source) type=" + srcObj.GetType());
+            if (LFPG_LOG_ENABLED)
+            {
+                string srcDeniedType = srcObj.GetType();
+                LFPG_Util.Warn("[FinishWiring-Server] denied (src not energy source) type=" + srcDeniedType);
+            }
             PlayerBase.LFPG_SendClientMsg(player, "Source is not a power generator.");
             return;
         }
         if (!LFPG_DeviceAPI.IsEnergyConsumer(dstObj))
         {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (dst not consumer) type=" + dstObj.GetType());
+            if (LFPG_LOG_ENABLED)
+            {
+                string dstDeniedType = dstObj.GetType();
+                LFPG_Util.Warn("[FinishWiring-Server] denied (dst not consumer) type=" + dstDeniedType);
+            }
             PlayerBase.LFPG_SendClientMsg(player, "Target is not an electrical device.");
             return;
         }

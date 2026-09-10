@@ -53,6 +53,9 @@ modded class MissionBaseWorld
 
 modded class PlayerBase
 {
+    // Runtime-only server cooldown shared by ATM availability notices.
+    int m_LFPG_LastBalanceNoticeMs = -10000;
+
     // COT pattern: prevent vanilla OnSelectPlayer + ResetGUI side effects
     // during SelectPlayer(sender, NULL). Flag on BOTH PlayerBase AND Mission.
     // Without Mission flag, ResetGUI crashes when player is null.

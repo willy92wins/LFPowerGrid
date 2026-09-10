@@ -7,13 +7,14 @@
 // Providers register at startup with a name and priority.
 // The registry resolves the active provider based on the
 // balanceMode setting in LF_BTCAtm.json:
-//   "auto"     → highest priority registered provider
+//   "auto"     -> highest priority supported provider, no fallback after exclusion
 //   "native"   → force LFPG native (always available)
-//   "lbmaster" → force LBmaster (disabled if mod absent)
+//   "lbmaster" -> LBmaster, unavailable if its banking API is missing
 //
 // Future providers (Expansion, Trader+, etc.) just need a
 // new class extending LFPG_BalanceProvider and calling
 // LFPG_BalanceRegistry.Register() with their priority.
+// Optional integrations can override the read-only IsSupported check.
 // =========================================================
 
 class LFPG_BalanceProvider
@@ -38,6 +39,12 @@ class LFPG_BalanceProvider
     }
 
     // --- API: override in subclasses ---
+
+    // Preserve existing providers; optional APIs override this without account access.
+    bool IsSupported()
+    {
+        return true;
+    }
 
     int GetBalance(PlayerBase player)
     {
@@ -117,7 +124,7 @@ class LFPG_BalanceRegistry
             s_Active = FindByName("LBmaster");
             if (!s_Active)
             {
-                string errLB = "[LFPG_Balance] Mode=lbmaster but LBmaster provider not registered! ATM will be disabled.";
+                string errLB = "[LFPG_Balance] Mode=lbmaster requested but LBmaster banking API is unavailable (missing provider or Core without banking). Requested configuration CANNOT be served. Account operations disabled; wallet switching intentionally disabled. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.";
                 LFPG_Util.Error(errLB);
             }
         }
@@ -145,7 +152,7 @@ class LFPG_BalanceRegistry
         {
             string noMsg = "[LFPG_Balance] Mode=";
             noMsg = noMsg + balanceMode;
-            noMsg = noMsg + " -> No active provider! BTC ATM balance operations will fail.";
+            noMsg = noMsg + " -> No active provider. Account operations disabled; wallet unchanged intentionally. Physical BTC stock operations remain available. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.";
             LFPG_Util.Error(noMsg);
         }
 
@@ -180,7 +187,7 @@ class LFPG_BalanceRegistry
         return s_Active;
     }
 
-    // Convenience: is there a working provider?
+    // The active provider passed the installation capability check at Init.
     static bool IsAvailable()
     {
         if (s_Active)
@@ -205,7 +212,7 @@ class LFPG_BalanceRegistry
                 continue;
 
             string provName = prov.GetName();
-            if (provName == name)
+            if (provName == name && prov.IsSupported())
                 return prov;
         }
         return null;
@@ -221,6 +228,7 @@ class LFPG_BalanceRegistry
             return null;
 
         LFPG_BalanceProvider best = null;
+        bool skippedUnsupported = false;
         int bestPrio = -1;
         int i = 0;
         for (i = 0; i < count; i = i + 1)
@@ -229,12 +237,25 @@ class LFPG_BalanceRegistry
             if (!prov)
                 continue;
 
+            if (!prov.IsSupported())
+            {
+                skippedUnsupported = true;
+                LFPG_Util.Warn("[LFPG_Balance] Mode=auto: excluding " + prov.GetName() + "; banking API unavailable. Core alone does not provide LBmaster banking.");
+                continue;
+            }
+
             int prio = prov.GetPriority();
             if (prio > bestPrio)
             {
                 bestPrio = prio;
                 best = prov;
             }
+        }
+        if (skippedUnsupported)
+        {
+            // A supported fallback may hold unrelated or previously migrated balances.
+            LFPG_Util.Warn("[LFPG_Balance] Mode=auto: no eligible banking provider remains after exclusion; fallback to another wallet intentionally disabled. Account operations disabled. If this server previously used LBmaster banking, restore that API; changing balanceMode does not recover or migrate balances, and using another wallet would leave the existing funds in the original bank. If this server never used LBmaster banking and Core was installed only as a dependency, set balanceMode to 'native' to make the ATM operational with the native wallet. The administrator must choose based on the server's history; startup cannot distinguish these cases and therefore does not switch wallets automatically.");
+            return null;
         }
         return best;
     }
