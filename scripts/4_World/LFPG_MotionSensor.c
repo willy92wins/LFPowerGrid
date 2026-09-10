@@ -1,5 +1,5 @@
 // =========================================================
-// LF_PowerGrid - Motion Sensor (v4.2)
+// LF_PowerGrid - Motion Sensor (v4.3)
 //
 // LFPG_MotionSensor_Kit: Holdable, deployable (same-model pattern).
 // LFPG_MotionSensor:     PASSTHROUGH, 1 IN (input_1) + 1 OUT (output_1).
@@ -21,6 +21,11 @@
 //   - 360° omnidirectional detection (removed 120° FOV cone)
 //   - Walls and objects block LOS via raycast
 //   - Pipeline: Range sphere → Group filter → LOS raycast
+//
+// v4.3:
+//   - Detection scan requires power; power loss does not clear gate/hold.
+//   - LOS identifies the intended target (direct hit or shared hierarchy root)
+//     before the linear-distance fallback.
 //
 // Behavior:
 //   Centralized tick in NetworkManager scans nearby players.
@@ -219,11 +224,9 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
         m_PoweredNet = powered;
 
-        if (!powered && m_GateOpen)
-        {
-            m_GateOpen = false;
-            m_GateHoldUntil = 0.0;
-        }
+        // Power is derived graph state. Closing the gate here would drop a
+        // live detection hold during a one-tick brownout. The graph already
+        // withholds downstream allocation while input cannot cover self-consumption.
 
         SetSynchDirty();
 
@@ -459,14 +462,21 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     // LFPG_SENSOR_HOLD_SEC even if no player detected,
     // preventing downstream power flickering.
     //
+    // Detection requires power: an unpowered sensor does not scan.
+    // Power loss does not clear the gate or the hold. The hold timestamp
+    // still expires on its own so a long outage does not leave the gate
+    // latched. A brief graph brownout must not consume a detection event.
+    // Downstream transmission is decided by the electrical graph, not this scan.
+    //
     // Returns true if gate state changed (needs propagate).
     // ============================================
     bool LFPG_EvaluateDetection(array<Man> players)
     {
         #ifdef SERVER
+        float nowSec = g_Game.GetTickTime();
         if (!m_PoweredNet)
         {
-            if (m_GateOpen)
+            if (m_GateOpen && nowSec >= m_GateHoldUntil)
             {
                 m_GateOpen = false;
                 m_GateHoldUntil = 0.0;
@@ -509,7 +519,6 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
 
         // ---- Scan players (360° omnidirectional) ----
         bool detected = false;
-        float nowSec = g_Game.GetTickTime();
 
         int i;
         int pCount = players.Count();
@@ -552,12 +561,12 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
             // 3. LOS dual-ray (standing torso + crouching center)
             targetHigh = playerPos;
             targetHigh[1] = targetHigh[1] + LFPG_SENSOR_TARGET_HIGH;
-            hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh);
+            hasLOS = LFPG_CheckLineOfSight(sensorEye, targetHigh, pb);
             if (!hasLOS)
             {
                 targetLow = playerPos;
                 targetLow[1] = targetLow[1] + LFPG_SENSOR_TARGET_LOW;
-                hasLOS = LFPG_CheckLineOfSight(sensorEye, targetLow);
+                hasLOS = LFPG_CheckLineOfSight(sensorEye, targetLow, pb);
             }
             if (!hasLOS)
                 continue;
@@ -638,7 +647,7 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     // ============================================
     // LOS raycast check
     // ============================================
-    protected bool LFPG_CheckLineOfSight(vector from, vector to)
+    protected bool LFPG_CheckLineOfSight(vector from, vector to, EntityAI targetEntity = null)
     {
         #ifdef SERVER
         vector hitPos;
@@ -649,18 +658,65 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
         bool bSorted = true;
         bool bGround = false;
         float rayRadius = 0.02;
+        bool hit;
+        float hitDist;
+        float targetDist;
+        int ri;
+        int rCount;
+        Object hitObj;
+        EntityAI hitEntity;
+        EntityAI hitRoot;
+        EntityAI targetRoot;
 
-        bool hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, m_RayResults, hitWith, this, bSorted, bGround, ObjIntersectFire, rayRadius);
+        // NEARESTCONTACT is explicit because the target test below depends on it:
+        // the results set then holds only the nearest contact, so finding the target
+        // there means nothing blocks the ray. Switching to ALLOBJECTS would put every
+        // hit in the set and let the sensor see through a nearer wall.
+        hit = DayZPhysics.RaycastRV(from, to, hitPos, hitNormal, contactComponent, m_RayResults, hitWith, this, bSorted, bGround, ObjIntersectFire, rayRadius, CollisionFlags.NEARESTCONTACT);
 
         if (!hit)
         {
             return true;
         }
 
+        // Direct hit on the intended target, or on an attachment that shares
+        // the same hierarchy root (clothing, backpack), is line of sight.
+        // The former distance-only test could treat the player's own collision
+        // as an obstruction. RaycastRV stores hits in the results set; the
+        // with argument is an optional object filter, not the hit object.
+        targetRoot = null;
+        if (targetEntity)
+        {
+            targetRoot = targetEntity.GetHierarchyRoot();
+        }
+
+        rCount = m_RayResults.Count();
+        for (ri = 0; ri < rCount; ri = ri + 1)
+        {
+            hitObj = m_RayResults.Get(ri);
+            if (!hitObj)
+                continue;
+
+            if (hitObj == targetEntity)
+            {
+                return true;
+            }
+
+            hitEntity = EntityAI.Cast(hitObj);
+            if (!hitEntity)
+                continue;
+
+            hitRoot = hitEntity.GetHierarchyRoot();
+            if (hitRoot && targetRoot && hitRoot == targetRoot)
+            {
+                return true;
+            }
+        }
+
         // v4.1: Linear margin (fixed 0.3m regardless of distance).
         // Previous squared margin (0.09) gave only 3mm at 15m.
-        float hitDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, hitPos));
-        float targetDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, to));
+        hitDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, hitPos));
+        targetDist = Math.Sqrt(LFPG_WorldUtil.DistSq(from, to));
 
         if (hitDist >= targetDist - LFPG_SENSOR_LOS_MARGIN)
         {
