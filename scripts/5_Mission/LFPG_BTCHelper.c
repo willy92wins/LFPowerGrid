@@ -227,6 +227,144 @@ class LFPG_BTCInventoryPlan
     }
 };
 
+// Integer-only denomination plan. Search exhaustion rejects the plan; an
+// unproven incumbent must never authorize a debit. No entities are created.
+class LFPG_BTCChangePlan
+{
+    protected static const int MAX_SEARCH_NODES = 8192;
+    ref array<string> m_Classnames;
+    ref array<int> m_Values;
+    ref array<int> m_Counts;
+    int m_Amount;
+    protected ref array<int> m_Trial;
+    protected ref array<int> m_SuffixGcd;
+    protected int m_UpperBound;
+    protected int m_Visited;
+    protected bool m_Exhausted;
+
+    void LFPG_BTCChangePlan()
+    {
+        m_Classnames = new array<string>;
+        m_Values = new array<int>;
+        m_Counts = new array<int>;
+        m_Trial = new array<int>;
+        m_SuffixGcd = new array<int>;
+    }
+
+    protected int GreatestCommonDivisor(int a, int b)
+    {
+        int remainder = 0;
+        while (b > 0)
+        {
+            remainder = a % b;
+            a = b;
+            b = remainder;
+        }
+        return a;
+    }
+
+    bool Calculate(int eurAmount)
+    {
+        m_Classnames.Clear();
+        m_Values.Clear();
+        m_Counts.Clear();
+        m_Trial.Clear();
+        m_SuffixGcd.Clear();
+        m_Amount = 0;
+        m_UpperBound = 0;
+        m_Visited = 0;
+        m_Exhausted = false;
+        if (eurAmount < 0 || eurAmount > 10000000)
+            return false;
+        if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
+            return false;
+        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+        if (!currencies || currencies.Count() == 0 || currencies.Count() > 16)
+            return false;
+
+        int ci = 0;
+        int billCount = 0;
+        int remaining = eurAmount;
+        int suffixGcd = 0;
+        LFPG_BTCCurrency cur;
+        for (ci = 0; ci < currencies.Count(); ci = ci + 1)
+        {
+            cur = currencies[ci];
+            if (!cur || cur.value <= 0 || cur.value > 10000000 || cur.classname == "")
+                return false;
+            m_Classnames.Insert(cur.classname);
+            m_Values.Insert(cur.value);
+            billCount = remaining / cur.value;
+            m_Counts.Insert(billCount);
+            m_Trial.Insert(0);
+            m_SuffixGcd.Insert(0);
+            remaining = remaining - billCount * cur.value;
+        }
+        m_Amount = eurAmount - remaining;
+        for (ci = m_Values.Count() - 1; ci >= 0; ci = ci - 1)
+        {
+            suffixGcd = GreatestCommonDivisor(suffixGcd, m_Values[ci]);
+            m_SuffixGcd.Set(ci, suffixGcd);
+        }
+        m_UpperBound = eurAmount - eurAmount % suffixGcd;
+        if (m_Amount < m_UpperBound)
+            Search(0, eurAmount, 0);
+        if (m_Exhausted)
+        {
+            m_Amount = 0;
+            m_Counts.Clear();
+            return false;
+        }
+        return true;
+    }
+
+    // Enumerate every count unless the suffix cannot improve the incumbent.
+    // The last denomination has a closed-form optimum. Depth is at most 16.
+    protected void Search(int index, int remaining, int represented)
+    {
+        if (m_Exhausted || m_Amount == m_UpperBound)
+            return;
+        if (m_Visited >= MAX_SEARCH_NODES)
+        {
+            m_Exhausted = true;
+            return;
+        }
+        m_Visited = m_Visited + 1;
+        int suffixGcd = m_SuffixGcd[index];
+        int upper = represented + remaining - remaining % suffixGcd;
+        if (upper <= m_Amount)
+            return;
+
+        int value = m_Values[index];
+        int billCount = remaining / value;
+        int nextRemaining = 0;
+        int candidate = 0;
+        int ci = 0;
+        if (index == m_Values.Count() - 1)
+        {
+            candidate = represented + billCount * value;
+            if (candidate > m_Amount)
+            {
+                m_Trial.Set(index, billCount);
+                m_Amount = candidate;
+                for (ci = 0; ci < m_Counts.Count(); ci = ci + 1)
+                    m_Counts.Set(ci, m_Trial[ci]);
+            }
+            return;
+        }
+
+        while (billCount >= 0)
+        {
+            m_Trial.Set(index, billCount);
+            nextRemaining = remaining - billCount * value;
+            Search(index + 1, nextRemaining, represented + billCount * value);
+            if (m_Exhausted || m_Amount == m_UpperBound)
+                return;
+            billCount = billCount - 1;
+        }
+    }
+};
+
 class LFPG_BTCHelper
 {
     // ===== QA hook (permanente, default false) =====
@@ -555,31 +693,31 @@ class LFPG_BTCHelper
         return entities;
     }
 
+    static LFPG_BTCChangePlan CalculateChange(int eurAmount)
+    {
+        LFPG_BTCChangePlan changePlan = new LFPG_BTCChangePlan();
+        if (!changePlan.Calculate(eurAmount))
+            return null;
+        return changePlan;
+    }
+
+    static int EstimateChangePlanEntities(LFPG_BTCChangePlan changePlan)
+    {
+        if (!changePlan)
+            return LFPG_BTC_MAX_ENTITIES_PER_TX + 1;
+        int entities = 0;
+        int ci = 0;
+        for (ci = 0; ci < changePlan.m_Counts.Count(); ci = ci + 1)
+            entities = entities + EstimateItemEntities(changePlan.m_Classnames[ci], changePlan.m_Counts[ci]);
+        return entities;
+    }
+
     static int EstimateGreedyChangeEntities(int eurAmount)
     {
         if (eurAmount <= 0)
             return 0;
-        array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
-        if (!currencies)
-            return eurAmount;
-
-        int remaining = eurAmount;
-        int entities = 0;
-        int ci = 0;
-        for (ci = 0; ci < currencies.Count(); ci = ci + 1)
-        {
-            if (remaining <= 0)
-                break;
-            LFPG_BTCCurrency cur = currencies[ci];
-            if (!cur || cur.value <= 0 || cur.classname == "")
-                continue;
-            int billCount = remaining / cur.value;
-            if (billCount <= 0)
-                continue;
-            entities = entities + EstimateItemEntities(cur.classname, billCount);
-            remaining = remaining - (billCount * cur.value);
-        }
-        return entities;
+        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount);
+        return EstimateChangePlanEntities(changePlan);
     }
 
     static int CeilEurCost(int btcAmount, float price)
@@ -789,83 +927,41 @@ class LFPG_BTCHelper
         return created;
     }
 
-    static float GreedyChange(PlayerBase player, float eurAmount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
+    // Materialize only the calculated counts and return the delivered value.
+    // A spawn failure must not trigger a different denomination search.
+    static int MaterializeChange(PlayerBase player, LFPG_BTCChangePlan changePlan, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
-        if (eurAmount <= 0.0)
-            return 0.0;
-        if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
-            return eurAmount;
-
-        float tStartG = g_Game.GetTime();
-        string logEntryG = "[BTC perf] GreedyChange eurAmount=";
-        logEntryG = logEntryG + eurAmount.ToString();
-        LFPG_Util.Info(logEntryG);
-
-        int intAmount = (int)eurAmount;
-        float fractional = eurAmount - intAmount;
-
+        if (!player || !changePlan)
+            return 0;
         if (allowStackProbe)
             WarmupCurrencyStackCache(player);
-        int changeEntities = EstimateGreedyChangeEntities(intAmount);
-        if (changeEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
-        {
-            string changeBudget = "[BTC] GreedyChange entity budget rejected eur=";
-            changeBudget = changeBudget + intAmount.ToString();
-            changeBudget = changeBudget + " entities=";
-            changeBudget = changeBudget + changeEntities.ToString();
-            changeBudget = changeBudget + " cap=";
-            changeBudget = changeBudget + LFPG_BTC_MAX_ENTITIES_PER_TX.ToString();
-            LFPG_Util.Error(changeBudget);
-            return eurAmount;
-        }
+        if (EstimateChangePlanEntities(changePlan) > LFPG_BTC_MAX_ENTITIES_PER_TX)
+            return 0;
 
-        auto currencies = LFPG_BTCConfig.GetCurrencies();
-        if (!currencies)
-            return eurAmount;
-
-        int cCount = currencies.Count();
-        if (cCount == 0)
-            return eurAmount;
-
-        int remaining = intAmount;
         int ci = 0;
-        int billCount = 0;
         int createdBills = 0;
-        int eurGiven = 0;
-
-        for (ci = 0; ci < cCount; ci = ci + 1)
+        int delivered = 0;
+        for (ci = 0; ci < changePlan.m_Counts.Count(); ci = ci + 1)
         {
-            if (remaining <= 0)
-                break;
-
-            LFPG_BTCCurrency cur = currencies[ci];
-            if (!cur)
+            if (changePlan.m_Counts[ci] <= 0)
                 continue;
-            if (cur.value <= 0)
-                continue;
-
-            billCount = remaining / cur.value;
-            if (billCount <= 0)
-                continue;
-
-            createdBills = StageItemsForPlayer(player, cur.classname, billCount, outputPlan, allowStackProbe);
-            eurGiven = createdBills * cur.value;
-            remaining = remaining - eurGiven;
+            createdBills = StageItemsForPlayer(player, changePlan.m_Classnames[ci], changePlan.m_Counts[ci], outputPlan, false);
+            delivered = delivered + createdBills * changePlan.m_Values[ci];
         }
+        return delivered;
+    }
 
-        // Remainder = fractional cents + any sub-denomination leftover
-        float totalRemainder = fractional + remaining;
-        float tEndG = g_Game.GetTime();
-        float durationG = tEndG - tStartG;
-        if (durationG > 200.0)
-        {
-            string warnSlowG = "[BTC perf] SLOW: GreedyChange took ";
-            warnSlowG = warnSlowG + durationG.ToString();
-            warnSlowG = warnSlowG + "ms eurAmount=";
-            warnSlowG = warnSlowG + eurAmount.ToString();
-            LFPG_Util.Warn(warnSlowG);
-        }
-        return totalRemainder;
+    // Compatibility entry point for Buy, Sell and restitution. Returns the
+    // entire remainder, including both unrepresentable and uncreated value.
+    static int GreedyChange(PlayerBase player, int eurAmount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
+    {
+        if (eurAmount <= 0)
+            return 0;
+        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount);
+        if (!changePlan)
+            return eurAmount;
+        int delivered = MaterializeChange(player, changePlan, outputPlan, allowStackProbe);
+        return eurAmount - delivered;
     }
 
     static LFPG_BTCAtmBase ResolveAndValidate(PlayerBase player, int netLow, int netHigh, string tag)
@@ -2558,8 +2654,18 @@ class LFPG_BTCHelper
             return;
         }
 
+        LFPG_BTCChangePlan cashChangePlan = CalculateChange(eurAmount);
+        if (!cashChangePlan || cashChangePlan.m_Amount <= 0)
+        {
+            int errChangeWC = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errChangeWC, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal could not be prepared with the available banknotes. No balance was debited.");
+            return;
+        }
+        int payableCash = cashChangePlan.m_Amount;
+
         // Missing stack capacities default to one without creating value.
-        int withdrawCashEntities = EstimateGreedyChangeEntities(eurAmount);
+        int withdrawCashEntities = EstimateChangePlanEntities(cashChangePlan);
         if (withdrawCashEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
             int errBudgetWC = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
@@ -2575,13 +2681,13 @@ class LFPG_BTCHelper
         }
 
         // Debit before materialization. Failed delivery never restores value.
-        int removed = atmPb.RemoveBalance(player, eurAmount);
-        if (removed != eurAmount)
+        int removed = atmPb.RemoveBalance(player, payableCash);
+        if (removed != payableCash)
         {
             int failedBal = atmPb.GetBalance(player);
             int errDurability = LFPG_BTC_ERR_INVALID;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errDurability, atm.LFPG_GetBtcStock(), failedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-            LFPG_Util.Error("[BTCWithdrawCash] debit was not exact; no delivery or refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " requested=" + eurAmount.ToString() + " removed=" + removed.ToString());
+            LFPG_Util.Error("[BTCWithdrawCash] debit was not exact; no delivery or refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " planned=" + payableCash.ToString() + " removed=" + removed.ToString());
             if (removed > 0)
                 PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal stopped after a partial debit. No cash was delivered or refunded; report this to an administrator.");
             return;
@@ -2589,13 +2695,13 @@ class LFPG_BTCHelper
 
         LFPG_Util.Info("[BTCWithdrawCash] balance debited before delivery uid=" + LFPG_Util.LogUid(sender.GetId()) + " deviceId=" + atm.LFPG_GetDeviceId() + " amount=" + removed.ToString());
         LFPG_BTCInventoryPlan withdrawPlan = new LFPG_BTCInventoryPlan();
-        float stagedRemainder = GreedyChange(player, eurAmount, withdrawPlan, false);
-        if (stagedRemainder > 0.001)
+        int deliveredCash = MaterializeChange(player, cashChangePlan, withdrawPlan, false);
+        int stagedRemainder = payableCash - deliveredCash;
+        if (stagedRemainder > 0)
         {
-            // Keep the represented amount after the exact debit; never refund the remainder.
-            float deliveredCash = removed - stagedRemainder;
+            // Only a materialization failure can leave a remainder after debit.
             int errStage = LFPG_BTC_ERR_INVENTORY_FULL;
-            if (deliveredCash > 0.0)
+            if (deliveredCash > 0)
                 errStage = LFPG_BTC_OK;
             int debitedBal = atmPb.GetBalance(player);
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errStage, atm.LFPG_GetBtcStock(), debitedBal, 0, deliveredCash, serverSessionLow, serverSessionHigh, sequence);
@@ -2604,6 +2710,9 @@ class LFPG_BTCHelper
             PlayerBase.LFPG_SendClientMsg(player, partialCashMsg);
             return;
         }
+
+        if (payableCash < eurAmount)
+            PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal: requested " + eurAmount.ToString() + " EUR; debited and delivered " + payableCash.ToString() + " EUR. The unrepresentable remainder stays in your account.");
 
         int newBal = atmPb.GetBalance(player);
         float eurAmt = removed;
