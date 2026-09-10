@@ -227,8 +227,8 @@ class LFPG_BTCInventoryPlan
     }
 };
 
-// Integer-only denomination plan. Search exhaustion rejects the plan; an
-// unproven incumbent must never authorize a debit. No entities are created.
+// Integer-only denomination plan. Exhaustion preserves a valid lower bound.
+// Only a proven plan may authorize a debit. No entities are created.
 class LFPG_BTCChangePlan
 {
     protected static const int MAX_SEARCH_NODES = 8192;
@@ -241,6 +241,7 @@ class LFPG_BTCChangePlan
     protected int m_UpperBound;
     protected int m_Visited;
     protected bool m_Exhausted;
+    protected bool m_Proven;
 
     void LFPG_BTCChangePlan()
     {
@@ -263,6 +264,12 @@ class LFPG_BTCChangePlan
         return a;
     }
 
+    bool IsProven()
+    {
+        return m_Proven;
+    }
+
+    // Success means valid counts; callers must check proof before a debit.
     bool Calculate(int eurAmount)
     {
         m_Classnames.Clear();
@@ -274,6 +281,7 @@ class LFPG_BTCChangePlan
         m_UpperBound = 0;
         m_Visited = 0;
         m_Exhausted = false;
+        m_Proven = false;
         if (eurAmount < 0 || eurAmount > 10000000)
             return false;
         if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
@@ -309,12 +317,7 @@ class LFPG_BTCChangePlan
         m_UpperBound = eurAmount - eurAmount % suffixGcd;
         if (m_Amount < m_UpperBound)
             Search(0, eurAmount, 0);
-        if (m_Exhausted)
-        {
-            m_Amount = 0;
-            m_Counts.Clear();
-            return false;
-        }
+        m_Proven = !m_Exhausted;
         return true;
     }
 
@@ -693,10 +696,13 @@ class LFPG_BTCHelper
         return entities;
     }
 
-    static LFPG_BTCChangePlan CalculateChange(int eurAmount)
+    // Unproven counts require explicit acceptance; debit callers stay strict.
+    static LFPG_BTCChangePlan CalculateChange(int eurAmount, bool allowUnproven = false)
     {
         LFPG_BTCChangePlan changePlan = new LFPG_BTCChangePlan();
         if (!changePlan.Calculate(eurAmount))
+            return null;
+        if (!changePlan.IsProven() && !allowUnproven)
             return null;
         return changePlan;
     }
@@ -716,7 +722,8 @@ class LFPG_BTCHelper
     {
         if (eurAmount <= 0)
             return 0;
-        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount);
+        // GreedyChange accepts the incumbent, so estimate those same counts.
+        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount, true);
         return EstimateChangePlanEntities(changePlan);
     }
 
@@ -929,9 +936,11 @@ class LFPG_BTCHelper
 
     // Materialize only the calculated counts and return the delivered value.
     // A spawn failure must not trigger a different denomination search.
-    static int MaterializeChange(PlayerBase player, LFPG_BTCChangePlan changePlan, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
+    static int MaterializeChange(PlayerBase player, LFPG_BTCChangePlan changePlan, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true, bool allowUnproven = false)
     {
         if (!player || !changePlan)
+            return 0;
+        if (!changePlan.IsProven() && !allowUnproven)
             return 0;
         if (allowStackProbe)
             WarmupCurrencyStackCache(player);
@@ -951,16 +960,16 @@ class LFPG_BTCHelper
         return delivered;
     }
 
-    // Compatibility entry point for Buy, Sell and restitution. Returns the
-    // entire remainder, including both unrepresentable and uncreated value.
+    // Best-effort entry point for Buy, Sell and restitution; accepts unproven
+    // counts. Callers must handle the full remainder, including uncreated value.
     static int GreedyChange(PlayerBase player, int eurAmount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
         if (eurAmount <= 0)
             return 0;
-        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount);
+        LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount, true);
         if (!changePlan)
             return eurAmount;
-        int delivered = MaterializeChange(player, changePlan, outputPlan, allowStackProbe);
+        int delivered = MaterializeChange(player, changePlan, outputPlan, allowStackProbe, true);
         return eurAmount - delivered;
     }
 
