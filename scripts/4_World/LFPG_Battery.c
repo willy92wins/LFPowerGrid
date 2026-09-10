@@ -79,7 +79,11 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     protected bool m_DischargeEnabled = true;
 
     // ---- Sync tracking (server-only, not persisted) ----
-    // Inspector server refresh is 2000 ms; do not dirty faster than that.
+    // STORED_ENERGY_SYNC_MIN_MS is a floor for a faster future caller.
+    // The only accounting path today ticks ~5 s, so this constant does
+    // not set publish cadence. Charge travels by SyncVar; the inspect
+    // panel polls it every 500 ms (LFPG_INSPECT_REFRESH_MS). The 2000 ms
+    // inspector interval is the topology RPC, not this value.
     static const int STORED_ENERGY_SYNC_MIN_MS = 2000;
     protected float m_LastSyncedStored = -1.0;
     protected int m_LastStoredSyncMs = -1;
@@ -376,7 +380,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         bool needsSync = false;
         int nowMs = g_Game.GetTime();
         int elapsedMs = 0;
-        int lastSyncedX10 = 0;
+        int lastSyncedInt = 0;
+        int newStoredInt = val;
 
         if (m_LastSyncedStored < 0.0)
         {
@@ -394,11 +399,13 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
                 needsSync = true;
             }
 
-            // Percentage threshold scales with capacity. Publish a changed
-            // X10 at least every STORED_ENERGY_SYNC_MIN_MS so the inspector
-            // is not stuck on a frozen number while charge is moving.
-            lastSyncedX10 = m_LastSyncedStored * 10.0;
-            if (newX10 != lastSyncedX10)
+            // Percentage threshold scales with capacity. Temporal publish
+            // follows the visible integer unit, not the X10 tenth: the
+            // inspector prints ints and no other client consumer shows
+            // tenths. Accounting ~5 s is the effective cadence; the 2000 ms
+            // floor does not bite on that caller.
+            lastSyncedInt = m_LastSyncedStored;
+            if (newStoredInt != lastSyncedInt)
             {
                 elapsedMs = nowMs - m_LastStoredSyncMs;
                 if (elapsedMs < 0)
