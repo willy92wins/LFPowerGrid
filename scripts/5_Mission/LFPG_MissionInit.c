@@ -103,6 +103,11 @@ modded class MissionServer
         LFPG_BalanceProvider_NativeImpl.ReconcileLoadedAtm(atm);
     }
 
+    override void LFPG_AtmReportKillDropDenied(string deviceId, int stock)
+    {
+        LFPG_BalanceProvider_NativeImpl.ReportKillDropDenied(deviceId, stock);
+    }
+
     override int LFPG_NativeGetPlayerBalance(string uid)
     {
         return LFPG_BalanceProvider_NativeImpl.ReadPlayerBalance(uid);

@@ -45,6 +45,8 @@ modded class MissionBaseWorld
     bool LFPG_AtmCanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
     bool LFPG_AtmPrepareStockMutation(string deviceId, int stockBefore, int stockTarget) { return false; }
     void LFPG_AtmReconcileLoaded(LFPG_BTCAtmBase atm) { }
+    // Kill-drop denial. Mission reports through the claim-error limiter.
+    void LFPG_AtmReportKillDropDenied(string deviceId, int stock) { }
 
     // Published to external mods from the World arena; implemented in Mission.
     int LFPG_NativeGetPlayerBalance(string uid) { return 0; }
@@ -53,8 +55,12 @@ modded class MissionBaseWorld
 
 modded class PlayerBase
 {
-    // Runtime-only server cooldown shared by ATM availability notices.
+    // Runtime-only server cooldown for the account-unavailable ATM notice.
     int m_LFPG_LastBalanceNoticeMs = -10000;
+    // Runtime-only server cooldown for the retained-stock ATM notice.
+    int m_LFPG_LastRetainedStockNoticeMs = -10000;
+    // First retained-stock notice must fire even when GetTime() is negative.
+    bool m_LFPG_RetainedStockNoticeSent = false;
 
     // COT pattern: prevent vanilla OnSelectPlayer + ResetGUI side effects
     // during SelectPlayer(sender, NULL). Flag on BOTH PlayerBase AND Mission.

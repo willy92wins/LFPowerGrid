@@ -1100,6 +1100,35 @@ class LFPG_BTCHelper
         PlayerBase.LFPG_SendClientMsg(player, "Account money is unavailable on this server. No valid banking provider is available, and your wallet has not been switched. Contact an administrator. Physical BTC remains available.");
     }
 
+    protected static void NotifyAtmCannotDeliverBtc(PlayerBase player)
+    {
+        int nowMs;
+        int lastNoticeMs;
+        int elapsedMs;
+
+        if (!g_Game || !g_Game.IsServer() || !player)
+            return;
+        if (!player.GetIdentity())
+            return;
+
+        nowMs = g_Game.GetTime();
+        if (player.m_LFPG_RetainedStockNoticeSent)
+        {
+            lastNoticeMs = player.m_LFPG_LastRetainedStockNoticeMs;
+            // Clock wrap makes nowMs < lastNoticeMs; signed subtract can go negative.
+            if (nowMs >= lastNoticeMs)
+            {
+                elapsedMs = nowMs - lastNoticeMs;
+                if (elapsedMs >= 0 && elapsedMs < 10000)
+                    return;
+            }
+        }
+
+        player.m_LFPG_RetainedStockNoticeSent = true;
+        player.m_LFPG_LastRetainedStockNoticeMs = nowMs;
+        PlayerBase.LFPG_SendClientMsg(player, "This ATM cannot deliver BTC until an administrator reviews it.");
+    }
+
     static void HandleBTCOpenRequest(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -2288,6 +2317,16 @@ class LFPG_BTCHelper
             return;
         }
 
+        int withdrawTarget = currentStock - btcAmount;
+        if (!LFPG_BalanceProvider_NativeImpl.CanPrepareStockMutation(atm.LFPG_GetDeviceId(), currentStock, withdrawTarget))
+        {
+            if (LFPG_BalanceProvider_NativeImpl.DeviceHasRetainedPhysicalEvidence(atm.LFPG_GetDeviceId()))
+                NotifyAtmCannotDeliverBtc(player);
+            int errRetainedOut = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errRetainedOut, currentStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            return;
+        }
+
         string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
         // Missing stack capacities default to one without creating value.
         int withdrawEntities = EstimateItemEntities(btcClassname, btcAmount);
@@ -2309,6 +2348,8 @@ class LFPG_BTCHelper
         bool stockRemoved = atm.LFPG_RemoveBtcStock(btcAmount);
         if (!stockRemoved)
         {
+            if (LFPG_BalanceProvider_NativeImpl.DeviceHasRetainedPhysicalEvidence(atm.LFPG_GetDeviceId()))
+                NotifyAtmCannotDeliverBtc(player);
             int errClaimFold = LFPG_BTC_ERR_INVALID;
             int blockedStock = atm.LFPG_GetBtcStock();
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errClaimFold, blockedStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);

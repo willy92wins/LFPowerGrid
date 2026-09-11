@@ -61,6 +61,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     protected static const int LFPG_NATIVE_BALANCE_CAP = 2000000000;
     protected static const int LFPG_CLAIM_PENDING = 0;
     protected static const int LFPG_CLAIM_REFUNDED = 1;
+    // Inert held record. Boot reconcile skips it. Additive: old saves remain 0/1.
+    protected static const int LFPG_CLAIM_RETAINED = 2;
     // One-shot delay leaves hive entities time to populate DeviceRegistry.
     static const int LFPG_BTC_ORPHAN_SWEEP_DELAY_MS = 120000;
     // Bounded purchases: at most eight pending account purchases per device.
@@ -149,6 +151,15 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     {
         if (AllowClaimErrorLog(uid, deviceId))
             LFPG_Util.Error(message);
+    }
+
+    static void ReportKillDropDenied(string deviceId, int stock)
+    {
+        string message;
+        string uid;
+        message = "[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stock.ToString() + " deviceId=" + deviceId;
+        uid = FindDeviceClaimUID(deviceId);
+        LogClaimError(message, uid, deviceId);
     }
 
     protected static bool HasDeviceClaims(string deviceId)
@@ -335,6 +346,219 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return true;
     }
+
+    protected static bool IsPendingPhysicalClaim(LFPG_BalanceClaim claim)
+    {
+        if (!claim)
+            return false;
+        if (claim.state != LFPG_CLAIM_PENDING)
+            return false;
+        if (claim.debit != 0)
+            return false;
+        if (claim.uid != "")
+            return false;
+        return true;
+    }
+
+    protected static bool ChainHasPendingPhysical(array<ref LFPG_BalanceClaim> chain)
+    {
+        if (!chain)
+            return false;
+        int i = 0;
+        for (i = 0; i < chain.Count(); i = i + 1)
+        {
+            if (IsPendingPhysicalClaim(chain[i]))
+                return true;
+        }
+        return false;
+    }
+
+    protected static bool ChainHasPhysicalEvidence(array<ref LFPG_BalanceClaim> chain)
+    {
+        if (!chain)
+            return false;
+        int i = 0;
+        for (i = 0; i < chain.Count(); i = i + 1)
+        {
+            LFPG_BalanceClaim claim = chain[i];
+            if (!claim)
+                continue;
+            if (claim.debit != 0)
+                continue;
+            if (claim.state == LFPG_CLAIM_PENDING || claim.state == LFPG_CLAIM_RETAINED)
+                return true;
+        }
+        return false;
+    }
+
+    protected static bool DeviceHasPhysicalEvidence(string deviceId)
+    {
+        return ChainHasPhysicalEvidence(CollectDeviceClaims(deviceId));
+    }
+
+    protected static bool ChainHasRetainedPhysical(array<ref LFPG_BalanceClaim> chain)
+    {
+        if (!chain)
+            return false;
+        int i = 0;
+        LFPG_BalanceClaim claim = null;
+        for (i = 0; i < chain.Count(); i = i + 1)
+        {
+            claim = chain[i];
+            if (!claim)
+                continue;
+            if (claim.debit != 0)
+                continue;
+            if (claim.state == LFPG_CLAIM_RETAINED)
+                return true;
+        }
+        return false;
+    }
+
+    // RETAINED physical only. PENDING is the in-flight segment; the broader
+    // DeviceHasPhysicalEvidence predicate would refuse a live mutation against itself.
+    static bool DeviceHasRetainedPhysicalEvidence(string deviceId)
+    {
+        EnsureLoaded();
+        return ChainHasRetainedPhysical(CollectDeviceClaims(deviceId));
+    }
+
+    protected static bool StockOutflowBlockedByRetainedEvidence(string deviceId, int stockBefore, int stockTarget)
+    {
+        if (stockTarget >= stockBefore)
+            return false;
+        if (deviceId == "")
+            return false;
+        if (!DeviceHasRetainedPhysicalEvidence(deviceId))
+            return false;
+        LogClaimError("[LFPG_Balance_Native] Stock outflow rejected: retained physical evidence deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+        return true;
+    }
+
+    protected static string FormatClaimSnapshot(LFPG_BalanceClaim claim)
+    {
+        if (!claim)
+            return "[null]";
+        string msg = "[uid=";
+        msg = msg + LFPG_Util.LogUid(claim.uid);
+        msg = msg + " deviceId=";
+        msg = msg + claim.deviceId;
+        msg = msg + " ";
+        msg = msg + claim.stockBefore.ToString();
+        msg = msg + "->";
+        msg = msg + claim.stockTarget.ToString();
+        msg = msg + " debit=";
+        msg = msg + claim.debit.ToString();
+        msg = msg + " state=";
+        msg = msg + claim.state.ToString();
+        msg = msg + " sessionLow=";
+        msg = msg + claim.sessionLow.ToString();
+        msg = msg + " sessionHigh=";
+        msg = msg + claim.sessionHigh.ToString();
+        msg = msg + " sequence=";
+        msg = msg + claim.sequence.ToString();
+        msg = msg + " orphanBoots=";
+        msg = msg + claim.orphanBoots.ToString();
+        msg = msg + " ambigBoots=";
+        msg = msg + claim.ambigBoots.ToString();
+        msg = msg + " refundBoots=";
+        msg = msg + claim.bootsSinceRefund.ToString();
+        msg = msg + "]";
+        return msg;
+    }
+
+    protected static void LogRetainedPhysicalCritical(string deviceId, int loadedStock, array<ref LFPG_BalanceClaim> retainedClaims, array<int> previousStates, string reason)
+    {
+        string header = "[LFPG_Balance_Native] CRITICAL physical ATM evidence retained; records kept inert deviceId=";
+        header = header + deviceId;
+        header = header + " loadedStock=";
+        header = header + loadedStock.ToString();
+        header = header + " count=";
+        int retainedCount = 0;
+        if (retainedClaims)
+            retainedCount = retainedClaims.Count();
+        header = header + retainedCount.ToString();
+        header = header + " reason=";
+        header = header + reason;
+        LFPG_Util.Error(header);
+
+        int i = 0;
+        int beforeState = 0;
+        string line = "";
+        LFPG_BalanceClaim claim = null;
+        for (i = 0; i < retainedCount; i = i + 1)
+        {
+            claim = retainedClaims[i];
+            beforeState = 0;
+            if (previousStates && i < previousStates.Count())
+                beforeState = previousStates[i];
+            line = "[LFPG_Balance_Native] CRITICAL retained snapshot beforeState=";
+            line = line + beforeState.ToString();
+            line = line + " after=";
+            line = line + FormatClaimSnapshot(claim);
+            LFPG_Util.Error(line);
+        }
+
+        array<ref LFPG_BalanceClaim> available = CollectDeviceClaims(deviceId);
+        int availableIndex = 0;
+        for (availableIndex = 0; availableIndex < available.Count(); availableIndex = availableIndex + 1)
+        {
+            line = "[LFPG_Balance_Native] CRITICAL available record ";
+            line = line + availableIndex.ToString();
+            line = line + "=";
+            line = line + FormatClaimSnapshot(available[availableIndex]);
+            LFPG_Util.Error(line);
+        }
+    }
+
+    protected static bool PersistRetainSelectedClaims(string deviceId, array<ref LFPG_BalanceClaim> selectedClaims, int loadedStock, string reason)
+    {
+        if (!selectedClaims || selectedClaims.Count() == 0)
+            return true;
+
+        int i = 0;
+        LFPG_BalanceClaim claim = null;
+        for (i = 0; i < selectedClaims.Count(); i = i + 1)
+        {
+            claim = selectedClaims[i];
+            if (!claim || claim.deviceId != deviceId)
+                return false;
+            if (claim.state == LFPG_CLAIM_RETAINED)
+                continue;
+            if (claim.state != LFPG_CLAIM_PENDING)
+                return false;
+        }
+
+        array<int> previousStates = new array<int>;
+        array<ref LFPG_BalanceClaim> mutated = new array<ref LFPG_BalanceClaim>;
+        for (i = 0; i < selectedClaims.Count(); i = i + 1)
+        {
+            claim = selectedClaims[i];
+            if (claim.state == LFPG_CLAIM_RETAINED)
+                continue;
+            mutated.Insert(claim);
+            previousStates.Insert(claim.state);
+            claim.state = LFPG_CLAIM_RETAINED;
+        }
+
+        if (mutated.Count() == 0)
+            return true;
+
+        bool dirtyBefore = s_CompoundActionDirty;
+        s_CompoundActionDirty = true;
+        if (!SaveToDisk())
+        {
+            for (i = 0; i < mutated.Count(); i = i + 1)
+                mutated[i].state = previousStates[i];
+            s_CompoundActionDirty = dirtyBefore;
+            LogClaimError("[LFPG_Balance_Native] Physical evidence retain was not durable; previous states restored deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+            return false;
+        }
+        s_CompoundActionDirty = dirtyBefore;
+        LogRetainedPhysicalCritical(deviceId, loadedStock, mutated, previousStates, reason);
+        return true;
+    }
+
     protected static void LogAmbiguousChain(string deviceId, int stock, array<ref LFPG_BalanceClaim> chain, string reason)
     {
         string msg = "[LFPG_Balance_Native] Ambiguous ATM claim chain; stock mutation blocked deviceId=";
@@ -507,6 +731,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
+        if (StockOutflowBlockedByRetainedEvidence(deviceId, stockBefore, stockTarget))
+            return false;
         if (!HasDeviceClaims(deviceId))
             return true;
         if (!s_ReconciledDevices.Contains(deviceId))
@@ -535,6 +761,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
+        if (StockOutflowBlockedByRetainedEvidence(deviceId, stockBefore, stockTarget))
+            return false;
         if (HasDeviceClaims(deviceId) && !s_ReconciledDevices.Contains(deviceId))
         {
             LogClaimError("[LFPG_Balance_Native] Stock mutation denied while claim chain is unresolved deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
@@ -625,7 +853,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_BalanceClaim claim = chain[i];
             if (!claim)
                 return false;
-            if (claim.state != LFPG_CLAIM_PENDING && claim.state != LFPG_CLAIM_REFUNDED)
+            if (claim.state != LFPG_CLAIM_PENDING && claim.state != LFPG_CLAIM_REFUNDED && claim.state != LFPG_CLAIM_RETAINED)
                 return false;
             if (claim.debit < 0)
                 return false;
@@ -811,10 +1039,18 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         return true;
     }
 
-    protected static bool ObserveAmbiguousPresentTimeline(string deviceId, array<ref LFPG_BalanceClaim> timeline)
+    protected static bool ObserveAmbiguousPresentTimeline(string deviceId, array<ref LFPG_BalanceClaim> timeline, int stock)
     {
         if (s_AmbiguousObservedThisBoot.Contains(deviceId))
             return false;
+
+        if (ChainHasPendingPhysical(timeline) || DeviceHasPhysicalEvidence(deviceId))
+        {
+            if (!PersistRetainSelectedClaims(deviceId, timeline, stock, "ambiguous present timeline contained physical evidence"))
+                return false;
+            s_AmbiguousObservedThisBoot.Set(deviceId, true);
+            return true;
+        }
 
         array<int> previousValues = new array<int>;
         bool refundReady = false;
@@ -862,6 +1098,15 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     {
         LogAmbiguousChain(deviceId, stock, chain, reason);
 
+        if (ChainHasPhysicalEvidence(chain))
+        {
+            array<ref LFPG_BalanceClaim> mixedPending = CollectPendingTimeline(chain);
+            if (!PersistRetainSelectedClaims(deviceId, mixedPending, stock, "pending chain with physical evidence did not match loaded stock"))
+                return;
+            s_ReconciledDevices.Set(deviceId, true);
+            return;
+        }
+
         bool removedProven = false;
         if (!PersistRemoveChainProvenPurchases(deviceId, removedProven))
             return;
@@ -874,7 +1119,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return;
         }
 
-        if (ObserveAmbiguousPresentTimeline(deviceId, remainingTimeline))
+        if (ObserveAmbiguousPresentTimeline(deviceId, remainingTimeline, stock))
             s_ReconciledDevices.Set(deviceId, true);
     }
     protected static void AdvancePresentRefundedClaims(string deviceId)
@@ -1077,8 +1322,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
 
         if (physicalTail.Count() > 0)
         {
-            array<int> physicalIndices = BuildClaimIndices(deviceId, physicalTail);
-            if (physicalIndices.Count() != physicalTail.Count() || !PersistRemoveDeviceClaimIndices(deviceId, physicalIndices))
+            if (!PersistRetainSelectedClaims(deviceId, physicalTail, stock, "physical timeline tail could not be fitted to loaded stock"))
             {
                 int restoreResyncIndex = 0;
                 for (restoreResyncIndex = 0; restoreResyncIndex < rebasedPurchases.Count(); restoreResyncIndex = restoreResyncIndex + 1)
@@ -1086,20 +1330,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     rebasedPurchases[restoreResyncIndex].stockBefore = previousPurchaseBefore[restoreResyncIndex];
                     rebasedPurchases[restoreResyncIndex].stockTarget = previousPurchaseTarget[restoreResyncIndex];
                 }
-                LogClaimError("[LFPG_Balance_Native] Physical-tail resync clear failed; purchases remain pending and device unresolved deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+                LogClaimError("[LFPG_Balance_Native] Physical-tail retain failed; purchases remain pending and device unresolved deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
                 return;
-            }
-
-            int physicalWarnIndex = 0;
-            for (physicalWarnIndex = 0; physicalWarnIndex < physicalTail.Count(); physicalWarnIndex = physicalWarnIndex + 1)
-            {
-                LFPG_BalanceClaim abandonedPhysical = physicalTail[physicalWarnIndex];
-                int abandonedDelta = abandonedPhysical.stockTarget - abandonedPhysical.stockBefore;
-                string physicalWarn = "[LFPG_Balance_Native] Physical timeline segment resync-cleared; delta abandoned deviceId=";
-                physicalWarn = physicalWarn + deviceId;
-                physicalWarn = physicalWarn + " delta=";
-                physicalWarn = physicalWarn + abandonedDelta.ToString();
-                LFPG_Util.Warn(physicalWarn);
             }
         }
 
@@ -1175,6 +1407,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 LogAmbiguousChain(deviceId, stock, chain, "invalid refunded claim record");
                 return;
             }
+            if (claim.state == LFPG_CLAIM_RETAINED)
+                continue;
             if (claim.debit > 0)
             {
                 if (claim.state != LFPG_CLAIM_REFUNDED)
@@ -1226,7 +1460,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return;
         }
 
-        if (PersistRemoveDeviceClaimPrefix(deviceId, count))
+        array<int> refundedIndices = BuildClaimIndices(deviceId, refundedPurchases);
+        if (refundedIndices.Count() == refundedPurchases.Count() && PersistRemoveDeviceClaimIndices(deviceId, refundedIndices))
         {
             s_ReconciledDevices.Set(deviceId, true);
             LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM hive stock already matched refunded compensation; tombstones cleared durably deviceId=" + deviceId);
@@ -1275,11 +1510,14 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
 
         int pendingCount = 0;
+        int refundedCount = 0;
         int i = 0;
         for (i = 0; i < chain.Count(); i = i + 1)
         {
             if (chain[i].state == LFPG_CLAIM_PENDING)
                 pendingCount = pendingCount + 1;
+            else if (chain[i].state == LFPG_CLAIM_REFUNDED)
+                refundedCount = refundedCount + 1;
         }
 
         if (pendingCount > 0)
@@ -1287,7 +1525,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             ReconcilePendingChain(atm, deviceId, chain);
             return;
         }
-        ReconcileRefundedChain(atm, deviceId, chain);
+        if (refundedCount > 0)
+        {
+            ReconcileRefundedChain(atm, deviceId, chain);
+            return;
+        }
+        s_ReconciledDevices.Set(deviceId, true);
     }
     protected static bool RefundPendingClaimAt(int claimIndex)
     {
@@ -1403,6 +1646,7 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         if (!claim || claim.state != LFPG_CLAIM_PENDING)
             return false;
         int previousOrphanBoots = claim.orphanBoots;
+        array<ref LFPG_BalanceClaim> retainSet = new array<ref LFPG_BalanceClaim>;
         claim.orphanBoots = claim.orphanBoots + 1;
         if (claim.orphanBoots < 2)
         {
@@ -1418,8 +1662,15 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         }
 
+        retainSet.Insert(claim);
         if (claim.debit > 0)
         {
+            if (DeviceHasPhysicalEvidence(claim.deviceId))
+            {
+                if (!PersistRetainSelectedClaims(claim.deviceId, retainSet, 0, "absent ATM mixed purchase held as retained evidence"))
+                    claim.orphanBoots = previousOrphanBoots;
+                return false;
+            }
             if (RefundPendingClaimAt(claimIndex))
                 return false;
             claim.orphanBoots = previousOrphanBoots;
@@ -1427,10 +1678,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         if (claim.debit == 0)
         {
-            if (PersistRemoveClaimAt(claimIndex))
-                return true;
-            claim.orphanBoots = previousOrphanBoots;
-            LogClaimError("[LFPG_Balance_Native] Orphan checkpoint clear failed after two observations deviceId=" + claim.deviceId, FindDeviceClaimUID(claim.deviceId), claim.deviceId);
+            if (!PersistRetainSelectedClaims(claim.deviceId, retainSet, 0, "absent ATM physical segment retained after two observations"))
+            {
+                claim.orphanBoots = previousOrphanBoots;
+                LogClaimError("[LFPG_Balance_Native] Orphan physical retain failed after two observations deviceId=" + claim.deviceId, FindDeviceClaimUID(claim.deviceId), claim.deviceId);
+            }
             return false;
         }
         claim.orphanBoots = previousOrphanBoots;
@@ -1495,8 +1747,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
 
             bool removedProven = false;
-            if (!PersistRemoveChainProvenPurchases(deviceId, removedProven))
-                continue;
+            if (!ChainHasPhysicalEvidence(absentChain))
+            {
+                if (!PersistRemoveChainProvenPurchases(deviceId, removedProven))
+                    continue;
+            }
 
             int claimIndex = 0;
             while (claimIndex < s_Claims.Count())
@@ -1521,6 +1776,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     bool pruned = AdvanceOrPruneRefundedClaimAt(claimIndex);
                     if (pruned)
                         continue;
+                    claimIndex = claimIndex + 1;
+                    continue;
+                }
+                if (claim.state == LFPG_CLAIM_RETAINED)
+                {
                     claimIndex = claimIndex + 1;
                     continue;
                 }
