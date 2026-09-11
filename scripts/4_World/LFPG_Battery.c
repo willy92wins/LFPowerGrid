@@ -17,8 +17,8 @@
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
 //   GetPortWorldPos override: p3d uses port_input_0/port_output_0.
 //
-// LFPG_BatteryMedium:   10,000 u capacity, 50 chg, 70 dis, 90% eff
-// LFPG_BatteryLarge:    50,000 u capacity, 80 chg, 120 dis, 88% eff
+// LFPG_BatteryMedium:   720,000 u capacity, 50 chg, 70 dis, 90% eff
+// LFPG_BatteryLarge:    3,600,000 u capacity, 80 chg, 120 dis, 88% eff
 // =========================================================
 
 // ---------------------------------------------------------
@@ -65,8 +65,8 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // RegisterNetSyncVariableFloat calls with mismatched bit-widths on the
     // same entity class corrupt the second float on the client). Keeping
     // zero floats in the SyncVar bitstream eliminates the bug by
-    // construction. 0.1 u resolution; storage up to 100000 u × 10 fits in
-    // int32 by 4 orders of magnitude.
+    // construction. 0.1 u resolution; storage up to 3600000 u × 10 fits in
+    // int32 by two orders of magnitude.
     protected int   m_StoredEnergyX10  = 0;
     protected int   m_ChargeRateX10    = 0;
     #ifndef SERVER
@@ -121,9 +121,9 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
         //
         // v4.5.1: Explicit ranges required. Unranged RegisterNetSyncVariableInt
         // defaults to a narrow bit-width (observed ~16 bits) → values above
-        // 65535 wrap (e.g. BatteryMedium at 60% stored = 120000 X10, wraps to
-        // 54464, displays as 27%). Large battery X10 max = 1_000_000.
-        RegisterNetSyncVariableInt(varStored, 0, 1500000);
+        // 65535 wrap (e.g. BatteryMedium at 60% stored = 4320000 X10).
+        // Large battery X10 max = 36000000.
+        RegisterNetSyncVariableInt(varStored, 0, 50000000);
         RegisterNetSyncVariableInt(varChargeRate, -2000, 2000);
     }
 
@@ -301,7 +301,17 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     // Persistence: StoredEnergy + DischargeEnabled + OutputEnabled
     // (after wireJSON from WireOwnerBase)
+    // Battery schema v3: v2 energy is scaled by 36. v1 is rejected.
     // ============================================
+    static const int LFPG_BATTERY_PERSIST_VERSION = 3;
+    static const int LFPG_BATTERY_PRE_X36_VERSION = 2;
+    static const float LFPG_BATTERY_MIGRATION_FACTOR = 36.0;
+
+    override int LFPG_GetDevicePersistVersion()
+    {
+        return LFPG_BATTERY_PERSIST_VERSION;
+    }
+
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
         // Disk format stays float for backward compat with existing saves.
@@ -312,12 +322,21 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
     {
-		bool dischargeEnabled = true;
-		bool outputEnabled = true;
+        bool dischargeEnabled = true;
+        bool outputEnabled = true;
         float storedFromSave = 0.0;
+        string errStored = "[LFPG_Battery] OnStoreLoad failed: m_StoredEnergy";
+        string errDisch = "[LFPG_Battery] OnStoreLoad failed: m_DischargeEnabled";
+        string errOutput = "[LFPG_Battery] OnStoreLoad failed: m_OutputEnabled";
+        string logMsg = "";
+        string className = "";
+        string deviceId = "";
+        float maxStored = 0.0;
+        float legacyMax = 0.0;
+        bool didCorrect = false;
+
         if (!ctx.Read(storedFromSave))
         {
-            string errStored = "[LFPG_Battery] OnStoreLoad failed: m_StoredEnergy";
             LFPG_Util.Error(errStored);
             return false;
         }
@@ -329,26 +348,102 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             storedFromSave = 0.0;
         }
 
-		if (!ctx.Read(dischargeEnabled))
+        if (!ctx.Read(dischargeEnabled))
         {
-            string errDisch = "[LFPG_Battery] OnStoreLoad failed: m_DischargeEnabled";
             LFPG_Util.Error(errDisch);
             return false;
         }
 
-		if (!ctx.Read(outputEnabled))
+        if (!ctx.Read(outputEnabled))
         {
-            string errOutput = "[LFPG_Battery] OnStoreLoad failed: m_OutputEnabled";
             LFPG_Util.Error(errOutput);
             return false;
         }
 
-		int loadedX10 = storedFromSave * 10.0;
-		m_StoredEnergy = storedFromSave;
-		m_StoredEnergyX10 = loadedX10;
-		m_DischargeEnabled = dischargeEnabled;
-		m_OutputEnabled = outputEnabled;
-		m_LoadedFromPersistence = true;
+        className = GetType();
+        deviceId = m_DeviceId;
+
+        if (deviceVer < 1)
+        {
+            logMsg = "[LFPG_Battery] Rejecting persist version=";
+            logMsg = logMsg + deviceVer.ToString();
+            logMsg = logMsg + " type=";
+            logMsg = logMsg + className;
+            logMsg = logMsg + " id=";
+            logMsg = logMsg + deviceId;
+            LFPG_Util.Warn(logMsg);
+            return false;
+        }
+
+        if (deviceVer == 1)
+        {
+            logMsg = "[LFPG_Battery] Rejecting ambiguous persist v1 type=";
+            logMsg = logMsg + className;
+            logMsg = logMsg + " id=";
+            logMsg = logMsg + deviceId;
+            LFPG_Util.Warn(logMsg);
+            return false;
+        }
+
+        if (deviceVer == LFPG_BATTERY_PRE_X36_VERSION)
+        {
+            maxStored = LFPG_GetMaxStoredEnergy();
+            legacyMax = maxStored / LFPG_BATTERY_MIGRATION_FACTOR;
+            if (storedFromSave < 0.0)
+            {
+                storedFromSave = 0.0;
+                didCorrect = true;
+            }
+            if (storedFromSave > legacyMax)
+            {
+                storedFromSave = legacyMax;
+                didCorrect = true;
+            }
+            if (didCorrect)
+            {
+                logMsg = "[LFPG_Battery] Clamped v2 energy to 0..legacyMax type=";
+                logMsg = logMsg + className;
+                logMsg = logMsg + " id=";
+                logMsg = logMsg + deviceId;
+                LFPG_Util.Warn(logMsg);
+            }
+            storedFromSave = storedFromSave * LFPG_BATTERY_MIGRATION_FACTOR;
+            logMsg = "[LFPG_Battery] battery_migration v2->v3 type=";
+            logMsg = logMsg + className;
+            logMsg = logMsg + " id=";
+            logMsg = logMsg + deviceId;
+            logMsg = logMsg + " energy=";
+            logMsg = logMsg + storedFromSave.ToString();
+            LFPG_Util.Info(logMsg);
+        }
+        else if (deviceVer == LFPG_BATTERY_PERSIST_VERSION)
+        {
+            maxStored = LFPG_GetMaxStoredEnergy();
+            if (storedFromSave < 0.0)
+            {
+                storedFromSave = 0.0;
+            }
+            if (storedFromSave > maxStored)
+            {
+                storedFromSave = maxStored;
+            }
+        }
+        else
+        {
+            logMsg = "[LFPG_Battery] Rejecting unsupported persist version=";
+            logMsg = logMsg + deviceVer.ToString();
+            logMsg = logMsg + " type=";
+            logMsg = logMsg + className;
+            logMsg = logMsg + " id=";
+            logMsg = logMsg + deviceId;
+            LFPG_Util.Warn(logMsg);
+            return false;
+        }
+
+        m_DischargeEnabled = dischargeEnabled;
+        m_OutputEnabled = outputEnabled;
+        m_LoadedFromPersistence = true;
+        LFPG_SetStoredEnergy(storedFromSave);
         return true;
     }
 
