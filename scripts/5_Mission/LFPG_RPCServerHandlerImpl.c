@@ -1373,6 +1373,8 @@ class LFPG_RPCServerHandlerImpl
         // as before. The one-shot final token is not spent until the
         // allowlisted entity and its frozen deviceId are confirmed, and
         // not at all when clamped yaw/pitch already match stored PTZ.
+        // An ordinary that passes those same checks restores the token
+        // so a later visit can skip the bucket once more.
         if (commitKind == LFPG_CCTV_AIM_KIND_ORDINARY)
         {
             nowSeconds = g_Game.GetTime() * 0.001;
@@ -1401,6 +1403,9 @@ class LFPG_RPCServerHandlerImpl
             aimPitch = LFPG_CCTV_PITCH_LIMIT;
         if (aimPitch < -LFPG_CCTV_PITCH_LIMIT)
             aimPitch = -LFPG_CCTV_PITCH_LIMIT;
+
+        if (commitKind == LFPG_CCTV_AIM_KIND_ORDINARY)
+            sessions.RearmCCTVAimFinal(record, cameraIndex);
 
         if (commitKind == LFPG_CCTV_AIM_KIND_FINAL)
         {
