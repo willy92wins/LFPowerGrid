@@ -753,12 +753,11 @@ static const float LFPG_SEARCHLIGHT_AIM_COOLDOWN_S    = 0.120;
 static const float LFPG_CCTV_REPLAY_COOLDOWN_S        = 1.0;
 // CCTV AIM is coalesced on the client (key-up / cycle / exit), not streamed
 // per frame. 50 ms is a flood cap, below human WASD key-up cadence.
-// Kind 1 (final) skips this bucket once per camera per session so a
-// leave/cycle write is not dropped after a recent ordinary commit. A final
-// that does not change stored yaw/pitch does not spend that token. The
-// token covers client-coordinated cycle/exit while the session is live;
-// it does not cover server-initiated teardown (power, timeout, death)
-// or disconnect ForceCleanup, which drop a still-pending ordinary.
+// Kind 1 (final) skips this bucket only for the first changing final of
+// each camera per session. A later final of the same camera shares the
+// 50 ms bucket and can be dropped. A final that does not change stored
+// yaw/pitch does not spend that token. Server-initiated teardown (power,
+// timeout, death) and disconnect ForceCleanup drop a still-pending ordinary.
 static const float LFPG_CCTV_AIM_COOLDOWN_S           = 0.050;
 static const int   LFPG_CCTV_AIM_KIND_ORDINARY        = 0;
 static const int   LFPG_CCTV_AIM_KIND_FINAL           = 1;

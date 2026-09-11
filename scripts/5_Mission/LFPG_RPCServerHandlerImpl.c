@@ -1430,7 +1430,11 @@ class LFPG_RPCServerHandlerImpl
         if (commitKind == LFPG_CCTV_AIM_KIND_FINAL)
         {
             if (camera.LFPG_GetPTZYaw() == aimYaw && camera.LFPG_GetPTZPitch() == aimPitch)
+            {
+                nowSeconds = g_Game.GetTime() * 0.001;
+                aimLimiterOk = sessions.AllowCCTVAim(record, nowSeconds);
                 return;
+            }
 
             nowSeconds = g_Game.GetTime() * 0.001;
             aimLimiterOk = sessions.ConsumeCCTVAimFinal(record, cameraIndex);

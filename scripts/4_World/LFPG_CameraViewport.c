@@ -1005,12 +1005,12 @@ class LFPG_CameraViewport
     // =========================================================
     void Tick(float timeslice)
     {
-		// Server-initiated teardown restores the pawn without a client
-		// phase-1. That path cannot emit a final AIM: FinishCCTV has
-		// already dropped the session. Last-PTZ delivery is guaranteed
-		// only for a client-coordinated cycle/exit (phase 1) while the
-		// session is still live. A pending ordinary is dropped in
-		// TryCompleteExit.
+        // Server-initiated teardown restores the pawn without a client
+        // phase-1. That path cannot emit a final AIM: FinishCCTV has
+        // already dropped the session. Only the first changing final of
+        // each camera per session is exempt from the 50 ms bucket; a
+        // later final of the same camera can be dropped. A pending ordinary
+        // is dropped in TryCompleteExit.
 		if (m_Active && m_ExitPhase == 0 && HasPlayerCameraRestored())
 		{
 			m_ExitSessionId = m_SessionId;

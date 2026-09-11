@@ -428,8 +428,9 @@ class LFPG_ControlSessionRegistry
         // In that case the record is dropped without an invalid SelectPlayer call.
         // Server-initiated Tick teardown (power, timeout, death) restores the
         // pawn and drops the record in this same call. A later client AIM
-        // misses the allowlist. Last-PTZ delivery is guaranteed only for a
-        // client-coordinated cycle/exit while the session is still live.
+        // misses the allowlist. Only the first changing final of each camera
+        // per session is exempt from the 50 ms bucket; a later final of the
+        // same camera shares that bucket and can be dropped.
         if (record.m_Identity && record.m_Player)
         {
             g_Game.SelectPlayer(record.m_Identity, record.m_Player);
