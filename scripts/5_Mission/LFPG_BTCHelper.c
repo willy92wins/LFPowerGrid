@@ -1102,16 +1102,29 @@ class LFPG_BTCHelper
 
     protected static void NotifyAtmCannotDeliverBtc(PlayerBase player)
     {
+        int nowMs;
+        int lastNoticeMs;
+        int elapsedMs;
+
         if (!g_Game || !g_Game.IsServer() || !player)
             return;
         if (!player.GetIdentity())
             return;
 
-        int nowMs = g_Game.GetTime();
-        int lastNoticeMs = player.m_LFPG_LastRetainedStockNoticeMs;
-        if (nowMs >= lastNoticeMs && nowMs - lastNoticeMs < 10000)
-            return;
+        nowMs = g_Game.GetTime();
+        if (player.m_LFPG_RetainedStockNoticeSent)
+        {
+            lastNoticeMs = player.m_LFPG_LastRetainedStockNoticeMs;
+            // Clock wrap makes nowMs < lastNoticeMs; signed subtract can go negative.
+            if (nowMs >= lastNoticeMs)
+            {
+                elapsedMs = nowMs - lastNoticeMs;
+                if (elapsedMs >= 0 && elapsedMs < 10000)
+                    return;
+            }
+        }
 
+        player.m_LFPG_RetainedStockNoticeSent = true;
         player.m_LFPG_LastRetainedStockNoticeMs = nowMs;
         PlayerBase.LFPG_SendClientMsg(player, "This ATM cannot deliver BTC until an administrator reviews it.");
     }

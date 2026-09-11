@@ -153,6 +153,15 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error(message);
     }
 
+    static void ReportKillDropDenied(string deviceId, int stock)
+    {
+        string message;
+        string uid;
+        message = "[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stock.ToString() + " deviceId=" + deviceId;
+        uid = FindDeviceClaimUID(deviceId);
+        LogClaimError(message, uid, deviceId);
+    }
+
     protected static bool HasDeviceClaims(string deviceId)
     {
         EnsureClaimState();

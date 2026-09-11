@@ -297,7 +297,7 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
         // drops after a denied debit can leave BTC in the world with no claim.
         if (!LFPG_AtmStock.CanPrepareStockMutation(deviceId, stockBefore, 0))
         {
-            LFPG_Util.Error("[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stockBefore.ToString() + " deviceId=" + deviceId);
+            LFPG_AtmStock.ReportKillDropDenied(deviceId, stockBefore);
             return;
         }
         string classname = LFPG_BTCConfig.GetBtcItemClassname();
