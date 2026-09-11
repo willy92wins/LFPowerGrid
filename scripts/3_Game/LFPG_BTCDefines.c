@@ -10,7 +10,7 @@
 // ---- BTC ATM: RPC SubIds (40-49 range) ----
 // Added to LFPG_RPC_SubId enum — listed here as reference.
 // INTEGRATION: Add these to the existing LFPG_RPC_SubId enum
-// in LFPG_Defines.c (after SORTER_SORT_ACK = 33).
+// in LFPG_Defines.c (before the SORTER_TEST_* block).
 //
 //   BTC_OPEN_REQUEST       = 40,  // Client→Server: player opened ATM UI
 //   BTC_OPEN_RESPONSE      = 41,  // Server→Client: price + stock + balance

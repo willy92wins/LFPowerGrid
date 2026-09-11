@@ -47,23 +47,13 @@ class LFPG_RPCGuard
         if (subId == LFPG_RPC_SubId.CCTV_AIM)
             return POLICY_CCTV_SESSION;
 
-        if (subId == LFPG_RPC_SubId.SORTER_CONFIG_REQUEST)
-            return POLICY_SORTER_DOSSIER_FROZEN;
         if (subId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_REQUEST)
-            return POLICY_SORTER_DOSSIER_FROZEN;
-        if (subId == LFPG_RPC_SubId.SORTER_CONFIG_SAVE)
             return POLICY_SORTER_DOSSIER_FROZEN;
         if (subId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_SAVE)
             return POLICY_SORTER_DOSSIER_FROZEN;
-        if (subId == LFPG_RPC_SubId.SORTER_REQUEST_SORT)
-            return POLICY_SORTER_DOSSIER_FROZEN;
         if (subId == LFPG_RPC_SubId.SORTER_TEST_REQUEST_SORT)
             return POLICY_SORTER_DOSSIER_FROZEN;
-        if (subId == LFPG_RPC_SubId.SORTER_RESYNC)
-            return POLICY_SORTER_DOSSIER_FROZEN;
         if (subId == LFPG_RPC_SubId.SORTER_TEST_RESYNC)
-            return POLICY_SORTER_DOSSIER_FROZEN;
-        if (subId == LFPG_RPC_SubId.SORTER_PREVIEW_REQUEST)
             return POLICY_SORTER_DOSSIER_FROZEN;
         if (subId == LFPG_RPC_SubId.SORTER_TEST_PREVIEW_REQUEST)
             return POLICY_SORTER_DOSSIER_FROZEN;
