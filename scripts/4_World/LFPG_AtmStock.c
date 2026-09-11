@@ -34,6 +34,25 @@ class LFPG_AtmStock
         return mw.LFPG_AtmPrepareStockMutation(deviceId, stockBefore, stockTarget);
     }
 
+    static void ReportKillDropDenied(string deviceId, int stock)
+    {
+        MissionBaseWorld mw;
+        string message;
+        message = "[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stock.ToString() + " deviceId=" + deviceId;
+        if (!g_Game)
+        {
+            LFPG_Util.Error(message);
+            return;
+        }
+        mw = MissionBaseWorld.Cast(g_Game.GetMission());
+        if (!mw)
+        {
+            LFPG_Util.Error(message);
+            return;
+        }
+        mw.LFPG_AtmReportKillDropDenied(deviceId, stock);
+    }
+
     // ATMs whose AfterStoreLoad landed before the mission was reachable.
     // Non-owning references: a deleted ATM leaves a null the drain skips.
     protected static ref array<LFPG_BTCAtmBase> s_PendingReconcile;
