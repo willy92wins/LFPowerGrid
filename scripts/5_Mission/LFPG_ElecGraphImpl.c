@@ -137,6 +137,13 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected ref map<string, int> m_NodeNetLow;
     protected ref map<string, int> m_NodeNetHigh;
 
+    // Last values written by SyncNodeToEntity. Used to skip a write when
+    // the same live entity already holds the same syncable fields.
+    // m_LastSyncedLoadRatio on the node is the first-write sentinel (< 0).
+    protected ref map<string, bool> m_LastSyncPowered;
+    protected ref map<string, bool> m_LastSyncOverloaded;
+    protected ref TStringManagedMap m_LastSyncEntity;
+
     void LFPG_ElecGraphImpl()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -181,6 +188,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         // v0.7.43 (Fix 3): NetworkID backup maps
         m_NodeNetLow = new map<string, int>;
         m_NodeNetHigh = new map<string, int>;
+        m_LastSyncPowered = new map<string, bool>;
+        m_LastSyncOverloaded = new map<string, bool>;
+        m_LastSyncEntity = new TStringManagedMap;
     }
 
     // ===========================
@@ -255,6 +265,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_NodeNetLow.Clear();
         m_NodeNetHigh.Clear();
         m_RequeueEpoch.Clear();
+        m_LastSyncPowered.Clear();
+        m_LastSyncOverloaded.Clear();
+        m_LastSyncEntity.Clear();
 
         // v0.7.34 (Bloque E): Full rebuild invalidates any active mutation
         if (m_MutationActive)
@@ -1612,6 +1625,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             m_NodeNetLow.Remove(deviceId);
             m_NodeNetHigh.Remove(deviceId);
             m_RequeueEpoch.Remove(deviceId);
+            m_LastSyncPowered.Remove(deviceId);
+            m_LastSyncOverloaded.Remove(deviceId);
+            m_LastSyncEntity.Remove(deviceId);
             // v5.1: Clean up charger delta-time timestamp for removed node
             m_ChargerLastChargeSec.Remove(deviceId);
             m_NodeCount = m_Nodes.Count();
@@ -2099,6 +2115,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     {
         #ifdef SERVER
         string dbgProc;
+        EntityAI resolvedEnt;
 		int startMs = g_Game.GetTime();
         m_PropagationEdgeAccountingActive = true;
         m_EdgesVisitedThisEpoch = 0;
@@ -2152,6 +2169,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         while (m_DirtyQueueHead < m_DirtyQueue.Count())
         {
+            resolvedEnt = null;
             if (processed >= nodeBudget)
                 break;
             if (m_EdgesVisitedThisEpoch >= edgeBudget)
@@ -2387,11 +2405,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 bool gateEntityResolved = false;
                 if (node.m_IsGated)
                 {
-                    EntityAI gateEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
-                    if (gateEnt)
+                    resolvedEnt = LFPG_DeviceRegistry.Get().FindById(nodeId);
+                    if (resolvedEnt)
                     {
                         gateEntityResolved = true;
-                        bool gateOpen = LFPG_DeviceAPI.IsGateOpen(gateEnt);
+                        bool gateOpen = LFPG_DeviceAPI.IsGateOpen(resolvedEnt);
                         if (!gateOpen)
                         {
                             gateIsClosed = true;
@@ -2772,7 +2790,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             node.m_DirtyMask = 0;
 
             // --- Step 5: Sync state to entity ---
-            SyncNodeToEntity(nodeId, node);
+            SyncNodeToEntity(nodeId, node, resolvedEnt, dirtyMask);
         }
 
         // v0.8.3: Re-enqueue nodes deferred by requeue limit.
@@ -2848,13 +2866,122 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // Sprint 4.3: Entity sync
     // ===========================
 
-    protected void SyncNodeToEntity(string nodeId, LFPG_ElecNode node)
+    // True when this live entity already holds the syncable fields that
+    // SyncNodeToEntity would write. First write after create or load uses
+    // m_LastSyncedLoadRatio < 0. Topology and a different entity always write.
+    protected bool NodeEntitySyncUnchanged(string nodeId, LFPG_ElecNode node, EntityAI entObj, int dirtyMask)
+    {
+        Managed lastEntRaw;
+        EntityAI lastEnt;
+        bool lastPowered;
+        bool lastOverloaded;
+        float loadDelta;
+
+        lastEnt = null;
+        lastPowered = false;
+        lastOverloaded = false;
+        loadDelta = 0.0;
+
+        if (!node || !entObj)
+            return false;
+
+        if (node.m_LastSyncedLoadRatio < 0.0)
+            return false;
+
+        if ((dirtyMask & LFPG_DIRTY_TOPOLOGY) != 0)
+            return false;
+
+        if (!m_LastSyncEntity.Find(nodeId, lastEntRaw))
+            return false;
+        lastEnt = EntityAI.Cast(lastEntRaw);
+        if (!lastEnt)
+            return false;
+        if (lastEnt != entObj)
+            return false;
+
+        if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
+        {
+            if (!m_LastSyncPowered.Find(nodeId, lastPowered))
+                return false;
+            if (lastPowered != node.m_Powered)
+                return false;
+            if (!m_LastSyncOverloaded.Find(nodeId, lastOverloaded))
+                return false;
+            if (lastOverloaded != node.m_Overloaded)
+                return false;
+            loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
+            if (loadDelta < 0.0)
+                loadDelta = -loadDelta;
+            if (loadDelta > 0.01)
+                return false;
+            return true;
+        }
+
+        if (!m_LastSyncPowered.Find(nodeId, lastPowered))
+            return false;
+        if (lastPowered != node.m_Powered)
+            return false;
+
+        if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+        {
+            if (!m_LastSyncOverloaded.Find(nodeId, lastOverloaded))
+                return false;
+            if (lastOverloaded != node.m_Overloaded)
+                return false;
+        }
+
+        return true;
+    }
+
+    protected void RememberNodeEntitySync(string nodeId, LFPG_ElecNode node, EntityAI entObj)
+    {
+        if (!node || !entObj)
+            return;
+
+        m_LastSyncEntity[nodeId] = entObj;
+        m_LastSyncPowered.Set(nodeId, node.m_Powered);
+        m_LastSyncOverloaded.Set(nodeId, node.m_Overloaded);
+        node.m_LastSyncedLoadRatio = node.m_LoadRatio;
+    }
+
+    protected void SyncNodeToEntity(string nodeId, LFPG_ElecNode node, EntityAI knownEnt = null, int dirtyMask = 0)
     {
         #ifdef SERVER
+        EntityAI entObj;
+        int cachedNetLow;
+        int cachedNetHigh;
+        bool hasNetLow;
+        bool hasNetHigh;
+        Object rawObj;
+        string ptLog5a;
+        string ptLog5b;
+        float loadDelta;
+        string loadState;
+        string telemMsg;
+
+        entObj = null;
+        cachedNetLow = 0;
+        cachedNetHigh = 0;
+        hasNetLow = false;
+        hasNetHigh = false;
+        rawObj = null;
+        ptLog5a = "";
+        ptLog5b = "";
+        loadDelta = 0.0;
+        loadState = "";
+        telemMsg = "";
+
         if (!node)
             return;
 
-        EntityAI entObj = LFPG_DeviceRegistry.Get().FindById(nodeId);
+        if (knownEnt)
+        {
+            entObj = LFPG_DeviceRegistry.Get().FindById(nodeId, knownEnt);
+        }
+        if (!entObj)
+        {
+            entObj = LFPG_DeviceRegistry.Get().FindById(nodeId);
+        }
         if (!entObj)
         {
             entObj = LFPG_DeviceAPI.ResolveVanillaDevice(nodeId);
@@ -2867,15 +2994,13 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         // auto-register to prevent future misses.
         if (!entObj)
         {
-            int cachedNetLow = 0;
-            int cachedNetHigh = 0;
-            bool hasNetLow = m_NodeNetLow.Find(nodeId, cachedNetLow);
-            bool hasNetHigh = m_NodeNetHigh.Find(nodeId, cachedNetHigh);
+            hasNetLow = m_NodeNetLow.Find(nodeId, cachedNetLow);
+            hasNetHigh = m_NodeNetHigh.Find(nodeId, cachedNetHigh);
             if (hasNetLow && hasNetHigh)
             {
                 if (cachedNetLow != 0 || cachedNetHigh != 0)
                 {
-                    Object rawObj = g_Game.GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
+                    rawObj = g_Game.GetObjectByNetworkId(cachedNetLow, cachedNetHigh);
                     entObj = EntityAI.Cast(rawObj);
                     if (entObj)
                     {
@@ -2887,10 +3012,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         if (!entObj)
         {
+            m_LastSyncEntity.Remove(nodeId);
             // [DIAG PT-CHAIN] Punto 5a: Entity resolution failed
             if (LFPG_DIAG_PT_CHAIN && node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
-                string ptLog5a = "[PT-CHAIN] SyncToEntity FAILED: entity NULL for ";
+                ptLog5a = "[PT-CHAIN] SyncToEntity FAILED: entity NULL for ";
                 ptLog5a = ptLog5a + nodeId;
                 ptLog5a = ptLog5a + " type=PASSTHROUGH";
                 ptLog5a = ptLog5a + " powered=" + node.m_Powered.ToString();
@@ -2901,10 +3027,13 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return;
         }
 
+        if (NodeEntitySyncUnchanged(nodeId, node, entObj, dirtyMask))
+            return;
+
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
             // v1.0: Sync load ratio + overloaded bool to source entity
-            float loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
+            loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
             if (loadDelta < 0.0)
             {
                 loadDelta = -loadDelta;
@@ -2915,22 +3044,21 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
                 if (loadDelta > LFPG_LOAD_TELEM_DELTA)
                 {
-                    string loadState = "NORMAL";
+                    loadState = "NORMAL";
                     if (node.m_LoadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
                     {
                         loadState = "OVERLOADED";
                     }
-                    string telemMsg = "[LoadTelem] " + nodeId;
+                    telemMsg = "[LoadTelem] " + nodeId;
                     telemMsg = telemMsg + " load=" + node.m_LoadRatio.ToString();
                     telemMsg = telemMsg + " prev=" + node.m_LastSyncedLoadRatio.ToString();
                     telemMsg = telemMsg + " cap=" + node.m_MaxOutput.ToString();
                     telemMsg = telemMsg + " state=" + loadState;
                     LFPG_Util.Info(telemMsg);
                 }
-
-                node.m_LastSyncedLoadRatio = node.m_LoadRatio;
             }
             LFPG_DeviceAPI.SetOverloaded(entObj, node.m_Overloaded);
+            RememberNodeEntitySync(nodeId, node, entObj);
             return;
         }
 
@@ -2940,7 +3068,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             // [DIAG PT-CHAIN] Punto 5b: PASSTHROUGH entity sync
             if (LFPG_DIAG_PT_CHAIN)
             {
-                string ptLog5b = "[PT-CHAIN] SyncToEntity: ";
+                ptLog5b = "[PT-CHAIN] SyncToEntity: ";
                 ptLog5b = ptLog5b + nodeId;
                 ptLog5b = ptLog5b + " powered=" + node.m_Powered.ToString();
                 ptLog5b = ptLog5b + " input=" + node.m_InputPower.ToString();
@@ -2950,10 +3078,12 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             }
             LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
             LFPG_DeviceAPI.SetOverloaded(entObj, node.m_Overloaded);
+            RememberNodeEntitySync(nodeId, node, entObj);
             return;
         }
 
         LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
+        RememberNodeEntitySync(nodeId, node, entObj);
         #endif
     }
 

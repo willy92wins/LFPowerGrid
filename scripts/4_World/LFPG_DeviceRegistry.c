@@ -14,12 +14,16 @@ class LFPG_DeviceRegistry
     protected ref TStringManagedMap m_ById;
 	protected ref map<string, bool> m_AmbiguousIds;
 	protected ref array<EntityAI> m_AllRegistered;
+    protected string m_LastFindId;
+    protected EntityAI m_LastFindEnt;
 
     void LFPG_DeviceRegistry()
     {
         m_ById = new TStringManagedMap;
 		m_AmbiguousIds = new map<string, bool>;
 		m_AllRegistered = new array<EntityAI>;
+        m_LastFindId = "";
+        m_LastFindEnt = null;
     }
 
     static LFPG_DeviceRegistry Get()
@@ -33,6 +37,12 @@ class LFPG_DeviceRegistry
     {
         if (!obj || deviceId == "")
             return;
+
+        if (deviceId == m_LastFindId)
+        {
+            m_LastFindId = "";
+            m_LastFindEnt = null;
+        }
 
 		if (m_AllRegistered.Find(obj) < 0)
 			m_AllRegistered.Insert(obj);
@@ -69,6 +79,12 @@ class LFPG_DeviceRegistry
         if (deviceId == "")
 			return;
 
+        if (deviceId == m_LastFindId)
+        {
+            m_LastFindId = "";
+            m_LastFindEnt = null;
+        }
+
 		if (objExpected)
 		{
 			int trackedIndex = m_AllRegistered.Find(objExpected);
@@ -93,21 +109,78 @@ class LFPG_DeviceRegistry
     // is destroyed (streaming, forced deletion without EEDelete).
     // Stale refs evaluate as non-null in map but null in usage.
     // One null-check per lookup — zero overhead for valid refs.
-    EntityAI FindById(string deviceId)
+    // Optional known: reuse a pointer already resolved this tick when
+    // it is still alive and still the mapping for this id. A destroyed
+    // ref returns null; a different live entity under the same id is
+    // returned instead of known.
+    EntityAI FindById(string deviceId, EntityAI known = null)
     {
+        Managed objRaw;
+        EntityAI obj;
+
 		if (m_AmbiguousIds.Contains(deviceId))
 			return null;
 
-        Managed objRaw;
+        if (known)
+        {
+            if (!known)
+            {
+                if (m_LastFindId == deviceId)
+                {
+                    m_LastFindId = "";
+                    m_LastFindEnt = null;
+                }
+                return null;
+            }
+
+            if (m_LastFindId == deviceId && m_LastFindEnt == known)
+                return known;
+
+            if (m_ById.Find(deviceId, objRaw))
+            {
+                obj = EntityAI.Cast(objRaw);
+                if (!obj)
+                {
+                    m_ById.Remove(deviceId);
+                    m_LastFindId = "";
+                    m_LastFindEnt = null;
+                    return null;
+                }
+                if (obj != known)
+                    return obj;
+                m_LastFindId = deviceId;
+                m_LastFindEnt = known;
+                return known;
+            }
+            if (m_LastFindId == deviceId)
+            {
+                m_LastFindId = "";
+                m_LastFindEnt = null;
+            }
+            return null;
+        }
+
         if (m_ById.Find(deviceId, objRaw))
         {
-            EntityAI obj = EntityAI.Cast(objRaw);
+            obj = EntityAI.Cast(objRaw);
             if (!obj)
             {
                 m_ById.Remove(deviceId);
+                if (m_LastFindId == deviceId)
+                {
+                    m_LastFindId = "";
+                    m_LastFindEnt = null;
+                }
                 return null;
             }
+            m_LastFindId = deviceId;
+            m_LastFindEnt = obj;
             return obj;
+        }
+        if (m_LastFindId == deviceId)
+        {
+            m_LastFindId = "";
+            m_LastFindEnt = null;
         }
         return null;
     }
