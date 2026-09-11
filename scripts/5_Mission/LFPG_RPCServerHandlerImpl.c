@@ -2761,7 +2761,7 @@ class LFPG_RPCServerHandlerImpl
 
         // Build and send CONFIG_RESPONSE
         ScriptRPC rpc = new ScriptRPC();
-        rpc.Write((int)responseSubId);  // Sprint 0: parametrized â€” V3=SORTER_CONFIG_RESPONSE / V4=SORTER_TEST_CONFIG_RESPONSE
+        rpc.Write((int)responseSubId);  // Sprint 0: parametrized; writes responseSubId (SORTER_TEST_CONFIG_RESPONSE)
         rpc.Write(netLow);
         rpc.Write(netHigh);
         rpc.Write(filterJSON);
@@ -3121,7 +3121,7 @@ class LFPG_RPCServerHandlerImpl
         // Always send response (empty if guards failed)
         sentCount = matchNames.Count();
         ScriptRPC rpc = new ScriptRPC();
-        int respSubId = responseSubId;  // Sprint 0: parametrized â€” V3=SORTER_PREVIEW_RESPONSE / V4=SORTER_TEST_PREVIEW_RESPONSE
+        int respSubId = responseSubId;  // Sprint 0: parametrized; copies responseSubId (SORTER_TEST_PREVIEW_RESPONSE)
         rpc.Write(respSubId);
         rpc.Write(selectedOutput);
         rpc.Write(totalMatched);
