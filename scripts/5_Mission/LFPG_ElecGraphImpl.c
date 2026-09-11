@@ -2098,6 +2098,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     override int ProcessDirtyQueue(int nodeBudget, int edgeBudget)
     {
         #ifdef SERVER
+        string dbgProc;
 		int startMs = g_Game.GetTime();
         m_PropagationEdgeAccountingActive = true;
         m_EdgesVisitedThisEpoch = 0;
@@ -2829,8 +2830,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         if (processed > 0)
         {
-            string dbgProc = "[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString() + " edges=" + m_EdgesVisitedThisEpoch.ToString() + " remaining=" + remaining.ToString() + " epoch=" + m_CurrentEpoch.ToString() + " ms=" + elapsed.ToString();
-            LFPG_Util.Debug(dbgProc);
+            if (LFPG_LOG_LEVEL >= 2)
+            {
+                dbgProc = "[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString() + " edges=" + m_EdgesVisitedThisEpoch.ToString() + " remaining=" + remaining.ToString() + " epoch=" + m_CurrentEpoch.ToString() + " ms=" + elapsed.ToString();
+                LFPG_Util.Debug(dbgProc);
+            }
         }
 
         m_PropagationEdgeAccountingActive = false;
@@ -2985,6 +2989,10 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected int ValidateConsumerStates(int edgeBudget)
     {
         #ifdef SERVER
+        float afterEnergy;
+        string chgLog;
+        string skipLog;
+        bool hasBat;
         int nodeTotal = m_Nodes.Count();
         if (nodeTotal <= 0)
             return 0;
@@ -3107,7 +3115,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             // v5.0 debug: trace BatteryCharger node state on each visit
             if (nodeId.IndexOf("BatteryCharger") >= 0)
             {
-                if (LFPG_LOG_LEVEL >= 1)
+                if (LFPG_LOG_LEVEL >= 2)
                 {
                     string dbgMsg = "[Charger] Validate " + nodeId;
                     dbgMsg = dbgMsg + " powered=" + node.m_Powered.ToString();
@@ -3274,18 +3282,21 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
                                                 m_ChargerLastChargeSec.Set(nodeId, nowSec);
 
-                                                float afterEnergy = batEm.GetEnergy();
-                                                string chgLog = "[Charger] Charged ";
-                                                chgLog = chgLog + nodeId;
-                                                chgLog = chgLog + ": ";
-                                                chgLog = chgLog + batEnergy.ToString();
-                                                chgLog = chgLog + " -> ";
-                                                chgLog = chgLog + afterEnergy.ToString();
-                                                chgLog = chgLog + " / ";
-                                                chgLog = chgLog + batMax.ToString();
-                                                chgLog = chgLog + " dt=";
-                                                chgLog = chgLog + deltaSec.ToString();
-                                                LFPG_Util.Info(chgLog);
+                                                if (LFPG_LOG_LEVEL >= 2)
+                                                {
+                                                    afterEnergy = batEm.GetEnergy();
+                                                    chgLog = "[Charger] Charged ";
+                                                    chgLog = chgLog + nodeId;
+                                                    chgLog = chgLog + ": ";
+                                                    chgLog = chgLog + batEnergy.ToString();
+                                                    chgLog = chgLog + " -> ";
+                                                    chgLog = chgLog + afterEnergy.ToString();
+                                                    chgLog = chgLog + " / ";
+                                                    chgLog = chgLog + batMax.ToString();
+                                                    chgLog = chgLog + " dt=";
+                                                    chgLog = chgLog + deltaSec.ToString();
+                                                    LFPG_Util.Info(chgLog);
+                                                }
                                             }
                                         }
                                     }
@@ -3294,14 +3305,17 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                                 {
                                     // Clean up timestamp when charger is off or battery removed
                                     m_ChargerLastChargeSec.Remove(nodeId);
-                                    string skipLog = "[Charger] Skip ";
-                                    skipLog = skipLog + nodeId;
-                                    skipLog = skipLog + " switchedOn=";
-                                    skipLog = skipLog + chargerOn.ToString();
-                                    bool hasBat = carBat != null;
-                                    skipLog = skipLog + " hasBat=";
-                                    skipLog = skipLog + hasBat.ToString();
-                                    LFPG_Util.Info(skipLog);
+                                    if (LFPG_LOG_LEVEL >= 2)
+                                    {
+                                        skipLog = "[Charger] Skip ";
+                                        skipLog = skipLog + nodeId;
+                                        skipLog = skipLog + " switchedOn=";
+                                        skipLog = skipLog + chargerOn.ToString();
+                                        hasBat = carBat != null;
+                                        skipLog = skipLog + " hasBat=";
+                                        skipLog = skipLog + hasBat.ToString();
+                                        LFPG_Util.Info(skipLog);
+                                    }
                                 }
                             }
                         }
