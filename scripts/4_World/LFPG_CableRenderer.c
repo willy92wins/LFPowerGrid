@@ -710,6 +710,10 @@ class LFPG_CableRenderer
     // Periodic neg cache purge interval (ms)
     protected static const int NEG_CACHE_PURGE_INTERVAL_MS = 60000; // 60 seconds
 
+    // Sway sample cadence so screenCacheSwayY/X can match across still-camera frames.
+    // Continuous nowMs made the projection cache miss every frame while swayScale > 0.
+    protected static const float LFPG_SWAY_CACHE_CADENCE_MS = 50.0;
+
     // v0.7.9: Incremental segment budget counter.
     // Updated in BuildWire (+) and DestroyWire (-) to avoid O(N) CountTotalSegments.
     protected int m_TotalSegCount;
@@ -2801,6 +2805,7 @@ class LFPG_CableRenderer
         vector camPos = g_Game.GetCurrentCameraPosition();
         vector camDir = g_Game.GetCurrentCameraDirection();
         float nowMs = g_Game.GetTime();
+        float swayNowMs = Math.Floor(nowMs / LFPG_SWAY_CACHE_CADENCE_MS) * LFPG_SWAY_CACHE_CADENCE_MS;
 
         // ---- Camera movement detection ----
         vector camDelta = camPos - m_LastCamPos;
@@ -3269,6 +3274,7 @@ class LFPG_CableRenderer
 
             // ================================================
             // Phase 1: reuse projected points while camera and sway are unchanged.
+            // Sway is sampled on LFPG_SWAY_CACHE_CADENCE_MS so those inputs can match.
             // ================================================
             float swayOff = 0.0;
             float swayOffX = 0.0;
@@ -3276,8 +3282,8 @@ class LFPG_CableRenderer
             if (swayScale > 0.0)
             {
                 float swayPhase = wsi.cachedPosA[0] * LFPG_SWAY_HASH_X + wsi.cachedPosA[2] * LFPG_SWAY_HASH_Z;
-                swayOff = Math.Sin(nowMs * LFPG_SWAY_SPEED + swayPhase) * LFPG_SWAY_AMPLITUDE * swayScale;
-                swayOffX = Math.Sin(nowMs * LFPG_SWAY_X_SPEED + swayPhase + LFPG_SWAY_X_PHASE_OFS) * LFPG_SWAY_X_AMPLITUDE * swayScale;
+                swayOff = Math.Sin(swayNowMs * LFPG_SWAY_SPEED + swayPhase) * LFPG_SWAY_AMPLITUDE * swayScale;
+                swayOffX = Math.Sin(swayNowMs * LFPG_SWAY_X_SPEED + swayPhase + LFPG_SWAY_X_PHASE_OFS) * LFPG_SWAY_X_AMPLITUDE * swayScale;
             }
             float swayDenom = segCount + 1.0;
 

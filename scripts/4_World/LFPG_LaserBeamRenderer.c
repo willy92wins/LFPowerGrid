@@ -22,7 +22,40 @@
 //   Cleanup: singleton destruction on mission end
 //
 // No allocations per frame. Pre-allocated screen coord arrays.
+// DrawFrame caches GetScreenPos by camera + beam transform.
 // =========================================================
+
+class LFPG_LaserBeamProjCache
+{
+    vector m_CamPos;
+    vector m_CamDir;
+    vector m_BeamStart;
+    vector m_BeamEnd;
+    float m_ViewportW;
+    float m_ViewportH;
+    int m_ProjectionRevision;
+    vector m_ScrA;
+    vector m_ScrB;
+    float m_DistSq;
+    float m_Dist;
+    bool m_Valid;
+
+    void LFPG_LaserBeamProjCache()
+    {
+        m_CamPos = "0 0 0";
+        m_CamDir = "0 0 0";
+        m_BeamStart = "0 0 0";
+        m_BeamEnd = "0 0 0";
+        m_ViewportW = 0.0;
+        m_ViewportH = 0.0;
+        m_ProjectionRevision = 0;
+        m_ScrA = "0 0 0";
+        m_ScrB = "0 0 0";
+        m_DistSq = 0.0;
+        m_Dist = 0.0;
+        m_Valid = false;
+    }
+};
 
 class LFPG_LaserBeamRenderer
 {
@@ -31,10 +64,16 @@ class LFPG_LaserBeamRenderer
     // Registered laser detectors (populated by device EEInit/EEDelete)
 	protected ref map<LFPG_LaserDetector, bool> m_Detectors;
     protected ref array<LFPG_LaserDetector> m_ActiveDetectors;
+    protected ref map<LFPG_LaserDetector, ref LFPG_LaserBeamProjCache> m_ProjCache;
+    protected ref array<LFPG_LaserDetector> m_ProjCacheDrop;
     protected vector m_CullClipA;
     protected vector m_CullClipB;
     // U6: acumulador del tick de mantenimiento, en segundos.
     protected float  m_CullAccS;
+    protected vector m_ProjectionProbeX;
+    protected vector m_ProjectionProbeY;
+    protected vector m_ProjectionProbeZ;
+    protected int m_ProjectionRevision;
 
     // ---- Beam visual constants ----
     static const int   LFPG_LASER_BEAM_COLOR     = 0xC0FF0000;  // red, semi-transparent
@@ -65,9 +104,15 @@ class LFPG_LaserBeamRenderer
     {
 		m_Detectors = new map<LFPG_LaserDetector, bool>;
         m_ActiveDetectors = new array<LFPG_LaserDetector>;
+        m_ProjCache = new map<LFPG_LaserDetector, ref LFPG_LaserBeamProjCache>;
+        m_ProjCacheDrop = new array<LFPG_LaserDetector>;
         m_CullClipA = "0 0 0";
         m_CullClipB = "0 0 0";
         m_CullAccS  = 0.0;
+        m_ProjectionProbeX = "0 0 0";
+        m_ProjectionProbeY = "0 0 0";
+        m_ProjectionProbeZ = "0 0 0";
+        m_ProjectionRevision = 0;
     }
 
     void ~LFPG_LaserBeamRenderer()
@@ -85,25 +130,44 @@ class LFPG_LaserBeamRenderer
         {
             m_ActiveDetectors.Clear();
         }
+        if (m_ProjCache)
+        {
+            m_ProjCache.Clear();
+        }
+        if (m_ProjCacheDrop)
+        {
+            m_ProjCacheDrop.Clear();
+        }
     }
 
     // ---- Registration (called by LFPG_LaserDetector) ----
 	void RegisterDetector(LFPG_LaserDetector detector)
 	{
+        LFPG_LaserBeamProjCache cache;
 		if (!detector || m_Detectors.Contains(detector))
 			return;
 
 		m_Detectors.Set(detector, true);
+        if (m_ProjCache && !m_ProjCache.Contains(detector))
+        {
+            cache = new LFPG_LaserBeamProjCache();
+            m_ProjCache.Set(detector, cache);
+        }
 		// Admit only the newcomer immediately; DrawFrame validates its live state.
 		m_ActiveDetectors.Insert(detector);
 	}
 
 	void UnregisterDetector(LFPG_LaserDetector detector)
 	{
+        int activeIdx;
 		if (!detector)
 			return;
 		m_Detectors.Remove(detector);
-		int activeIdx = m_ActiveDetectors.Find(detector);
+        if (m_ProjCache)
+        {
+            m_ProjCache.Remove(detector);
+        }
+        activeIdx = m_ActiveDetectors.Find(detector);
 		if (activeIdx >= 0)
 		{
 			m_ActiveDetectors.Remove(activeIdx);
@@ -163,33 +227,66 @@ class LFPG_LaserBeamRenderer
 
     protected void CullTick()
     {
+        int i;
+        int dropIdx;
+        LFPG_LaserDetector detector;
+        LFPG_LaserDetector cachedDet;
+        PlayerBase player;
+        vector camPos;
+        float cullDistSq;
+        vector start;
+        vector end;
+        float distSq;
+
         if (!m_Detectors || !m_ActiveDetectors)
             return;
 
 		m_ActiveDetectors.Clear();
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (!player)
+        player = PlayerBase.Cast(g_Game.GetPlayer());
+        if (player)
+        {
+            camPos = g_Game.GetCurrentCameraPosition();
+            cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
+
+            for (i = 0; i < m_Detectors.Count(); i = i + 1)
+            {
+                detector = m_Detectors.GetKey(i);
+                if (!detector || !detector.LFPG_IsPowered() || detector.LFPG_GetBeamLength() < 0.05)
+                    continue;
+
+                start = detector.LFPG_GetBeamStart();
+                end = detector.LFPG_GetBeamEnd();
+                distSq = DistanceSqToSegment(camPos, start, end);
+                if (distSq > cullDistSq)
+                    continue;
+
+                // Distance/power candidates survive camera turns. Frustum clipping belongs
+                // to DrawFrame so a newly visible beam is reconsidered on that frame.
+                m_ActiveDetectors.Insert(detector);
+            }
+        }
+
+        if (!m_ProjCache || !m_ProjCacheDrop)
             return;
 
-        vector camPos = g_Game.GetCurrentCameraPosition();
-        float cullDistSq = LFPG_CULL_DISTANCE_M * LFPG_CULL_DISTANCE_M;
-
-        int i;
-        for (i = 0; i < m_Detectors.Count(); i = i + 1)
+        m_ProjCacheDrop.Clear();
+        for (i = 0; i < m_ProjCache.Count(); i = i + 1)
         {
-			LFPG_LaserDetector detector = m_Detectors.GetKey(i);
-            if (!detector || !detector.LFPG_IsPowered() || detector.LFPG_GetBeamLength() < 0.05)
-                continue;
-
-            vector start = detector.LFPG_GetBeamStart();
-            vector end = detector.LFPG_GetBeamEnd();
-            float distSq = DistanceSqToSegment(camPos, start, end);
-            if (distSq > cullDistSq)
-                continue;
-
-			// Distance/power candidates survive camera turns. Frustum clipping belongs
-			// to DrawFrame so a newly visible beam is reconsidered on that frame.
-            m_ActiveDetectors.Insert(detector);
+            cachedDet = m_ProjCache.GetKey(i);
+            if (!cachedDet)
+            {
+                m_ProjCache.Clear();
+                m_ProjCacheDrop.Clear();
+                return;
+            }
+            if (!m_Detectors.Contains(cachedDet))
+            {
+                m_ProjCacheDrop.Insert(cachedDet);
+            }
+        }
+        for (dropIdx = 0; dropIdx < m_ProjCacheDrop.Count(); dropIdx = dropIdx + 1)
+        {
+            m_ProjCache.Remove(m_ProjCacheDrop[dropIdx]);
         }
     }
 
@@ -223,6 +320,10 @@ class LFPG_LaserBeamRenderer
         vector scrB;
         float dist;
         float depthWidth;
+        LFPG_LaserBeamProjCache projCache;
+        bool reuseLaserProj;
+
+        UpdateProjectionRevision(camPos, camDir);
 
         for (i = 0; i < count; i = i + 1)
         {
@@ -242,14 +343,50 @@ class LFPG_LaserBeamRenderer
             beamStart = det.LFPG_GetBeamStart();
             beamEnd = det.LFPG_GetBeamEnd();
 
-            // Distance cull against the nearest point on the beam segment.
-            distSq = DistanceSqToSegment(camPos, beamStart, beamEnd);
+            projCache = null;
+            reuseLaserProj = false;
+            if (m_ProjCache && m_ProjCache.Find(det, projCache) && projCache)
+            {
+                reuseLaserProj = (projCache.m_Valid && projCache.m_ProjectionRevision == m_ProjectionRevision && projCache.m_CamPos[0] == camPos[0] && projCache.m_CamPos[1] == camPos[1] && projCache.m_CamPos[2] == camPos[2] && projCache.m_CamDir[0] == camDir[0] && projCache.m_CamDir[1] == camDir[1] && projCache.m_CamDir[2] == camDir[2] && projCache.m_BeamStart[0] == beamStart[0] && projCache.m_BeamStart[1] == beamStart[1] && projCache.m_BeamStart[2] == beamStart[2] && projCache.m_BeamEnd[0] == beamEnd[0] && projCache.m_BeamEnd[1] == beamEnd[1] && projCache.m_BeamEnd[2] == beamEnd[2] && projCache.m_ViewportW == lasSwF && projCache.m_ViewportH == lasShF);
+            }
+
+            if (reuseLaserProj)
+            {
+                distSq = projCache.m_DistSq;
+                scrA = projCache.m_ScrA;
+                scrB = projCache.m_ScrB;
+                dist = projCache.m_Dist;
+            }
+            else
+            {
+                // Distance cull against the nearest point on the beam segment.
+                distSq = DistanceSqToSegment(camPos, beamStart, beamEnd);
+                if (distSq > cullDistSq)
+                    continue;
+
+                // Project to screen — GetScreenPos returns vector(screenX, screenY, depth)
+                scrA = g_Game.GetScreenPos(beamStart);
+                scrB = g_Game.GetScreenPos(beamEnd);
+                dist = Math.Sqrt(distSq);
+                if (projCache)
+                {
+                    projCache.m_CamPos = camPos;
+                    projCache.m_CamDir = camDir;
+                    projCache.m_BeamStart = beamStart;
+                    projCache.m_BeamEnd = beamEnd;
+                    projCache.m_ViewportW = lasSwF;
+                    projCache.m_ViewportH = lasShF;
+                    projCache.m_ProjectionRevision = m_ProjectionRevision;
+                    projCache.m_ScrA = scrA;
+                    projCache.m_ScrB = scrB;
+                    projCache.m_DistSq = distSq;
+                    projCache.m_Dist = dist;
+                    projCache.m_Valid = true;
+                }
+            }
+
             if (distSq > cullDistSq)
                 continue;
-
-            // Project to screen — GetScreenPos returns vector(screenX, screenY, depth)
-            scrA = g_Game.GetScreenPos(beamStart);
-            scrB = g_Game.GetScreenPos(beamEnd);
 
             // Z check (behind camera plane)
             bool lasBehindA = (scrA[2] < LFPG_BEHIND_CAM_Z);
@@ -283,7 +420,6 @@ class LFPG_LaserBeamRenderer
             }
 
             // Depth-based width scaling (same formula as cables)
-            dist = Math.Sqrt(distSq);
             if (dist < 0.1)
             {
                 dist = 0.1;
@@ -325,6 +461,27 @@ class LFPG_LaserBeamRenderer
                 }
             }
             hud.DrawLineScreen(scrA[0], scrA[1], scrB[0], scrB[1], depthWidth, lasDraw);
+        }
+    }
+
+    // CGame exposes active position/direction, but no complete active-camera FOV/roll getter.
+    // Sample its actual projection instead, including scripted cameras and optical zoom.
+    // Three world-axis offsets ensure that at least two probes are off the viewing axis.
+    protected void UpdateProjectionRevision(vector camPos, vector camDir)
+    {
+        vector probeBase = camPos + camDir * 10.0;
+        vector probeX = g_Game.GetScreenPos(probeBase + "1 0 0");
+        vector probeY = g_Game.GetScreenPos(probeBase + "0 1 0");
+        vector probeZ = g_Game.GetScreenPos(probeBase + "0 0 1");
+        bool changed = LFPG_WorldUtil.DistSq(probeX, m_ProjectionProbeX) > 0.0;
+        changed = changed || LFPG_WorldUtil.DistSq(probeY, m_ProjectionProbeY) > 0.0;
+        changed = changed || LFPG_WorldUtil.DistSq(probeZ, m_ProjectionProbeZ) > 0.0;
+        if (changed)
+        {
+            m_ProjectionRevision = m_ProjectionRevision + 1;
+            m_ProjectionProbeX = probeX;
+            m_ProjectionProbeY = probeY;
+            m_ProjectionProbeZ = probeZ;
         }
     }
 };
