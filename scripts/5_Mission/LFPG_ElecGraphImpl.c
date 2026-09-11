@@ -139,7 +139,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
     // Last values written by SyncNodeToEntity. Used to skip a write when
     // the same live entity already holds the same syncable fields.
-    // m_LastSyncedLoadRatio on the node is the first-write sentinel (< 0).
+    // Missing m_LastSyncEntity is the first-write sentinel. Load ratio on
+    // the node is stored only after SetLoadRatio actually writes.
     protected ref map<string, bool> m_LastSyncPowered;
     protected ref map<string, bool> m_LastSyncOverloaded;
     protected ref TStringManagedMap m_LastSyncEntity;
@@ -1028,6 +1029,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_NodeNetLow.Remove(deviceId);
         m_NodeNetHigh.Remove(deviceId);
         m_RequeueEpoch.Remove(deviceId);
+        m_LastSyncPowered.Remove(deviceId);
+        m_LastSyncOverloaded.Remove(deviceId);
+        m_LastSyncEntity.Remove(deviceId);
         // v5.1: Clean up charger delta-time timestamp for removed node
         m_ChargerLastChargeSec.Remove(deviceId);
         m_NodeCount = m_Nodes.Count();
@@ -2867,8 +2871,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // ===========================
 
     // True when this live entity already holds the syncable fields that
-    // SyncNodeToEntity would write. First write after create or load uses
-    // m_LastSyncedLoadRatio < 0. Topology and a different entity always write.
+    // SyncNodeToEntity would write. First write after create or load has
+    // no last entity. Topology, DIRTY_INPUT, and a different entity always write.
     protected bool NodeEntitySyncUnchanged(string nodeId, LFPG_ElecNode node, EntityAI entObj, int dirtyMask)
     {
         Managed lastEntRaw;
@@ -2885,10 +2889,10 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         if (!node || !entObj)
             return false;
 
-        if (node.m_LastSyncedLoadRatio < 0.0)
+        if ((dirtyMask & LFPG_DIRTY_TOPOLOGY) != 0)
             return false;
 
-        if ((dirtyMask & LFPG_DIRTY_TOPOLOGY) != 0)
+        if ((dirtyMask & LFPG_DIRTY_INPUT) != 0)
             return false;
 
         if (!m_LastSyncEntity.Find(nodeId, lastEntRaw))
@@ -2901,6 +2905,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
+            if (node.m_LastSyncedLoadRatio < 0.0)
+                return false;
             if (!m_LastSyncPowered.Find(nodeId, lastPowered))
                 return false;
             if (lastPowered != node.m_Powered)
@@ -2933,6 +2939,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return true;
     }
 
+    // Records the last entity and powered/overload actually synced.
+    // Load ratio is stored on the node only when SetLoadRatio writes.
     protected void RememberNodeEntitySync(string nodeId, LFPG_ElecNode node, EntityAI entObj)
     {
         if (!node || !entObj)
@@ -2941,7 +2949,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_LastSyncEntity[nodeId] = entObj;
         m_LastSyncPowered.Set(nodeId, node.m_Powered);
         m_LastSyncOverloaded.Set(nodeId, node.m_Overloaded);
-        node.m_LastSyncedLoadRatio = node.m_LoadRatio;
     }
 
     protected void SyncNodeToEntity(string nodeId, LFPG_ElecNode node, EntityAI knownEnt = null, int dirtyMask = 0)
@@ -2958,6 +2965,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         float loadDelta;
         string loadState;
         string telemMsg;
+        Managed lastLoadEntRaw;
+        EntityAI lastLoadEnt;
+        bool forceLoadWrite;
 
         entObj = null;
         cachedNetLow = 0;
@@ -2970,6 +2980,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         loadDelta = 0.0;
         loadState = "";
         telemMsg = "";
+        lastLoadEnt = null;
+        forceLoadWrite = false;
 
         if (!node)
             return;
@@ -3032,13 +3044,37 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
-            // v1.0: Sync load ratio + overloaded bool to source entity
+            // v1.0: Sync load ratio + overloaded bool to source entity.
+            // First write and a new live entity always push load. The cached
+            // ratio is only the last value actually written, not the last skip.
+            forceLoadWrite = false;
+            if (node.m_LastSyncedLoadRatio < 0.0)
+            {
+                forceLoadWrite = true;
+            }
+            else if (!m_LastSyncEntity.Find(nodeId, lastLoadEntRaw))
+            {
+                forceLoadWrite = true;
+            }
+            else
+            {
+                lastLoadEnt = EntityAI.Cast(lastLoadEntRaw);
+                if (!lastLoadEnt)
+                {
+                    forceLoadWrite = true;
+                }
+                else if (lastLoadEnt != entObj)
+                {
+                    forceLoadWrite = true;
+                }
+            }
+
             loadDelta = node.m_LoadRatio - node.m_LastSyncedLoadRatio;
             if (loadDelta < 0.0)
             {
                 loadDelta = -loadDelta;
             }
-            if (loadDelta > 0.01)
+            if (forceLoadWrite || loadDelta > 0.01)
             {
                 LFPG_DeviceAPI.SetLoadRatio(entObj, node.m_LoadRatio);
 
@@ -3056,6 +3092,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     telemMsg = telemMsg + " state=" + loadState;
                     LFPG_Util.Info(telemMsg);
                 }
+                node.m_LastSyncedLoadRatio = node.m_LoadRatio;
             }
             LFPG_DeviceAPI.SetOverloaded(entObj, node.m_Overloaded);
             RememberNodeEntitySync(nodeId, node, entObj);
