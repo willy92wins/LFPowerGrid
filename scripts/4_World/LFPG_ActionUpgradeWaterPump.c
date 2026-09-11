@@ -12,7 +12,7 @@
 //
 // On completion:
 //   1. Capture pos/ori and filter state
-//   2. Create and validate T2 at same pos/ori
+//   2. Drop T1 physics, then create T2 with physics at the same pos/ori
 //   3. Stage material surplus with vanilla properties preserved
 //   4. Move the original filter to T2 after all output creation succeeds
 //   5. Consume originals, cut wires and delete T1
@@ -176,9 +176,16 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
             LFPG_Util.Warn("[UpgradePump] Another destructive operation already owns the target.");
             return;
         }
+
+        // T2 must not carry a physics body inside T1's volume. Strip T1 first,
+        // then spawn T2 with ECE_CREATEPHYSICS at the same origin used today.
+        if (dBodyIsSet(pump))
+            dBodyDestroy(pump);
+
         EntityAI t2 = EntityAI.Cast(g_Game.CreateObjectEx("LFPG_WaterPump_T2", spawnPos, ECE_CREATEPHYSICS));
         if (!t2)
         {
+            RestorePumpStaticPhysics(pump);
             pump.LFPG_EndExclusiveOp();
             LFPG_Util.Error("[UpgradePump] Failed to create LFPG_WaterPump_T2 - aborting upgrade, T1 + materials preserved");
             return;
@@ -194,6 +201,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         if (!StageMaterialSurplus(plate, plateQty, LFPG_PUMP_UPGRADE_PLATES, pos, stagedOutputs))
         {
             AbortStagedUpgradeOutputs(stagedOutputs);
+            RestorePumpStaticPhysics(pump);
             pump.LFPG_EndExclusiveOp();
             LFPG_Util.Error("[UpgradePump] Failed to stage MetalPlate surplus - T1 + materials preserved");
             return;
@@ -201,6 +209,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         if (!StageMaterialSurplus(nails, nailsQty, LFPG_PUMP_UPGRADE_NAILS, pos, stagedOutputs))
         {
             AbortStagedUpgradeOutputs(stagedOutputs);
+            RestorePumpStaticPhysics(pump);
             pump.LFPG_EndExclusiveOp();
             LFPG_Util.Error("[UpgradePump] Failed to stage Nail surplus - T1 + materials preserved");
             return;
@@ -214,6 +223,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
 			if (!filterItem.GetInventory().GetCurrentInventoryLocation(filterSource))
 			{
 				AbortStagedUpgradeOutputs(stagedOutputs);
+				RestorePumpStaticPhysics(pump);
 				pump.LFPG_EndExclusiveOp();
 				LFPG_Util.Error("[UpgradePump] Cannot locate original filter - T1 preserved");
 				return;
@@ -222,6 +232,7 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
 			if (!GameInventory.LocationSyncMoveEntity(filterSource, filterTarget))
 			{
 				AbortStagedUpgradeOutputs(stagedOutputs);
+				RestorePumpStaticPhysics(pump);
 				pump.LFPG_EndExclusiveOp();
 				LFPG_Util.Error("[UpgradePump] Cannot transfer original filter - T1 preserved");
 				return;
@@ -235,6 +246,21 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
     
         // The exclusive flag intentionally remains set until EEDelete completes.
         LFPG_Util.Info("[UpgradePump] T2 created at " + spawnPos.ToString() + " ori=" + ori.ToString() + " (T1 was " + pos.ToString() + ")");
+    }
+
+    // Rebuild a static body from the VObject if an abort happens after T1
+    // physics was stripped and T2 did not commit. Layer mask 0xffffffff
+    // keeps the geometry layers from the P3D unmodified.
+    protected void RestorePumpStaticPhysics(EntityAI device)
+    {
+        if (!device)
+            return;
+        if (dBodyIsSet(device))
+            return;
+
+        Physics.CreateStatic(device, 0xffffffff);
+        if (!dBodyIsSet(device))
+            LFPG_Util.Error("[UpgradePump] Failed to restore pump physics after aborted upgrade");
     }
 
     // Helpers stage every excess output before source materials are consumed.
@@ -275,7 +301,11 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         {
             EntityAI output = stagedOutputs[i];
             if (output)
+            {
+                if (dBodyIsSet(output))
+                    dBodyDestroy(output);
                 g_Game.ObjectDelete(output);
+            }
         }
         stagedOutputs.Clear();
     }
