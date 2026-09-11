@@ -181,6 +181,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         {
             int deferDelay = 50;
             bool deferRepeat = false;
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_DeferredRouting);
             g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, deferDelay, deferRepeat);
         }
 
@@ -264,6 +265,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         int initDelay = 500;
         bool initRepeat = false;
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_DeferredRouting);
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_DeferredRouting, initDelay, initRepeat);
         #endif
 
