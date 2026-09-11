@@ -42,6 +42,7 @@ class LFPG_ControlSessionRecord
     ref array<float> m_CameraYaws;
     ref array<float> m_CameraPitches;
     // One-shot final AIM token per allowlisted camera. 0 = unused, 1 = consumed.
+    // An accepted ordinary AIM restores 0 for that camera.
     ref array<int> m_CameraFinalAimConsumed;
 
     float m_SearchlightYaw;
@@ -197,9 +198,9 @@ class LFPG_ControlSessionRegistry
         return record.m_AimLimiter.Allow(nowSeconds, LFPG_CCTV_AIM_COOLDOWN_S);
     }
 
-    // One final AIM per camera per CCTV session. Mirrors SEARCHLIGHT_EXIT_V2:
-    // the stream limiter is skipped for a single leave/cycle write, then
-    // further finals fall through to the ordinary 50 ms bucket. The AIM
+    // One changing final AIM may skip the stream limiter per camera until
+    // consumed. An accepted ordinary AIM for that camera restores the token.
+    // Further finals fall through to the ordinary 50 ms bucket. The AIM
     // handler must call this only after entity + deviceId checks, and not
     // for a final whose clamped yaw/pitch already match stored PTZ.
     bool ConsumeCCTVAimFinal(LFPG_ControlSessionRecord record, int cameraIndex)
@@ -213,6 +214,19 @@ class LFPG_ControlSessionRegistry
 
         record.m_CameraFinalAimConsumed[cameraIndex] = 1;
         return true;
+    }
+
+    // Restore the one-shot final AIM token after this camera accepts an
+    // ordinary AIM. The next changing final may skip the 50 ms bucket
+    // once; extra finals still share that bucket.
+    void RearmCCTVAimFinal(LFPG_ControlSessionRecord record, int cameraIndex)
+    {
+        if (!record || !record.m_CameraFinalAimConsumed)
+            return;
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraFinalAimConsumed.Count())
+            return;
+
+        record.m_CameraFinalAimConsumed[cameraIndex] = 0;
     }
 
     int FindCCTVCameraIndex(LFPG_ControlSessionRecord record, int cameraNetLow, int cameraNetHigh)
