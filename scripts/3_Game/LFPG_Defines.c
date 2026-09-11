@@ -291,21 +291,11 @@ enum LFPG_RPC_SubId
 	CAMERA_LIST_RESPONSE = 16,  // Sprint B: server sends camera list back to client
 	CCTV_EXIT_REQUEST = 17,     // v1.3.0: client requests exit → server does SelectPlayer
 	CCTV_EXIT_CONFIRM = 18,     // v1.3.0: server confirms exit → client safe to cleanup
-	SORTER_CONFIG_REQUEST  = 19,  // S4: client requests Sorter config for UI
-	SORTER_CONFIG_RESPONSE = 20,  // S4: server sends filterJSON + container names
-	SORTER_CONFIG_SAVE     = 21,  // S4: client saves updated filterJSON
-	SORTER_REQUEST_SORT    = 22,  // S3: client requests manual sort (BinPack)
-	SORTER_SAVE_ACK        = 23,  // S5: server confirms config save success/fail
 	SEARCHLIGHT_AIM            = 24,  // v1.4.0: Client→Server: yaw+pitch
 	SEARCHLIGHT_ENTER          = 25,  // v1.4.0: Client→Server: request enter spectator
 	SEARCHLIGHT_ENTER_CONFIRM  = 26,  // v1.4.0: Server→Client: confirm + send yaw/pitch
 	SEARCHLIGHT_EXIT_REQUEST   = 27,  // v1.4.0: Client→Server: request exit
 	SEARCHLIGHT_EXIT_CONFIRM   = 28,  // v1.4.0: Server→Client: confirm exit
-	SORTER_RESYNC              = 29,  // v2.4: Client→Server: re-link nearest container
-	SORTER_RESYNC_ACK          = 30,  // v2.4: Server→Client: result (containerName)
-	SORTER_PREVIEW_REQUEST     = 31,  // v2.6: Client→Server: request matching items for preview
-	SORTER_PREVIEW_RESPONSE    = 32,  // v2.6: Server→Client: matched item list (cap 50)
-	SORTER_SORT_ACK            = 33,   // v3.2: Server→Client: sort result (success, movedCount)*
 	SORTER_CARGO_REFRESH       = 34,   // v5.0: Server→Client broadcast: nearby containers changed, refresh UI
 	// ---- BTC ATM (Sprint BTC) ----
     BTC_OPEN_REQUEST       = 40,
@@ -321,7 +311,7 @@ enum LFPG_RPC_SubId
     // ---- Server settings sync (v4.5) ----
     SYNC_SERVER_SETTINGS   = 50,  // Server→Client: send config flags on JIP
     // ---- V4 TEST sorter (Sprint 0, 2026-04-26) ----
-    // Mirrors V3 SORTER_* SubIds (19-23, 29-34) for the test variant.
+    // V3 SORTER_* SubIds 19-23 and 29-33 retired. SORTER_CARGO_REFRESH=34 remains live.
     // V4 entity (LFPG_Sorter_TEST) opens LFPG_SorterView_TEST via these.
     SORTER_TEST_CONFIG_REQUEST  = 60,
     SORTER_TEST_CONFIG_RESPONSE = 61,

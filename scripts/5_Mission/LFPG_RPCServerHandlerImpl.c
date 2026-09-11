@@ -126,51 +126,26 @@ class LFPG_RPCServerHandlerImpl
             HandleRequestCameraList(player, sender, ctx);
         }
 
-        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_REQUEST)
-        {
-            int srvCfgRespId = LFPG_RPC_SubId.SORTER_CONFIG_RESPONSE;
-            HandleSorterConfigRequest(player, sender, ctx, srvCfgRespId);
-        }
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_REQUEST)
         {
             // Sprint 0 (2026-04-26): V4 routes to same handler with V4 response SubId
             int srvCfgRespIdT = LFPG_RPC_SubId.SORTER_TEST_CONFIG_RESPONSE;
             HandleSorterConfigRequest(player, sender, ctx, srvCfgRespIdT);
         }
-        else if (subId == LFPG_RPC_SubId.SORTER_CONFIG_SAVE)
-        {
-            int srvSaveAckId = LFPG_RPC_SubId.SORTER_SAVE_ACK;
-            HandleSorterConfigSave(player, sender, ctx, srvSaveAckId);
-        }
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_SAVE)
         {
             int srvSaveAckIdT = LFPG_RPC_SubId.SORTER_TEST_SAVE_ACK;
             HandleSorterConfigSave(player, sender, ctx, srvSaveAckIdT);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_REQUEST_SORT)
-        {
-            int srvSortAckId = LFPG_RPC_SubId.SORTER_SORT_ACK;
-            HandleSorterRequestSort(player, sender, ctx, srvSortAckId);
         }
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_REQUEST_SORT)
         {
             int srvSortAckIdT = LFPG_RPC_SubId.SORTER_TEST_SORT_ACK;
             HandleSorterRequestSort(player, sender, ctx, srvSortAckIdT);
         }
-        else if (subId == LFPG_RPC_SubId.SORTER_RESYNC)
-        {
-            int srvResyncAckId = LFPG_RPC_SubId.SORTER_RESYNC_ACK;
-            HandleSorterResync(player, sender, ctx, srvResyncAckId);
-        }
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_RESYNC)
         {
             int srvResyncAckIdT = LFPG_RPC_SubId.SORTER_TEST_RESYNC_ACK;
             HandleSorterResync(player, sender, ctx, srvResyncAckIdT);
-        }
-        else if (subId == LFPG_RPC_SubId.SORTER_PREVIEW_REQUEST)
-        {
-            int srvPrevRespId = LFPG_RPC_SubId.SORTER_PREVIEW_RESPONSE;
-            HandleSorterPreviewRequest(player, sender, ctx, srvPrevRespId);
         }
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_PREVIEW_REQUEST)
         {
