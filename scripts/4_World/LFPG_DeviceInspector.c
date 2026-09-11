@@ -1733,7 +1733,7 @@ class LFPG_DeviceInspector
             m_SmoothY = m_SmoothY + (dy * LFPG_INSPECT_POS_LERP);
         }
 
-        m_Panel.SetPos(m_SmoothX, m_SmoothY);
+        SetPosDirty(m_Panel, m_SmoothX, m_SmoothY);
         return true;
     }
 

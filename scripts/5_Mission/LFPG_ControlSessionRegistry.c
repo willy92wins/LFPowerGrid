@@ -36,11 +36,18 @@ class LFPG_ControlSessionRecord
     ref array<vector> m_CameraPositions;
     ref array<vector> m_CameraOrientations;
     ref array<string> m_CameraLabels;
+    ref array<int> m_CameraNetLows;
+    ref array<int> m_CameraNetHighs;
+    ref array<string> m_CameraDeviceIds;
+    ref array<float> m_CameraYaws;
+    ref array<float> m_CameraPitches;
+    // One-shot final AIM token per allowlisted camera. 0 = unused, 1 = consumed.
+    ref array<int> m_CameraFinalAimConsumed;
 
     float m_SearchlightYaw;
     float m_SearchlightPitch;
 
-    // Per-session AIM limiter. Allocated once in BeginSearchlight; never on the AIM path.
+    // Per-session AIM limiter. Allocated once in BeginSearchlight / BeginCCTV; never on the AIM path.
     ref LFPG_RateLimiter m_AimLimiter;
     // Per-session CCTV replay limiter. Allocated once in BeginCCTV; never on the replay path.
     ref LFPG_RateLimiter m_ReplayLimiter;
@@ -84,7 +91,7 @@ class LFPG_ControlSessionRegistry
         return true;
     }
 
-    LFPG_ControlSessionRecord BeginCCTV(PlayerIdentity identity, PlayerBase player, LFPG_Monitor monitor, int deviceNetLow, int deviceNetHigh, int cameraCount, array<vector> cameraPositions, array<vector> cameraOrientations, array<string> cameraLabels)
+    LFPG_ControlSessionRecord BeginCCTV(PlayerIdentity identity, PlayerBase player, LFPG_Monitor monitor, int deviceNetLow, int deviceNetHigh, int cameraCount, array<vector> cameraPositions, array<vector> cameraOrientations, array<string> cameraLabels, array<int> cameraNetLows, array<int> cameraNetHighs, array<string> cameraDeviceIds, array<float> cameraYaws, array<float> cameraPitches)
     {
         if (!identity || !player || !monitor)
             return null;
@@ -107,6 +114,19 @@ class LFPG_ControlSessionRegistry
         record.m_CameraPositions = cameraPositions;
         record.m_CameraOrientations = cameraOrientations;
         record.m_CameraLabels = cameraLabels;
+        record.m_CameraNetLows = cameraNetLows;
+        record.m_CameraNetHighs = cameraNetHighs;
+        record.m_CameraDeviceIds = cameraDeviceIds;
+        record.m_CameraYaws = cameraYaws;
+        record.m_CameraPitches = cameraPitches;
+        record.m_CameraFinalAimConsumed = new array<int>;
+        int finalIndex = 0;
+        while (finalIndex < cameraCount)
+        {
+            record.m_CameraFinalAimConsumed.Insert(0);
+            finalIndex = finalIndex + 1;
+        }
+        record.m_AimLimiter = new LFPG_RateLimiter();
         record.m_ReplayLimiter = new LFPG_RateLimiter();
         m_ByUID.Set(uid, record);
         return record;
@@ -169,6 +189,86 @@ class LFPG_ControlSessionRegistry
         return record.m_ReplayLimiter.Allow(nowSeconds, LFPG_CCTV_REPLAY_COOLDOWN_S);
     }
 
+    bool AllowCCTVAim(LFPG_ControlSessionRecord record, float nowSeconds)
+    {
+        if (!record || !record.m_AimLimiter)
+            return false;
+
+        return record.m_AimLimiter.Allow(nowSeconds, LFPG_CCTV_AIM_COOLDOWN_S);
+    }
+
+    // One final AIM per camera per CCTV session. Mirrors SEARCHLIGHT_EXIT_V2:
+    // the stream limiter is skipped for a single leave/cycle write, then
+    // further finals fall through to the ordinary 50 ms bucket. The AIM
+    // handler must call this only after entity + deviceId checks, and not
+    // for a final whose clamped yaw/pitch already match stored PTZ.
+    bool ConsumeCCTVAimFinal(LFPG_ControlSessionRecord record, int cameraIndex)
+    {
+        if (!record || !record.m_CameraFinalAimConsumed)
+            return false;
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraFinalAimConsumed.Count())
+            return false;
+        if (record.m_CameraFinalAimConsumed[cameraIndex] != 0)
+            return false;
+
+        record.m_CameraFinalAimConsumed[cameraIndex] = 1;
+        return true;
+    }
+
+    int FindCCTVCameraIndex(LFPG_ControlSessionRecord record, int cameraNetLow, int cameraNetHigh)
+    {
+        if (!record || record.m_Kind != LFPG_CONTROL_KIND_CCTV)
+            return -1;
+        if (record.m_State != LFPG_CONTROL_STATE_ENTERING && record.m_State != LFPG_CONTROL_STATE_ACTIVE)
+            return -1;
+        if (!record.m_CameraNetLows || !record.m_CameraNetHighs)
+            return -1;
+
+        int cameraIndex = 0;
+        while (cameraIndex < record.m_CameraCount)
+        {
+            if (cameraIndex >= record.m_CameraNetLows.Count() || cameraIndex >= record.m_CameraNetHighs.Count())
+                return -1;
+            if (record.m_CameraNetLows[cameraIndex] == cameraNetLow && record.m_CameraNetHighs[cameraIndex] == cameraNetHigh)
+                return cameraIndex;
+            cameraIndex = cameraIndex + 1;
+        }
+        return -1;
+    }
+
+    string GetCCTVCameraDeviceId(LFPG_ControlSessionRecord record, int cameraIndex)
+    {
+        if (!record || !record.m_CameraDeviceIds)
+            return "";
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraDeviceIds.Count())
+            return "";
+        return record.m_CameraDeviceIds[cameraIndex];
+    }
+
+    void UpdateCCTVAimCache(LFPG_ControlSessionRecord record, int cameraIndex, float yaw, float pitch)
+    {
+        if (!record || !record.m_CameraYaws || !record.m_CameraPitches)
+            return;
+        if (cameraIndex < 0 || cameraIndex >= record.m_CameraYaws.Count() || cameraIndex >= record.m_CameraPitches.Count())
+            return;
+
+        record.m_CameraYaws[cameraIndex] = yaw;
+        record.m_CameraPitches[cameraIndex] = pitch;
+    }
+
+    void UpdateAllCCTVAimCaches(int cameraNetLow, int cameraNetHigh, float yaw, float pitch)
+    {
+        int sessionIndex = 0;
+        while (sessionIndex < m_ByUID.Count())
+        {
+            LFPG_ControlSessionRecord record = m_ByUID.GetElement(sessionIndex);
+            int cameraIndex = FindCCTVCameraIndex(record, cameraNetLow, cameraNetHigh);
+            if (cameraIndex >= 0)
+                UpdateCCTVAimCache(record, cameraIndex, yaw, pitch);
+            sessionIndex = sessionIndex + 1;
+        }
+    }
+
     void MarkActive(LFPG_ControlSessionRecord record)
     {
         if (!record)
@@ -199,6 +299,8 @@ class LFPG_ControlSessionRegistry
             return false;
         if (!record.m_CameraPositions || !record.m_CameraOrientations || !record.m_CameraLabels)
             return false;
+        if (!record.m_CameraNetLows || !record.m_CameraNetHighs || !record.m_CameraDeviceIds || !record.m_CameraYaws || !record.m_CameraPitches)
+            return false;
         if (record.m_CameraCount <= 0)
             return false;
         if (record.m_CameraPositions.Count() < record.m_CameraCount)
@@ -206,6 +308,16 @@ class LFPG_ControlSessionRegistry
         if (record.m_CameraOrientations.Count() < record.m_CameraCount)
             return false;
         if (record.m_CameraLabels.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraNetLows.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraNetHighs.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraDeviceIds.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraYaws.Count() < record.m_CameraCount)
+            return false;
+        if (record.m_CameraPitches.Count() < record.m_CameraCount)
             return false;
 
         ScriptRPC rpc = new ScriptRPC();
@@ -234,6 +346,10 @@ class LFPG_ControlSessionRegistry
             writeFloat = writeOri[2];
             rpc.Write(writeFloat);
             rpc.Write(record.m_CameraLabels[cameraIndex]);
+            rpc.Write(record.m_CameraNetLows[cameraIndex]);
+            rpc.Write(record.m_CameraNetHighs[cameraIndex]);
+            rpc.Write(record.m_CameraYaws[cameraIndex]);
+            rpc.Write(record.m_CameraPitches[cameraIndex]);
             cameraIndex = cameraIndex + 1;
         }
 
@@ -310,6 +426,11 @@ class LFPG_ControlSessionRegistry
 
         // A disconnected identity is represented by a null engine reference.
         // In that case the record is dropped without an invalid SelectPlayer call.
+        // Server-initiated Tick teardown (power, timeout, death) restores the
+        // pawn and drops the record in this same call. A later client AIM
+        // misses the allowlist. Only the first changing final of each camera
+        // per session is exempt from the 50 ms bucket; a later final of the
+        // same camera shares that bucket and can be dropped.
         if (record.m_Identity && record.m_Player)
         {
             g_Game.SelectPlayer(record.m_Identity, record.m_Player);
