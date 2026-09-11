@@ -1571,13 +1571,13 @@ class ActionLFPG_DebugStatus : ActionSingleUseBase
         }
 
         // Overflow guards: prevent (int) cast on huge values
-        if (val > 999999.0)
+        if (val > 5000000.0)
         {
-            return "999999+";
+            return "5000000+";
         }
-        if (val < -999999.0)
+        if (val < -5000000.0)
         {
-            return "-999999-";
+            return "-5000000-";
         }
 
         float rounded = Math.Round(val * 10.0) / 10.0;
