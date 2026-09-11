@@ -2098,6 +2098,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     override int ProcessDirtyQueue(int nodeBudget, int edgeBudget)
     {
         #ifdef SERVER
+        string dbgProc;
 		int startMs = g_Game.GetTime();
         m_PropagationEdgeAccountingActive = true;
         m_EdgesVisitedThisEpoch = 0;
@@ -2831,7 +2832,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         {
             if (LFPG_LOG_LEVEL >= 2)
             {
-                string dbgProc = "[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString() + " edges=" + m_EdgesVisitedThisEpoch.ToString() + " remaining=" + remaining.ToString() + " epoch=" + m_CurrentEpoch.ToString() + " ms=" + elapsed.ToString();
+                dbgProc = "[ElecGraph] ProcessDirtyQueue: processed=" + processed.ToString() + " edges=" + m_EdgesVisitedThisEpoch.ToString() + " remaining=" + remaining.ToString() + " epoch=" + m_CurrentEpoch.ToString() + " ms=" + elapsed.ToString();
                 LFPG_Util.Debug(dbgProc);
             }
         }
@@ -2988,6 +2989,10 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected int ValidateConsumerStates(int edgeBudget)
     {
         #ifdef SERVER
+        float afterEnergy;
+        string chgLog;
+        string skipLog;
+        bool hasBat;
         int nodeTotal = m_Nodes.Count();
         if (nodeTotal <= 0)
             return 0;
@@ -3279,8 +3284,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
                                                 if (LFPG_LOG_LEVEL >= 2)
                                                 {
-                                                    float afterEnergy = batEm.GetEnergy();
-                                                    string chgLog = "[Charger] Charged ";
+                                                    afterEnergy = batEm.GetEnergy();
+                                                    chgLog = "[Charger] Charged ";
                                                     chgLog = chgLog + nodeId;
                                                     chgLog = chgLog + ": ";
                                                     chgLog = chgLog + batEnergy.ToString();
@@ -3302,11 +3307,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                                     m_ChargerLastChargeSec.Remove(nodeId);
                                     if (LFPG_LOG_LEVEL >= 2)
                                     {
-                                        string skipLog = "[Charger] Skip ";
+                                        skipLog = "[Charger] Skip ";
                                         skipLog = skipLog + nodeId;
                                         skipLog = skipLog + " switchedOn=";
                                         skipLog = skipLog + chargerOn.ToString();
-                                        bool hasBat = carBat != null;
+                                        hasBat = carBat != null;
                                         skipLog = skipLog + " hasBat=";
                                         skipLog = skipLog + hasBat.ToString();
                                         LFPG_Util.Info(skipLog);
