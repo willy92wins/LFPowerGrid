@@ -736,6 +736,17 @@ class LFPG_CableRenderer
 	protected vector m_ProjectionProbeZ;
 	protected int m_ProjectionRevision;
 
+    // C4: reuse 3P player screen rect while cam projection + player root stay still.
+    protected vector m_PlOccLastPlPos;
+    protected int    m_PlOccProjectionRevision;
+    protected bool   m_PlOccCacheValid;
+    protected bool   m_PlOccCachedActive;
+    protected float  m_PlOccRectX1;
+    protected float  m_PlOccRectY1;
+    protected float  m_PlOccRectX2;
+    protected float  m_PlOccRectY2;
+    protected float  m_PlOccDepthThreshold;
+
     // ---- Occlusion: stagger round-robin ----
     // Distributes raycast cost across frames.
     protected int    m_OccStaggerIdx;
@@ -801,6 +812,15 @@ class LFPG_CableRenderer
         m_OccCursorByGroup.Insert(0);
         m_CamMoved        = true;
         m_TotalSegCount   = 0;
+        m_PlOccCacheValid = false;
+        m_PlOccCachedActive = false;
+        m_PlOccProjectionRevision = -1;
+        m_PlOccLastPlPos = "0 0 0";
+        m_PlOccRectX1 = 0.0;
+        m_PlOccRectY1 = 0.0;
+        m_PlOccRectX2 = 0.0;
+        m_PlOccRectY2 = 0.0;
+        m_PlOccDepthThreshold = 0.0;
 
         // v0.7.7: read bubble setting once
         LFPG_ServerSettings cfg = LFPG_Settings.Get();
@@ -2888,7 +2908,7 @@ class LFPG_CableRenderer
         // In 3rd-person view, compute a screen-space bounding rect around
         // the player model. Segments farther from camera than the player
         // that intersect this rect get alpha-faded so cables don't overdraw
-        // the character. Cost: 2 GetScreenPos + ~10 float ops per frame.
+        // the character. C4: skip 2x GetScreenPos when cam+player are steady.
         bool plOccActive = false;
         float plRectX1 = 0.0;
         float plRectY1 = 0.0;
@@ -2903,51 +2923,90 @@ class LFPG_CableRenderer
             // In 1P the model is hidden so occlusion is unnecessary.
             if (plCamDist > LFPG_PLOCC_3P_MIN_DIST_SQ)
             {
-                vector plHead = plPos;
-                plHead[1] = plHead[1] + LFPG_PLOCC_HEAD_OFFSET_Y;
-
-                vector plFeetScr = g_Game.GetScreenPos(plPos);
-                vector plHeadScr = g_Game.GetScreenPos(plHead);
-
-                // Both points must be in front of camera
-                if (plFeetScr[2] > LFPG_BEHIND_CAM_Z && plHeadScr[2] > LFPG_BEHIND_CAM_Z)
+                bool reusePlOcc = false;
+                if (m_PlOccCacheValid && m_PlOccProjectionRevision == m_ProjectionRevision)
                 {
-                    // Screen-space height of player model
-                    float plHPx = plFeetScr[1] - plHeadScr[1];
-                    if (plHPx < 0.0)
+                    if (LFPG_WorldUtil.DistSq(plPos, m_PlOccLastPlPos) <= 0.0)
                     {
-                        plHPx = -plHPx;
-                    }
-
-                    if (plHPx > 10.0)
-                    {
-                        // Width from height using body aspect ratio + padding
-                        float plWPx = plHPx * LFPG_PLOCC_WIDTH_RATIO;
-                        float plCenterX = (plFeetScr[0] + plHeadScr[0]) * 0.5;
-                        float plHalfW = plWPx * 0.5;
-                        float plPad = plHPx * LFPG_PLOCC_PAD_RATIO;
-
-                        // Build rect (screen Y: 0=top, head < feet)
-                        float plTopY = plHeadScr[1];
-                        float plBotY = plFeetScr[1];
-                        if (plTopY > plBotY)
-                        {
-                            plTopY = plFeetScr[1];
-                            plBotY = plHeadScr[1];
-                        }
-
-                        plRectX1 = plCenterX - plHalfW;
-                        plRectY1 = plTopY - plPad;
-                        plRectX2 = plCenterX + plHalfW;
-                        plRectY2 = plBotY + plPad;
-
-                        // Depth threshold: avg player Z + margin.
-                        // Segments beyond this are candidates for player occlusion.
-                        plDepthThreshold = (plFeetScr[2] + plHeadScr[2]) * 0.5 + LFPG_PLOCC_DEPTH_MARGIN;
-                        plOccActive = true;
+                        reusePlOcc = true;
                     }
                 }
+
+                if (reusePlOcc)
+                {
+                    plOccActive = m_PlOccCachedActive;
+                    plRectX1 = m_PlOccRectX1;
+                    plRectY1 = m_PlOccRectY1;
+                    plRectX2 = m_PlOccRectX2;
+                    plRectY2 = m_PlOccRectY2;
+                    plDepthThreshold = m_PlOccDepthThreshold;
+                }
+                else
+                {
+                    vector plHead = plPos;
+                    plHead[1] = plHead[1] + LFPG_PLOCC_HEAD_OFFSET_Y;
+
+                    vector plFeetScr = g_Game.GetScreenPos(plPos);
+                    vector plHeadScr = g_Game.GetScreenPos(plHead);
+
+                    // Both points must be in front of camera
+                    if (plFeetScr[2] > LFPG_BEHIND_CAM_Z && plHeadScr[2] > LFPG_BEHIND_CAM_Z)
+                    {
+                        // Screen-space height of player model
+                        float plHPx = plFeetScr[1] - plHeadScr[1];
+                        if (plHPx < 0.0)
+                        {
+                            plHPx = -plHPx;
+                        }
+
+                        if (plHPx > 10.0)
+                        {
+                            // Width from height using body aspect ratio + padding
+                            float plWPx = plHPx * LFPG_PLOCC_WIDTH_RATIO;
+                            float plCenterX = (plFeetScr[0] + plHeadScr[0]) * 0.5;
+                            float plHalfW = plWPx * 0.5;
+                            float plPad = plHPx * LFPG_PLOCC_PAD_RATIO;
+
+                            // Build rect (screen Y: 0=top, head < feet)
+                            float plTopY = plHeadScr[1];
+                            float plBotY = plFeetScr[1];
+                            if (plTopY > plBotY)
+                            {
+                                plTopY = plFeetScr[1];
+                                plBotY = plHeadScr[1];
+                            }
+
+                            plRectX1 = plCenterX - plHalfW;
+                            plRectY1 = plTopY - plPad;
+                            plRectX2 = plCenterX + plHalfW;
+                            plRectY2 = plBotY + plPad;
+
+                            // Depth threshold: avg player Z + margin.
+                            // Segments beyond this are candidates for player occlusion.
+                            plDepthThreshold = (plFeetScr[2] + plHeadScr[2]) * 0.5 + LFPG_PLOCC_DEPTH_MARGIN;
+                            plOccActive = true;
+                        }
+                    }
+
+                    m_PlOccLastPlPos = plPos;
+                    m_PlOccProjectionRevision = m_ProjectionRevision;
+                    m_PlOccCacheValid = true;
+                    m_PlOccCachedActive = plOccActive;
+                    m_PlOccRectX1 = plRectX1;
+                    m_PlOccRectY1 = plRectY1;
+                    m_PlOccRectX2 = plRectX2;
+                    m_PlOccRectY2 = plRectY2;
+                    m_PlOccDepthThreshold = plDepthThreshold;
+                }
             }
+            else
+            {
+                m_PlOccCacheValid = false;
+            }
+        }
+        else
+        {
+            m_PlOccCacheValid = false;
         }
 
         // v0.7.38 (C1) / vX (perf): far-to-near painter's order. The sort
