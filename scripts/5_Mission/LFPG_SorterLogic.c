@@ -2,7 +2,7 @@
 // LF_PowerGrid - Sorter Logic (v1.2.0 Sprint S3)
 //
 // Server-side sorting logic used by LFPG_TickSorters
-// (NetworkManager) and SORTER_REQUEST_SORT RPC handler.
+// (NetworkManager) and SORTER_TEST_REQUEST_SORT RPC handler.
 //
 // All methods are static helpers — no state.
 //
