@@ -145,6 +145,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected ref map<string, bool> m_LastSyncOverloaded;
     protected ref TStringManagedMap m_LastSyncEntity;
 
+    // S2: epoch-scoped memos so AllocateOutput does not rewalk the same
+    // PASSTHROUGH incoming/outgoing lists. Cleared at PDQ epoch start and
+    // on topology mutate. Powered-incoming is also cleared at each
+    // AllocateOutput so combiner splits still see SOURCE m_OutputPower
+    // published this epoch (v2.2 Bug #2). Fail-closed: miss recomputes.
+    protected ref map<string, int> m_PoweredIncomingMemo;
+    protected ref map<string, bool> m_HasEnabledDownstreamMemo;
+
     void LFPG_ElecGraphImpl()
     {
         m_Nodes = new map<string, ref LFPG_ElecNode>;
@@ -192,6 +200,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_LastSyncPowered = new map<string, bool>;
         m_LastSyncOverloaded = new map<string, bool>;
         m_LastSyncEntity = new TStringManagedMap;
+        m_PoweredIncomingMemo = new map<string, int>;
+        m_HasEnabledDownstreamMemo = new map<string, bool>;
     }
 
     // ===========================
@@ -269,6 +279,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_LastSyncPowered.Clear();
         m_LastSyncOverloaded.Clear();
         m_LastSyncEntity.Clear();
+        ClearPropagationMemos();
 
         // v0.7.34 (Bloque E): Full rebuild invalidates any active mutation
         if (m_MutationActive)
@@ -1495,6 +1506,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         inArr.Insert(edge);
 
         m_EdgeCount = m_EdgeCount + 1;
+        ClearPropagationMemos();
         return true;
         #else
         return false;
@@ -1524,6 +1536,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 asymMsg = asymMsg + " in=" + removedIn.ToString();
                 LFPG_Util.Warn(asymMsg);
             }
+
+            ClearPropagationMemos();
         }
         #endif
     }
@@ -2123,6 +2137,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 		int startMs = g_Game.GetTime();
         m_PropagationEdgeAccountingActive = true;
         m_EdgesVisitedThisEpoch = 0;
+        ClearPropagationMemos();
 
         // v0.7.32 (Bloque C): Tick counter advances on every call,
         // including when queue is empty. Used for validation gating.
@@ -3684,6 +3699,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
+    protected void ClearPropagationMemos()
+    {
+        if (m_PoweredIncomingMemo)
+            m_PoweredIncomingMemo.Clear();
+        if (m_HasEnabledDownstreamMemo)
+            m_HasEnabledDownstreamMemo.Clear();
+    }
+
     protected int CountEnabledOutgoing(string nodeId)
     {
         ref array<ref LFPG_ElecEdge> outEdges;
@@ -3704,6 +3727,45 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return count;
     }
 
+    // S2: epoch memo of "has at least one enabled outgoing". Same walk as the
+    // cold-start ptHasDown loop; miss recomputes and charges edge budget.
+    protected bool HasEnabledDownstream(string nodeId)
+    {
+        bool cachedHasDown;
+        if (m_HasEnabledDownstreamMemo)
+        {
+            if (m_HasEnabledDownstreamMemo.Contains(nodeId))
+            {
+                cachedHasDown = m_HasEnabledDownstreamMemo.Get(nodeId);
+                return cachedHasDown;
+            }
+        }
+
+        bool hasDown = false;
+        ref array<ref LFPG_ElecEdge> ptOutEdges;
+        if (m_Outgoing.Find(nodeId, ptOutEdges) && ptOutEdges)
+        {
+            int pti;
+            for (pti = 0; pti < ptOutEdges.Count(); pti = pti + 1)
+            {
+                m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+                if (!hasDown)
+                {
+                    LFPG_ElecEdge ptEdge = ptOutEdges[pti];
+                    if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
+                    {
+                        hasDown = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (m_HasEnabledDownstreamMemo)
+            m_HasEnabledDownstreamMemo.Set(nodeId, hasDown);
+        return hasDown;
+    }
+
     // v0.8.3: Count powered incoming edges for multi-source demand sharing.
     // Used in AllocateOutput to proportionally divide
     // PASSTHROUGH demand among active suppliers for LoadRatio calculation.
@@ -3711,9 +3773,20 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // Cost: O(K) where K = incoming edge count (typically 1-2 for Combiner).
     protected int CountPoweredIncoming(string nodeId)
     {
+        int memoCount;
+        if (m_PoweredIncomingMemo)
+        {
+            if (m_PoweredIncomingMemo.Find(nodeId, memoCount))
+                return memoCount;
+        }
+
         ref array<ref LFPG_ElecEdge> inEdges;
         if (!m_Incoming.Find(nodeId, inEdges) || !inEdges)
+        {
+            if (m_PoweredIncomingMemo)
+                m_PoweredIncomingMemo.Set(nodeId, 0);
             return 0;
+        }
 
         int count = 0;
         int cpi;
@@ -3750,6 +3823,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 }
             }
         }
+
+        if (m_PoweredIncomingMemo)
+            m_PoweredIncomingMemo.Set(nodeId, count);
         return count;
     }
 
@@ -3760,6 +3836,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected float AllocateOutput(string nodeId, float availableOutput)
     {
         #ifdef SERVER
+        if (m_PoweredIncomingMemo)
+            m_PoweredIncomingMemo.Clear();
+
         ref array<ref LFPG_ElecEdge> outEdges;
         if (!m_Outgoing.Find(nodeId, outEdges) || !outEdges)
             return 0.0;
@@ -3843,25 +3922,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                         }
                         else
                         {
-                            bool ptHasDown = false;
-                            ref array<ref LFPG_ElecEdge> ptOutEdges;
-                            if (m_Outgoing.Find(edge.m_TargetNodeId, ptOutEdges) && ptOutEdges)
-                            {
-                                int pti;
-                                for (pti = 0; pti < ptOutEdges.Count(); pti = pti + 1)
-                                {
-                                    m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
-                                    if (!ptHasDown)
-                                    {
-                                        ref LFPG_ElecEdge ptEdge = ptOutEdges[pti];
-                                        if (ptEdge && (ptEdge.m_Flags & LFPG_EDGE_ENABLED) != 0)
-                                        {
-                                            ptHasDown = true;
-											break;
-                                        }
-                                    }
-                                }
-                            }
+                            bool ptHasDown = HasEnabledDownstream(edge.m_TargetNodeId);
 
                             if (ptHasDown && targetNode.m_MaxOutput > LFPG_PROPAGATION_EPSILON)
                             {
