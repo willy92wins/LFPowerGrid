@@ -711,7 +711,8 @@ class LFPG_CableRenderer
     protected static const int NEG_CACHE_PURGE_INTERVAL_MS = 60000; // 60 seconds
 
     // Sway sample cadence so screenCacheSwayY/X can match across still-camera frames.
-    // Continuous nowMs made the projection cache miss every frame while swayScale > 0.
+    // Applied only while the camera is still; moving camera keeps continuous nowMs
+    // (projection already misses, so forcing 20 Hz sway for all frames is useless).
     protected static const float LFPG_SWAY_CACHE_CADENCE_MS = 50.0;
 
     // v0.7.9: Incremental segment budget counter.
@@ -2805,7 +2806,6 @@ class LFPG_CableRenderer
         vector camPos = g_Game.GetCurrentCameraPosition();
         vector camDir = g_Game.GetCurrentCameraDirection();
         float nowMs = g_Game.GetTime();
-        float swayNowMs = Math.Floor(nowMs / LFPG_SWAY_CACHE_CADENCE_MS) * LFPG_SWAY_CACHE_CADENCE_MS;
 
         // ---- Camera movement detection ----
         vector camDelta = camPos - m_LastCamPos;
@@ -2821,6 +2821,14 @@ class LFPG_CableRenderer
         if (dirDist > LFPG_OCC_CAM_DIR_THRESH)
         {
             m_CamMoved = true;
+        }
+
+        // Quantize sway inputs only when camera is still so Phase-1 cache can hit;
+        // while moving, keep continuous nowMs (do not force 20 Hz for all frames).
+        float swayNowMs = nowMs;
+        if (!m_CamMoved)
+        {
+            swayNowMs = Math.Floor(nowMs / LFPG_SWAY_CACHE_CADENCE_MS) * LFPG_SWAY_CACHE_CADENCE_MS;
         }
 
         PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
@@ -3274,7 +3282,7 @@ class LFPG_CableRenderer
 
             // ================================================
             // Phase 1: reuse projected points while camera and sway are unchanged.
-            // Sway is sampled on LFPG_SWAY_CACHE_CADENCE_MS so those inputs can match.
+            // Still camera: sway quantized on LFPG_SWAY_CACHE_CADENCE_MS so inputs can match.
             // ================================================
             float swayOff = 0.0;
             float swayOffX = 0.0;

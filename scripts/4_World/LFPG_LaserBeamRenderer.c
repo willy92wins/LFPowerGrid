@@ -469,6 +469,10 @@ class LFPG_LaserBeamRenderer
     // Three world-axis offsets ensure that at least two probes are off the viewing axis.
     protected void UpdateProjectionRevision(vector camPos, vector camDir)
     {
+        // Skip the 3 GetScreenPos probes when nothing will draw this frame.
+        if (!m_ActiveDetectors || m_ActiveDetectors.Count() == 0)
+            return;
+
         vector probeBase = camPos + camDir * 10.0;
         vector probeX = g_Game.GetScreenPos(probeBase + "1 0 0");
         vector probeY = g_Game.GetScreenPos(probeBase + "0 1 0");
