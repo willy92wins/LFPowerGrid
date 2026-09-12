@@ -156,10 +156,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     static void ReportKillDropDenied(string deviceId, int stock)
     {
         string message;
-        string uid;
         message = "[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stock.ToString() + " deviceId=" + deviceId;
-        uid = FindDeviceClaimUID(deviceId);
-        LogClaimError(message, uid, deviceId);
+        LFPG_Util.Error(message);
     }
 
     protected static bool HasDeviceClaims(string deviceId)
@@ -425,13 +423,13 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
 
     protected static bool StockOutflowBlockedByRetainedEvidence(string deviceId, int stockBefore, int stockTarget)
     {
-        if (stockTarget >= stockBefore)
+        if (stockTarget == stockBefore)
             return false;
         if (deviceId == "")
             return false;
         if (!DeviceHasRetainedPhysicalEvidence(deviceId))
             return false;
-        LogClaimError("[LFPG_Balance_Native] Stock outflow rejected: retained physical evidence deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
+        LogClaimError("[LFPG_Balance_Native] Stock deposit/outflow blocked by retained evidence deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
         return true;
     }
 
@@ -1100,8 +1098,18 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
 
         if (ChainHasPhysicalEvidence(chain))
         {
-            array<ref LFPG_BalanceClaim> mixedPending = CollectPendingTimeline(chain);
-            if (!PersistRetainSelectedClaims(deviceId, mixedPending, stock, "pending chain with physical evidence did not match loaded stock"))
+            bool removedProvenPhysical = false;
+            if (!PersistRemoveChainProvenPurchases(deviceId, removedProvenPhysical))
+                return;
+
+            array<ref LFPG_BalanceClaim> remainingUnprovenChain = CollectDeviceClaims(deviceId);
+            array<ref LFPG_BalanceClaim> remainingUnprovenPending = CollectPendingTimeline(remainingUnprovenChain);
+            if (remainingUnprovenPending.Count() == 0)
+            {
+                s_ReconciledDevices.Set(deviceId, true);
+                return;
+            }
+            if (!PersistRetainSelectedClaims(deviceId, remainingUnprovenPending, stock, "pending chain with physical evidence did not match loaded stock"))
                 return;
             s_ReconciledDevices.Set(deviceId, true);
             return;
