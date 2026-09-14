@@ -64,6 +64,46 @@ class DetectsDefects(unittest.TestCase):
     def test_duplicate_class_twice_in_one_file(self):
         self.assert_fires("DUP_CLASS", {"a.c": CLEAN + CLEAN})
 
+    def test_duplicate_class_outside_and_inside_server(self):
+        """Unconditional class plus the same name under #ifdef SERVER.
+
+        Both compile when SERVER is defined. Fixture:
+        checker-counterexamples.json negative_duplicate_outside_and_inside_server.
+        """
+        self.assert_fires(
+            "DUP_CLASS",
+            {"a.c": b"class AuditSame { void F() {} };\n"
+                    b"#ifdef SERVER\n"
+                    b"class AuditSame { void F() {} };\n"
+                    b"#endif\n"})
+
+    def test_duplicate_class_separate_server_blocks(self):
+        """Two #ifdef SERVER blocks declaring the same class.
+
+        Fixture: checker-counterexamples.json
+        negative_duplicate_separate_server_blocks.
+        """
+        self.assert_fires(
+            "DUP_CLASS",
+            {"a.c": b"#ifdef SERVER\n"
+                    b"class AuditSame { void F() {} };\n"
+                    b"#endif\n"
+                    b"#ifdef SERVER\n"
+                    b"class AuditSame { void F() {} };\n"
+                    b"#endif\n"})
+
+    def test_duplicate_class_after_define_in_nested_path(self):
+        """A #define in nested #ifndef/#ifdef can compile a second class."""
+        self.assert_fires(
+            "DUP_CLASS",
+            {"a.c": b"class AuditSame {};\n"
+                    b"#ifndef LFPG_SWITCH\n"
+                    b"#define LFPG_SWITCH\n"
+                    b"#ifdef LFPG_SWITCH\n"
+                    b"class AuditSame {};\n"
+                    b"#endif\n"
+                    b"#endif\n"})
+
     def test_filehandle_numeric_init(self):
         self.assert_fires("FILEHANDLE_INIT",
                           {"a.c": b"class A\n{\n    FileHandle h = 0;\n};\n"})
@@ -100,6 +140,17 @@ class StaysQuiet(unittest.TestCase):
         """The client/server split declares one class per side. Legitimate."""
         self.assert_clean({"a.c": b"#ifndef SERVER\n" + CLEAN + b"#endif\n"
                                   b"#ifdef SERVER\n" + CLEAN + b"#endif\n"})
+
+    def test_same_class_ifdef_server_else(self):
+        """#ifdef SERVER / #else is exclusive. Fixture:
+        checker-counterexamples.json positive_exclusive_server_client.
+        """
+        self.assert_clean(
+            {"a.c": b"#ifdef SERVER\n"
+                    b"class AuditSame { void F() {} };\n"
+                    b"#else\n"
+                    b"class AuditSame { void F() {} };\n"
+                    b"#endif\n"})
 
     def test_config_cpp_is_not_enforce_script(self):
         """config.cpp repeats nested class names by design (one per entity)."""
