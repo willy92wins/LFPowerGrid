@@ -2947,7 +2947,9 @@ class LFPG_CableRenderer
                     plHead[1] = plHead[1] + LFPG_PLOCC_HEAD_OFFSET_Y;
 
                     vector plFeetScr = g_Game.GetScreenPos(plPos);
+                    tRnd.m_Projections = tRnd.m_Projections + 1;
                     vector plHeadScr = g_Game.GetScreenPos(plHead);
+                    tRnd.m_Projections = tRnd.m_Projections + 1;
 
                     // Both points must be in front of camera
                     if (plFeetScr[2] > LFPG_BEHIND_CAM_Z && plHeadScr[2] > LFPG_BEHIND_CAM_Z)
@@ -3181,7 +3183,9 @@ class LFPG_CableRenderer
                 if (!reuseUltraProjection)
                 {
                     wsi.ultraScreenA = g_Game.GetScreenPos(wsi.cachedPosA);
+                    tRnd.m_Projections = tRnd.m_Projections + 1;
                     wsi.ultraScreenB = g_Game.GetScreenPos(wsi.cachedPosB);
+                    tRnd.m_Projections = tRnd.m_Projections + 1;
                     wsi.ultraCacheCamPos = camPos;
                     wsi.ultraCacheCamDir = camDir;
                     wsi.ultraCacheViewportW = swF;
@@ -3365,6 +3369,7 @@ class LFPG_CableRenderer
                 wsi.cachedScreenPts.Clear();
 
                 vector firstScr = g_Game.GetScreenPos(firstSeg.m_From);
+                tRnd.m_Projections = tRnd.m_Projections + 1;
                 if (firstScr[2] > LFPG_BEHIND_CAM_Z)
                 {
                     float absFX = firstScr[0];
@@ -3404,6 +3409,7 @@ class LFPG_CableRenderer
                     }
 
                     vector segScr = g_Game.GetScreenPos(wp);
+                    tRnd.m_Projections = tRnd.m_Projections + 1;
                     if (segScr[2] > LFPG_BEHIND_CAM_Z)
                     {
                         float absWX = segScr[0];
@@ -3707,6 +3713,7 @@ class LFPG_CableRenderer
                             for (jp = 0; jp < jCount; jp = jp + 1)
                             {
                                 wsi.cachedJointScreenPts.Insert(g_Game.GetScreenPos(wsi.cachedJoints[jp]));
+                                tRnd.m_Projections = tRnd.m_Projections + 1;
                             }
                             wsi.jointCacheCamPos = camPos;
                             wsi.jointCacheCamDir = camDir;

@@ -13,10 +13,15 @@ Checks
   NUL_BYTES        NUL inside a text file: an interrupted or racing write.
   BALANCE          Unbalanced {} () [] after removing strings and comments.
                    Detects truncation, which is silent otherwise.
-  DUP_CLASS        The same class declared twice in the same preprocessor
-                   branch. Declarations in mutually exclusive branches
-                   (#ifndef SERVER vs #ifdef SERVER) are the client/server
-                   split and are legitimate.
+  DUP_CLASS        The same class declared twice under conditions that can
+                   hold at once. Exclusive branches (#ifdef SERVER / #else,
+                   or #ifndef SERVER vs #ifdef SERVER) are the client/server
+                   split and are legitimate. Two #ifdef SERVER blocks, or an
+                   unconditional declaration plus one inside #ifdef SERVER,
+                   are duplicates: both compile when SERVER is defined.
+                   #define and #undef are not modelled, so a nested #ifndef X
+                   inside #ifdef X is still compared and can report a duplicate
+                   that never compiles (dead code; fails closed).
   FILEHANDLE_INIT  FileHandle initialized to a numeric literal; diag rejects it.
   CHAINED_REPLACE  Replace is not chainable in Enforce.
 
@@ -84,28 +89,73 @@ def strip_noncode(raw):
     return code
 
 
-def branch_at_line(code):
-    """Map each line number to the preprocessor branch path active on it.
+def _is_literal(item):
+    """True when item is a (symbol, defined) preprocessor literal."""
+    return isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], bool)
 
-    Two declarations sharing a name but sitting on different paths are mutually
-    exclusive at compile time and are not duplicates.
+
+def _is_literal_path(path):
+    for item in path:
+        if not _is_literal(item):
+            return False
+    return True
+
+
+def conditions_compatible(path_a, path_b):
+    """True when both preprocessor conditions can hold at the same time.
+
+    A symbol that is defined in one path and undefined in the other makes
+    the pair exclusive. #elif and other non-literal markers keep the old
+    exact-path comparison (they are not modelled as SAT literals).
+    """
+    if not _is_literal_path(path_a) or not _is_literal_path(path_b):
+        return path_a == path_b
+    polar_a = {}
+    polar_b = {}
+    for sym, defined in path_a:
+        polar_a.setdefault(sym, set()).add(defined)
+    for sym, defined in path_b:
+        polar_b.setdefault(sym, set()).add(defined)
+    for sym in polar_a:
+        if sym not in polar_b:
+            continue
+        if True in polar_a[sym] and False in polar_b[sym]:
+            return False
+        if False in polar_a[sym] and True in polar_b[sym]:
+            return False
+    return True
+
+
+def branch_at_line(code):
+    """Map each line number to the active preprocessor condition.
+
+    The path is a tuple of literals (symbol, defined). #ifdef X pushes
+    (X, True); #ifndef X pushes (X, False); #else inverts the last literal;
+    #endif pops. No per-block counter: two #ifdef SERVER blocks share the
+    same condition. #elif (and #else after a non-literal) keep the historical
+    unique-suffix mutation so complex branches stay exclusive by identity.
     """
     path = []
     out = {}
-    counter = 0
     for lineno, line in enumerate(code.split("\n"), 1):
         m = PREPROC.match(line)
         if m:
             kind, sym = m.group(1), m.group(2)
-            if kind in ("ifdef", "ifndef"):
-                counter += 1
-                path.append("%s:%s#%d" % (kind, sym, counter))
-            elif kind in ("else", "elif") and path:
-                prev = path[-1]
-                path[-1] = prev + "|" + kind
+            if kind == "ifdef":
+                path.append((sym, True))
+            elif kind == "ifndef":
+                path.append((sym, False))
+            elif kind == "else" and path:
+                last = path[-1]
+                if _is_literal(last):
+                    path[-1] = (last[0], not last[1])
+                else:
+                    path[-1] = str(last) + "|else"
+            elif kind == "elif" and path:
+                path[-1] = str(path[-1]) + "|elif"
             elif kind == "endif" and path:
                 path.pop()
-        out[lineno] = "/".join(path)
+        out[lineno] = tuple(path)
     return out
 
 
@@ -159,8 +209,10 @@ def main():
             branches = branch_at_line(code)
             for m in CLASS_DECL.finditer(code):
                 lineno = code.count("\n", 0, m.start()) + 1
-                key = (m.group(2), bool(m.group(1)), branches.get(lineno, ""))
-                declarations.setdefault(key, []).append("%s:%d" % (rel, lineno))
+                path = branches.get(lineno, ())
+                key = (m.group(2), bool(m.group(1)))
+                site = "%s:%d" % (rel, lineno)
+                declarations.setdefault(key, []).append((path, site))
 
             if FILEHANDLE_NUM_INIT.search(code):
                 rep.fail("FILEHANDLE_INIT", rel,
@@ -168,7 +220,18 @@ def main():
             if CHAINED_REPLACE.search(code):
                 rep.fail("CHAINED_REPLACE", rel, "Replace is not chainable in Enforce")
 
-    for (name, is_modded, _branch), sites in sorted(declarations.items()):
+    for (name, is_modded), entries in sorted(declarations.items()):
+        n = len(entries)
+        used = [False] * n
+        for i in range(n):
+            for j in range(i + 1, n):
+                if conditions_compatible(entries[i][0], entries[j][0]):
+                    used[i] = True
+                    used[j] = True
+        sites = []
+        for k in range(n):
+            if used[k]:
+                sites.append(entries[k][1])
         if len(sites) > 1:
             rep.fail("DUP_CLASS", name, "%sclass declared at: %s"
                      % ("modded " if is_modded else "", ", ".join(sites)))

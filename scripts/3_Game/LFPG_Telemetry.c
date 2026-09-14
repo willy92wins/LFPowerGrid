@@ -100,6 +100,7 @@ class LFPG_Telemetry
     protected static int s_SumRndBudget = 0;
     protected static int s_SumRndSegs = 0;
     protected static int s_SumRndOccRays = 0;
+    protected static int s_SumRndProjections = 0;
     protected static int s_PeakRndSegs = 0;
 
     // ---- Ensure metrics objects exist ----
@@ -148,6 +149,7 @@ class LFPG_Telemetry
         s_SumRndBudget = s_SumRndBudget + rnd.m_WiresBudget;
         s_SumRndSegs = s_SumRndSegs + rnd.m_SegmentsDrawn;
         s_SumRndOccRays = s_SumRndOccRays + rnd.m_OccRaycastsUsed;
+        s_SumRndProjections = s_SumRndProjections + rnd.m_Projections;
 
         if (rnd.m_SegmentsDrawn > s_PeakRndSegs)
         {
@@ -205,6 +207,7 @@ class LFPG_Telemetry
             int avgCulledW = s_SumRndCulled / s_FrameCount;
             int avgOccW = s_SumRndOccluded / s_FrameCount;
             int avgSegs = s_SumRndSegs / s_FrameCount;
+            int avgRndProjections = s_SumRndProjections / s_FrameCount;
             int budgetPct = 0;
             int budgetMax = 512;  // mirrors LFPG_MAX_RENDERED_SEGS
             if (budgetMax > 0)
@@ -221,6 +224,7 @@ class LFPG_Telemetry
             rLog = rLog + " peakSegs=" + s_PeakRndSegs.ToString();
             rLog = rLog + " budgetPct=" + budgetPct.ToString() + "%";
             rLog = rLog + " occRays=" + s_SumRndOccRays.ToString();
+            rLog = rLog + " avgProjections=" + avgRndProjections.ToString();
 			LFPG_Util.Info(rLog);
         }
 
@@ -239,6 +243,7 @@ class LFPG_Telemetry
         s_SumRndBudget = 0;
         s_SumRndSegs = 0;
         s_SumRndOccRays = 0;
+        s_SumRndProjections = 0;
         s_PeakRndSegs = 0;
         s_LastDumpMs = nowMs;
     }
