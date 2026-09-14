@@ -4,6 +4,9 @@
 // LFPG_SolarPanel_Kit:  DeployableContainer_Base (box model + hologram).
 // LFPG_SolarPanel:      SOURCE, 1 OUT (output_1), 20 u/s (T1).
 //                     Sun-driven via centralized NM timer.
+// LFPG_SolarPanel_T2_Kit: same box model, hologram of the T2 panel.
+//                     Only source is dismantling a deployed T2; the
+//                     Hammer upgrade path still consumes a T1 in place.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Persists m_SourceOn via LFPG_OnStoreSaveDevice hook.
@@ -216,10 +219,27 @@ class LFPG_SolarPanel_T2 : LFPG_SolarPanel
         return false;
     }
 
-    // T2 cannot be dismantled (upgraded device)
+    // Dismantles into its own kit, not the T1 one: the MetalPlate and
+    // Nails spent on the upgrade stay inside the kit and are not refunded.
     override string LFPG_GetKitClassname()
     {
-        string empty = "";
-        return empty;
+        string kitClass = "LFPG_SolarPanel_T2_Kit";
+        return kitClass;
+    }
+};
+
+// ---------------------------------------------------------
+// T2 KIT
+// ---------------------------------------------------------
+class LFPG_SolarPanel_T2_Kit : LFPG_KitBaseDeployable
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_SolarPanel_T2";
+    }
+
+    override vector GetDeployOrientationOffset()
+    {
+        return "0 -90 0";
     }
 };

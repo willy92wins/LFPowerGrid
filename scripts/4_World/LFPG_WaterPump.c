@@ -4,6 +4,9 @@
 // LFPG_WaterPump_Kit:  LFPG_KitBaseDeployable (box → hologram).
 // LFPG_WaterPump (T1): PASSTHROUGH, 1 IN + 1 OUT, 50 u/s, cap 100 u/s
 // LFPG_WaterPump_T2:   PASSTHROUGH, 1 IN + 3 OUT, 50 u/s, cap 100 u/s + 50L tank
+// LFPG_WaterPump_T2_Kit: LFPG_KitBaseDeployable, deploys the T2 back.
+//   Screwdriver dismantle of a deployed T2 returns this kit, not the T1 one;
+//   the guard below refuses while the 50L tank still holds water.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
 //   Wire store, wire API, persistence wireJSON, CanConnectTo — all in base.
@@ -432,11 +435,21 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
         AddAction(LFPG_ActionFillPump);
     }
 
-    // T2 cannot be dismantled (upgraded device)
+    // Dismantles into its own kit, not the T1 one: the MetalPlate and
+    // Nails spent on the upgrade stay inside the kit and are not refunded.
     override string LFPG_GetKitClassname()
     {
-        string empty = "";
-        return empty;
+        string kitClass = "LFPG_WaterPump_T2_Kit";
+        return kitClass;
+    }
+
+    // The kit carries no stored water; empty the 50L tank before dismantling.
+    // Same contract as Furnace fuel, Battery charge and ATM stock: the tank
+    // lives in a script field, so the ObjectDelete in the dismantle action
+    // would destroy it with no refund and no warning.
+    override bool LFPG_BlocksDismantle()
+    {
+        return m_TankLevel > 0.0;
     }
 
     // ============================================
@@ -789,5 +802,21 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     override float GetLiquidThroughputCoef()
     {
         return LIQUID_THROUGHPUT_WELL;
+    }
+};
+
+// ---------------------------------------------------------
+// T2 KIT: LFPG_KitBaseDeployable (box → hologram of T2 model)
+// Own kit, so dismantling a T2 never refunds it as a T1.
+// No GetDeployOrientationOffset override: the T1 kit declares
+// none either, and the T1 → T2 upgrade reuses the T1 orientation
+// verbatim (LFPG_ActionUpgradeWaterPump.c), so both pump models
+// share one deploy frame.
+// ---------------------------------------------------------
+class LFPG_WaterPump_T2_Kit : LFPG_KitBaseDeployable
+{
+    override string LFPG_GetSpawnClassname()
+    {
+        return "LFPG_WaterPump_T2";
     }
 };

@@ -142,6 +142,10 @@ class LFPG_KitBaseDeployable : DeployableContainer_Base
             device.SetOrientation(finalOri);
             device.Update();
 
+            // Restore relative health copied onto the kit at dismantle.
+            float kitHealth = GetHealth01("", "Health");
+            device.SetHealth01("", "Health", kitHealth);
+
             string okLog = "[";
             okLog = okLog + GetType();
             okLog = okLog + "] Deployed ";

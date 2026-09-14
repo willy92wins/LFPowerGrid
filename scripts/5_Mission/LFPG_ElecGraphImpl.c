@@ -2062,6 +2062,31 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         node.m_DirtyMask = node.m_DirtyMask | mask;
         node.m_Dirty = true;
 
+        // A node that already ran this epoch is still re-enqueued below, but
+        // the dequeue dedup runs BEFORE the requeue-limit path and consumes
+        // that entry without processing it, so the mark is accepted and then
+        // dropped. That swallows RequestPropagate() whenever it arrives from
+        // inside SyncNodeToEntity - which is how a device asks for the extra
+        // pass its own latch change needs (LFPG_LogicGate.c, gateChanged ->
+        // RequestPropagate).
+        //
+        // The rewind is unconditional, exactly like the two in-loop call
+        // sites that re-dirty a node which already ran this epoch. The
+        // LFPG_MAX_REQUEUE_PER_EPOCH ceiling is deliberately NOT re-checked
+        // here: it is enforced at the dequeue, and that path DEFERS the mark
+        // to the next epoch (m_DeferredRequeue) instead of losing it, which
+        // is what bounds the work. Gating this rewind on the ceiling would
+        // leave m_LastEpoch == m_CurrentEpoch on the over-budget mark and
+        // hand it straight back to the dedup - the swallow this block is
+        // here to remove.
+        if (m_CurrentEpoch > 0 && node.m_LastEpoch == m_CurrentEpoch)
+        {
+            EnsureRequeueEpoch(nodeId, node);
+            node.m_RequeueCount = node.m_RequeueCount + 1;
+            int prevEpochMark = m_CurrentEpoch - 1;
+            node.m_LastEpoch = prevEpochMark;
+        }
+
         if (!node.m_InQueue)
         {
             node.m_InQueue = true;

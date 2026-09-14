@@ -77,6 +77,11 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
     protected bool m_Input1Powered = false;
     protected bool m_GateOpen      = false;
     protected bool m_Overloaded    = false;
+    // One evaluation of slack for the convergence brownout in
+    // LFPG_SetPowered. Not net-synced and not persisted: it is always
+    // false while the gate is open, because opening requires a live
+    // reading and a live reading clears it.
+    protected bool m_BrownoutHeld  = false;
 
     void LFPG_LogicGateBase()
     {
@@ -139,7 +144,46 @@ class LFPG_LogicGateBase : LFPG_WireOwnerBase
 
         bool newGate = LFPG_EvaluateGateLogic(newIn0, newIn1);
         bool gateChanged = false;
-        if (m_GateOpen != newGate)
+
+        // m_GateOpen is a latch, and IsPortReceivingPower answers with THIS
+        // epoch's allocation. AllocateOutput zeroes every outgoing edge of a
+        // distributor whose demand exceeds what it currently holds
+        // (LFPG_ElecGraphImpl.c:3836-4161), so on the epoch right after this
+        // gate opens - when its demand signal jumps from the closed-gate
+        // probe (LFPG_GATE_PROBE_DEMAND, 1.0) to what the load downstream
+        // really asks for - both input ports read dark while the upstream
+        // ramps. Re-latching on that reading closes the gate, the raised
+        // demand collapses back to the probe, the ramp restarts, and the
+        // gate never converges. Measured in-game as in0=1 in1=1 output=0
+        // powered=0 held for 24.6 s (B5, gs02-ev/B5-20260912/issue1).
+        //
+        // A single total brownout carries no truth-table information, so the
+        // latch keeps its value for exactly one evaluation. The SECOND
+        // consecutive dark reading is believed: a real all-off keeps
+        // arriving, a ramp does not, and one evaluation is all the ramp
+        // needs. The per-input flags below still follow the flow, so the
+        // client LEDs are not held.
+        bool totalBrownout = false;
+        if (!newIn0 && !newIn1)
+        {
+            totalBrownout = true;
+        }
+
+        bool holdLatch = false;
+        if (totalBrownout)
+        {
+            if (!m_BrownoutHeld)
+            {
+                m_BrownoutHeld = true;
+                holdLatch = true;
+            }
+        }
+        else
+        {
+            m_BrownoutHeld = false;
+        }
+
+        if (!holdLatch && m_GateOpen != newGate)
         {
             m_GateOpen = newGate;
             gateChanged = true;

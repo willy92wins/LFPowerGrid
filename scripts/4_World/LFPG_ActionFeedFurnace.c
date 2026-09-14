@@ -267,6 +267,8 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
             return true;
         if (typeName == "LFPG_SolarPanel_Kit")
             return true;
+        if (typeName == "LFPG_SolarPanel_T2_Kit")
+            return true;
         if (typeName == "LFPG_Combiner_Kit")
             return true;
         if (typeName == "LFPG_Camera_Kit")
@@ -274,6 +276,8 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
         if (typeName == "LFPG_Monitor_Kit")
             return true;
         if (typeName == "LFPG_WaterPump_Kit")
+            return true;
+        if (typeName == "LFPG_WaterPump_T2_Kit")
             return true;
         if (typeName == "LFPG_Furnace_Kit")
             return true;

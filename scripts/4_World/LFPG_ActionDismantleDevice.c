@@ -22,8 +22,6 @@
 //      wire cutting, graph cleanup, NM unregister, registry removal
 //
 // Excluded devices (LFPG_GetKitClassname returns ""):
-//   - LFPG_SolarPanel_T2    (upgraded, non-reversible)
-//   - LFPG_WaterPump_T2     (upgraded, non-reversible)
 //   - LFPG_BatteryAdapter   (can be picked up directly)
 //
 // Devices not extending LFPG_DeviceBase are excluded by Cast:

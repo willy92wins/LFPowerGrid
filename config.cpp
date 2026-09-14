@@ -184,7 +184,7 @@ class CfgPatches
 {
     class LFPowerGrid
     {
-        units[] = { "LFPG_CableReel", "LFPG_Generator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_WallLamp_Kit", "LFPG_WallLamp", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin", "LFPG_RemoteController", "LFPG_Speaker_Kit", "LFPG_Speaker", "LFPG_GhostPASReceiver"};
+        units[] = { "LFPG_CableReel", "LFPG_Generator", "LF_TestLamp", "LF_TestLampHeavy", "LFPG_Splitter_Kit", "LFPG_Splitter", "LFPG_CeilingLight_Kit", "LFPG_CeilingLight", "LFPG_WallLamp_Kit", "LFPG_WallLamp", "LFPG_SolarPanel_Kit", "LFPG_SolarPanel", "LFPG_SolarPanel_T2", "LFPG_SolarPanel_T2_Kit", "LFPG_Combiner_Kit", "LFPG_Combiner", "LFPG_Camera_Kit", "LFPG_Camera", "LFPG_Monitor_Kit", "LFPG_Monitor", "LFPG_PushButton_Kit", "LFPG_PushButton", "LFPG_SwitchV2_Kit", "LFPG_SwitchV2", "LFPG_WaterPump_Kit", "LFPG_WaterPump", "LFPG_WaterPump_T2", "LFPG_WaterPump_T2_Kit", "LFPG_Furnace_Kit", "LFPG_Furnace", "LFPG_Sorter_Kit", "LFPG_Sorter", "LFPG_Searchlight_Kit", "LFPG_Searchlight", "LFPG_MotionSensor_Kit", "LFPG_MotionSensor", "LFPG_AND_Gate_Kit", "LFPG_AND_Gate", "LFPG_OR_Gate_Kit", "LFPG_OR_Gate", "LFPG_XOR_Gate_Kit", "LFPG_XOR_Gate", "LFPG_MemoryCell_Kit", "LFPG_MemoryCell", "LFPG_PressurePad_Kit", "LFPG_PressurePad", "LFPG_LaserDetector_Kit", "LFPG_LaserDetector", "LFPG_ElectronicCounter_Kit", "LFPG_ElectronicCounter", "LFPG_BatteryMedium_Kit", "LFPG_BatteryMedium", "LFPG_BatteryLarge_Kit", "LFPG_BatteryLarge", "LFPG_DoorController_Kit", "LFPG_DoorController", "LFPG_Intercom_Kit", "LFPG_Intercom", "LFPG_GhostRadio", "LFPG_SwitchRemote_Kit", "LFPG_SwitchRemote", "LFPG_SwitchV2Remote_Kit", "LFPG_SwitchV2Remote", "LFPG_Fridge_Kit", "LFPG_Fridge", "LFPG_Sprinkler_Kit", "LFPG_Sprinkler", "LFPG_BatteryAdapter_Kit", "LFPG_BatteryAdapter", "LFPG_ElectricStove_Kit", "LFPG_ElectricStove", "LFPG_BTCAtm_Kit", "LFPG_BTCAtm", "LFPG_BTCAtmAdmin_Kit", "LFPG_BTCAtmAdmin", "LFPG_RemoteController", "LFPG_Speaker_Kit", "LFPG_Speaker", "LFPG_GhostPASReceiver"};
         weapons[] = {};
         requiredVersion = 0.1;
         requiredAddons[] = { "DZ_Data", "DZ_Scripts", "DZ_Gear_Tools", "DZ_Gear_Camping", "DZ_Gear_Containers", "DZ_Gear_Consumables", "DZ_Radio", "DZ_Gear_Cooking", "DF_Scripts"};
@@ -434,6 +434,24 @@ class CfgVehicles
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
+    };
+
+    // ---- Solar Panel T2 Kit (screwdriver dismantle of a deployed T2) ----
+    class LFPG_SolarPanel_T2_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SOLAR_T2_KIT";
+        descriptionShort = "$STR_LFPG_SOLAR_T2_KIT_DESC";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        weight = 2000;
+        itemSize[] = {5, 3};
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
+        carveNavmesh = 1;
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // =========================================================
@@ -993,6 +1011,24 @@ class CfgVehicles
                 icon = "missing";
             };
         };
+    };
+
+    // ---- Water Pump T2 Kit (screwdriver dismantle of a deployed T2) ----
+    class LFPG_WaterPump_T2_Kit : Inventory_Base
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_PUMP_T2_KIT";
+        descriptionShort = "$STR_LFPG_PUMP_T2_KIT_DESC";
+        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
+        weight = 5000;
+        itemSize[] = {5, 3};
+        rotationFlags = 2;
+        itemBehaviour = 2;
+        canBeDigged = 0;
+        carveNavmesh = 1;
+        physLayer = "item_small";
+        SingleUseActions[] = {527};
+        ContinuousActions[] = {231};
     };
 
     // =========================================================

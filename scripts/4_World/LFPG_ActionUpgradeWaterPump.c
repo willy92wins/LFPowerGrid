@@ -242,7 +242,13 @@ class LFPG_ActionUpgradeWaterPump : ActionContinuousBase
         g_Game.ObjectDelete(plate);
         g_Game.ObjectDelete(nails);
         LFPG_DeviceLifecycle.OnDeviceKilled(pump, deviceId);
-        g_Game.ObjectDelete(pump);
+        // DeleteSafe, not the raw ObjectDelete native: it is the only removal path
+        // that raises m_PendingDelete, so IsSetForDeletion reports T1 as gone to
+        // every consumer from this statement on (entityai.c:774, :807, :812), and it
+        // hands the destruction to the system call queue instead of running it while
+        // T1 is still the target of the action callback on the stack (object.c:82).
+        // Same contract vanilla uses to swap one entity for another (entityai.c:1104).
+        pump.DeleteSafe();
     
         // The exclusive flag intentionally remains set until EEDelete completes.
         LFPG_Util.Info("[UpgradePump] T2 created at " + spawnPos.ToString() + " ori=" + ori.ToString() + " (T1 was " + pos.ToString() + ")");
