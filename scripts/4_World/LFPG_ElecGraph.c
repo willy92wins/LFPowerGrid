@@ -30,7 +30,8 @@
 // PASSTHROUGH demand signal = downstreamDemand + selfConsumption,
 // always written to m_LastStableOutput regardless of power state.
 // Demand is a topology property, not a power-flow property.
-// Cold-start fallback: m_MaxOutput when m_LastStableOutput=0.
+// Cold-start fallback: capacity estimate only while PASSTHROUGH demand
+// is unknown (m_DemandKnown == false). A published zero stays zero.
 //
 // === SAFETY NETS ===
 // - Component Watchdog: per-subnet node limit (v0.7.31)
