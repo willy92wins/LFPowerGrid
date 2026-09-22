@@ -30,7 +30,8 @@
 // PASSTHROUGH demand signal = downstreamDemand + selfConsumption,
 // always written to m_LastStableOutput regardless of power state.
 // Demand is a topology property, not a power-flow property.
-// Cold-start fallback: m_MaxOutput when m_LastStableOutput=0.
+// Cold-start fallback: capacity estimate only while PASSTHROUGH demand
+// is unknown (m_DemandKnown == false). A published zero stays zero.
 //
 // === SAFETY NETS ===
 // - Component Watchdog: per-subnet node limit (v0.7.31)
@@ -2327,6 +2328,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             // --- Step 2: Compute output based on device type ---
             float newOutput = 0.0;
             bool newPowered = false;
+            // F1: set when this pass is the first published PASSTHROUGH demand.
+            bool demandBecameKnown = false;
 
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
@@ -2674,6 +2677,16 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                             }
                         }
                     }
+
+                    // F1: publish is known only after hard/soft, virtual
+                    // generation, and gate policy. Step 2a supply is not a
+                    // publish. Zero is valid. The flag stays set if power
+                    // drops; a new or rebuilt node starts unknown.
+                    if (!node.m_DemandKnown)
+                    {
+                        node.m_DemandKnown = true;
+                        demandBecameKnown = true;
+                    }
                 }
             }
 
@@ -2736,7 +2749,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             // v2.2: inputChanged — PASSTHROUGH input changed but demand signal
             // (output) is stable. Triggers upstream re-evaluation for multi-source
             // convergence (Fix Bug #1).
-            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream || m_AllocChanged || inputChanged)
+            // F1: demandBecameKnown — first publish, including 0 -> 0, so
+            // upstream drops a cold-start estimate instead of keeping it.
+            if (outputDelta > LFPG_PROPAGATION_EPSILON || forceDownstream || m_AllocChanged || inputChanged || demandBecameKnown)
             {
                 node.m_OutputPower = newOutput;
                 node.m_LastStableOutput = newOutput;
@@ -3902,7 +3917,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 else if (targetNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
                 {
                     edgeDemand = targetNode.m_LastStableOutput;
-                    if (edgeDemand < LFPG_PROPAGATION_EPSILON)
+                    // F1: a published zero is real demand. Capacity and
+                    // closed-gate probe estimates stay reserved for unknown.
+                    if (edgeDemand < LFPG_PROPAGATION_EPSILON && !targetNode.m_DemandKnown)
                     {
                         // Cold-start fallback: bootstrap demand estimate.
                         // Only use m_MaxOutput if the passthrough has downstream

@@ -226,6 +226,13 @@ class LFPG_ElecNode
     // for bootstrap. Default false (non-gated devices ignore this).
     bool   m_GateClosed;
 
+    // F1: PASSTHROUGH published-demand validity. False = unknown, so
+    // AllocateOutput may estimate from capacity (or the closed-gate
+    // probe). True = demand was calculated after hard/soft publish;
+    // zero is a valid result. Runtime only: not persisted, not synced.
+    // New nodes and rebuilds start false. Power loss does not clear it.
+    bool   m_DemandKnown;
+
     // --- v2.0: Battery (PASSTHROUGH + energy storage) ---
     // Set by NetworkManager battery timer (~5s). Graph reads only.
     // Default 0.0 = zero regression for all non-battery devices.
@@ -270,6 +277,7 @@ class LFPG_ElecNode
         m_LastSyncedLoadRatio = -1.0;
         m_IsGated = false;
         m_GateClosed = false;
+        m_DemandKnown = false;
         m_VirtualGeneration = 0.0;
         m_SoftDemand = 0.0;
         m_SoftDemandRatio = 0.0;
