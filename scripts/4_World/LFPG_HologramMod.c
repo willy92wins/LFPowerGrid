@@ -249,10 +249,7 @@ modded class Hologram
             LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
             if (deployKit)
             {
-                vector baseOri = super.GetDefaultOrientation();
-                vector oriOff = deployKit.GetDeployOrientationOffset();
-                vector oriResult = baseOri + oriOff;
-                return oriResult;
+                return super.GetDefaultOrientation() + deployKit.GetDeployOrientationOffset();
             }
         }
 
@@ -544,8 +541,7 @@ modded class Hologram
         if (!hit)
         {
             // No surface hit - project to max range and ground-snap
-            vector noHitPoint = camPos + (camDir * LFPG_HOLO_MAX_RANGE);
-            vector noHitGroundPos = LFPG_GroundSnap(noHitPoint, LFPG_HOLO_SURFACE_MISS);
+            vector noHitGroundPos = LFPG_GroundSnap(rayEnd, LFPG_HOLO_SURFACE_MISS);
             vector noHitOri = LFPG_CalcFloorOrientation();
 
             LFPG_ApplySmoothed(noHitGroundPos, noHitOri, timeslice, projection);
@@ -805,8 +801,7 @@ modded class Hologram
         bool cacheFresh = (nowMs - m_LFPG_GroundCacheTimeMs <= LFPG_HOLO_GROUND_CACHE_TTL_MS);
         if (m_LFPG_GroundCacheValid && cacheFresh && surfaceClass == m_LFPG_GroundCacheSurfaceClass && cacheMoveSq <= LFPG_HOLO_GROUND_CACHE_MOVE_SQ)
         {
-            vector cachedPose = Vector(pos[0], m_LFPG_GroundCacheResult[1], pos[2]);
-            return cachedPose;
+            return Vector(pos[0], m_LFPG_GroundCacheResult[1], pos[2]);
         }
 
         vector rayFrom = Vector(pos[0], pos[1] + LFPG_HOLO_GROUND_RAY_UP, pos[2]);
@@ -862,9 +857,7 @@ modded class Hologram
         LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
         if (deployKit)
         {
-            vector depOff = deployKit.GetDeployPositionOffset();
-            vector depOut = pos + depOff;
-            return depOut;
+            return pos + deployKit.GetDeployPositionOffset();
         }
 
         return pos;
@@ -949,8 +942,7 @@ modded class Hologram
         // Force green hologram: since we skip super.UpdateHologram(),
         // vanilla never calls EvaluateCollision(), leaving color stale.
         // SetIsColliding(false) forces the green (valid) material.
-        bool bNoCollide = false;
-        SetIsColliding(bNoCollide);
+        SetIsColliding(false);
 
         // FIX: Vanilla calls these every frame in UpdateHologram.
         // Without RefreshTrigger, the ProjectionTrigger stays at its
@@ -985,8 +977,7 @@ modded class Hologram
     {
         if (LFPG_IsLFPGKitProjection())
         {
-            bool bNoCollide = false;
-            SetIsColliding(bNoCollide);
+            SetIsColliding(false);
             return;
         }
         super.EvaluateCollision(action_item);
