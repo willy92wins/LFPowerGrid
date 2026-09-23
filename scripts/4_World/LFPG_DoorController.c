@@ -97,8 +97,6 @@ class LFPG_DoorController : LFPG_DeviceBase
     protected int m_NextSearchMs = 0;
     protected int m_SearchBackoffMs = LFPG_DC_BACKOFF_MIN_MS;
     protected int m_LastSearchAttemptMs = 0;
-    protected int m_SearchWakeMs = 0;
-    protected int m_SearchAttempts = 0;
 
     void LFPG_DoorController()
     {
@@ -208,7 +206,6 @@ class LFPG_DoorController : LFPG_DeviceBase
             m_SearchObjects = new array<Object>;
         if (!m_SearchNearbyPlayers)
             m_SearchNearbyPlayers = new array<Man>;
-        m_SearchWakeMs = g_Game.GetTime();
 
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm) nm.RegisterDoorController(this);
@@ -479,7 +476,6 @@ class LFPG_DoorController : LFPG_DeviceBase
 
             m_SearchBackoffMs = LFPG_DC_BACKOFF_MIN_MS;
             m_NextSearchMs = 0;
-            m_SearchWakeMs = g_Game.GetTime();
             m_SearchObjects.Clear();
             g_Game.GetObjectsAtPosition(GetPosition(), LFPG_DC_SEARCH_RADIUS, m_SearchObjects, null);
             m_SearchCursor = 0;
@@ -507,7 +503,6 @@ class LFPG_DoorController : LFPG_DeviceBase
 
         m_SearchBackoffMs = LFPG_DC_BACKOFF_MIN_MS;
         m_NextSearchMs = 0;
-        m_SearchWakeMs = g_Game.GetTime();
         m_SearchObjects.Clear();
         g_Game.GetObjectsAtPosition(GetPosition(), LFPG_DC_SEARCH_RADIUS, m_SearchObjects, null);
         m_SearchCursor = 0;
@@ -654,7 +649,6 @@ class LFPG_DoorController : LFPG_DeviceBase
         }
 
         m_SearchInProgress = false;
-        m_SearchAttempts = m_SearchAttempts + 1;
         nowMs = g_Game.GetTime();
         m_LastSearchAttemptMs = nowMs;
         if (m_SearchBestDoor)
@@ -676,37 +670,11 @@ class LFPG_DoorController : LFPG_DeviceBase
             pairMsg = pairMsg + m_DeviceId;
             LFPG_Util.Info(pairMsg);
 
-            #ifndef SERVER
-            if (LFPG_PERFDIAG_ENABLED)
-            {
-                int pairLatencyMs = nowMs - m_SearchWakeMs;
-                string pairDiag = "LFPG_PERFDIAG door_pair pair_ms=";
-                pairDiag = pairDiag + pairLatencyMs.ToString();
-                pairDiag = pairDiag + " attempts=";
-                pairDiag = pairDiag + m_SearchAttempts.ToString();
-                pairDiag = pairDiag + " objects=";
-                pairDiag = pairDiag + count.ToString();
-                Print(pairDiag);
-            }
-            #endif
-
             LFPG_ApplyDoorState();
         }
         else
         {
             m_NextSearchMs = nowMs + m_SearchBackoffMs;
-            #ifndef SERVER
-            if (LFPG_PERFDIAG_ENABLED)
-            {
-                string retryDiag = "LFPG_PERFDIAG door_pair miss attempts=";
-                retryDiag = retryDiag + m_SearchAttempts.ToString();
-                retryDiag = retryDiag + " backoff_ms=";
-                retryDiag = retryDiag + m_SearchBackoffMs.ToString();
-                retryDiag = retryDiag + " objects=";
-                retryDiag = retryDiag + count.ToString();
-                Print(retryDiag);
-            }
-            #endif
             m_SearchBackoffMs = m_SearchBackoffMs * 2;
             if (m_SearchBackoffMs > LFPG_DC_BACKOFF_MAX_MS)
                 m_SearchBackoffMs = LFPG_DC_BACKOFF_MAX_MS;
@@ -760,16 +728,13 @@ class LFPG_DoorController : LFPG_DeviceBase
         if (m_DoorType == LFPG_DOORTYPE_FENCE)
         {
             Fence f = Fence.Cast(m_PairedDoor);
-            if (f)
+            if (f && !f.IsOpened())
             {
-                if (!f.IsOpened())
-                {
-                    f.OpenFence();
+                f.OpenFence();
 
-                    string openFenceMsg = "[LFPG_DoorController] Opened fence. id=";
-                    openFenceMsg = openFenceMsg + m_DeviceId;
-                    LFPG_Util.Debug(openFenceMsg);
-                }
+                string openFenceMsg = "[LFPG_DoorController] Opened fence. id=";
+                openFenceMsg = openFenceMsg + m_DeviceId;
+                LFPG_Util.Debug(openFenceMsg);
             }
             return;
         }
@@ -814,16 +779,13 @@ class LFPG_DoorController : LFPG_DeviceBase
         if (m_DoorType == LFPG_DOORTYPE_FENCE)
         {
             Fence f = Fence.Cast(m_PairedDoor);
-            if (f)
+            if (f && f.IsOpened())
             {
-                if (f.IsOpened())
-                {
-                    f.CloseFence();
+                f.CloseFence();
 
-                    string closeFenceMsg = "[LFPG_DoorController] Closed fence. id=";
-                    closeFenceMsg = closeFenceMsg + m_DeviceId;
-                    LFPG_Util.Debug(closeFenceMsg);
-                }
+                string closeFenceMsg = "[LFPG_DoorController] Closed fence. id=";
+                closeFenceMsg = closeFenceMsg + m_DeviceId;
+                LFPG_Util.Debug(closeFenceMsg);
             }
             return;
         }
