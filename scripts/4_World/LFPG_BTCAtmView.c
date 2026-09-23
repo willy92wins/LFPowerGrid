@@ -242,28 +242,17 @@ class LFPG_BTCAtmView extends ScriptView
         if (!root)
             return;
 
-        string wn = "";
-
-        wn = "BTCAtmPanel";
-        if (!BTCAtmPanel) { BTCAtmPanel = root.FindAnyWidget(wn); }
-        wn = "HeaderFrame";
-        if (!HeaderFrame) { HeaderFrame = root.FindAnyWidget(wn); }
-        wn = "PanelBg";
-        if (!PanelBg) { PanelBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "HeaderBg";
-        if (!HeaderBg) { HeaderBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "AccentLine";
-        if (!AccentLine) { AccentLine = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "HeaderIcon";
-        if (!HeaderIcon) { HeaderIcon = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "HeaderTitle";
-        if (!HeaderTitle) { HeaderTitle = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "DragHandle";
-        if (!DragHandle) { DragHandle = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!BTCAtmPanel) { BTCAtmPanel = root.FindAnyWidget("BTCAtmPanel"); }
+        if (!HeaderFrame) { HeaderFrame = root.FindAnyWidget("HeaderFrame"); }
+        if (!PanelBg) { PanelBg = ImageWidget.Cast(root.FindAnyWidget("PanelBg")); }
+        if (!HeaderBg) { HeaderBg = ImageWidget.Cast(root.FindAnyWidget("HeaderBg")); }
+        if (!AccentLine) { AccentLine = ImageWidget.Cast(root.FindAnyWidget("AccentLine")); }
+        if (!HeaderIcon) { HeaderIcon = TextWidget.Cast(root.FindAnyWidget("HeaderIcon")); }
+        if (!HeaderTitle) { HeaderTitle = TextWidget.Cast(root.FindAnyWidget("HeaderTitle")); }
+        if (!DragHandle) { DragHandle = TextWidget.Cast(root.FindAnyWidget("DragHandle")); }
 
         // CloseX — child-walk (ButtonWidget child issue)
-        wn = "BtnCloseX";
-        Widget closeXBtn = root.FindAnyWidget(wn);
+        Widget closeXBtn = root.FindAnyWidget("BtnCloseX");
         if (closeXBtn)
         {
             Widget closeXChild = closeXBtn.GetChildren();
@@ -282,102 +271,62 @@ class LFPG_BTCAtmView extends ScriptView
         }
 
         // Info cards
-        wn = "CardPriceBg";
-        if (!CardPriceBg) { CardPriceBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardPriceLabel";
-        if (!CardPriceLabel) { CardPriceLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PriceText";
-        if (!PriceText) { PriceText = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "PriceChangeText";
-        if (!PriceChangeText) { PriceChangeText = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardStockBg";
-        if (!CardStockBg) { CardStockBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardStockLabel";
-        if (!CardStockLabel) { CardStockLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "StockText";
-        if (!StockText) { StockText = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardBalanceBg";
-        if (!CardBalanceBg) { CardBalanceBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardBalanceLabel";
-        if (!CardBalanceLabel) { CardBalanceLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "BalanceText";
-        if (!BalanceText) { BalanceText = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardCashBg";
-        if (!CardCashBg) { CardCashBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CardCashLabel";
-        if (!CardCashLabel) { CardCashLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CashEurText";
-        if (!CashEurText) { CashEurText = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "CashBtcText";
-        if (!CashBtcText) { CashBtcText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!CardPriceBg) { CardPriceBg = ImageWidget.Cast(root.FindAnyWidget("CardPriceBg")); }
+        if (!CardPriceLabel) { CardPriceLabel = TextWidget.Cast(root.FindAnyWidget("CardPriceLabel")); }
+        if (!PriceText) { PriceText = TextWidget.Cast(root.FindAnyWidget("PriceText")); }
+        if (!PriceChangeText) { PriceChangeText = TextWidget.Cast(root.FindAnyWidget("PriceChangeText")); }
+        if (!CardStockBg) { CardStockBg = ImageWidget.Cast(root.FindAnyWidget("CardStockBg")); }
+        if (!CardStockLabel) { CardStockLabel = TextWidget.Cast(root.FindAnyWidget("CardStockLabel")); }
+        if (!StockText) { StockText = TextWidget.Cast(root.FindAnyWidget("StockText")); }
+        if (!CardBalanceBg) { CardBalanceBg = ImageWidget.Cast(root.FindAnyWidget("CardBalanceBg")); }
+        if (!CardBalanceLabel) { CardBalanceLabel = TextWidget.Cast(root.FindAnyWidget("CardBalanceLabel")); }
+        if (!BalanceText) { BalanceText = TextWidget.Cast(root.FindAnyWidget("BalanceText")); }
+        if (!CardCashBg) { CardCashBg = ImageWidget.Cast(root.FindAnyWidget("CardCashBg")); }
+        if (!CardCashLabel) { CardCashLabel = TextWidget.Cast(root.FindAnyWidget("CardCashLabel")); }
+        if (!CashEurText) { CashEurText = TextWidget.Cast(root.FindAnyWidget("CashEurText")); }
+        if (!CashBtcText) { CashBtcText = TextWidget.Cast(root.FindAnyWidget("CashBtcText")); }
 
         // Amount section
-        wn = "AmountBg";
-        if (!AmountBg) { AmountBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "AmountLabel";
-        if (!AmountLabel) { AmountLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "BtcLabel";
-        if (!BtcLabel) { BtcLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditBtcBorder";
-        if (!EditBtcBorder) { EditBtcBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditBtcBg";
-        if (!EditBtcBg) { EditBtcBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditBtcAmount";
-        if (!EditBtcAmount) { EditBtcAmount = EditBoxWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "ArrowLabel";
-        if (!ArrowLabel) { ArrowLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EurLabel";
-        if (!EurLabel) { EurLabel = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditEurBorder";
-        if (!EditEurBorder) { EditEurBorder = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditEurBg";
-        if (!EditEurBg) { EditEurBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "EditEurAmount";
-        if (!EditEurAmount) { EditEurAmount = EditBoxWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!AmountBg) { AmountBg = ImageWidget.Cast(root.FindAnyWidget("AmountBg")); }
+        if (!AmountLabel) { AmountLabel = TextWidget.Cast(root.FindAnyWidget("AmountLabel")); }
+        if (!BtcLabel) { BtcLabel = TextWidget.Cast(root.FindAnyWidget("BtcLabel")); }
+        if (!EditBtcBorder) { EditBtcBorder = ImageWidget.Cast(root.FindAnyWidget("EditBtcBorder")); }
+        if (!EditBtcBg) { EditBtcBg = ImageWidget.Cast(root.FindAnyWidget("EditBtcBg")); }
+        if (!EditBtcAmount) { EditBtcAmount = EditBoxWidget.Cast(root.FindAnyWidget("EditBtcAmount")); }
+        if (!ArrowLabel) { ArrowLabel = TextWidget.Cast(root.FindAnyWidget("ArrowLabel")); }
+        if (!EurLabel) { EurLabel = TextWidget.Cast(root.FindAnyWidget("EurLabel")); }
+        if (!EditEurBorder) { EditEurBorder = ImageWidget.Cast(root.FindAnyWidget("EditEurBorder")); }
+        if (!EditEurBg) { EditEurBg = ImageWidget.Cast(root.FindAnyWidget("EditEurBg")); }
+        if (!EditEurAmount) { EditEurAmount = EditBoxWidget.Cast(root.FindAnyWidget("EditEurAmount")); }
 
         // Separator
-        wn = "SepBuySell";
-        if (!SepBuySell) { SepBuySell = ImageWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!SepBuySell) { SepBuySell = ImageWidget.Cast(root.FindAnyWidget("SepBuySell")); }
 
         // Tabs — child-walk (ButtonWidget children)
-        string tabCashName = "TabCash";
-        BindTabChildren(root, tabCashName);
-        string tabAccName = "TabAccount";
-        BindTabChildren(root, tabAccName);
+        BindTabChildren(root, "TabCash");
+        BindTabChildren(root, "TabAccount");
 
         // Row 1: Buy/Sell BTC — child-walk
-        string btnBuyName = "BtnBuyBtc";
-        BindButtonChildren3(root, btnBuyName);
-        string btnSellName = "BtnSellBtc";
-        BindButtonChildren3(root, btnSellName);
+        BindButtonChildren3(root, "BtnBuyBtc");
+        BindButtonChildren3(root, "BtnSellBtc");
 
         // Row 2: Withdraw/Deposit EUR — child-walk
-        string btnWdEurName = "BtnWithdrawEur";
-        BindButtonChildren3(root, btnWdEurName);
-        string btnDepEurName = "BtnDepositEur";
-        BindButtonChildren3(root, btnDepEurName);
+        BindButtonChildren3(root, "BtnWithdrawEur");
+        BindButtonChildren3(root, "BtnDepositEur");
 
         // Row 3: Withdraw/Deposit BTC — child-walk
-        string btnWdBtcName = "BtnWithdrawBtc";
-        BindButtonChildren3(root, btnWdBtcName);
-        string btnDepBtcName = "BtnDepositBtc";
-        BindButtonChildren3(root, btnDepBtcName);
+        BindButtonChildren3(root, "BtnWithdrawBtc");
+        BindButtonChildren3(root, "BtnDepositBtc");
 
         // Status
-        wn = "StatusBg";
-        if (!StatusBg) { StatusBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "StatusText";
-        if (!StatusText) { StatusText = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!StatusBg) { StatusBg = ImageWidget.Cast(root.FindAnyWidget("StatusBg")); }
+        if (!StatusText) { StatusText = TextWidget.Cast(root.FindAnyWidget("StatusText")); }
 
         // Footer
-        wn = "FooterSep";
-        if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterBg";
-        if (!FooterBg) { FooterBg = ImageWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterEscHint";
-        if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget(wn)); }
-        wn = "FooterBrand";
-        if (!FooterBrand) { FooterBrand = TextWidget.Cast(root.FindAnyWidget(wn)); }
+        if (!FooterSep) { FooterSep = ImageWidget.Cast(root.FindAnyWidget("FooterSep")); }
+        if (!FooterBg) { FooterBg = ImageWidget.Cast(root.FindAnyWidget("FooterBg")); }
+        if (!FooterEscHint) { FooterEscHint = TextWidget.Cast(root.FindAnyWidget("FooterEscHint")); }
+        if (!FooterBrand) { FooterBrand = TextWidget.Cast(root.FindAnyWidget("FooterBrand")); }
     }
 
     // ── Tab child-walk helper (Bg + Text) ──
@@ -398,14 +347,12 @@ class LFPG_BTCAtmView extends ScriptView
             child = child.GetSibling();
         }
 
-        string cashName = "TabCash";
-        string accName = "TabAccount";
-        if (tabName == cashName)
+        if (tabName == "TabCash")
         {
             TabCashBg = foundBg;
             TabCashText = foundTxt;
         }
-        if (tabName == accName)
+        if (tabName == "TabAccount")
         {
             TabAccountBg = foundBg;
             TabAccountText = foundTxt;
@@ -444,43 +391,37 @@ class LFPG_BTCAtmView extends ScriptView
         }
 
         // Assign to the correct field by name
-        string n1 = "BtnBuyBtc";
-        string n2 = "BtnSellBtc";
-        string n3 = "BtnWithdrawEur";
-        string n4 = "BtnDepositEur";
-        string n5 = "BtnWithdrawBtc";
-        string n6 = "BtnDepositBtc";
-        if (btnName == n1)
+        if (btnName == "BtnBuyBtc")
         {
             BtnBuyBtcBg = foundBg;
             BtnBuyBtcText = foundTxt;
             BtnBuyBtcHint = foundHint;
         }
-        if (btnName == n2)
+        if (btnName == "BtnSellBtc")
         {
             BtnSellBtcBg = foundBg;
             BtnSellBtcText = foundTxt;
             BtnSellBtcHint = foundHint;
         }
-        if (btnName == n3)
+        if (btnName == "BtnWithdrawEur")
         {
             BtnWithdrawEurBg = foundBg;
             BtnWithdrawEurText = foundTxt;
             BtnWithdrawEurHint = foundHint;
         }
-        if (btnName == n4)
+        if (btnName == "BtnDepositEur")
         {
             BtnDepositEurBg = foundBg;
             BtnDepositEurText = foundTxt;
             BtnDepositEurHint = foundHint;
         }
-        if (btnName == n5)
+        if (btnName == "BtnWithdrawBtc")
         {
             BtnWithdrawBtcBg = foundBg;
             BtnWithdrawBtcText = foundTxt;
             BtnWithdrawBtcHint = foundHint;
         }
-        if (btnName == n6)
+        if (btnName == "BtnDepositBtc")
         {
             BtnDepositBtcBg = foundBg;
             BtnDepositBtcText = foundTxt;
@@ -498,43 +439,33 @@ class LFPG_BTCAtmView extends ScriptView
         Widget root = GetLayoutRoot();
         if (!root)
             return;
-        string wn = "";
         Widget btn = null;
 
-        wn = "TabCash";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("TabCash");
         if (btn) { btn.SetUserID(UID_TAB_CASH); }
 
-        wn = "TabAccount";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("TabAccount");
         if (btn) { btn.SetUserID(UID_TAB_ACCOUNT); }
 
-        wn = "BtnBuyBtc";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnBuyBtc");
         if (btn) { btn.SetUserID(UID_BUY_BTC); }
 
-        wn = "BtnSellBtc";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnSellBtc");
         if (btn) { btn.SetUserID(UID_SELL_BTC); }
 
-        wn = "BtnWithdrawEur";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnWithdrawEur");
         if (btn) { btn.SetUserID(UID_WITHDRAW_EUR); }
 
-        wn = "BtnDepositEur";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnDepositEur");
         if (btn) { btn.SetUserID(UID_DEPOSIT_EUR); }
 
-        wn = "BtnWithdrawBtc";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnWithdrawBtc");
         if (btn) { btn.SetUserID(UID_WITHDRAW_BTC); }
 
-        wn = "BtnDepositBtc";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnDepositBtc");
         if (btn) { btn.SetUserID(UID_DEPOSIT_BTC); }
 
-        wn = "BtnCloseX";
-        btn = root.FindAnyWidget(wn);
+        btn = root.FindAnyWidget("BtnCloseX");
         if (btn) { btn.SetUserID(UID_CLOSE_X); }
 
         m_ButtonIDsAssigned = true;
@@ -1143,13 +1074,7 @@ class LFPG_BTCAtmView extends ScriptView
 
     static void OnPriceUnavailable()
     {
-        if (!s_Instance)
-            return;
-        if (!s_Instance.m_IsOpen)
-            return;
-        LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(s_Instance.GetController());
-        if (ctrl)
-            ctrl.RefreshFromClientData();
+        OnTxResult();
     }
 
     // =========================================================
@@ -1162,8 +1087,7 @@ class LFPG_BTCAtmView extends ScriptView
         Widget root = GetLayoutRoot();
         if (!root)
         {
-            string errMsg = "[BTCAtmView] No layout root";
-            LFPG_Util.Error(errMsg);
+            LFPG_Util.Error("[BTCAtmView] No layout root");
             return;
         }
         m_IsOpen = true;
@@ -1203,17 +1127,14 @@ class LFPG_BTCAtmView extends ScriptView
         // Clear EditBoxes on open
         if (EditBtcAmount)
         {
-            string clearBtc = "";
-            EditBtcAmount.SetText(clearBtc);
+            EditBtcAmount.SetText("");
         }
         if (EditEurAmount)
         {
-            string clearEur = "";
-            EditEurAmount.SetText(clearEur);
+            EditEurAmount.SetText("");
         }
 
-        string openMsg = "[BTCAtmView] Opened";
-        LFPG_Util.Info(openMsg);
+        LFPG_Util.Info("[BTCAtmView] Opened");
     }
 
     protected void DoClose()
@@ -1238,8 +1159,7 @@ class LFPG_BTCAtmView extends ScriptView
         #endif
 
         HideCursor();
-        string closeMsg = "[BTCAtmView] Closed";
-        LFPG_Util.Info(closeMsg);
+        LFPG_Util.Info("[BTCAtmView] Closed");
     }
 };
 #endif

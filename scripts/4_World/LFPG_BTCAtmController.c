@@ -456,18 +456,14 @@ class LFPG_BTCAtmController extends ViewController
         bool priceNA = LFPG_BTCAtmClientData.s_PriceUnavailable;
         if (priceNA)
         {
-            string errNAKey = "#STR_LFPG_BTC_ERR_PRICE_NA";
-            string errNA = Widget.TranslateString(errNAKey);
-            ShowStatus(errNA, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_PRICE_NA"), true);
             return;
         }
 
         int btcAmount = GetBtcInput();
         if (btcAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY"), true);
             return;
         }
 
@@ -475,9 +471,8 @@ class LFPG_BTCAtmController extends ViewController
 
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-        int subId = LFPG_RPC_SubId.BTC_BUY;
 
-        SendBTCBuyRpc(subId, netLow, netHigh, btcAmount, useAccount);
+        SendBTCBuyRpc(LFPG_RPC_SubId.BTC_BUY, netLow, netHigh, btcAmount, useAccount);
     }
 
     void OnSellClick()
@@ -485,18 +480,14 @@ class LFPG_BTCAtmController extends ViewController
         bool priceNA = LFPG_BTCAtmClientData.s_PriceUnavailable;
         if (priceNA)
         {
-            string errNAKey = "#STR_LFPG_BTC_ERR_PRICE_NA";
-            string errNA = Widget.TranslateString(errNAKey);
-            ShowStatus(errNA, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_PRICE_NA"), true);
             return;
         }
 
         int btcAmount = GetBtcInput();
         if (btcAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY"), true);
             return;
         }
 
@@ -506,17 +497,14 @@ class LFPG_BTCAtmController extends ViewController
         bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
         if (wo && useAccount)
         {
-            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
-            string errWo = Widget.TranslateString(errWoKey);
-            ShowStatus(errWo, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_WITHDRAW_ONLY"), true);
             return;
         }
 
-        int subId = LFPG_RPC_SubId.BTC_SELL;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
 
-        SendBTCSellRpc(subId, netLow, netHigh, btcAmount, useAccount);
+        SendBTCSellRpc(LFPG_RPC_SubId.BTC_SELL, netLow, netHigh, btcAmount, useAccount);
     }
 
     void OnWithdrawEurClick()
@@ -524,15 +512,12 @@ class LFPG_BTCAtmController extends ViewController
         int eurAmount = GetEurInput();
         if (eurAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY_EUR";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY_EUR"), true);
             return;
         }
-        int subId = LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-        SendBTCCashRpc(subId, netLow, netHigh, eurAmount);
+        SendBTCCashRpc(LFPG_RPC_SubId.BTC_WITHDRAW_CASH, netLow, netHigh, eurAmount);
     }
 
     void OnDepositEurClick()
@@ -541,23 +526,18 @@ class LFPG_BTCAtmController extends ViewController
         bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
         if (wo)
         {
-            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
-            string errWo = Widget.TranslateString(errWoKey);
-            ShowStatus(errWo, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_WITHDRAW_ONLY"), true);
             return;
         }
         int eurAmount = GetEurInput();
         if (eurAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY_EUR";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY_EUR"), true);
             return;
         }
-        int subId = LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-        SendBTCCashRpc(subId, netLow, netHigh, eurAmount);
+        SendBTCCashRpc(LFPG_RPC_SubId.BTC_DEPOSIT_CASH, netLow, netHigh, eurAmount);
     }
 
     void OnWithdrawBtcClick()
@@ -565,15 +545,12 @@ class LFPG_BTCAtmController extends ViewController
         int btcAmount = GetBtcInput();
         if (btcAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY"), true);
             return;
         }
-        int subId = LFPG_RPC_SubId.BTC_WITHDRAW;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        SendBTCRpc(LFPG_RPC_SubId.BTC_WITHDRAW, netLow, netHigh, btcAmount);
     }
 
     void OnDepositBtcClick()
@@ -582,23 +559,18 @@ class LFPG_BTCAtmController extends ViewController
         bool wo = LFPG_BTCAtmClientData.s_WithdrawOnly;
         if (wo)
         {
-            string errWoKey = "#STR_LFPG_BTC_WITHDRAW_ONLY";
-            string errWo = Widget.TranslateString(errWoKey);
-            ShowStatus(errWo, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_WITHDRAW_ONLY"), true);
             return;
         }
         int btcAmount = GetBtcInput();
         if (btcAmount <= 0)
         {
-            string errEmptyKey = "#STR_LFPG_BTC_ERR_EMPTY";
-            string errEmpty = Widget.TranslateString(errEmptyKey);
-            ShowStatus(errEmpty, true);
+            ShowStatus(Widget.TranslateString("#STR_LFPG_BTC_ERR_EMPTY"), true);
             return;
         }
-        int subId = LFPG_RPC_SubId.BTC_DEPOSIT;
         int netLow = LFPG_BTCAtmClientData.s_NetLow;
         int netHigh = LFPG_BTCAtmClientData.s_NetHigh;
-        SendBTCRpc(subId, netLow, netHigh, btcAmount);
+        SendBTCRpc(LFPG_RPC_SubId.BTC_DEPOSIT, netLow, netHigh, btcAmount);
     }
 
     // =========================================================
@@ -741,12 +713,12 @@ class LFPG_BTCAtmController extends ViewController
     // =========================================================
     // Input reading
     // =========================================================
-    protected int GetBtcInput()
+    protected int ReadEditBoxInput(EditBoxWidget w)
     {
-        if (!m_EditBtc)
+        if (!w)
             return 0;
 
-        string text = m_EditBtc.GetText();
+        string text = w.GetText();
         if (text == "")
             return 0;
 
@@ -758,21 +730,14 @@ class LFPG_BTCAtmController extends ViewController
         return val;
     }
 
+    protected int GetBtcInput()
+    {
+        return ReadEditBoxInput(m_EditBtc);
+    }
+
     protected int GetEurInput()
     {
-        if (!m_EditEur)
-            return 0;
-
-        string text = m_EditEur.GetText();
-        if (text == "")
-            return 0;
-
-        int val = text.ToInt();
-        if (val < 0)
-        {
-            val = 0;
-        }
-        return val;
+        return ReadEditBoxInput(m_EditEur);
     }
 
     // =========================================================
@@ -848,143 +813,89 @@ class LFPG_BTCAtmController extends ViewController
 
             if (txType == LFPG_BTC_TX_BUY)
             {
-                string buyOkKey = "#STR_LFPG_BTC_TX_BUY_OK";
-                string buyOk = Widget.TranslateString(buyOkKey);
-                buyOk = buyOk + moved.ToString();
-                buyOk = buyOk + " BTC";
-                return buyOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_BUY_OK") + moved.ToString() + " BTC";
             }
             if (txType == LFPG_BTC_TX_SELL)
             {
-                string sellOkKey = "#STR_LFPG_BTC_TX_SELL_OK";
-                string sellOk = Widget.TranslateString(sellOkKey);
-                sellOk = sellOk + moved.ToString();
-                sellOk = sellOk + " BTC";
-                return sellOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_SELL_OK") + moved.ToString() + " BTC";
             }
             if (txType == LFPG_BTC_TX_WITHDRAW)
             {
-                string wdOkKey = "#STR_LFPG_BTC_TX_WITHDRAW_OK";
-                string wdOk = Widget.TranslateString(wdOkKey);
-                wdOk = wdOk + moved.ToString();
-                wdOk = wdOk + " BTC";
-                return wdOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_WITHDRAW_OK") + moved.ToString() + " BTC";
             }
             if (txType == LFPG_BTC_TX_DEPOSIT)
             {
-                string depOkKey = "#STR_LFPG_BTC_TX_DEPOSIT_OK";
-                string depOk = Widget.TranslateString(depOkKey);
-                depOk = depOk + moved.ToString();
-                depOk = depOk + " BTC";
-                return depOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_DEPOSIT_OK") + moved.ToString() + " BTC";
             }
             if (txType == LFPG_BTC_TX_WITHDRAW_CASH)
             {
-                string wdcOkKey = "#STR_LFPG_BTC_TX_WITHDRAW_CASH_OK";
-                string wdcOk = Widget.TranslateString(wdcOkKey);
                 float wdcEurRound = Math.Round(eur);
                 int wdcEurInt = wdcEurRound;
-                wdcOk = wdcOk + wdcEurInt.ToString();
-                wdcOk = wdcOk + " E";
-                return wdcOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_WITHDRAW_CASH_OK") + wdcEurInt.ToString() + " E";
             }
             if (txType == LFPG_BTC_TX_DEPOSIT_CASH)
             {
-                string dpcOkKey = "#STR_LFPG_BTC_TX_DEPOSIT_CASH_OK";
-                string dpcOk = Widget.TranslateString(dpcOkKey);
                 float dpcEurRound = Math.Round(eur);
                 int dpcEurInt = dpcEurRound;
-                dpcOk = dpcOk + dpcEurInt.ToString();
-                dpcOk = dpcOk + " E";
-                return dpcOk;
+                return Widget.TranslateString("#STR_LFPG_BTC_TX_DEPOSIT_CASH_OK") + dpcEurInt.ToString() + " E";
             }
-            string genericOkKey = "#STR_LFPG_BTC_TX_OK_GENERIC";
-            string genericOk = Widget.TranslateString(genericOkKey);
-            return genericOk;
+            return Widget.TranslateString("#STR_LFPG_BTC_TX_OK_GENERIC");
         }
 
         // Errors
         if (errCode == LFPG_BTC_ERR_NO_PRICE)
         {
-            string e1Key = "#STR_LFPG_BTC_ERR_PRICE_NA";
-            string e1 = Widget.TranslateString(e1Key);
-            return e1;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_PRICE_NA");
         }
         if (errCode == LFPG_BTC_ERR_NO_FUNDS)
         {
-            string e2Key = "#STR_LFPG_BTC_ERR_NO_FUNDS";
-            string e2 = Widget.TranslateString(e2Key);
-            return e2;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_FUNDS");
         }
         if (errCode == LFPG_BTC_ERR_NO_STOCK)
         {
-            string e3Key = "#STR_LFPG_BTC_ERR_NO_STOCK";
-            string e3 = Widget.TranslateString(e3Key);
-            return e3;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_STOCK");
         }
         if (errCode == LFPG_BTC_ERR_STOCK_FULL)
         {
-            string e4Key = "#STR_LFPG_BTC_ERR_STOCK_FULL";
-            string e4 = Widget.TranslateString(e4Key);
-            return e4;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_STOCK_FULL");
         }
         if (errCode == LFPG_BTC_ERR_NO_ITEMS)
         {
-            string e5Key = "#STR_LFPG_BTC_ERR_NO_ITEMS";
-            string e5 = Widget.TranslateString(e5Key);
-            return e5;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_ITEMS");
         }
         if (errCode == LFPG_BTC_ERR_INVENTORY_FULL)
         {
-            string e6Key = "#STR_LFPG_BTC_ERR_INV_FULL";
-            string e6 = Widget.TranslateString(e6Key);
-            return e6;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_INV_FULL");
         }
         if (errCode == LFPG_BTC_ERR_NOT_POWERED)
         {
-            string e7Key = "#STR_LFPG_BTC_ERR_NO_POWER";
-            string e7 = Widget.TranslateString(e7Key);
-            return e7;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_POWER");
         }
         if (errCode == LFPG_BTC_ERR_TOO_FAR)
         {
-            string e8Key = "#STR_LFPG_BTC_ERR_TOO_FAR";
-            string e8 = Widget.TranslateString(e8Key);
-            return e8;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_TOO_FAR");
         }
         if (errCode == LFPG_BTC_ERR_NO_CASH)
         {
-            string e10Key = "#STR_LFPG_BTC_ERR_NO_CASH";
-            string e10 = Widget.TranslateString(e10Key);
-            return e10;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_CASH");
         }
         if (errCode == LFPG_BTC_ERR_NO_BALANCE_PROVIDER)
         {
-            string e11Key = "#STR_LFPG_BTC_ERR_NO_BALANCE";
-            string e11 = Widget.TranslateString(e11Key);
-            return e11;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_NO_BALANCE");
         }
         if (errCode == LFPG_BTC_ERR_REFUNDED)
         {
-            string e12Key = "#STR_LFPG_BTC_ERR_REFUNDED";
-            string e12 = Widget.TranslateString(e12Key);
-            return e12;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_REFUNDED");
         }
         if (errCode == LFPG_BTC_ERR_REFUND_PARTIAL)
         {
-            string e13Key = "#STR_LFPG_BTC_ERR_REFUND_PARTIAL";
-            string e13 = Widget.TranslateString(e13Key);
-            return e13;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_REFUND_PARTIAL");
         }
         if (errCode == LFPG_BTC_ERR_AMOUNT_TOO_LARGE)
         {
-            string e14Key = "#STR_LFPG_BTC_ERR_AMOUNT_TOO_LARGE";
-            string e14 = Widget.TranslateString(e14Key);
-            return e14;
+            return Widget.TranslateString("#STR_LFPG_BTC_ERR_AMOUNT_TOO_LARGE");
         }
-        string e9Key = "#STR_LFPG_BTC_ERR_UNKNOWN";
-        string e9 = Widget.TranslateString(e9Key);
-        return e9;
+        return Widget.TranslateString("#STR_LFPG_BTC_ERR_UNKNOWN");
     }
 
     // =========================================================
