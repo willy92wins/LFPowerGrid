@@ -1,21 +1,9 @@
-// =========================================================
-// LF_PowerGrid - BTC ATM Helper (v5.0 Refactor)
-//
-// BTC ATM server handlers + utility methods extracted from
-// modded PlayerBase into static methods.
-//
-// Utilities (CountPlayerItems, GreedyChange, etc.) have no
-// external dependency. Server handlers use
-// Balance operations use LFPG_BalanceRegistry (provider pattern).
-// =========================================================
-
 class LFPG_BTCInventoryInput
 {
     EntityAI m_Entity;
     int m_UnitValue;
     int m_AvailableUnits;
     int m_SelectedUnits;
-
     void LFPG_BTCInventoryInput()
     {
         m_Entity = null;
@@ -24,30 +12,23 @@ class LFPG_BTCInventoryInput
         m_SelectedUnits = 0;
     }
 };
-
-// Runtime-only plan. BTC handlers finish synchronously in one frame; the
-// nonce registry already owns the per-player IN_FLIGHT slot during mutation.
 class LFPG_BTCInventoryPlan
 {
     protected ref array<ref LFPG_BTCInventoryInput> m_Inputs;
     protected ref array<EntityAI> m_Outputs;
-
     void LFPG_BTCInventoryPlan()
     {
         m_Inputs = new array<ref LFPG_BTCInventoryInput>;
         m_Outputs = new array<EntityAI>;
     }
-
     void ResetCashInputs()
     {
         m_Inputs.Clear();
     }
-
     void AddCashInput(EntityAI ent, int unitValue, int availableUnits)
     {
         if (!ent || unitValue <= 0 || availableUnits <= 0)
             return;
-
         int i = 0;
         for (i = 0; i < m_Inputs.Count(); i = i + 1)
         {
@@ -55,14 +36,12 @@ class LFPG_BTCInventoryPlan
             if (existing && existing.m_Entity == ent)
                 return;
         }
-
         LFPG_BTCInventoryInput input = new LFPG_BTCInventoryInput();
         input.m_Entity = ent;
         input.m_UnitValue = unitValue;
         input.m_AvailableUnits = availableUnits;
         m_Inputs.Insert(input);
     }
-
     int GetPreparedCashValue()
     {
         int total = 0;
@@ -76,7 +55,6 @@ class LFPG_BTCInventoryPlan
         }
         return total;
     }
-
     protected void ClearCashSelection()
     {
         int i = 0;
@@ -87,13 +65,11 @@ class LFPG_BTCInventoryPlan
                 input.m_SelectedUnits = 0;
         }
     }
-
     bool SelectPreparedCashExact(int amount)
     {
         ClearCashSelection();
         if (amount <= 0)
             return false;
-
         int remaining = amount;
         int i = 0;
         for (i = 0; i < m_Inputs.Count(); i = i + 1)
@@ -101,30 +77,25 @@ class LFPG_BTCInventoryPlan
             LFPG_BTCInventoryInput input = m_Inputs[i];
             if (!input || input.m_UnitValue <= 0)
                 continue;
-
             int units = remaining / input.m_UnitValue;
             if (units > input.m_AvailableUnits)
                 units = input.m_AvailableUnits;
             if (units <= 0)
                 continue;
-
             input.m_SelectedUnits = units;
             remaining = remaining - (units * input.m_UnitValue);
             if (remaining == 0)
                 return true;
         }
-
         ClearCashSelection();
         return false;
     }
-
     bool SelectPreparedCashCover(int amount, out int selectedValue)
     {
         selectedValue = 0;
         ClearCashSelection();
         if (amount <= 0)
             return false;
-
         int remaining = amount;
         int i = 0;
         for (i = 0; i < m_Inputs.Count(); i = i + 1)
@@ -132,13 +103,11 @@ class LFPG_BTCInventoryPlan
             LFPG_BTCInventoryInput input = m_Inputs[i];
             if (!input || input.m_UnitValue <= 0)
                 continue;
-
             int units = remaining / input.m_UnitValue;
             if (units > input.m_AvailableUnits)
                 units = input.m_AvailableUnits;
             if (units <= 0)
                 continue;
-
             input.m_SelectedUnits = units;
             int value = units * input.m_UnitValue;
             selectedValue = selectedValue + value;
@@ -146,7 +115,6 @@ class LFPG_BTCInventoryPlan
             if (remaining == 0)
                 return true;
         }
-
         for (i = m_Inputs.Count() - 1; i >= 0; i = i - 1)
         {
             LFPG_BTCInventoryInput cover = m_Inputs[i];
@@ -154,17 +122,14 @@ class LFPG_BTCInventoryPlan
                 continue;
             if (cover.m_SelectedUnits >= cover.m_AvailableUnits)
                 continue;
-
             cover.m_SelectedUnits = cover.m_SelectedUnits + 1;
             selectedValue = selectedValue + cover.m_UnitValue;
             return true;
         }
-
         ClearCashSelection();
         selectedValue = 0;
         return false;
     }
-
     int CommitPreparedCashValue(int expectedValue)
     {
         int selectedValue = 0;
@@ -176,26 +141,21 @@ class LFPG_BTCInventoryPlan
                 continue;
             if (!input.m_Entity)
                 return 0;
-
             int currentQty = (int)input.m_Entity.GetQuantity();
             if (currentQty < 1)
                 currentQty = 1;
             if (currentQty < input.m_SelectedUnits)
                 return 0;
-
             selectedValue = selectedValue + (input.m_SelectedUnits * input.m_UnitValue);
         }
-
         if (selectedValue != expectedValue)
             return 0;
-
         int committedValue = 0;
         for (i = 0; i < m_Inputs.Count(); i = i + 1)
         {
             LFPG_BTCInventoryInput commitInput = m_Inputs[i];
             if (!commitInput || commitInput.m_SelectedUnits <= 0)
                 continue;
-
             int available = (int)commitInput.m_Entity.GetQuantity();
             if (available < 1)
                 available = 1;
@@ -207,13 +167,11 @@ class LFPG_BTCInventoryPlan
         }
         return committedValue;
     }
-
     void TrackOutput(EntityAI ent)
     {
         if (ent)
             m_Outputs.Insert(ent);
     }
-
     void AbortOutputs()
     {
         int i = 0;
@@ -226,9 +184,6 @@ class LFPG_BTCInventoryPlan
         m_Outputs.Clear();
     }
 };
-
-// Integer-only denomination plan. Exhaustion preserves a valid lower bound.
-// Only a proven plan may authorize a debit. No entities are created.
 class LFPG_BTCChangePlan
 {
     protected static const int MAX_SEARCH_NODES = 8192;
@@ -242,7 +197,6 @@ class LFPG_BTCChangePlan
     protected int m_Visited;
     protected bool m_Exhausted;
     protected bool m_Proven;
-
     void LFPG_BTCChangePlan()
     {
         m_Classnames = new array<string>;
@@ -251,7 +205,6 @@ class LFPG_BTCChangePlan
         m_Trial = new array<int>;
         m_SuffixGcd = new array<int>;
     }
-
     protected int GreatestCommonDivisor(int a, int b)
     {
         int remainder = 0;
@@ -263,13 +216,10 @@ class LFPG_BTCChangePlan
         }
         return a;
     }
-
     bool IsProven()
     {
         return m_Proven;
     }
-
-    // Success means valid counts; callers must check proof before a debit.
     bool Calculate(int eurAmount)
     {
         m_Classnames.Clear();
@@ -289,7 +239,6 @@ class LFPG_BTCChangePlan
         array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
         if (!currencies || currencies.Count() == 0 || currencies.Count() > 16)
             return false;
-
         int ci = 0;
         int billCount = 0;
         int remaining = eurAmount;
@@ -320,9 +269,6 @@ class LFPG_BTCChangePlan
         m_Proven = !m_Exhausted;
         return true;
     }
-
-    // Enumerate every count unless the suffix cannot improve the incumbent.
-    // The last denomination has a closed-form optimum. Depth is at most 16.
     protected void Search(int index, int remaining, int represented)
     {
         if (m_Exhausted || m_Amount == m_UpperBound)
@@ -337,7 +283,6 @@ class LFPG_BTCChangePlan
         int upper = represented + remaining - remaining % suffixGcd;
         if (upper <= m_Amount)
             return;
-
         int value = m_Values[index];
         int billCount = remaining / value;
         int nextRemaining = 0;
@@ -355,7 +300,6 @@ class LFPG_BTCChangePlan
             }
             return;
         }
-
         while (billCount >= 0)
         {
             m_Trial.Set(index, billCount);
@@ -367,33 +311,12 @@ class LFPG_BTCChangePlan
         }
     }
 };
-
 class LFPG_BTCHelper
 {
-    // ===== QA hook (permanente, default false) =====
-    // Cambia a true + rebuild para forzar el branch race (REFUNDED /
-    // REFUND_PARTIAL) en escenarios 6-8 del plan A3+B2
-    // (plans/2026-05-17-btc-atomic-tx.md). Default false en produccion.
-    // NO requiere revert antes de commit; es hook oficial debug-only.
     static bool LFPG_DebugForceAddStockFail = false;
-    // Hard cap on entities created by one monetary transaction (BTC stacks,
-    // bills, and change). Rejects before spawn when the estimate exceeds this.
     protected static const int LFPG_BTC_MAX_ENTITIES_PER_TX = 64;
     protected static ref map<string, int> s_StackCapacityCache;
-
-    // Sales whose destruction already ran in THIS boot. Guards the last hole
-    // of E04 (2026-09-07): if both clearing and rebasing the .sell marker fail
-    // — two file writes to the same path, so a lock or a full disk takes both —
-    // the marker keeps its pre-credit balanceBefore. The reconciler would then
-    // see current == balanceBefore + creditAmount on the next connect and
-    // destroy the player's items A SECOND TIME. Marking the sale here lets the
-    // reconciler refuse that while the server stays up, which is exactly the
-    // window in which the player reconnects after the failure.
-    // Deliberately NOT persisted: a durable record would need the very write
-    // that just failed. Across a restart the fail-closed log still stands, and
-    // it names the file for the admin to delete.
     protected static ref map<string, bool> s_SellDestroyedThisBoot;
-
     static void LFPG_MarkSellDestroyedThisBoot(string uid)
     {
         if (uid == "")
@@ -402,7 +325,6 @@ class LFPG_BTCHelper
             s_SellDestroyedThisBoot = new map<string, bool>();
         s_SellDestroyedThisBoot.Set(uid, true);
     }
-
     static bool LFPG_SellDestroyedThisBoot(string uid)
     {
         if (uid == "")
@@ -411,11 +333,6 @@ class LFPG_BTCHelper
             return false;
         return s_SellDestroyedThisBoot.Contains(uid);
     }
-
-    // =========================================================
-    // BTC ATM: Utility methods (no external dependency)
-    // =========================================================
-
     static void SendBTCTxResultPayload(PlayerBase player, PlayerIdentity sender, int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount, int cashOnInv, int btcOnInv, int serverSessionLow, int serverSessionHigh, int sequence)
     {
         ScriptRPC rpc = new ScriptRPC();
@@ -432,37 +349,28 @@ class LFPG_BTCHelper
         rpc.Write(serverSessionLow);
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
-        // Targeting the player keeps the response private to the requester.
         rpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
     }
-
     static void SendBTCTxResult(PlayerBase player, PlayerIdentity sender, int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount, int serverSessionLow, int serverSessionHigh, int sequence)
     {
         int cashOnInv = CountPlayerCash(player);
         string btcCls = LFPG_BTCConfig.GetBtcItemClassname();
         int btcOnInv = CountPlayerItems(player, btcCls);
-
         LFPG_BTCSessionRegistry.Get().CompleteRequest(sender, serverSessionLow, serverSessionHigh, sequence, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv);
         LFPG_FaultInject.ObserveTx(txType, errCode, newStock, newBalance, btcMoved, cashOnInv, btcOnInv);
         SendBTCTxResultPayload(player, sender, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence);
     }
-
     static void SendBTCReplayResult(PlayerBase player, PlayerIdentity sender, LFPG_BTCSessionResponse response)
     {
         if (!response)
             return;
-
         SendBTCTxResultPayload(player, sender, response.m_TxType, response.m_ErrCode, response.m_NewStock, response.m_NewBalance, response.m_BtcMoved, response.m_EurAmount, response.m_CashOnInventory, response.m_BtcOnInventory, response.m_ServerSessionLow, response.m_ServerSessionHigh, response.m_Sequence);
     }
-
     static void SendBTCNonceRejection(PlayerBase player, PlayerIdentity sender, int txType, int serverSessionLow, int serverSessionHigh, int sequence)
     {
         LFPG_BTCSessionRegistry registry = LFPG_BTCSessionRegistry.Get();
         if (!registry.AllowReplayResponse(sender))
             return;
-
-        // A pre-reservation rejection must not complete an unrelated request
-        // that currently owns the per-UID IN_FLIGHT slot.
         int cashOnInv = CountPlayerCash(player);
         string btcCls = LFPG_BTCConfig.GetBtcItemClassname();
         int btcOnInv = CountPlayerItems(player, btcCls);
@@ -473,7 +381,6 @@ class LFPG_BTCHelper
     {
         if (!ent)
             return 0;
-
         float fQty = ent.GetQuantity();
         int qty = fQty;
         if (qty < 1)
@@ -482,54 +389,37 @@ class LFPG_BTCHelper
         }
         return qty;
     }
-
-    // Consumes 'toConsume' units from an entity stack.
-    // If consuming all or more → ObjectDelete.
-    // If partial → SetQuantity to remainder.
-    // Returns actual amount consumed.
     static int LFPG_ConsumeFromStack(EntityAI ent, int toConsume)
     {
         if (!ent || toConsume <= 0)
             return 0;
-
         int available = LFPG_GetEffectiveQty(ent);
         int actual = toConsume;
         if (actual > available)
         {
             actual = available;
         }
-
         if (actual >= available)
         {
-            // Consume entire entity
             g_Game.ObjectDelete(ent);
             return actual;
         }
-
-        // Partial consume — set new quantity directly on EntityAI
         float newQty = available - actual;
         bool bFalse = false;
         ent.SetQuantity(newQty, bFalse, bFalse);
         return actual;
     }
-
-    // Recursively collect entities matching `classname` from `root`'s full
-    // inventory tree — walks attachments + cargo, recursing into nested
-    // containers (e.g. a case inside a backpack).
     static void LFPG_CollectMatching(EntityAI root, string classname, array<EntityAI> result)
     {
         if (!root || !result)
             return;
-
         if (root.GetType() == classname)
         {
             result.Insert(root);
         }
-
         GameInventory inv = root.GetInventory();
         if (!inv)
             return;
-
         int i = 0;
         int n = inv.AttachmentCount();
         for (i = 0; i < n; i = i + 1)
@@ -537,7 +427,6 @@ class LFPG_BTCHelper
             EntityAI att = inv.GetAttachmentFromIndex(i);
             LFPG_CollectMatching(att, classname, result);
         }
-
         CargoBase cargo = inv.GetCargo();
         if (cargo)
         {
@@ -549,28 +438,22 @@ class LFPG_BTCHelper
             }
         }
     }
-
-    // Collects all matching items from hands + player's entire inventory tree.
     static void LFPG_CollectPlayerItems(PlayerBase player, string classname, array<EntityAI> result)
     {
         if (!player || !result)
             return;
-
         HumanInventory hInv = player.GetHumanInventory();
         if (hInv)
         {
             EntityAI hands = hInv.GetEntityInHands();
             LFPG_CollectMatching(hands, classname, result);
         }
-
         LFPG_CollectMatching(player, classname, result);
     }
-
     static int CountPlayerItems(PlayerBase player, string classname)
     {
         array<EntityAI> matches = new array<EntityAI>();
         LFPG_CollectPlayerItems(player, classname, matches);
-
         int count = 0;
         int i = 0;
         int n = matches.Count();
@@ -583,15 +466,12 @@ class LFPG_BTCHelper
         }
         return count;
     }
-
     static int DestroyPlayerItems(PlayerBase player, string classname, int amount)
     {
         if (amount <= 0)
             return 0;
-
         array<EntityAI> candidates = new array<EntityAI>();
         LFPG_CollectPlayerItems(player, classname, candidates);
-
         int remaining = amount;
         int destroyed = 0;
         int di = 0;
@@ -601,23 +481,15 @@ class LFPG_BTCHelper
         {
             if (remaining <= 0)
                 break;
-
             EntityAI ent = candidates[di];
             if (!ent)
                 continue;
-
             consumed = LFPG_ConsumeFromStack(ent, remaining);
             destroyed = destroyed + consumed;
             remaining = remaining - consumed;
         }
-
         return destroyed;
     }
-
-    // Spawn entity on ground near player with random scatter.
-    // Returns null on failure.
-    // Scatter stays inside the recipient's own footprint: a ground drop carries
-    // no ownership, so any nearby player can take it first.
     static EntityAI SpawnOnGroundNear(string classname, vector basePos)
     {
         basePos[0] = basePos[0] + Math.RandomFloat(-0.15, 0.15);
@@ -625,17 +497,11 @@ class LFPG_BTCHelper
         Object obj = g_Game.CreateObjectEx(classname, basePos, ECE_CREATEPHYSICS);
         return EntityAI.Cast(obj);
     }
-
-    // CreateItemsForPlayer was removed: it had no remaining call-sites after
-    // the cash Buy rewrite. Staging uses StageItemsForPlayer; restitution uses
-    // RestoreDestroyedItems so an entity budget cannot refuse a restore. The
-    // wrapper is not kept because unused methods still occupy script arena.
     static void EnsureStackCapacityCache()
     {
         if (!s_StackCapacityCache)
             s_StackCapacityCache = new map<string, int>;
     }
-
     static void ProbeAndCacheStack(PlayerBase player, string classname)
     {
         EnsureStackCapacityCache();
@@ -648,7 +514,6 @@ class LFPG_BTCHelper
             s_StackCapacityCache.Set(classname, 1);
             return;
         }
-
         EntityAI probe = player.GetInventory().CreateInInventory(classname);
         if (!probe)
             probe = SpawnOnGroundNear(classname, player.GetPosition());
@@ -657,14 +522,12 @@ class LFPG_BTCHelper
             s_StackCapacityCache.Set(classname, 1);
             return;
         }
-
         int maxStack = (int)probe.GetQuantityMax();
         if (maxStack < 1)
             maxStack = 1;
         s_StackCapacityCache.Set(classname, maxStack);
         g_Game.ObjectDelete(probe);
     }
-
     static void WarmupCurrencyStackCache(PlayerBase player)
     {
         array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
@@ -679,7 +542,6 @@ class LFPG_BTCHelper
             ProbeAndCacheStack(player, cur.classname);
         }
     }
-
     static int EstimateItemEntities(string classname, int amount)
     {
         if (amount <= 0)
@@ -695,8 +557,6 @@ class LFPG_BTCHelper
             entities = entities + 1;
         return entities;
     }
-
-    // Unproven counts require explicit acceptance; debit callers stay strict.
     static LFPG_BTCChangePlan CalculateChange(int eurAmount, bool allowUnproven = false)
     {
         LFPG_BTCChangePlan changePlan = new LFPG_BTCChangePlan();
@@ -706,7 +566,6 @@ class LFPG_BTCHelper
             return null;
         return changePlan;
     }
-
     static int EstimateChangePlanEntities(LFPG_BTCChangePlan changePlan)
     {
         if (!changePlan)
@@ -717,16 +576,13 @@ class LFPG_BTCHelper
             entities = entities + EstimateItemEntities(changePlan.m_Classnames[ci], changePlan.m_Counts[ci]);
         return entities;
     }
-
     static int EstimateGreedyChangeEntities(int eurAmount)
     {
         if (eurAmount <= 0)
             return 0;
-        // GreedyChange accepts the incumbent, so estimate those same counts.
         LFPG_BTCChangePlan changePlan = CalculateChange(eurAmount, true);
         return EstimateChangePlanEntities(changePlan);
     }
-
     static int CeilEurCost(int btcAmount, float price)
     {
         if (btcAmount <= 0)
@@ -738,7 +594,6 @@ class LFPG_BTCHelper
             costInt = costInt + 1;
         return costInt;
     }
-
     static int MaxAffordableBtc(int cashValue, float price, int requested)
     {
         if (cashValue <= 0 || price <= 0.0 || requested <= 0)
@@ -752,7 +607,6 @@ class LFPG_BTCHelper
         }
         return 0;
     }
-
     static int StageItemsForPlayer(PlayerBase player, string classname, int amount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
         if (amount <= 0)
@@ -775,24 +629,19 @@ class LFPG_BTCHelper
         }
         return StageItemsForPlayerUnchecked(player, classname, amount, outputPlan);
     }
-
     static int RestoreDestroyedItems(PlayerBase player, string classname, int amount)
     {
         if (!player || classname == "" || amount <= 0)
             return 0;
         return StageItemsForPlayerUnchecked(player, classname, amount, null);
     }
-
     static int StageItemsForPlayerUnchecked(PlayerBase player, string classname, int amount, LFPG_BTCInventoryPlan outputPlan)
     {
         if (amount <= 0)
             return 0;
-
         int created = 0;
         int groundDrops = 0;
         vector playerPos = player.GetPosition();
-
-        // BTC perf 2026-05-19: log entry for observability
         int existingCount = CountPlayerItems(player, classname);
         string logEntry = "[BTC perf] CreateItemsForPlayer cls=";
         logEntry = logEntry + classname;
@@ -802,13 +651,8 @@ class LFPG_BTCHelper
         logEntry = logEntry + existingCount.ToString();
         LFPG_Util.Info(logEntry);
         float tStart = g_Game.GetTime();
-
-        // First entity doubles as probe to read GetQuantityMax().
-        // ConfigGetFloat is unreliable here: classname may live in
-        // CfgMagazines or CfgVehicles depending on user config.
         EntityAI probeItem = player.GetInventory().CreateInInventory(classname);
         bool probeOnGround = false;
-
         if (!probeItem)
         {
             probeItem = SpawnOnGroundNear(classname, playerPos);
@@ -816,15 +660,11 @@ class LFPG_BTCHelper
                 return 0;
             probeOnGround = true;
         }
-
         if (outputPlan)
             outputPlan.TrackOutput(probeItem);
-
         int maxStack = (int)probeItem.GetQuantityMax();
         if (maxStack < 1)
             maxStack = 1;
-
-        // BTC perf 2026-05-19: stackability gate - warn if amplifier present
         if (maxStack == 1 && amount > 10)
         {
             string warnStack = "[BTC perf] STACKABILITY GATE: maxStack=1 for cls=";
@@ -834,8 +674,6 @@ class LFPG_BTCHelper
             warnStack = warnStack + " - O(N) entity spawn risk. Consider reconfiguring btcItemClassname to a stackable item or adding varStackMax to its config.";
             LFPG_Util.Warn(warnStack);
         }
-
-        // Assign quantity to probe (first stack)
         int firstQty = amount;
         if (firstQty > maxStack)
             firstQty = maxStack;
@@ -843,15 +681,12 @@ class LFPG_BTCHelper
         created = created + firstQty;
         if (probeOnGround)
             groundDrops = groundDrops + 1;
-
-        // Create remaining stacks
         int remaining = amount - firstQty;
         while (remaining > 0)
         {
             int stackQty = remaining;
             if (stackQty > maxStack)
                 stackQty = maxStack;
-
             EntityAI newItem = player.GetInventory().CreateInInventory(classname);
             if (newItem)
             {
@@ -876,20 +711,10 @@ class LFPG_BTCHelper
                     break;
                 }
             }
-
             remaining = remaining - stackQty;
         }
-
         if (groundDrops > 0)
         {
-            // Ground drops are unowned and takeable by anyone nearby. Warn level
-            // with id and position so a theft claim can be traced offline; the
-            // client message names the count so the recipient reacts at once.
-            // GetId (hashed) is the log-safe identifier: gameplay.c:369-370
-            // states GetPlainId cannot be used in logs.
-            // Staging-time report: a caller that aborts afterwards deletes these
-            // objects through LFPG_BTCInventoryPlan.AbortOutputs, so the line is
-            // labelled staged and is not by itself proof of a delivered drop.
             string dropUid = "unknown";
             PlayerIdentity dropIdentity = player.GetIdentity();
             if (dropIdentity)
@@ -908,7 +733,6 @@ class LFPG_BTCHelper
             dropClientMsg = dropClientMsg + " stack(s) dropped at your feet. Pick them up now, anyone nearby can take them.";
             PlayerBase.LFPG_SendClientMsg(player, dropClientMsg);
         }
-
         float tEnd = g_Game.GetTime();
         float duration = tEnd - tStart;
         string logExit = "[BTC perf] CreateItemsForPlayer cls=";
@@ -930,12 +754,8 @@ class LFPG_BTCHelper
             warnSlow = warnSlow + amount.ToString();
             LFPG_Util.Warn(warnSlow);
         }
-
         return created;
     }
-
-    // Materialize only the calculated counts and return the delivered value.
-    // A spawn failure must not trigger a different denomination search.
     static int MaterializeChange(PlayerBase player, LFPG_BTCChangePlan changePlan, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true, bool allowUnproven = false)
     {
         if (!player || !changePlan)
@@ -946,7 +766,6 @@ class LFPG_BTCHelper
             WarmupCurrencyStackCache(player);
         if (EstimateChangePlanEntities(changePlan) > LFPG_BTC_MAX_ENTITIES_PER_TX)
             return 0;
-
         int ci = 0;
         int createdBills = 0;
         int delivered = 0;
@@ -959,9 +778,6 @@ class LFPG_BTCHelper
         }
         return delivered;
     }
-
-    // Best-effort entry point for Buy, Sell and restitution; accepts unproven
-    // counts. Callers must handle the full remainder, including uncreated value.
     static int GreedyChange(PlayerBase player, int eurAmount, LFPG_BTCInventoryPlan outputPlan, bool allowStackProbe = true)
     {
         if (eurAmount <= 0)
@@ -972,7 +788,6 @@ class LFPG_BTCHelper
         int delivered = MaterializeChange(player, changePlan, outputPlan, allowStackProbe, true);
         return eurAmount - delivered;
     }
-
     static LFPG_BTCAtmBase ResolveAndValidate(PlayerBase player, int netLow, int netHigh, string tag)
     {
         Object rawObj = g_Game.GetObjectByNetworkId(netLow, netHigh);
@@ -984,7 +799,6 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(errEnt);
             return null;
         }
-
         LFPG_BTCAtmBase atm = LFPG_BTCAtmBase.Cast(devEnt);
         if (!atm)
         {
@@ -993,7 +807,6 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(errCast);
             return null;
         }
-
         float dist = vector.Distance(player.GetPosition(), devEnt.GetPosition());
         if (dist > LFPG_INTERACT_DIST_M)
         {
@@ -1002,7 +815,6 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(errDist);
             return null;
         }
-
         if (atm.IsRuined())
         {
             string errRuined = tag;
@@ -1010,7 +822,6 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(errRuined);
             return null;
         }
-
         return atm;
     }
     static int CountPlayerCash(PlayerBase player)
@@ -1021,7 +832,6 @@ class LFPG_BTCHelper
         auto currencies = LFPG_BTCConfig.GetCurrencies();
         if (!currencies)
             return 0;
-
         array<string> seenClassnames = new array<string>;
         int curIdx = 0;
         int curCount = currencies.Count();
@@ -1030,42 +840,35 @@ class LFPG_BTCHelper
             LFPG_BTCCurrency cur = currencies[curIdx];
             if (!cur)
                 continue;
-
             string cn = cur.classname;
             if (cn == "")
                 continue;
             if (seenClassnames.Find(cn) >= 0)
                 continue;
             seenClassnames.Insert(cn);
-
             int itemCount = CountPlayerItems(player, cn);
             int curValue = cur.value;
             int subtotal = itemCount * curValue;
             total = total + subtotal;
         }
-
         return total;
     }
-
     static bool PreparePlayerCash(PlayerBase player, LFPG_BTCInventoryPlan plan)
     {
         if (!player || !plan)
             return false;
-
         plan.ResetCashInputs();
         if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
             return false;
         array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
         if (!currencies)
             return false;
-
         int ci = 0;
         for (ci = 0; ci < currencies.Count(); ci = ci + 1)
         {
             LFPG_BTCCurrency cur = currencies[ci];
             if (!cur || cur.value <= 0 || cur.classname == "")
                 continue;
-
             array<EntityAI> matches = new array<EntityAI>();
             LFPG_CollectPlayerItems(player, cur.classname, matches);
             int mi = 0;
@@ -1079,43 +882,32 @@ class LFPG_BTCHelper
         }
         return true;
     }
-
-    // =========================================================
-    // BTC ATM: Server Handlers (use BalanceRegistry)
-    // =========================================================
-
     protected static void NotifyBalanceUnavailable(PlayerBase player)
     {
         if (!g_Game || !g_Game.IsServer() || !player)
             return;
         if (!player.GetIdentity())
             return;
-
         int nowMs = g_Game.GetTime();
         int lastNoticeMs = player.m_LFPG_LastBalanceNoticeMs;
         if (nowMs >= lastNoticeMs && nowMs - lastNoticeMs < 10000)
             return;
-
         player.m_LFPG_LastBalanceNoticeMs = nowMs;
         PlayerBase.LFPG_SendClientMsg(player, "Account money is unavailable on this server. No valid banking provider is available, and your wallet has not been switched. Contact an administrator. Physical BTC remains available.");
     }
-
     protected static void NotifyAtmCannotDeliverBtc(PlayerBase player)
     {
         int nowMs;
         int lastNoticeMs;
         int elapsedMs;
-
         if (!g_Game || !g_Game.IsServer() || !player)
             return;
         if (!player.GetIdentity())
             return;
-
         nowMs = g_Game.GetTime();
         if (player.m_LFPG_RetainedStockNoticeSent)
         {
             lastNoticeMs = player.m_LFPG_LastRetainedStockNoticeMs;
-            // Clock wrap makes nowMs < lastNoticeMs; signed subtract can go negative.
             if (nowMs >= lastNoticeMs)
             {
                 elapsedMs = nowMs - lastNoticeMs;
@@ -1123,12 +915,10 @@ class LFPG_BTCHelper
                     return;
             }
         }
-
         player.m_LFPG_RetainedStockNoticeSent = true;
         player.m_LFPG_LastRetainedStockNoticeMs = nowMs;
         PlayerBase.LFPG_SendClientMsg(player, "This ATM cannot deliver BTC until an administrator reviews it.");
     }
-
     static void HandleBTCOpenRequest(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -1137,63 +927,51 @@ class LFPG_BTCHelper
             return;
         if (!ctx.Read(netHigh))
             return;
-
         if (!sender)
             return;
-
         if (!LFPG_BTCConfig.IsEnabled())
             return;
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
             PlayerBase.LFPG_SendClientMsg(player, rlMsg);
             return;
         }
-
         string tag = "[BTCOpenRequest]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
             return;
-
         if (!atm.LFPG_IsATMPowered())
         {
             string errPower = "ATM has no power.";
             PlayerBase.LFPG_SendClientMsg(player, errPower);
             return;
         }
-
-        // Keep the stock-only ATM paths accessible without selecting a wallet.
         if (!LFPG_BalanceRegistry.IsAvailable())
             NotifyBalanceUnavailable(player);
-
         float price = -1.0;
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
         if (priceOk)
         {
             price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
         }
-
         int balance = 0;
         LFPG_BalanceProvider atmPlayer = LFPG_BalanceRegistry.GetActive();
         if (atmPlayer)
         {
             balance = atmPlayer.GetBalance(player);
         }
-
         int stock = atm.LFPG_GetBtcStock();
         bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
         int cashOnInv = CountPlayerCash(player);
         string btcClsOpen = LFPG_BTCConfig.GetBtcItemClassname();
         int btcOnInv = CountPlayerItems(player, btcClsOpen);
         float priceChange24h = LFPG_NetworkManager.Get().LFPG_GetBTC24hChange();
-
         int serverSessionLow = 0;
         int serverSessionHigh = 0;
         int highWatermark = 0;
         if (!LFPG_BTCSessionRegistry.Get().OpenSession(sender, serverSessionLow, serverSessionHigh, highWatermark))
             return;
-
         ScriptRPC rpc = new ScriptRPC();
         int subResp = LFPG_RPC_SubId.BTC_OPEN_RESPONSE;
         rpc.Write(subResp);
@@ -1209,7 +987,6 @@ class LFPG_BTCHelper
         rpc.Write(serverSessionHigh);
         rpc.Write(highWatermark);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
-
         string logOpen = "[BTCOpenRequest] price=";
         logOpen = logOpen + price.ToString();
         logOpen = logOpen + " stock=";
@@ -1242,7 +1019,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -1250,7 +1026,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int requestSubId = (int)LFPG_RPC_SubId.BTC_BUY;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
@@ -1268,13 +1043,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
             NotifyBalanceUnavailable(player);
@@ -1282,7 +1055,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -1290,7 +1062,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCBuy]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -1298,7 +1069,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (btcAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
@@ -1322,24 +1092,18 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeB);
             return;
         }
-
-        // Read balance early for error responses
         LFPG_BalanceProvider atmEarly = LFPG_BalanceRegistry.GetActive();
         int earlyBal = 0;
         if (atmEarly)
         {
             earlyBal = atmEarly.GetBalance(player);
         }
-
-        // Powered
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY,errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Price
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
         if (!priceOk)
         {
@@ -1348,13 +1112,7 @@ class LFPG_BTCHelper
             return;
         }
         float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
-
-        // B1: Stock check REMOVED — Buy spawns unlimited BTC
-
-        // Cost calculation (ceiling = player pays more on fractions)
         float costFloat = btcAmount * price;
-        // Overflow guard: (int)costFloat is UB if costFloat exceeds INT_MAX
-        // (~2.147e9). Defense-in-depth on top of the btcAmount cap above.
         if (costFloat > 2000000000.0)
         {
             int errOverflowB = LFPG_BTC_ERR_AMOUNT_TOO_LARGE;
@@ -1374,18 +1132,14 @@ class LFPG_BTCHelper
         {
             costInt = costInt + 1;
         }
-
         if (useAccount)
         {
-            // WithdrawOnly: account BUY adds BTC to ATM stock; cash BUY does not.
             if (atm.LFPG_IsWithdrawOnly())
             {
                 int errWo = LFPG_BTC_ERR_INVALID;
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY,errWo, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
-            // Claims are implemented only by Native; piggyback account buys fail closed.
             if (!atmEarly || atmEarly.GetName() != "Native")
             {
                 if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount))
@@ -1397,7 +1151,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errProviderMode, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-        
             int playerBalance = earlyBal;
             if (playerBalance < costInt)
             {
@@ -1405,7 +1158,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errFunds, atm.LFPG_GetBtcStock(), playerBalance, 0, costFloat, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-        
             int currentStock = atm.LFPG_GetBtcStock();
             int maxStock = LFPG_BTCConfig.GetMaxBtcPerMachine();
             if (btcAmount > maxStock - currentStock)
@@ -1419,13 +1171,11 @@ class LFPG_BTCHelper
                 LFPG_Util.Warn(warnBuyFull);
                 return;
             }
-        
             if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount))
             {
                 SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-        
             int stockTarget = currentStock + btcAmount;
             int claimedDebit = 0;
             string deviceId = atm.LFPG_GetDeviceId();
@@ -1438,7 +1188,6 @@ class LFPG_BTCHelper
                 return;
             }
             bool stockApplied = atm.LFPG_ApplyClaimedStockTarget(stockTarget);
-            // Permanent QA hook: a forced failure leaves the durable claim recoverable.
             if (LFPG_DebugForceAddStockFail)
                 stockApplied = false;
             if (!stockApplied)
@@ -1449,13 +1198,11 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errApply, atm.LFPG_GetBtcStock(), applyBalance, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-        
             int newBalance = atmEarly.GetBalance(player);
             int newStock = atm.LFPG_GetBtcStock();
             int okCode = LFPG_BTC_OK;
             float eurSpent = claimedDebit;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, okCode, newStock, newBalance, btcAmount, eurSpent, serverSessionLow, serverSessionHigh, sequence);
-        
             string logBuyA = "[BTCBuy] account->stock: ";
             logBuyA = logBuyA + btcAmount.ToString();
             logBuyA = logBuyA + " BTC for ";
@@ -1465,7 +1212,6 @@ class LFPG_BTCHelper
         }
         else
         {
-            // ── Cash mode: prove payment capacity before creating BTC ──
             if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
             {
                 int errCatalogC = LFPG_BTC_ERR_INVALID;
@@ -1473,13 +1219,11 @@ class LFPG_BTCHelper
                 LFPG_Util.Error("[BTCBuy] cash rejected: currency catalog is invalid");
                 return;
             }
-
             if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount))
             {
                 SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             LFPG_BTCInventoryPlan buyCashPlan = new LFPG_BTCInventoryPlan();
             if (!PreparePlayerCash(player, buyCashPlan))
             {
@@ -1487,7 +1231,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errNoCashPrep, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             int preparedCash = buyCashPlan.GetPreparedCashValue();
             int affordableBtc = MaxAffordableBtc(preparedCash, price, btcAmount);
             if (affordableBtc <= 0)
@@ -1496,7 +1239,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errNoCash, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             int plannedCost = CeilEurCost(affordableBtc, price);
             int selectedCashValue = 0;
             if (!buyCashPlan.SelectPreparedCashCover(plannedCost, selectedCashValue))
@@ -1505,7 +1247,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errNoCash2, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             int cashChange = selectedCashValue - plannedCost;
             string btcClsCash = LFPG_BTCConfig.GetBtcItemClassname();
             ProbeAndCacheStack(player, btcClsCash);
@@ -1520,7 +1261,6 @@ class LFPG_BTCHelper
                 LFPG_Util.Error("[BTCBuy] cash rejected: entity budget exceeded before spawn");
                 return;
             }
-
             int createdCash = StageItemsForPlayer(player, btcClsCash, affordableBtc, buyCashPlan);
             if (createdCash <= 0)
             {
@@ -1529,7 +1269,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errInvC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             int actualCostIntC = CeilEurCost(createdCash, price);
             if (createdCash != affordableBtc)
             {
@@ -1543,7 +1282,6 @@ class LFPG_BTCHelper
                 }
                 cashChange = selectedCashValue - actualCostIntC;
             }
-
             if (cashChange > 0)
             {
                 float changeRemainder = GreedyChange(player, cashChange, buyCashPlan);
@@ -1555,7 +1293,6 @@ class LFPG_BTCHelper
                     return;
                 }
             }
-
             int committedCashValue = buyCashPlan.CommitPreparedCashValue(selectedCashValue);
             if (committedCashValue != selectedCashValue)
             {
@@ -1564,7 +1301,6 @@ class LFPG_BTCHelper
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errCommitC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 return;
             }
-
             int newStockC = atm.LFPG_GetBtcStock();
             int newBalC = 0;
             LFPG_BalanceProvider atmFinalC = LFPG_BalanceRegistry.GetActive();
@@ -1573,7 +1309,6 @@ class LFPG_BTCHelper
             int okCodeC = LFPG_BTC_OK;
             float eurSpentC = actualCostIntC;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, okCodeC, newStockC, newBalC, createdCash, eurSpentC, serverSessionLow, serverSessionHigh, sequence);
-
             string logBuyC = "[BTCBuy] cash: ";
             logBuyC = logBuyC + createdCash.ToString();
             logBuyC = logBuyC + " BTC for ";
@@ -1582,7 +1317,6 @@ class LFPG_BTCHelper
             LFPG_Util.Info(logBuyC);
         }
     }
-
     static void ClearSellDestroyIntentAfterDestroy(string uid, int currentBalance, int creditAmount, int btcAmount, string classname)
     {
         bool cleared = false;
@@ -1590,7 +1324,6 @@ class LFPG_BTCHelper
             cleared = LFPG_FileUtil.ClearSellDestroyIntent(uid);
         if (cleared)
             return;
-
         bool rebased = false;
         if (currentBalance >= 0 && creditAmount > 0 && btcAmount > 0 && classname != "")
         {
@@ -1604,18 +1337,15 @@ class LFPG_BTCHelper
         }
         LFPG_Util.Error("[BTCSell] sell-intent marker survived after destroy and could not be rebased. Admin: delete the sibling .sell file before restarting");
     }
-
     static void ReconcilePendingAccountSell(PlayerBase player)
     {
         if (!g_Game || !g_Game.IsServer())
             return;
         if (!player)
             return;
-
         PlayerIdentity identity = player.GetIdentity();
         if (!identity)
             return;
-
         string uid = identity.GetPlainId();
         int balanceBefore = 0;
         int creditAmount = 0;
@@ -1623,7 +1353,6 @@ class LFPG_BTCHelper
         string classname = "";
         if (!LFPG_FileUtil.TryReadSellDestroyIntent(uid, balanceBefore, creditAmount, btcAmount, classname))
             return;
-
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
             NotifyBalanceUnavailable(player);
@@ -1641,9 +1370,6 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCSell] sell-intent marker failed closed; leaving marker for admin uid=" + LFPG_Util.LogUid(uid));
             return;
         }
-
-        // Rebased completed sales store the post-credit balance as balanceBefore.
-        // Compare that disarm case before the cap gate; otherwise a near-cap rebase never clears.
         int current = provider.GetBalance(player);
         if (current == balanceBefore)
         {
@@ -1654,36 +1380,23 @@ class LFPG_BTCHelper
                 LFPG_Util.Warn("[BTCSell] sell-intent marker had no durable credit; marker cleared and items left intact uid=" + LFPG_Util.LogUid(uid));
             return;
         }
-
         int cap = LFPG_BalanceProvider_NativeImpl.GetBalanceCap();
         if (balanceBefore > cap || creditAmount > cap - balanceBefore)
         {
             LFPG_Util.Error("[BTCSell] sell-intent marker exceeds Native cap; leaving marker for admin uid=" + LFPG_Util.LogUid(uid));
             return;
         }
-
         int expectedAfter = balanceBefore + creditAmount;
         if (current != expectedAfter)
         {
             LFPG_Util.Error("[BTCSell] sell-intent marker balance is ambiguous; not destroying items; admin: inspect Native ledger vs sibling .sell file uid=" + LFPG_Util.LogUid(uid));
             return;
         }
-
-        // A sale whose destruction already ran in this boot must never be
-        // destroyed again. The marker may remain after a partial destruction
-        // or after clearing and rebasing both failed. The credited balance is
-        // no longer evidence of how many items remain to destroy.
-        // Fail closed: leave the items and the marker,
-        // and tell the admin which file to inspect.
         if (LFPG_SellDestroyedThisBoot(uid))
         {
             LFPG_Util.Error("[BTCSell] sell-intent marker survived a destruction attempt this boot; NOT destroying again. Admin: inspect ledger/items vs sibling .sell file before restarting uid=" + LFPG_Util.LogUid(uid));
             return;
         }
-
-        // Mark BEFORE destroying, not after: if the destruction is interrupted
-        // half way the flag is still set, and the next reconcile in this boot
-        // fails closed instead of destroying an unknown remainder again.
         LFPG_MarkSellDestroyedThisBoot(uid);
         int destroyed = DestroyPlayerItems(player, classname, btcAmount);
         if (destroyed != btcAmount)
@@ -1696,13 +1409,11 @@ class LFPG_BTCHelper
             shortMsg = shortMsg + LFPG_Util.LogUid(uid);
             shortMsg = shortMsg + "; sibling .sell file retained. Admin: reconcile the partial destruction before restarting";
             LFPG_Util.Error(shortMsg);
-            // The boot flag was set before destruction; do not retry or disarm.
             return;
         }
         LFPG_FaultInject.ObserveReconcile(current, balanceBefore, creditAmount, destroyed, btcAmount);
         ClearSellDestroyIntentAfterDestroy(uid, current, creditAmount, btcAmount, classname);
     }
-
     static void HandleBTCSell(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -1727,7 +1438,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -1735,9 +1445,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Fingerprints use the decoded request argument, before policy can
-        // force the execution mode to cash.
         bool requestedToAccount = toAccount;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_SELL;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
@@ -1756,13 +1463,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
             NotifyBalanceUnavailable(player);
@@ -1770,7 +1475,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -1778,7 +1482,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCSell]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -1786,20 +1489,17 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (btcAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-        // Read balance early for error responses
         LFPG_BalanceProvider atmEarlyS = LFPG_BalanceRegistry.GetActive();
         int earlyBalS = 0;
         if (atmEarlyS)
         {
             earlyBalS = atmEarlyS.GetBalance(player);
         }
-
         int maxBtcOp = LFPG_BTCConfig.GetMaxBtcPerMachine();
         if (btcAmount > maxBtcOp)
         {
@@ -1812,16 +1512,12 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeS);
             return;
         }
-
-        // Powered
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL,errPow, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Price
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
         if (!priceOk)
         {
@@ -1830,10 +1526,6 @@ class LFPG_BTCHelper
             return;
         }
         float price = LFPG_NetworkManager.Get().LFPG_GetBTCPrice();
-
-        // Overflow guard BEFORE destruction: subsequent eurTotal = destroyed*price
-        // cast to int would be UB if it exceeds INT_MAX (~2.147e9). Rejecting
-        // here avoids losing player items to a transaction that cannot complete.
         float eurTotalCheck = btcAmount * price;
         if (eurTotalCheck > 2000000000.0)
         {
@@ -1848,8 +1540,6 @@ class LFPG_BTCHelper
             LFPG_Util.Error(warnOverflowS);
             return;
         }
-
-        // Check player has enough BTC items
         string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
         int playerBtc = CountPlayerItems(player, btcClassname);
         if (playerBtc < btcAmount)
@@ -1858,20 +1548,11 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL,errItems, atm.LFPG_GetBtcStock(), earlyBalS, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Sell: BTC items are destroyed, no stock room check needed
-        // (sold BTC disappear from the game)
-
-        // Enforce WithdrawOnly: if true, always cash
         bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
         if (withdrawOnly)
         {
             toAccount = false;
         }
-
-        // Account Sell preflight. Integer value must be representable either
-        // by the account room or by an exact staged cash payout. Only the
-        // fractional residue remains on the ATM.
         int eurIntExpected = (int)eurTotalCheck;
         int expectedCarry = 0;
         int expectedIntegerPayout = 0;
@@ -1892,10 +1573,6 @@ class LFPG_BTCHelper
         LFPG_BTCInventoryPlan sellCashPlan = new LFPG_BTCInventoryPlan();
         float nextCashDecimalRemainder = 0.0;
         bool nativeAccountRoomKnown = (atmEarlyS.GetName() == "Native");
-        // Mirror of the account-buy gate: account credit is implemented only
-        // by Native. A sell requested "to account" with an external provider
-        // fails closed before any reservation or destruction instead of
-        // silently degrading to a cash payout.
         if (toAccount && !nativeAccountRoomKnown)
         {
             int errProviderSell = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
@@ -1948,14 +1625,11 @@ class LFPG_BTCHelper
             }
             else
             {
-                // External providers expose no capacity contract. Zero is the
-                // only proven room; stage the complete integer value as cash.
                 accountRoom = 0;
             }
             expectedAccountPayout = accountRoom;
             expectedCashPayout = expectedIntegerPayout - expectedAccountPayout;
         }
-
         if (!toAccount)
         {
             float cashFractionalExpected = eurTotalCheck - eurIntExpected;
@@ -1972,7 +1646,6 @@ class LFPG_BTCHelper
             expectedCashStage = eurIntExpected + expectedCashCarry;
             nextCashDecimalRemainder = combinedCashExpected - expectedCashCarry;
         }
-
         int cashEntitiesNeeded = 0;
         if (!toAccount)
             cashEntitiesNeeded = expectedCashStage;
@@ -1997,14 +1670,11 @@ class LFPG_BTCHelper
                 return;
             }
         }
-
-        // Reserve before the first inventory mutation.
         if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, requestedToAccount))
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!toAccount)
         {
             float stagedCashSellRemainder = GreedyChange(player, expectedCashStage, sellCashPlan);
@@ -2016,7 +1686,6 @@ class LFPG_BTCHelper
                 return;
             }
         }
-
         if (toAccount && expectedCashPayout > 0)
         {
             float stagedCashRemainder = GreedyChange(player, expectedCashPayout, sellAccountPlan);
@@ -2028,11 +1697,6 @@ class LFPG_BTCHelper
                 return;
             }
         }
-
-        // Persist account credit while BTC still exists. A reported save failure
-        // then aborts staged cash without destroying player items. The sell
-        // marker is a balances sibling, not a claim, so it does not consume
-        // the eight PENDING purchase slots.
         if (toAccount)
         {
             accountAdded = 0;
@@ -2117,7 +1781,6 @@ class LFPG_BTCHelper
             if (LFPG_FaultInject.ShouldCrash("E04_crash_after_credit"))
                 return;
         }
-
         int destroyed = DestroyPlayerItems(player, btcClassname, btcAmount);
         if (destroyed <= 0 || destroyed != btcAmount)
         {
@@ -2162,9 +1825,7 @@ class LFPG_BTCHelper
                 LFPG_Util.Error("[BTCSell] post-destruction cardinality mismatch; credit reverted and BTC restitution attempted");
             return;
         }
-
         float eurTotal = destroyed * price;
-
         if (toAccount)
         {
             atm.LFPG_SetDecimalRemainder(nextDecimalRemainder);
@@ -2179,22 +1840,15 @@ class LFPG_BTCHelper
         {
             atm.LFPG_SetDecimalRemainder(nextCashDecimalRemainder);
         }
-
         int newBalance = atmEarlyS.GetBalance(player);
         int newStock = atm.LFPG_GetBtcStock();
-
         int okCode = LFPG_BTC_OK;
         SendBTCTxResult(player, sender, LFPG_BTC_TX_SELL,okCode, newStock, newBalance, destroyed, eurTotal, serverSessionLow, serverSessionHigh, sequence);
-
         if (sellIntentWritten)
         {
-            // Order matters: mark BEFORE trying to clear the marker. If both
-            // the clear and the rebase fail, the flag is already set and the
-            // reconciler refuses to destroy this player's items a second time.
             LFPG_MarkSellDestroyedThisBoot(sellIntentUid);
             ClearSellDestroyIntentAfterDestroy(sellIntentUid, newBalance, accountAdded, btcAmount, btcClassname);
         }
-
         string logSell = "[BTCSell] player sold ";
         logSell = logSell + destroyed.ToString();
         logSell = logSell + " BTC for ";
@@ -2203,7 +1857,6 @@ class LFPG_BTCHelper
         logSell = logSell + toAccount.ToString();
         LFPG_Util.Info(logSell);
     }
-
     static void HandleBTCWithdraw(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -2225,7 +1878,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -2233,7 +1885,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int requestSubId = (int)LFPG_RPC_SubId.BTC_WITHDRAW;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
@@ -2251,13 +1902,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -2265,7 +1914,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCWithdraw]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -2273,20 +1921,17 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (btcAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-        // Read balance early for error responses
         int earlyBalW = 0;
         LFPG_BalanceProvider atmEarlyW = LFPG_BalanceRegistry.GetActive();
         if (atmEarlyW)
         {
             earlyBalW = atmEarlyW.GetBalance(player);
         }
-
         int maxBtcOp = LFPG_BTCConfig.GetMaxBtcPerMachine();
         if (btcAmount > maxBtcOp)
         {
@@ -2299,16 +1944,12 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeW);
             return;
         }
-
-        // Powered
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW,errPow, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Stock check
         int currentStock = atm.LFPG_GetBtcStock();
         if (btcAmount > currentStock)
         {
@@ -2316,7 +1957,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW,errStock, currentStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int withdrawTarget = currentStock - btcAmount;
         if (!LFPG_BalanceProvider_NativeImpl.CanPrepareStockMutation(atm.LFPG_GetDeviceId(), currentStock, withdrawTarget))
         {
@@ -2326,9 +1966,7 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errRetainedOut, currentStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
-        // Missing stack capacities default to one without creating value.
         int withdrawEntities = EstimateItemEntities(btcClassname, btcAmount);
         if (withdrawEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -2337,14 +1975,11 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCWithdraw] rejected: entity budget exceeded before spawn");
             return;
         }
-
         if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, false))
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Persist the full stock debit before creating any physical output.
         bool stockRemoved = atm.LFPG_RemoveBtcStock(btcAmount);
         if (!stockRemoved)
         {
@@ -2355,11 +1990,9 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errClaimFold, blockedStock, earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         LFPG_Util.Info("[BTCWithdraw] stock debited before delivery uid=" + LFPG_Util.LogUid(sender.GetId()) + " deviceId=" + atm.LFPG_GetDeviceId() + " amount=" + btcAmount.ToString());
         LFPG_BTCInventoryPlan btcWithdrawPlan = new LFPG_BTCInventoryPlan();
         int created = StageItemsForPlayer(player, btcClassname, btcAmount, btcWithdrawPlan, false);
-
         if (created <= 0)
         {
             btcWithdrawPlan.AbortOutputs();
@@ -2375,20 +2008,15 @@ class LFPG_BTCHelper
             LFPG_Util.Warn("[BTCWithdraw] partial delivery after full stock debit; no refund uid=" + LFPG_Util.LogUid(sender.GetId()) + " debited=" + btcAmount.ToString() + " delivered=" + created.ToString());
             PlayerBase.LFPG_SendClientMsg(player, "BTC withdrawal delivered only part of the debited stock. The remainder was not refunded; report this to an administrator.");
         }
-
-        // Updated state
         int newStock = atm.LFPG_GetBtcStock();
         int newBalance = earlyBalW;
-
         int okCode = LFPG_BTC_OK;
         SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW,okCode, newStock, newBalance, created, 0.0, serverSessionLow, serverSessionHigh, sequence);
-
         string logW = "[BTCWithdraw] player withdrew ";
         logW = logW + created.ToString();
         logW = logW + " BTC from pool";
         LFPG_Util.Info(logW);
     }
-
     static void HandleBTCDeposit(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         int netLow = 0;
@@ -2410,7 +2038,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -2418,7 +2045,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int requestSubId = (int)LFPG_RPC_SubId.BTC_DEPOSIT;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
@@ -2436,13 +2062,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -2450,7 +2074,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCDeposit]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -2458,20 +2081,17 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (btcAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-        // Read balance early for error responses
         int earlyBalD = 0;
         LFPG_BalanceProvider atmEarlyD = LFPG_BalanceRegistry.GetActive();
         if (atmEarlyD)
         {
             earlyBalD = atmEarlyD.GetBalance(player);
         }
-
         int maxBtcOp = LFPG_BTCConfig.GetMaxBtcPerMachine();
         if (btcAmount > maxBtcOp)
         {
@@ -2484,24 +2104,18 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeD);
             return;
         }
-
-        // Powered
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,errPow, atm.LFPG_GetBtcStock(), earlyBalD, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // WithdrawOnly: nothing enters the account or the ATM.
         if (atm.LFPG_IsWithdrawOnly())
         {
             int errWo = LFPG_BTC_ERR_INVALID;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,errWo, atm.LFPG_GetBtcStock(), earlyBalD, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Player has items?
         string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
         int playerBtc = CountPlayerItems(player, btcClassname);
         if (playerBtc < btcAmount)
@@ -2510,18 +2124,14 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,errItems, atm.LFPG_GetBtcStock(), earlyBalD, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // ATM has room?
         int maxStock = LFPG_BTCConfig.GetMaxBtcPerMachine();
         int currentStock = atm.LFPG_GetBtcStock();
-        // Overflow-safe
         if (btcAmount > maxStock - currentStock)
         {
             int errFull = LFPG_BTC_ERR_STOCK_FULL;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,errFull, currentStock, earlyBalD, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!atm.LFPG_CanAddBtcStock(btcAmount))
         {
             int errMutationNotAdmissible = LFPG_BTC_ERR_INVALID;
@@ -2529,17 +2139,12 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCDeposit] stock mutation not admissible; deposit rejected before destruction");
             return;
         }
-
         if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, false))
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Execute
         int destroyed = DestroyPlayerItems(player, btcClassname, btcAmount);
-
-        // Guard: if nothing was destroyed, don't touch stock
         if (destroyed <= 0)
         {
             int errDestroyD = LFPG_BTC_ERR_NO_ITEMS;
@@ -2549,10 +2154,6 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(logNoDD);
             return;
         }
-
-        // Permanent QA hook: the forced failure must SKIP the real mutation.
-        // Forcing the flag after LFPG_AddBtcStock ran would leave the stock
-        // incremented while the refund branch restores the items (BTC dupe).
         bool stockAddedDep;
         if (LFPG_DebugForceAddStockFail)
             stockAddedDep = false;
@@ -2560,7 +2161,6 @@ class LFPG_BTCHelper
             stockAddedDep = atm.LFPG_AddBtcStock(destroyed);
         if (!stockAddedDep)
         {
-            // Race after pre-check. Restore destroyed items best-effort.
             int restoredDep = RestoreDestroyedItems(player, btcClassname, destroyed);
             int newStockDepR = atm.LFPG_GetBtcStock();
             int errCodeDep = LFPG_BTC_ERR_REFUNDED;
@@ -2588,20 +2188,15 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,errCodeDep, newStockDepR, earlyBalD, restoredDep, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Updated state
         int newStock = atm.LFPG_GetBtcStock();
         int newBalance = earlyBalD;
-
         int okCode = LFPG_BTC_OK;
         SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT,okCode, newStock, newBalance, destroyed, 0.0, serverSessionLow, serverSessionHigh, sequence);
-
         string logD = "[BTCDeposit] player deposited ";
         logD = logD + destroyed.ToString();
         logD = logD + " BTC into pool";
         LFPG_Util.Info(logD);
     }
-
     static void HandleBTCWithdrawCash(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         #ifdef SERVER
@@ -2624,7 +2219,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -2632,7 +2226,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int requestSubId = (int)LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
@@ -2650,13 +2243,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
             NotifyBalanceUnavailable(player);
@@ -2664,7 +2255,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -2672,7 +2262,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCWithdrawCash]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -2680,7 +2269,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (eurAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
@@ -2692,7 +2280,6 @@ class LFPG_BTCHelper
         {
             currentBal = atmPb.GetBalance(player);
         }
-
         int maxEurOpW = LFPG_BTCConfig.GetMaxEurPerOperation();
         if (eurAmount > maxEurOpW)
         {
@@ -2705,21 +2292,18 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeWC);
             return;
         }
-
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH,errPow, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (currentBal < eurAmount)
         {
             int errFunds = LFPG_BTC_ERR_NO_FUNDS;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH,errFunds, atm.LFPG_GetBtcStock(), currentBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
         {
             int errCatalogWC = LFPG_BTC_ERR_INVALID;
@@ -2727,7 +2311,6 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCWithdrawCash] rejected: currency catalog is invalid");
             return;
         }
-
         LFPG_BTCChangePlan cashChangePlan = CalculateChange(eurAmount);
         if (!cashChangePlan || cashChangePlan.m_Amount <= 0)
         {
@@ -2737,8 +2320,6 @@ class LFPG_BTCHelper
             return;
         }
         int payableCash = cashChangePlan.m_Amount;
-
-        // Missing stack capacities default to one without creating value.
         int withdrawCashEntities = EstimateChangePlanEntities(cashChangePlan);
         if (withdrawCashEntities > LFPG_BTC_MAX_ENTITIES_PER_TX)
         {
@@ -2747,14 +2328,11 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCWithdrawCash] rejected: entity budget exceeded before spawn");
             return;
         }
-
         if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, eurAmount, false))
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // Debit before materialization. Failed delivery never restores value.
         int removed = atmPb.RemoveBalance(player, payableCash);
         if (removed != payableCash)
         {
@@ -2766,14 +2344,12 @@ class LFPG_BTCHelper
                 PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal stopped after a partial debit. No cash was delivered or refunded; report this to an administrator.");
             return;
         }
-
         LFPG_Util.Info("[BTCWithdrawCash] balance debited before delivery uid=" + LFPG_Util.LogUid(sender.GetId()) + " deviceId=" + atm.LFPG_GetDeviceId() + " amount=" + removed.ToString());
         LFPG_BTCInventoryPlan withdrawPlan = new LFPG_BTCInventoryPlan();
         int deliveredCash = MaterializeChange(player, cashChangePlan, withdrawPlan, false);
         int stagedRemainder = payableCash - deliveredCash;
         if (stagedRemainder > 0)
         {
-            // Only a materialization failure can leave a remainder after debit.
             int errStage = LFPG_BTC_ERR_INVENTORY_FULL;
             if (deliveredCash > 0)
                 errStage = LFPG_BTC_OK;
@@ -2784,22 +2360,18 @@ class LFPG_BTCHelper
             PlayerBase.LFPG_SendClientMsg(player, partialCashMsg);
             return;
         }
-
         if (payableCash < eurAmount)
             PlayerBase.LFPG_SendClientMsg(player, "Cash withdrawal: requested " + eurAmount.ToString() + " EUR; debited and delivered " + payableCash.ToString() + " EUR. The unrepresentable remainder stays in your account.");
-
         int newBal = atmPb.GetBalance(player);
         float eurAmt = removed;
         int okCode = LFPG_BTC_OK;
         SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, okCode, atm.LFPG_GetBtcStock(), newBal, 0, eurAmt, serverSessionLow, serverSessionHigh, sequence);
-
         string logWC = "[BTCWithdrawCash] ";
         logWC = logWC + removed.ToString();
         logWC = logWC + " EUR withdrawn as bills";
         LFPG_Util.Info(logWC);
         #endif
     }
-
     static void HandleBTCDepositCash(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         #ifdef SERVER
@@ -2822,7 +2394,6 @@ class LFPG_BTCHelper
             payloadOk = false;
         if (!ctx.Read(sequence))
             payloadOk = false;
-
         if (!sender)
             return;
         if (!payloadOk)
@@ -2830,7 +2401,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int requestSubId = (int)LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
         LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
@@ -2848,13 +2418,11 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BalanceRegistry.IsAvailable())
         {
             NotifyBalanceUnavailable(player);
@@ -2862,7 +2430,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errNoBp, 0, 0, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_NetworkManager.Get().AllowPlayerAction(sender))
         {
             string rlMsg = "Too fast! Wait a moment.";
@@ -2870,7 +2437,6 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         string tag = "[BTCDepositCash]";
         LFPG_BTCAtmBase atm = ResolveAndValidate(player, netLow, netHigh, tag);
         if (!atm)
@@ -2878,21 +2444,17 @@ class LFPG_BTCHelper
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (eurAmount <= 0)
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-        // Capture one provider before any physical side effect. The same
-        // instance performs credit and any compensating debit.
         LFPG_BalanceProvider atmPb = LFPG_BalanceRegistry.GetActive();
         int earlyBal = 0;
         if (atmPb)
         {
             earlyBal = atmPb.GetBalance(player);
         }
-
         int maxEurOpD = LFPG_BTCConfig.GetMaxEurPerOperation();
         if (eurAmount > maxEurOpD)
         {
@@ -2905,29 +2467,24 @@ class LFPG_BTCHelper
             LFPG_Util.Warn(warnLargeDC);
             return;
         }
-
         if (!atmPb)
         {
             int errProvider = LFPG_BTC_ERR_NO_BALANCE_PROVIDER;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errProvider, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!atm.LFPG_IsATMPowered())
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
-        // WithdrawOnly: nothing enters the account or the ATM.
         if (atm.LFPG_IsWithdrawOnly())
         {
             int errWo = LFPG_BTC_ERR_INVALID;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errWo, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
         {
             int errCatalogDC = LFPG_BTC_ERR_INVALID;
@@ -2935,7 +2492,6 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCDepositCash] rejected: currency catalog is invalid");
             return;
         }
-
         int requestedCredit = eurAmount;
         if (atmPb.GetName() == "Native")
         {
@@ -2956,13 +2512,11 @@ class LFPG_BTCHelper
             if (requestedCredit > room)
                 requestedCredit = room;
         }
-
         if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, eurAmount, false))
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         LFPG_BTCInventoryPlan depositCashPlan = new LFPG_BTCInventoryPlan();
         if (!PreparePlayerCash(player, depositCashPlan))
         {
@@ -2976,7 +2530,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errNoCash2, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         if (!depositCashPlan.SelectPreparedCashExact(requestedCredit))
         {
             int errUnrepresentable = LFPG_BTC_ERR_INVALID;
@@ -2984,7 +2537,6 @@ class LFPG_BTCHelper
             LFPG_Util.Error("[BTCDepositCash] amount is not representable with prepared bills; no account mutation");
             return;
         }
-
         int creditedCash = atmPb.AddBalance(player, requestedCredit);
         if (creditedCash != requestedCredit)
         {
@@ -2999,7 +2551,6 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errDurability, atm.LFPG_GetBtcStock(), failedBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int committedCash = depositCashPlan.CommitPreparedCashValue(requestedCredit);
         if (committedCash != creditedCash)
         {
@@ -3012,8 +2563,6 @@ class LFPG_BTCHelper
             }
             else
             {
-                // Last-resort restitution: prevalidation makes over-commit
-                // unreachable in normal synchronous operation.
                 int restitutionAmount = committedCash - creditedCash;
                 LFPG_BTCInventoryPlan restitutionPlan = new LFPG_BTCInventoryPlan();
                 float restitutionResidual = GreedyChange(player, restitutionAmount, restitutionPlan);
@@ -3033,12 +2582,10 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, errCommit, atm.LFPG_GetBtcStock(), commitBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
-
         int newBal = atmPb.GetBalance(player);
         float eurAmt = creditedCash;
         int okCode = LFPG_BTC_OK;
         SendBTCTxResult(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, okCode, atm.LFPG_GetBtcStock(), newBal, 0, eurAmt, serverSessionLow, serverSessionHigh, sequence);
-
         string logDC = "[BTCDepositCash] ";
         logDC = logDC + creditedCash.ToString();
         logDC = logDC + " EUR deposited from bills";
