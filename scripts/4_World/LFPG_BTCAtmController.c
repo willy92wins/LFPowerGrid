@@ -606,7 +606,6 @@ class LFPG_BTCAtmController extends ViewController
     // =========================================================
     protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
     {
-        #ifndef SERVER
         if (!g_Game)
             return;
 
@@ -633,12 +632,10 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        #endif
     }
 
     protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
-        #ifndef SERVER
         if (!g_Game)
             return;
 
@@ -666,12 +663,10 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        #endif
     }
 
     protected void SendBTCBuyRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
-        #ifndef SERVER
         if (!g_Game)
             return;
 
@@ -699,12 +694,10 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        #endif
     }
 
     protected void SendBTCCashRpc(int subId, int netLow, int netHigh, int eurAmount)
     {
-        #ifndef SERVER
         if (!g_Game)
             return;
 
@@ -731,7 +724,6 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
-        #endif
     }
 
     protected void RequestBTCSession(PlayerBase player, int netLow, int netHigh)
@@ -1011,16 +1003,14 @@ class LFPG_BTCAtmController extends ViewController
             roundedInt = roundedInt + 1;
         }
         string result = roundedInt.ToString();
-        string suffix = " E";
-        result = result + suffix;
+        result = result + " E";
         return result;
     }
 
     protected string FormatEurInt(int val)
     {
         string result = val.ToString();
-        string suffix = " E";
-        result = result + suffix;
+        result = result + " E";
         return result;
     }
 };
