@@ -1,18 +1,6 @@
 #ifndef SERVER
-// Client-only compilation boundary
-// =========================================================
-// LF_PowerGrid - Client RPC Handler (v5.0 Refactor)
-//
-// All client-side RPC handlers extracted from modded PlayerBase
-// into static methods. Part of the crash fix refactor.
-// =========================================================
-
 class LFPG_RPCClientHandler
 {
-    // =========================================================
-    // Dispatch: routes subId to individual client handlers.
-    // Called from modded PlayerBase.OnRPC inside #else (client).
-    // =========================================================
     static void Dispatch(PlayerBase player, int subId, ParamsReadContext ctx)
     {
         if (subId == LFPG_RPC_SubId.SYNC_OWNER_WIRES)
@@ -47,7 +35,6 @@ class LFPG_RPCClientHandler
         {
             HandleSorterCargoRefresh(player);
         }
-        // ---- V4 TEST sorter dispatch (Sprint 0, 2026-04-26) ----
         else if (subId == LFPG_RPC_SubId.SORTER_TEST_CONFIG_RESPONSE)
         {
             HandleSorterTestConfigResponse(ctx);
@@ -98,10 +85,6 @@ class LFPG_RPCClientHandler
         }
     }
 
-    // =========================================================
-    // Individual client handlers
-    // =========================================================
-
     static void HandleSyncServerSettings(ParamsReadContext ctx)
     {
         bool hideFlag = false;
@@ -109,9 +92,7 @@ class LFPG_RPCClientHandler
 
         LFPG_CableRenderer.SetServerHideCablesNoReel(hideFlag);
 
-        string logMsg = "[LFPG] Server settings received: HideCablesWithoutReel=";
-        logMsg = logMsg + hideFlag.ToString();
-        Print(logMsg);
+        Print("[LFPG] Server settings received: HideCablesWithoutReel=" + hideFlag.ToString());
     }
 
     static void HandleClientMsg(ParamsReadContext ctx)
@@ -303,13 +284,7 @@ class LFPG_RPCClientHandler
 
         if (LFPG_PERFDIAG_ENABLED)
         {
-            string perfSnapshot = "LFPG_PERFDIAG t=";
-            perfSnapshot = perfSnapshot + g_Game.GetTickTime().ToString();
-            perfSnapshot = perfSnapshot + " deviceId=";
-            perfSnapshot = perfSnapshot + ownerDeviceId;
-            perfSnapshot = perfSnapshot + " snapshot_receive jsonLen=";
-            perfSnapshot = perfSnapshot + json.Length().ToString();
-            Print(perfSnapshot);
+            Print("LFPG_PERFDIAG t=" + g_Game.GetTickTime().ToString() + " deviceId=" + ownerDeviceId + " snapshot_receive jsonLen=" + json.Length().ToString());
         }
     }
 
@@ -334,13 +309,7 @@ class LFPG_RPCClientHandler
 
         if (LFPG_LOG_LEVEL >= 2)
         {
-            string syncMsg = "[CLIENT] SyncOwnerWiresV2 owner=";
-            syncMsg = syncMsg + ownerDeviceId;
-            syncMsg = syncMsg + " generation=";
-            syncMsg = syncMsg + generation.ToString();
-            syncMsg = syncMsg + " jsonLen=";
-            syncMsg = syncMsg + json.Length().ToString();
-            LFPG_Util.Debug(syncMsg);
+            LFPG_Util.Debug("[CLIENT] SyncOwnerWiresV2 owner=" + ownerDeviceId + " generation=" + generation.ToString() + " jsonLen=" + json.Length().ToString());
         }
 
         LFPG_CableRenderer renderer = LFPG_CableRenderer.Get();
@@ -355,15 +324,7 @@ class LFPG_RPCClientHandler
 
         if (LFPG_PERFDIAG_ENABLED)
         {
-            string perfSnapshot = "LFPG_PERFDIAG t=";
-            perfSnapshot = perfSnapshot + g_Game.GetTickTime().ToString();
-            perfSnapshot = perfSnapshot + " deviceId=";
-            perfSnapshot = perfSnapshot + ownerDeviceId;
-            perfSnapshot = perfSnapshot + " snapshot_receive jsonLen=";
-            perfSnapshot = perfSnapshot + json.Length().ToString();
-            perfSnapshot = perfSnapshot + " generation=";
-            perfSnapshot = perfSnapshot + generation.ToString();
-            Print(perfSnapshot);
+            Print("LFPG_PERFDIAG t=" + g_Game.GetTickTime().ToString() + " deviceId=" + ownerDeviceId + " snapshot_receive jsonLen=" + json.Length().ToString() + " generation=" + generation.ToString());
         }
     }
 
@@ -501,7 +462,6 @@ class LFPG_RPCClientHandler
     {
         player.UpdateInventoryMenu();
 
-        // v5.0: Signal 5_Mission to refresh vicinity containers
         LFPG_CargoRefreshSignal.Request();
     }
 
@@ -548,19 +508,7 @@ class LFPG_RPCClientHandler
 
         LFPG_BTCAtmClientData.OnOpenResponse(price, stock, balance, cashOnInv, withdrawOnly, btcOnInv, priceChange24h, protocolVersion, serverSessionLow, serverSessionHigh, highWatermark);
 
-        string logResp = "[BTCOpenResponse] price=";
-        logResp = logResp + price.ToString();
-        logResp = logResp + " stock=";
-        logResp = logResp + stock.ToString();
-        logResp = logResp + " bal=";
-        logResp = logResp + balance.ToString();
-        logResp = logResp + " cash=";
-        logResp = logResp + cashOnInv.ToString();
-        logResp = logResp + " wo=";
-        logResp = logResp + withdrawOnly.ToString();
-        logResp = logResp + " protocol=";
-        logResp = logResp + protocolVersion.ToString();
-        LFPG_Util.Info(logResp);
+        LFPG_Util.Info("[BTCOpenResponse] price=" + price.ToString() + " stock=" + stock.ToString() + " bal=" + balance.ToString() + " cash=" + cashOnInv.ToString() + " wo=" + withdrawOnly.ToString() + " protocol=" + protocolVersion.ToString());
 
         LFPG_BTCAtmView.Open();
     }
@@ -605,19 +553,7 @@ class LFPG_RPCClientHandler
         if (!LFPG_BTCAtmClientData.OnTxResult(txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence))
             return;
 
-        string logTx = "[BTCTxResult] type=";
-        logTx = logTx + txType.ToString();
-        logTx = logTx + " err=";
-        logTx = logTx + errCode.ToString();
-        logTx = logTx + " stock=";
-        logTx = logTx + newStock.ToString();
-        logTx = logTx + " bal=";
-        logTx = logTx + newBalance.ToString();
-        logTx = logTx + " btc=";
-        logTx = logTx + btcMoved.ToString();
-        logTx = logTx + " cash=";
-        logTx = logTx + cashOnInv.ToString();
-        LFPG_Util.Info(logTx);
+        LFPG_Util.Info("[BTCTxResult] type=" + txType.ToString() + " err=" + errCode.ToString() + " stock=" + newStock.ToString() + " bal=" + newBalance.ToString() + " btc=" + btcMoved.ToString() + " cash=" + cashOnInv.ToString());
 
         LFPG_BTCAtmView.OnTxResult();
     }
@@ -625,15 +561,12 @@ class LFPG_RPCClientHandler
     {
         LFPG_BTCAtmClientData.OnPriceUnavailable();
 
-        string logNA = "[BTCPriceUnavailable] price not available from API";
-        LFPG_Util.Info(logNA);
+        LFPG_Util.Info("[BTCPriceUnavailable] price not available from API");
 
         LFPG_BTCAtmView.OnPriceUnavailable();
     }
 
     // ============================================================
-	// Shared sorter UI handlers; _TEST RPC names remain stable.
-	// Legacy and _TEST entities use the same panel.
     // ============================================================
     static void HandleSorterTestConfigResponse(ParamsReadContext ctx)
     {
@@ -699,11 +632,9 @@ class LFPG_RPCClientHandler
             return;
         }
 
-        // Open the Sorter UI with full data
         LFPG_SorterView_TEST.Open(filterJSON, containerName, destName0, destName1, destName2, destName3, destName4, destName5, netLow, netHigh);
 
-        string logMsg = "[SorterConfigResponse] Opened UI, container=" + containerName;
-        LFPG_Util.Info(logMsg);
+        LFPG_Util.Info("[SorterConfigResponse] Opened UI, container=" + containerName);
     }
 
     static void HandleSorterTestSaveAck(ParamsReadContext ctx)
@@ -726,16 +657,10 @@ class LFPG_RPCClientHandler
 
         LFPG_SorterView_TEST.OnSortAck(success, movedCount);
 
-        // v3.2: Force client inventory UI refresh.
-        // LocationSyncMoveEntity on server moves items but client
-        // may not refresh cargo view until relog. UpdateInventoryMenu
-        // is vanilla EntityAI method called after every inventory op.
-		// Repack can change cargo positions without transferring any items.
 		if (success)
         {
             player.UpdateInventoryMenu();
 
-            // v5.0: Signal 5_Mission to refresh vicinity containers
             LFPG_CargoRefreshSignal.Request();
         }
     }
@@ -744,7 +669,6 @@ class LFPG_RPCClientHandler
     {
         player.UpdateInventoryMenu();
 
-        // v5.0: Signal 5_Mission to refresh vicinity containers
         LFPG_CargoRefreshSignal.Request();
     }
 
@@ -798,24 +722,20 @@ class LFPG_RPCClientHandler
 
         if (!ctx.Read(outputIdx))
         {
-            string errOut = "[SorterPreviewResponse] read outputIdx FAIL";
-            LFPG_Util.Warn(errOut);
+            LFPG_Util.Warn("[SorterPreviewResponse] read outputIdx FAIL");
             return;
         }
         if (!ctx.Read(totalMatched))
         {
-            string errTotal = "[SorterPreviewResponse] read totalMatched FAIL";
-            LFPG_Util.Warn(errTotal);
+            LFPG_Util.Warn("[SorterPreviewResponse] read totalMatched FAIL");
             return;
         }
         if (!ctx.Read(sentCount))
         {
-            string errSent = "[SorterPreviewResponse] read sentCount FAIL";
-            LFPG_Util.Warn(errSent);
+            LFPG_Util.Warn("[SorterPreviewResponse] read sentCount FAIL");
             return;
         }
 
-        // Sanity cap
         if (sentCount > LFPG_SORTER_PREVIEW_CAP)
         {
             sentCount = LFPG_SORTER_PREVIEW_CAP;
@@ -823,7 +743,6 @@ class LFPG_RPCClientHandler
 
         array<string> names = new array<string>;
         array<string> cats = new array<string>;
-        // v4.3: Changed from array<int> to string (formatted "WxH" / "WxH xQ")
         array<string> infos = new array<string>;
 
         int si = 0;
@@ -856,21 +775,13 @@ class LFPG_RPCClientHandler
 
         if (!readOk)
         {
-            string errRead = "[SorterPreviewResponse] item read FAIL at index ";
-            errRead = errRead + si.ToString();
-            LFPG_Util.Warn(errRead);
+            LFPG_Util.Warn("[SorterPreviewResponse] item read FAIL at index " + si.ToString());
             return;
         }
 
         LFPG_SorterView_TEST.OnPreviewData(outputIdx, totalMatched, names, cats, infos);
 
-        string logMsg = "[SorterPreviewResponse] output=";
-        logMsg = logMsg + outputIdx.ToString();
-        logMsg = logMsg + " total=";
-        logMsg = logMsg + totalMatched.ToString();
-        logMsg = logMsg + " received=";
-        logMsg = logMsg + sentCount.ToString();
-        LFPG_Util.Info(logMsg);
+        LFPG_Util.Info("[SorterPreviewResponse] output=" + outputIdx.ToString() + " total=" + totalMatched.ToString() + " received=" + sentCount.ToString());
     }
 };
 #endif
