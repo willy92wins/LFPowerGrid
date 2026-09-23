@@ -256,6 +256,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         #endif
     }
 
+    bool LFPG_GetSwitchState()
+    {
+        return m_SourceOn;
+    }
+
     // ============================================
     // Lifecycle hooks
     // ============================================
