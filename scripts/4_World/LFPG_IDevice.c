@@ -32,13 +32,7 @@ class LFPG_DeviceAPI
         // v0.7.38 (BugFix): Restrict vanilla to known types.
         // Previously accepted ANY entity with CompEM (flashlights, stoves,
         // radios, barrels...). Now only PowerGenerator and Spotlight.
-        if (IsVanillaSource(e))
-            return true;
-
-        if (IsVanillaConsumer(e))
-            return true;
-
-        return false;
+        return IsVanillaSource(e) || IsVanillaConsumer(e);
     }
 
     // Is this entity an energy source (generator)?
@@ -47,15 +41,8 @@ class LFPG_DeviceAPI
         if (!e)
             return false;
 
-        // LFPG-native source
-        if (IsSource(e))
-            return true;
-
-        // Vanilla: check config for isEnergySource = 1
-        if (IsVanillaSource(e))
-            return true;
-
-        return false;
+        // LFPG-native source or vanilla source.
+        return IsSource(e) || IsVanillaSource(e);
     }
 
     // Is this entity an energy consumer (lamp, fridge, etc)?
@@ -834,8 +821,7 @@ class LFPG_DeviceAPI
         if (count > 0) return count;
 
         // Vanilla fallback
-        if (IsVanillaSource(e)) return 1;
-        if (IsVanillaConsumer(e)) return 1;
+        if (IsVanillaSource(e) || IsVanillaConsumer(e)) return 1;
         return 0;
     }
 
