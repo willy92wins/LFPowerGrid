@@ -1,139 +1,51 @@
-// =========================================================
-// LF_PowerGrid - Sorter Logic (v1.2.0 Sprint S3)
-//
-// Server-side sorting logic used by LFPG_TickSorters
-// (NetworkManager) and SORTER_TEST_REQUEST_SORT RPC handler.
-//
-// All methods are static helpers — no state.
-//
-// Functions:
-//   EvaluateItem       — two-pass filter: rules then catch-all
-//   MatchesAnyRule     — OR logic across rules in one output
-//   MatchRule          — single rule evaluation
-//   ResolveCategory    — EntityAI → category string (IsKindOf)
-//   GetItemSlotSize    — CfgVehicles itemSize lookup (area)
-//   ResolveOutputContainer — wire topology → dest container
-//   MoveItemToContainer — server-authoritative inventory move
-//   RepackCargoInPlace — in-place 2D bin-packing (no ground round-trip)
-//
-// Enforce Script rules:
-//   No foreach, no ++/--, no ternario, no +=/-=
-//   Variables hoisted before conditionals
-//   Incremental string concat
-// =========================================================
-
 class LFPG_SorterLogic
 {
-    // =========================================================
-    // Sprint S3.1 — Container accessibility guards (4-layer)
-    // =========================================================
-    // Layer 0: VSM (Virtual Storage Module) detection.
-    //          #ifdef VSM compile-time conditional.
-    //          Blocks interaction with VSM containers that are
-    //          closed (items on disk) or processing (batch queue).
-    //          Covers ALL VSM containers including doorless ones
-    //          (SeaChest, WoodenCrate, etc.) that Layer 3 misses.
-    //
-    // Layer 1: CanReceiveItemIntoCargo / CanReleaseCargo (vanilla API).
-    //          CodeLock hooks TentBase here. Any mod that overrides
-    //          these methods is covered automatically.
-    //
-    // Layer 2: CodeLock direct detection WITHOUT compile-time dep.
-    //          FindAttachmentBySlotName("Att_CombinationLock") +
-    //          !IsTakeable() = locked.
-    //
-    // Layer 3: Door animation phase for vanilla furniture.
-    //          Barrel_ColorBase, TentBase, Fence.
-    //          Unknown types → always accessible (no false positives).
-    // =========================================================
-
-    // ---------------------------------------------------------
-    // CanTakeFromContainer: checks if the Sorter can READ items
-    // from this container (source side).
-    // Item param is used for CanReleaseCargo check — can be null
-    // for a general "is accessible" query.
-    // ---------------------------------------------------------
     static bool CanTakeFromContainer(EntityAI container, EntityAI item)
     {
         if (!container)
             return false;
 
-        // Layer 0: VSM virtual storage detection (compile-time conditional)
         if (IsVSMBlocked(container))
             return false;
 
-        // Layer 1: Vanilla API — mods override this
         if (item)
         {
             if (!container.CanReleaseCargo(item))
                 return false;
         }
 
-        // Layer 2: CodeLock direct detection (no compile dependency)
         if (HasLockedCodeLock(container))
             return false;
 
-        // Layer 3: Door animation — if container has a door and it's closed, skip
         if (IsDoorClosed(container))
             return false;
 
         return true;
     }
 
-    // ---------------------------------------------------------
-    // CanPutIntoContainer: checks if the Sorter can WRITE items
-    // into this container (destination side).
-    // ---------------------------------------------------------
     static bool CanPutIntoContainer(EntityAI container, EntityAI item)
     {
         if (!container)
             return false;
 
-        // Layer 0: VSM virtual storage detection (compile-time conditional)
         if (IsVSMBlocked(container))
             return false;
 
-        // Layer 1: Vanilla API — mods override this
         if (item)
         {
             if (!container.CanReceiveItemIntoCargo(item))
                 return false;
         }
 
-        // Layer 2: CodeLock direct detection (no compile dependency)
         if (HasLockedCodeLock(container))
             return false;
 
-        // Layer 3: Door animation — if container has a door and it's closed, skip
         if (IsDoorClosed(container))
             return false;
 
         return true;
     }
 
-    // ---------------------------------------------------------
-    // IsVSMBlocked: detects Virtual Storage Module containers.
-    //
-    // Uses #ifdef VSM (compile-time conditional).
-    // VSM defines "VSM" in Scripts/Common/vsm.c.
-    // If VSM is not loaded, this method always returns false
-    // and has ZERO overhead (compiled out entirely).
-    //
-    // When VSM IS loaded, checks:
-    //   1. VSM_IsVirtualStorage() — is this a VSM-managed container?
-    //   2. VSM_IsOpen() — is the container physically open?
-    //   3. VSM_IsProcessing() — is VSM currently restoring/virtualizing?
-    //
-    // A VSM container is only accessible when:
-    //   - It IS a virtual storage AND
-    //   - It IS open (items spawned from disk) AND
-    //   - It is NOT processing (batch restore/virtualize complete)
-    //
-    // Closed VSM containers have empty cargo (items on disk).
-    // Putting items into a closed VSM container would cause them
-    // to be lost when VSM virtualizes on next close cycle, or to
-    // coexist with restored items causing cargo overflow.
-    // ---------------------------------------------------------
     protected static bool IsVSMBlocked(EntityAI container)
     {
         #ifdef VSM
@@ -142,7 +54,6 @@ class LFPG_SorterLogic
         {
             if (ib.VSM_IsVirtualStorage())
             {
-                // VSM container: only accessible when open AND not processing
                 if (!ib.VSM_IsOpen())
                     return true;
 
@@ -155,22 +66,6 @@ class LFPG_SorterLogic
         return false;
     }
 
-    // ---------------------------------------------------------
-    // HasLockedCodeLock: detects a locked CodeLock attachment
-    // WITHOUT referencing the CodeLock class (zero compile-time
-    // dependency on the CodeLock mod).
-    //
-    // Detection logic:
-    //   1. FindAttachmentBySlotName("Att_CombinationLock")
-    //      → null if no lock attached (or slot doesn't exist)
-    //   2. !lockAtt.IsTakeable()
-    //      → CodeLock calls SetTakeable(false) when locking
-    //      → SetTakeable(true) + drop when unlocking
-    //   3. So: attachment exists AND not takeable = LOCKED
-    //
-    // Also checks vanilla CombinationLock which uses the same
-    // slot name and similar lock semantics.
-    // ---------------------------------------------------------
     protected static bool HasLockedCodeLock(EntityAI container)
     {
         if (!container)
@@ -179,47 +74,22 @@ class LFPG_SorterLogic
         if (!container.GetInventory())
             return false;
 
-        // CodeLock and vanilla CombinationLock both use this slot
         string slotName = "Att_CombinationLock";
         EntityAI lockAtt = container.FindAttachmentBySlotName(slotName);
         if (!lockAtt)
             return false;
 
-        // When locked: SetTakeable(false). When unlocked: dropped to ground.
-        // If it's still attached and not takeable → locked.
         if (!lockAtt.IsTakeable())
             return true;
 
         return false;
     }
 
-    // ---------------------------------------------------------
-    // IsDoorClosed: checks common door animation phases on
-    // vanilla DayZ containers and furniture.
-    //
-    // Animation sources checked (in order):
-    //   "Doors"  — barrels, many modded containers
-    //   "Doors1" — double-door containers (left)
-    //   "Doors2" — double-door containers (right)
-    //   "Door"   — some modded furniture
-    //   "lid"    — crates, ammo boxes
-    //
-    // Phase semantics: 0.0 = fully closed, 1.0 = fully open.
-    // We consider < 0.5 as "closed".
-    //
-    // If NONE of these animation sources exist on the model,
-    // the container is treated as always-open (no door to check).
-    // This avoids false positives on containers without doors
-    // (e.g. open shelves, ground stashes, simple crates).
-    // ---------------------------------------------------------
     protected static bool IsDoorClosed(EntityAI container)
     {
         if (!container)
             return false;
 
-        // Check known container types with door animations.
-        // Only check animation phase for types we KNOW have doors.
-        // Unknown types → treated as always-open (no false positives).
         float phase;
 
         string kBarrel = "Barrel_ColorBase";
@@ -229,7 +99,6 @@ class LFPG_SorterLogic
         string kFence = "Fence";
         string kDoors1 = "Doors1";
 
-        // Barrel_ColorBase: use real Openable state (visual animation is "Lid").
         if (container.IsKindOf(kBarrel))
         {
             Barrel_ColorBase barrel = Barrel_ColorBase.Cast(container);
@@ -239,9 +108,6 @@ class LFPG_SorterLogic
                 return true;
         }
 
-        // TentBase: "EntranceO" animation.
-        // CodeLock TentBase.GetDoorAnimState() checks GetAnimationPhase("EntranceO"):
-        //   if truthy (non-zero) → entrance closed → return false (not accessible)
         if (container.IsKindOf(kTent))
         {
             phase = container.GetAnimationPhase(kEntrance);
@@ -249,18 +115,12 @@ class LFPG_SorterLogic
                 return true;
         }
 
-        // Fence: gate door. "Doors1" phase 0=closed, 1=open.
-        // Fence with CodeLock blocks CanOpenFence() but we check directly.
         if (container.IsKindOf(kFence))
         {
             phase = container.GetAnimationPhase(kDoors1);
             if (phase < 0.5)
                 return true;
         }
-
-        // SeaChest, WoodenCrate, etc: no door animations → always accessible.
-        // Modded containers with custom doors will be caught by Layer 1
-        // (CanReceiveItemIntoCargo) if the mod overrides it.
 
         return false;
     }
