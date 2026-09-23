@@ -286,6 +286,7 @@ modded class Hologram
         return false;
     }
 
+#ifndef SERVER
     // ============================================
     // Placement helpers (v3.0: virtual dispatch)
     // All read from m_LFPG_CachedSameKit (set once per frame
