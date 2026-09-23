@@ -47,8 +47,6 @@ static const string LFPG_INTERCOM_MIC_RVMAT    = "\LFPowerGrid\data\rf_broadcast
 static const float LFPG_INTERCOM_CONSUMPTION_T1 = 10.0;
 static const float LFPG_INTERCOM_CONSUMPTION_T2 = 20.0;
 
-static const int LFPG_INTERCOM_HS_CAMO       = 0;
-static const int LFPG_INTERCOM_HS_SCREEN     = 1;
 static const int LFPG_INTERCOM_HS_LED1       = 2;
 static const int LFPG_INTERCOM_HS_LED2       = 3;
 static const int LFPG_INTERCOM_HS_MIC        = 4;
@@ -57,7 +55,6 @@ static const string LFPG_INTERCOM_SND_RF_BEEP      = "LFPG_Intercom_RFBeep_Sound
 static const string LFPG_INTERCOM_SND_KNOB_CLICK   = "LFPG_Intercom_KnobClick_SoundSet";
 static const string LFPG_INTERCOM_SND_STATIC_BURST  = "LFPG_Intercom_Static_SoundSet";
 
-static const int LFPG_SND_NONE         = 0;
 static const int LFPG_SND_KNOB_CLICK   = 1;
 static const int LFPG_SND_RF_BEEP      = 2;
 static const int LFPG_SND_STATIC_BURST = 3;
@@ -110,10 +107,6 @@ class LFPG_Intercom : LFPG_DeviceBase
 	protected bool m_VisualBroadcastEnabled = false;
 	protected int m_VisualFrequencyIndex = 0;
     #endif
-    #ifndef SERVER
-    protected int m_PerfDiagActionDirtyCount = 0;
-    #endif
-
     // ---- RF toggle state (not SyncVars) ----
     protected bool m_PrevToggleInput   = false;
     protected int  m_LastRFToggleTime  = 0;
@@ -129,27 +122,16 @@ class LFPG_Intercom : LFPG_DeviceBase
     // ============================================
     void LFPG_Intercom()
     {
-        string pIn1 = "input_1";
-        string lIn1 = "Power In";
-        LFPG_AddPort(pIn1, LFPG_PortDir.IN, lIn1);
+        LFPG_AddPort("input_1", LFPG_PortDir.IN, "Power In");
 
-        string pTog = "input_toggle";
-        string lTog = "Toggle Signal";
-        LFPG_AddPort(pTog, LFPG_PortDir.IN, lTog);
+        LFPG_AddPort("input_toggle", LFPG_PortDir.IN, "Toggle Signal");
 
-        string varPowered    = "m_PoweredNet";
-        string varSwitchOn   = "m_SwitchOn";
-        string varRadio      = "m_RadioInstalled";
-        string varBroadcast  = "m_BroadcastEnabled";
-        string varFreq       = "m_FrequencyIndex";
-        string varOverloaded = "m_Overloaded";
-
-        RegisterNetSyncVariableBool(varPowered);
-        RegisterNetSyncVariableBool(varSwitchOn);
-        RegisterNetSyncVariableBool(varRadio);
-        RegisterNetSyncVariableBool(varBroadcast);
-        RegisterNetSyncVariableInt(varFreq);
-        RegisterNetSyncVariableBool(varOverloaded);
+        RegisterNetSyncVariableBool("m_PoweredNet");
+        RegisterNetSyncVariableBool("m_SwitchOn");
+        RegisterNetSyncVariableBool("m_RadioInstalled");
+        RegisterNetSyncVariableBool("m_BroadcastEnabled");
+        RegisterNetSyncVariableInt("m_FrequencyIndex");
+        RegisterNetSyncVariableBool("m_Overloaded");
         RegisterNetSyncVariableInt("m_SoundEvent", 0, 15);
         RegisterNetSyncVariableInt("m_SoundEventSeq", 0, 255);
     }
@@ -174,13 +156,10 @@ class LFPG_Intercom : LFPG_DeviceBase
         if (!attachment)
             return false;
 
-        string typeName = attachment.GetType();
-        string ghostType = "LFPG_GhostRadio";
-        if (typeName == ghostType)
+        if (attachment.GetType() == "LFPG_GhostRadio")
             return false;
 
-        string kindRadio = "PersonalRadio";
-        if (!attachment.IsKindOf(kindRadio))
+        if (!attachment.IsKindOf("PersonalRadio"))
             return false;
 
         return super.CanReceiveAttachment(attachment, slotId);
@@ -191,12 +170,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         if (!attachment)
             return false;
 
-        if (m_RadioInstalled)
-        {
-            string kindRadio = "PersonalRadio";
-            if (attachment.IsKindOf(kindRadio))
-                return false;
-        }
+        if (m_RadioInstalled && attachment.IsKindOf("PersonalRadio"))
+            return false;
 
         return super.CanReleaseAttachment(attachment);
     }
@@ -208,14 +183,11 @@ class LFPG_Intercom : LFPG_DeviceBase
     override vector LFPG_GetPortWorldPos(string portName)
     {
         string memPoint;
-        string pInput1 = "input_1";
-        string pToggle = "input_toggle";
-
-        if (portName == pInput1)
+        if (portName == "input_1")
         {
             memPoint = "port_input_0";
         }
-        else if (portName == pToggle)
+        else if (portName == "input_toggle")
         {
             memPoint = "port_output_0";
         }
@@ -431,29 +403,25 @@ class LFPG_Intercom : LFPG_DeviceBase
 		int frequencyIndex;
 		if (!ctx.Read(switchOn))
         {
-            string errSwitch = "[LFPG_Intercom] OnStoreLoad failed: m_SwitchOn";
-            LFPG_Util.Error(errSwitch);
+            LFPG_Util.Error("[LFPG_Intercom] OnStoreLoad failed: m_SwitchOn");
             return false;
         }
 
 		if (!ctx.Read(radioInstalled))
         {
-            string errRadio = "[LFPG_Intercom] OnStoreLoad failed: m_RadioInstalled";
-            LFPG_Util.Error(errRadio);
+            LFPG_Util.Error("[LFPG_Intercom] OnStoreLoad failed: m_RadioInstalled");
             return false;
         }
 
 		if (!ctx.Read(broadcastEnabled))
         {
-            string errBcast = "[LFPG_Intercom] OnStoreLoad failed: m_BroadcastEnabled";
-            LFPG_Util.Error(errBcast);
+            LFPG_Util.Error("[LFPG_Intercom] OnStoreLoad failed: m_BroadcastEnabled");
             return false;
         }
 
 		if (!ctx.Read(frequencyIndex))
         {
-            string errFreq = "[LFPG_Intercom] OnStoreLoad failed: m_FrequencyIndex";
-            LFPG_Util.Error(errFreq);
+            LFPG_Util.Error("[LFPG_Intercom] OnStoreLoad failed: m_FrequencyIndex");
             return false;
         }
 
@@ -542,13 +510,11 @@ class LFPG_Intercom : LFPG_DeviceBase
         // Knob_input: 0.0 = off, 1.0 = on
         if (m_SwitchOn)
         {
-            string animOn = "knob_input";
-            SetAnimationPhase(animOn, 1.0);
+            SetAnimationPhase("knob_input", 1.0);
         }
         else
         {
-            string animOff = "knob_input";
-            SetAnimationPhase(animOff, 0.0);
+            SetAnimationPhase("knob_input", 0.0);
         }
 
         // Knob_freq: frequency dial position (0.0 to 1.0)
@@ -568,10 +534,8 @@ class LFPG_Intercom : LFPG_DeviceBase
         }
         else
         {
-            string emptyTex = "";
-            SetObjectTexture(LFPG_INTERCOM_HS_MIC, emptyTex);
-            string emptyMat = "";
-            SetObjectMaterial(LFPG_INTERCOM_HS_MIC, emptyMat);
+            SetObjectTexture(LFPG_INTERCOM_HS_MIC, "");
+            SetObjectMaterial(LFPG_INTERCOM_HS_MIC, "");
         }
 		m_VisualPowered = m_PoweredNet;
 		m_VisualSwitchOn = m_SwitchOn;
@@ -588,14 +552,7 @@ class LFPG_Intercom : LFPG_DeviceBase
     void LFPG_ToggleIntercom()
     {
         #ifdef SERVER
-        if (m_SwitchOn)
-        {
-            m_SwitchOn = false;
-        }
-        else
-        {
-            m_SwitchOn = true;
-        }
+        m_SwitchOn = !m_SwitchOn;
         string togMsg = "[LFPG_Intercom] Toggle ";
         if (m_SwitchOn)
         {
@@ -618,17 +575,6 @@ class LFPG_Intercom : LFPG_DeviceBase
         m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
         SetSynchDirty();
 
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
-            string perfToggle = "LFPG_PERFDIAG intercom_dirty action=toggle count=";
-            perfToggle = perfToggle + m_PerfDiagActionDirtyCount.ToString();
-            perfToggle = perfToggle + " deviceId=";
-            perfToggle = perfToggle + m_DeviceId;
-            Print(perfToggle);
-        }
-        #endif
         #endif
     }
 
@@ -743,9 +689,7 @@ class LFPG_Intercom : LFPG_DeviceBase
                     if (!edge)
                         continue;
 
-                    string targetPort = edge.m_TargetPort;
-                    string togglePort = "input_toggle";
-                    if (targetPort == togglePort)
+                    if (edge.m_TargetPort == "input_toggle")
                     {
                         togglePower = togglePower + edge.m_AllocatedPower;
                     }
@@ -753,11 +697,7 @@ class LFPG_Intercom : LFPG_DeviceBase
             }
         }
 
-        bool currentInput = false;
-        if (togglePower >= LFPG_INTERCOM_TOGGLE_INPUT_MIN)
-        {
-            currentInput = true;
-        }
+        bool currentInput = togglePower >= LFPG_INTERCOM_TOGGLE_INPUT_MIN;
 
         if (currentInput && !m_PrevToggleInput)
         {
@@ -840,17 +780,11 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected void LFPG_UpdateGhostRadio()
     {
         #ifdef SERVER
-        bool shouldExist = false;
-        if (m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled)
-        {
-            shouldExist = true;
-        }
-
-        if (shouldExist && !m_GhostRadio)
+        if (m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled && !m_GhostRadio)
         {
             LFPG_SpawnGhostRadio();
         }
-        else if (!shouldExist && m_GhostRadio)
+        else if (!(m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled) && m_GhostRadio)
         {
             LFPG_DestroyGhostRadio();
         }
@@ -917,17 +851,11 @@ class LFPG_Intercom : LFPG_DeviceBase
     protected void LFPG_UpdateGhostPAS()
     {
         #ifdef SERVER
-        bool pasShouldExist = false;
-        if (m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled)
-        {
-            pasShouldExist = true;
-        }
-
-        if (pasShouldExist && !m_GhostPAS)
+        if (m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled && !m_GhostPAS)
         {
             LFPG_SpawnGhostPAS();
         }
-        else if (!pasShouldExist && m_GhostPAS)
+        else if (!(m_RadioInstalled && m_PoweredNet && m_SwitchOn && m_BroadcastEnabled) && m_GhostPAS)
         {
             LFPG_DestroyGhostPAS();
         }
@@ -959,14 +887,7 @@ class LFPG_Intercom : LFPG_DeviceBase
     void LFPG_ToggleBroadcast()
     {
         #ifdef SERVER
-        if (m_BroadcastEnabled)
-        {
-            m_BroadcastEnabled = false;
-        }
-        else
-        {
-            m_BroadcastEnabled = true;
-        }
+        m_BroadcastEnabled = !m_BroadcastEnabled;
         LFPG_UpdateGhostRadio();
         LFPG_UpdateGhostPAS();
 
@@ -990,17 +911,6 @@ class LFPG_Intercom : LFPG_DeviceBase
         }
         SetSynchDirty();
 
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
-            string perfBroadcast = "LFPG_PERFDIAG intercom_dirty action=broadcast count=";
-            perfBroadcast = perfBroadcast + m_PerfDiagActionDirtyCount.ToString();
-            perfBroadcast = perfBroadcast + " deviceId=";
-            perfBroadcast = perfBroadcast + m_DeviceId;
-            Print(perfBroadcast);
-        }
-        #endif
         #endif
     }
 
@@ -1031,17 +941,6 @@ class LFPG_Intercom : LFPG_DeviceBase
         m_SoundEventSeq = (m_SoundEventSeq + 1) % 256;
         SetSynchDirty();
 
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagActionDirtyCount = m_PerfDiagActionDirtyCount + 1;
-            string perfFrequency = "LFPG_PERFDIAG intercom_dirty action=frequency count=";
-            perfFrequency = perfFrequency + m_PerfDiagActionDirtyCount.ToString();
-            perfFrequency = perfFrequency + " deviceId=";
-            perfFrequency = perfFrequency + m_DeviceId;
-            Print(perfFrequency);
-        }
-        #endif
         #endif
     }
 };
