@@ -1119,18 +1119,12 @@ class LFPG_FileUtil
 				return EnsureTypedFileOrRestore(targetPath, RECOVERY_BALANCES);
             }
 
-            bool hasBackup = false;
-            if (FileExist(bakNewPath))
-                hasBackup = true;
-            else if (FileExist(bakPath))
-                hasBackup = true;
-
             // Promote only an in-flight crash inside the replace window: no
             // target, marker still present, and a backup that can rebuild the
             // previous snapshot. First-save crashes and reported aborts fail
             // closed (empty/fresh or restore-from-backup) instead of resurrecting
             // a rolled-back credit.
-            if (!inFlight || !hasBackup)
+            if (!inFlight || (!FileExist(bakNewPath) && !FileExist(bakPath)))
             {
                 LFPG_Util.Error("[FileUtil] Orphan balances .tmp is not an in-flight replace. NOT promoting: " + tmpPath);
                 PreserveOrphanTmpEvidence(tmpPath);
