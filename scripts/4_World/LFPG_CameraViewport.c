@@ -1,7 +1,5 @@
 #ifndef SERVER
 // Client-only compilation boundary
-// =========================================================
-// LF_PowerGrid - CCTV Viewport Manager (v1.3.2)
 //
 // EXIT STRATEGY: COT DEDICATED SERVER PATTERN
 //
@@ -42,8 +40,6 @@
 //   - No multilinea en params de función
 //   - Hoisting de variables antes de if/else
 //   - String concat incremental
-// =========================================================
-
 static const float LFPG_CCTV_SCANLINE_SPACING = 8.0;
 static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.15;
 static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;
@@ -1415,31 +1411,22 @@ class LFPG_CameraViewport
 #ifdef SERVER
 static const float LFPG_CCTV_LENS_OFFSET_M = 0.2;
 
-// Server-side no-op stub: keeps LFPG_CameraViewport type plus the public and
-// externally consumed protected surface resolvable after the client boundary
-// removed the implementation from the server type surface (SP-075).
 class LFPG_CameraViewport
 {
     protected Object m_ViewCamObj;
     protected ref array<ref LFPG_CameraListEntry> m_CameraList;
     protected vector m_BaseOrientation;
 
-    void LFPG_CameraViewport()
-    {
-    }
+    void LFPG_CameraViewport() {}
 
     static LFPG_CameraViewport Get()
     {
         return null;
     }
 
-    static void Reset()
-    {
-    }
+    static void Reset() {}
 
-    static void SafeAbort()
-    {
-    }
+    static void SafeAbort() {}
 
     bool IsActive()
     {
@@ -1456,9 +1443,7 @@ class LFPG_CameraViewport
         return false;
     }
 
-    void EnterFromList(array<ref LFPG_CameraListEntry> entries)
-    {
-    }
+    void EnterFromList(array<ref LFPG_CameraListEntry> entries) {}
 
     protected bool EnterCamera(int index)
     {
@@ -1470,28 +1455,16 @@ class LFPG_CameraViewport
         return false;
     }
 
-    void HandleKeyUp(int key)
-    {
-    }
+    void HandleKeyUp(int key) {}
 
-    void CycleNext()
-    {
-    }
+    void CycleNext() {}
 
-    void CyclePrev()
-    {
-    }
+    void CyclePrev() {}
 
-    void DoExitCleanup()
-    {
-    }
+    void DoExitCleanup() {}
 
-    void Tick(float timeslice)
-    {
-    }
+    void Tick(float timeslice) {}
 
-    void DrawOverlay()
-    {
-    }
+    void DrawOverlay() {}
 };
 #endif

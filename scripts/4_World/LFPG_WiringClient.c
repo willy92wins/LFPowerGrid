@@ -1,6 +1,5 @@
 #ifndef SERVER
 // Client-only compilation boundary
-// =========================================================
 // LF_PowerGrid - client wiring session + preview rendering
 //
 // Preview uses CanvasWidget (2D overlay) via LFPG_CableHUD.
@@ -31,8 +30,6 @@
 //   RED    (0xFFFF3333) - segment over limit or connection invalid
 //   GREY   (0xFF888888) - no valid target under cursor
 //   CYAN   (0xFF00FFFF) - waypoint marker cross
-// =========================================================
-
 class LFPG_PreviewSpanCache
 {
     ref array<vector> points;
@@ -48,7 +45,6 @@ class LFPG_WiringClient
 {
     protected static ref LFPG_WiringClient s_Instance;
 
-    // Session state
     protected bool   m_Active = false;
     protected string m_SrcDeviceId;
     protected int    m_SrcLow;
@@ -58,48 +54,30 @@ class LFPG_WiringClient
 
     protected ref array<vector> m_Waypoints;
 
-    // Frame counter for throttled logging
     protected int m_FrameCounter = 0;
 
-    // Reusable temp array for preview drawing (avoids GC pressure)
     protected ref array<vector> m_PreviewPts;
 
-    // v0.7.9: Reusable sag output buffer for preview catenaria
     protected ref array<vector> m_SagPts;
 
-    // v0.7.10: Screen projection cache for preview (avoids redundant GetScreenPos).
-    // Matches CableRenderer.DrawFrame approach: project once, draw from cache.
     protected ref array<vector> m_PreviewScreenPts;
 
-    // FullSync throttle: minimum seconds between sync requests (client-side)
     protected static const float SYNC_COOLDOWN_SEC = 5.0;
     protected static float s_LastSyncRequestMs = -99999.0;
 
-    // v0.7.12 (B2): Cached semáforo status for Finish pre-validation (B3)
     protected int m_LastPreConnectStatus;
     protected string m_LastPreConnectReason;
 
-    // v0.7.33 (Fix #14): Session start time for timeout detection.
-    // Prevents stuck sessions from disconnect, alt-tab, or unresponsive server.
     protected float m_SessionStartMs;
 
-    // v0.7.38 (BugFix): Post-finish cooldown to prevent auto-restart.
-    // After Finish() sends the RPC and Cancel()s, the port action can
-    // immediately re-trigger Start() because cursor is still on device.
-    // The orphan session times out after 2min → confusing message.
     protected float m_LastFinishMs;
 
-    // v0.7.36 (H1): Cohen-Sutherland clip output buffers.
-    // Reused per-segment to avoid allocation (mirrors CableRenderer approach).
     protected vector m_ClipA;
     protected vector m_ClipB;
 
-    // v0.7.36 (M1): Reusable PreConnectParams to avoid per-frame allocation.
-    // Fields are overwritten each frame in DrawPreviewFrame.
     protected ref LFPG_PreConnectParams m_PreConnectParams;
     protected ref LFPG_PreConnectResult m_PreConnectResult;
 
-    // Cached fixed prefix: source -> last waypoint.
     protected ref array<vector> m_PreviewPrefixPts;
     protected ref array<ref LFPG_PreviewSpanCache> m_PrefixSpanCaches;
     protected bool m_PrefixCacheValid;
@@ -183,8 +161,6 @@ class LFPG_WiringClient
         m_PrefixCacheValid = false;
         s_LastSyncRequestMs = -99999.0;
     }
-
-    // ---- Public API ----
 
     bool IsActive()
     {
@@ -310,7 +286,6 @@ class LFPG_WiringClient
 
         if (srcObj && dstObj)
         {
-            // Resolve positions for geometry validation
             vector startPos = LFPG_DeviceAPI.GetPortWorldPos(srcObj, m_SrcPort);
             vector endPos = LFPG_DeviceAPI.GetPortWorldPos(dstObj, dstPort);
 
@@ -344,12 +319,7 @@ class LFPG_WiringClient
             }
         }
 
-        // =========================================================
-        // Direction swap logic (preserved from v0.7.11)
-        // =========================================================
 
-        // Determine actual source (OUT) and target (IN).
-        // If user started from IN and is finishing on OUT, swap.
         int actualSrcLow = m_SrcLow;
         int actualSrcHigh = m_SrcHigh;
         string actualSrcDeviceId = m_SrcDeviceId;
@@ -363,7 +333,6 @@ class LFPG_WiringClient
 
         if (m_SrcPortDir == LFPG_PortDir.OUT)
         {
-            // Normal order: first=OUT, second=IN. Waypoints stay as-is.
             int wi;
             for (wi = 0; wi < m_Waypoints.Count(); wi = wi + 1)
             {
@@ -372,7 +341,6 @@ class LFPG_WiringClient
         }
         else
         {
-            // Reversed: first=IN, second=OUT. Swap and reverse waypoints.
             actualSrcLow = dstLow;
             actualSrcHigh = dstHigh;
             actualSrcDeviceId = dstDeviceId;
@@ -382,7 +350,6 @@ class LFPG_WiringClient
             actualDstDeviceId = m_SrcDeviceId;
             actualDstPort = m_SrcPort;
 
-            // Reverse waypoint order so geometry matches source→target direction
             int rw;
             for (rw = m_Waypoints.Count() - 1; rw >= 0; rw = rw - 1)
             {
@@ -412,8 +379,6 @@ class LFPG_WiringClient
 
         LFPG_Util.Info("[WiringClient] RPC FINISH_WIRING sent");
 
-        // v0.7.38 (BugFix): Record finish time BEFORE Cancel clears state.
-        // Prevents immediate re-Start from port action on same frame/next tick.
         m_LastFinishMs = g_Game.GetTime();
 
         Cancel();
@@ -432,8 +397,6 @@ class LFPG_WiringClient
         m_LastPreConnectReason = "";
         m_SessionStartMs = 0.0;
 
-        // v0.7.10: Explicitly clear canvas to prevent ghost preview lines
-        // persisting for one frame if Cancel() fires outside the normal draw cycle.
         if (wasActive)
         {
             LFPG_CableHUD hud = LFPG_CableHUD.Get();
@@ -447,17 +410,12 @@ class LFPG_WiringClient
         }
     }
 
-    // =========================================================
-    // Per-frame preview rendering
-    // =========================================================
     static void TickPreview()
     {
         LFPG_WiringClient wc = Get();
         if (!wc.m_Active)
             return;
 
-        // v0.7.33 (Fix #14): Session timeout — auto-cancel stale sessions.
-        // Prevents stuck state from disconnect, alt-tab, or unresponsive server.
         float nowMs = g_Game.GetTime();
         float elapsed = nowMs - wc.m_SessionStartMs;
         if (elapsed > LFPG_WIRING_SESSION_TIMEOUT_MS)
@@ -475,16 +433,6 @@ class LFPG_WiringClient
         wc.DrawPreviewFrame();
     }
 
-    // =========================================================
-    // FindBestPort — find the best compatible port on a device
-    //
-    // Moved from LFPG_ConnectionRules (3_Game) in v0.7.13 because
-    // it depends on LFPG_DeviceAPI + LFPG_CableRenderer (both 4_World).
-    // 3_Game layer cannot reference 4_World types.
-    //
-    // Returns port index, or -1 if no compatible port exists.
-    // Priority: empty port > occupied port (for replacement).
-    // =========================================================
     static int FindBestPort(EntityAI device, int wantDir, string deviceId, LFPG_CableRenderer renderer)
     {
         if (!device)
@@ -509,7 +457,6 @@ class LFPG_WiringClient
                 firstAny = pi;
             }
 
-            // Check occupancy via renderer cache (client-side best effort)
             if (firstEmpty < 0 && renderer)
             {
                 string pName = LFPG_DeviceAPI.GetPortName(device, pi);
