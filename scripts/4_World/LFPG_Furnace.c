@@ -76,8 +76,6 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // ---- Client: sound + particle ----
 #ifndef SERVER
     protected EffectSound m_FurnaceLoopSound;
-#endif
-#ifndef SERVER
     protected ref Effect m_SmokeEffect;
 #endif
 
@@ -256,11 +254,6 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             SetSynchDirty();
         }
         #endif
-    }
-
-    bool LFPG_GetSwitchState()
-    {
-        return m_SourceOn;
     }
 
     // ============================================
@@ -741,8 +734,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             }
         }
 
-        int fuel = fuelPerUnit * qty;
-        return fuel;
+        return fuelPerUnit * qty;
     }
 
     void LFPG_AddFuel(int amount)
@@ -779,10 +771,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
         if (!cargo)
             return false;
 
-        int count = cargo.GetItemCount();
-        if (count > 0)
-            return true;
-        return false;
+        return cargo.GetItemCount() > 0;
     }
 
     #ifndef SERVER
