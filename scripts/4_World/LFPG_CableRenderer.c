@@ -1,8 +1,5 @@
 #ifndef SERVER
 // Client-only compilation boundary
-// =========================================================
-// LF_PowerGrid - client cable renderer (v0.7.38)
-//
 // v0.7.38 (Audit Phase 1) changes:
 //   C1 — Painter's sort: swap-based selection sort replaces O(n³) InsertAt.
 //   C2 — All LFPG_Diag.ServerEcho calls guarded with LFPG_DIAG_ENABLED
@@ -50,17 +47,6 @@
 //   character are alpha-faded so cables don't overdraw the model.
 //   Cost: 2 GetScreenPos per frame + 1 line-vs-rect per segment.
 //
-// Event-driven cable rendering with frozen geometry.
-//
-// Architecture:
-//   1. UpsertOwnerBlob (RPC event) -> stores segment data.
-//      Geometry is computed once and never recomputed unless the
-//      wire topology changes (new wire, cut, device destroyed).
-//   2. CullTick (2s timer) -> distance-based visibility flag.
-//   3. DrawFrame (per-frame from MissionGameplay) -> draws visible
-//      segments via Canvas 2D with raycast occlusion.
-//   4. RetryTick (5s timer) -> builds wires whose target entity
-//      was not available at initial build time (network bubble edge).
 //
 // v0.7.35 (Fase 1) changes:
 //   F1.1 — Fixed crash: m_AllWires → m_WireSegments (undefined member)
@@ -82,17 +68,6 @@
 //          occlusion samples blocked fade proportionally instead
 //          of the all-or-nothing visibility switch.
 //
-// v0.7.7 improvements:
-//   - Bounding sphere culling (fixes midpoint-near-player bug)
-//   - Device proximity bubble (configurable tight cull radius)
-//   - LOD visual: 3/2/1 passes by distance (shadow+base+highlight)
-//   - Depth-based line width (fake perspective)
-//   - Alpha fade at distance (smooth disappearance)
-//   - Owner early-out in CullTick (skip all wires if owner far)
-//
-// Occlusion: raycast from camera to segment midpoint.
-//   Budgeted (max N raycasts/frame), staggered by time,
-//   with hysteresis to prevent flicker at geometry edges.
 //
 // Connection cache: updated per owner on snapshots, deltas and local purge.
 //   Key: "deviceId|portName|dir"  Value: connected type name
@@ -120,69 +95,45 @@ class LFPG_OwnerWireState
 
     ref array<ref LFPG_WireData> wires;
 
-    // Last JSON received (for change detection; avoids redundant decode)
     string lastJson;
 
     // v1.2.3: last authoritative owner mutation generation applied locally.
     int wireGeneration = -1;
 
-    // Last known powered state (persists when entity is out of bubble)
     bool lastPowered;
 
-    // v0.7.8: Load ratio from source (0.0-N), synced from server.
     float lastLoadRatio;
 
-    // v1.0: Overloaded state (all-off policy). If true, ALL wires show CRITICAL_LOAD.
     bool lastOverloaded;
 
-    // v0.7.9: Pre-computed wire keys ("ownerId|0", "ownerId|1", etc.)
-    // Populated in BuildOwnerWires. Eliminates string concat in CullTick.
     ref array<string> cachedWireKeys;
 
-    // v0.7.9: Consecutive CullTick cycles where ownerObj was null.
-    // After threshold, wires are destroyed (device likely deleted/despawned).
     int nullOwnerTicks;
 
 	ref array<string> m_ConnectionKeys = new array<string>;
 	ref map<string, bool> m_CacheDevices = new map<string, bool>;
 };
 
-// Per-wire rendering data: visual sub-segments + wire-level occlusion
 class LFPG_WireSegmentInfo
 {
     ref array<ref LFPG_CableParticle> segments;
     bool powered;
     bool visible;        // distance-based (CullTick)
 
-    // Cached endpoint positions for distance-based culling.
     vector cachedPosA;
     vector cachedPosB;
 
-    // v0.7.7: Bounding sphere for the ENTIRE wire (all sub-segments).
-    // Fixes the known bug where cables with waypoints disappear when
-    // the player is near the midpoint but far from both endpoints.
     vector cachedCenter;
     float  cachedRadius;
 
-    // v0.7.7: Minimum distance from player to nearest point on wire.
-    // Computed in CullTick, used in DrawFrame for LOD + alpha fade.
-    // Avoids redundant distance calculations per frame.
     float  cachedMinDist;
 
-    // v0.7.8: Cable visual state (determines color).
-    // Set in CullTick based on powered state + load + overload mask.
     int cableState;
 
-    // v0.7.8: Wire index within the owner (for overload mask bit check).
     int wireIndex;
 
-    // v0.7.8: Waypoint world positions for joint rendering.
-    // Stored at build time. Joints are drawn only at LOD close.
     ref array<vector> cachedJoints;
 
-    // ---- Wire-level occlusion (raycast Z-buffer emulation) ----
-    // Coarse sample points for raycast (1 or 3 depending on wire length).
-    // Built once in BuildWire. Raycasts target these, not individual sub-segs.
     ref array<vector> occSamples;
     ref array<bool> occSampleBlocked;
     int    occSampleCursor;
@@ -190,17 +141,10 @@ class LFPG_WireSegmentInfo
     float  occNextCheckMs;    // game time for next recheck
     int    occConsecCount;    // positive=consecutive visible, negative=consecutive occluded
 
-    // v0.7.35 (F2.3): Ratio of occluded samples (0.0 = fully visible, 1.0 = fully blocked).
-    // Updated by CheckWireOcclusion. Used in DrawFrame to fade partially
-    // occluded wires instead of all-or-nothing. Only meaningful when occluded == false.
     float  occBlockedRatio;
 
-    // v0.7.38 (H6): Stable stagger group for occlusion round-robin.
-    // Computed once at BuildWire from wireIndex. Avoids flicker caused by
-    // map-index-based stagger shifting when wires are added/removed.
     int    occStaggerGroup;
 
-    // Per-wire projection caches. Valid only for identical camera and sway inputs.
     ref array<vector> cachedScreenPts;
     ref array<vector> cachedJointScreenPts;
     vector screenCacheCamPos;
@@ -252,23 +196,7 @@ class LFPG_WireSegmentInfo
         cableState      = LFPG_CableState.IDLE;
     }
 
-    // Build occlusion sample points from ACTUAL cable geometry.
-    //
-    // v0.8.2: Endpoint-anchored sampling with per-span distribution
-    // for waypoint cables. Fixes long cable visibility behind walls.
-    //
-    // ---- ROOT CAUSE OF BUG ----
-    //   A cable [DeviceA]--10% visible--[WALL]--90% hidden--[DeviceB]
-    //   with uniform samples at 16/33/50/66/83% has NO sample in the
-    //   visible 10% section. All samples blocked → cable hides entirely.
-    //
-    // ---- FIX ----
-    //   Always insert cachedPosA and cachedPosB as samples first.
-    //   For waypoint cables (Branch A): sample the MIDPOINT of each span
-    //   (A→j[0], j[0]→j[1], ...) instead of uniform length fractions.
-    //   Each span is independently testable. If the span near the player
-    //   is visible, its midpoint passes → cable shows.
-    //
+// Build occlusion samples from the actual cable geometry.
     // ---- BUDGET CONSTRAINT (CRITICAL — DO NOT EXCEED 5 SAMPLES) ----
     //   DrawFrame has a STRICT budget check:
     //     if (samplesNeeded <= rayBudget) → check; else → SKIP entirely
@@ -305,11 +233,6 @@ class LFPG_WireSegmentInfo
         occSampleBlocked.Clear();
         occSampleCursor = 0;
 
-        // Always sample both device endpoint positions (2 of 5 budget).
-        // Ensures the cable shows whenever either device is directly visible
-        // from the camera. Also provides the second "passing sample" that
-        // keeps occBlockedRatio below LFPG_OCC_PARTIAL_THRESHOLD in
-        // Branch A when posA + span0_mid are both unobstructed.
         occSamples.Insert(cachedPosA);
         occSampleBlocked.Insert(false);
         occSamples.Insert(cachedPosB);
@@ -318,7 +241,6 @@ class LFPG_WireSegmentInfo
         if (!segments || segments.Count() == 0)
             return;
 
-        // Compute total chain length (needed for Branch B tier selection)
         float totalLen = 0.0;
         int i;
         LFPG_CableParticle seg;
@@ -854,17 +776,8 @@ class LFPG_CableRenderer
 		return m_TotalSegCount > 0;
     }
 
-    // U6: un solo tick de mantenimiento, gobernado por el frame.
-    // Antes eran cuatro cadenas CallLater repetidas en CALL_CATEGORY_GUI,
-    // registradas en el constructor y desregistradas a mano en CleanupInstance;
-    // una instancia que sobreviviera a Reset() dejaba temporizadores huerfanos
-    // apuntando al objeto viejo. El hub de frame resuelve el singleton por Get()
-    // en cada llamada, asi que ese modo de fallo desaparece.
-    //
-    // Los periodos son los mismos y arrancan a la vez, igual que los CallLater
-    // registrados en el mismo instante, asi que la coincidencia de ticks no cambia.
-    // El acumulador se pone a cero al disparar en vez de restar el periodo: tras un
-    // tiron largo se dispara una vez, no en rafaga.
+    // El mantenimiento periódico se acumula por separado; tras un tirón se ejecuta
+    // una vez, evitando ráfagas.
     void MaintenanceTick(float timeslice)
     {
         m_CullAccS      = m_CullAccS + timeslice;
@@ -898,13 +811,7 @@ class LFPG_CableRenderer
         }
     }
 
-    // v0.7.9: proper cleanup on destruction.
-    // Deregisters the pending one-shot timers, releases all shape segments and
-    // clears maps. Without this, Reset() during reconnect would leave orphaned
-    // CallLater entries pointing to the old instance.
-    // U6: los cuatro ticks repetidos que antes vivian aqui ya no se registran;
-    // los gobierna MaintenanceTick desde el frame, asi que no pueden quedar
-    // huerfanos. Solo quedan los one-shot del batch de sincronizacion.
+    // Release segments and clear maps; only sync-batch one-shot timers remain.
     void ~LFPG_CableRenderer()
     {
         CleanupInstance();
@@ -4074,26 +3981,8 @@ class LFPG_CableRenderer
     // ===========================
     // ReconcileTick — periodic cable self-heal (v0.7.38, Audit #1)
     // ===========================
-    // Runs every 60s (LFPG_RECONCILE_TICK_MS). Client-side only.
-    //
-    // Problem: A wire enters retry as TARGET_MISSING, retryCount hits
-    // LFPG_RETRY_MAX (5), the entry is removed. If the target entity
-    // loads AFTER that (late streaming, heavy server), the cable stays
-    // invisible until the player reconnects or an admin forces refresh.
-    //
-    // Solution: Scan all owners' wire data. For each wire that has:
-    //   - valid data in m_ByOwnerId (wire exists in topology)
-    //   - NO built segments in m_WireSegments
-    //   - NO active entry in m_RetryQueue
-    // → re-insert into retry queue with fresh retryCount=0.
-    //
-    // Cost: O(total_wires) string lookups + map.Contains checks.
-    // No entity resolution, no raycasts, no geometry. Safe at 60s interval.
-    //
-    // Note: NegCache entries for failed deviceIds expire after 5s
-    // (NEG_CACHE_TTL_MS), so by the time ReconcileTick runs (60s),
-    // stale NegCache entries are already purged. The re-inserted retry
-    // will get a fresh resolution attempt in the next RetryTick cycle.
+    // Requeue topology wires that have neither built segments nor an active retry.
+    // This recovers targets that load after their retry entry expires.
     protected void ReconcileTick()
     {
         int reconciled = 0;
@@ -4193,9 +4082,7 @@ class LFPG_CableRenderer
         }
     }
 
-    // ===========================
-    // Catenaria (v0.7.9: adaptive subdivisions + quadratic sag)
-    // ===========================
+    // Catenaria
 
     // Determine optimal subdivision count for a segment based on its length.
     // Short cables look taut (0 subs), long cables get more curvature.
@@ -4226,12 +4113,7 @@ class LFPG_CableRenderer
         return segLen * sagFactor;
     }
 
-    // Apply catenaria sag to a raw point chain.
-    // v0.7.9: Self-contained. Each segment pair gets adaptive subdivisions
-    // and quadratic sag scaling. No external subdivision parameter needed.
-    //
-    // Input rawPts: [portA, wp1?, wp2?, ..., portB]
-    // Output m_SagPoints: interpolated chain with sag sub-points.
+    // Apply sag to [portA, waypoints..., portB], writing interpolated points to m_SagPoints.
     protected void ApplyCatenaria(array<vector> rawPts)
     {
         m_SagPoints.Clear();
@@ -4411,9 +4293,6 @@ class LFPG_CableRenderer
         }
     }
 
-    // ===========================
-    // Cleanup: destroy all (game shutdown / full reset)
-    // ===========================
     void DestroyAll()
     {
         m_TempKeys.Clear();
