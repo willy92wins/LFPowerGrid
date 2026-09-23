@@ -1,7 +1,3 @@
-// LF_PowerGrid - Network Manager (mission-arena implementation)
-// Split out of scripts/4_World/LFPG_NetworkManager.c; see that facade.
-
-// One coherent resume record per registered sorter (server runtime only).
 class LFPG_SorterResumeState
 {
 	EntityAI m_Item;
@@ -13,7 +9,6 @@ class LFPG_SorterResumeState
 	int m_WireGeneration;
 	ref LFPG_SortConfig m_Config;
 	ref array<EntityAI> m_Destinations = new array<EntityAI>;
-
 	void Clear()
 	{
 		m_Item = null;
@@ -26,7 +21,6 @@ class LFPG_SorterResumeState
 		m_WireGeneration = -1;
 		m_Destinations.Clear();
 	}
-
 	void Store(EntityAI item, int itemIndex, int outputIndex, int ruleIndex, LFPG_SortConfig config, int wireMask, int wireGeneration, EntityAI inputContainer, array<EntityAI> destinations)
 	{
 		m_Item = item;
@@ -41,7 +35,6 @@ class LFPG_SorterResumeState
 		for (int routeIndex = 0; routeIndex < destinations.Count(); routeIndex = routeIndex + 1)
 			m_Destinations.Insert(destinations[routeIndex]);
 	}
-
 	bool MatchesRoutes(int wireMask, int wireGeneration, array<EntityAI> destinations)
 	{
 		if (m_WireMask != wireMask || m_WireGeneration != wireGeneration || m_Destinations.Count() != destinations.Count())
@@ -54,12 +47,8 @@ class LFPG_SorterResumeState
 		return true;
 	}
 };
-
 class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 {
-    // Call sites hold the facade type, but the session registry only exists
-    // on the implementation. Returns null rather than throwing when no
-    // mission could build the manager; every caller already guards on null.
     static LFPG_ControlSessionRegistry Sessions()
     {
         LFPG_NetworkManagerImpl impl = LFPG_NetworkManagerImpl.Cast(LFPG_NetworkManager.Get());
@@ -67,70 +56,29 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return null;
         return impl.GetControlSessionRegistry();
     }
-
     protected ref LFPG_ControlSessionRegistry m_ControlSessions;
-
-    // Per-player anti-spam
     protected ref TStringManagedRefMap m_RateByPlayer;
-
-    // Central wire storage for vanilla sources (keyed by position-based device ID)
     protected ref map<string, ref array<ref LFPG_WireData>> m_VanillaWires;
-	// Temporary typed view, released before calling other device methods.
 	protected ref array<ref LFPG_WireData> m_WireQueryStore;
-
-    // Reverse index: "targetDeviceId|targetPort" -> number of wires targeting it
-    // Updated incrementally via ReverseIdxAdd/Remove. Full rebuild on self-heal.
     protected ref map<string, int> m_ReverseIdx;
-
-    // Reverse owner map: "targetDeviceId|targetPort" -> array of ownerDeviceIds
-    // Enables directed removal without full device scan.
     protected ref map<string, ref array<string>> m_ReverseOwners;
-
-    // Per-player wire count (incremental O(1) quota check)
-    // Updated on add/remove/cut. Full recount on self-heal.
     protected ref map<string, int> m_WiresByPlayer;
-
-    // Coalesced self-heal scheduling
     protected bool m_SelfHealQueued = false;
-    // T5 W4-F06: same-tick CutAll calls share one graph rebuild.
     protected bool m_CutGraphRebuildQueued = false;
-    // A detected reverse-index mismatch requires the atomic validation heal.
     protected bool m_IndexHealAfterCut = false;
-    // Fail-closed provenance bit: true only after a complete synchronous
-    // RebuildReverseIdx and while incremental mutations remain provable.
     protected bool m_ReverseIndexTrusted = false;
-    // T5 W1-F07: scope graph-rebuild dedupe to the validation cycle that
-    // follows a graph rebuild; index rebuild/recount still always execute.
     protected bool m_ValidationOnlyHealPending = false;
     protected bool m_ValidationSkipGraphRebuild = false;
     protected bool m_ValidationAfterCutRequested = false;
     protected int m_GraphRebuildGeneration = 0;
     protected int m_ValidationGraphGeneration = 0;
-    // True only when an incremental graph mutation could not prove that the
-    // in-memory graph still matches the authoritative wire stores.
     protected bool m_GraphFullRebuildRequired = true;
-    // One-shot credit for the existing replacement path, which explicitly
-    // removes the graph edge immediately before ReverseIdxRemove.
     protected string m_ExplicitGraphRemovalCredit = "";
-    // Suppresses redundant per-wire graph edits while CutAll is about to
-    // remove the whole node and schedule the coalesced rebuild.
     protected bool m_CutAllGraphBatchActive = false;
     protected bool m_CutAllHasPreviousOwnerPosition = false;
     protected vector m_CutAllPreviousOwnerPosition;
-    // Devices forced off by a CutAll batch. Applied in the same callback as
-    // the final rebuild so SyncVar batching cannot expose an intermediate off.
     protected ref map<string, bool> m_CutPendingPowerOff;
-
-    // v0.7.38 (RC-01): Port locking for concurrent FinishWiring protection.
-    // Key: "targetDeviceId|targetPort" → true while a FinishWiring is in-flight
-    // for that destination port. Prevents two RPCs from both passing the
-    // occupancy check on the same port in the same tick.
     protected ref map<string, bool> m_PortLocks;
-
-    // v0.7.38 (RC-07): Startup validation flag.
-    // False until ValidateAllWiresAndPropagate completes (5s after init).
-    // RPC handlers reject wiring requests during this window to prevent
-    // transient flicker from rebuild overwriting incremental state.
     protected bool m_StartupValidationDone = false;
     protected bool m_ValidationActive = false;
     protected bool m_ValidationRerunRequested = false;
@@ -141,9 +89,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected ref array<EntityAI> m_ValidationDevices;
     protected ref map<string, bool> m_ValidationValidIds;
     protected ref array<string> m_ValidationVanillaIds;
-
-	// FullSync serializes snapshots for one player. Mutations are deferred only
-	// for that recipient; all other interested players receive them immediately.
     protected bool m_FullSyncInProgress = false;
     protected PlayerBase m_FullSyncPlayer;
 	protected bool m_FullSyncReplayActive = false;
@@ -158,44 +103,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected ref TStringManagedRefMap m_DeferredOwnerSnapshots;
     protected ref array<string>   m_DeferredBroadcastVanillaIds;
     protected ref array<EntityAI> m_DeferredBroadcastVanillaObjs;
-
-    // v0.7.4: deferred vanilla wire persistence.
-    // MarkVanillaDirty() sets flag; FlushVanillaIfDirty() writes to disk.
-    // Periodic timer (LFPG_VANILLA_FLUSH_S) flushes automatically.
-    // Eliminates synchronous I/O on every wire mutation.
     protected bool m_VanillaDirty = false;
     protected int m_LastVanillaSaveFailureWarnMs = 0;
     protected int m_VanillaSaveFailureCount = 0;
     protected static const int LFPG_VANILLA_SAVE_WARN_INTERVAL_MS = 60000;
-
-    // v0.7.16 H6: Version guard — track loaded schema version.
-    // If file was saved by a newer mod version, block saves to prevent data loss.
     protected int m_VanillaLoadedVer = 0;
     protected bool m_VanillaReadOnly = false;
-
-    // v4.7: Deferred vanilla wire pruning flag.
-    // Pruning is deferred to 35s post-init to allow late-loading entities
-    // to be resolved before wires are permanently removed.
     protected bool m_DeferredPruneScheduled = false;
-
-    // v0.8.0: Centralized solar timer cached state.
-    // Single timer reads GetDate() once per tick, updates all panels atomically.
-    // Eliminates N per-panel CallLater timers and prevents race conditions.
     protected bool m_SolarHasSun = false;
-
-    // v1.1.0: Water Pump tank fill tracking (in-game hour based)
     protected float m_TankFillLastMs = -1.0;
-
-    // v1.2.0 (Sprint S3): Sorter round-robin cursor
     protected int m_SorterCursor = 0;
-
-    // v1.2.0 (Sprint S5): Dedicated sorter registry — avoids iterating all devices
     protected ref array<EntityAI> m_RegisteredSorters;
-
-    // v1.2.0 (Sprint S5): Reusable item cache for TickSorters (GC reduction)
     protected ref array<EntityAI> m_SorterItemCache;
-
-    // v5.0: Reusable container list for TickSorters cargo refresh broadcast
     protected ref array<EntityAI> m_TickAffectedContainers;
     protected ref array<EntityAI> m_TickDirtyDestinations;
     protected ref array<EntityAI> m_TickDirtySources;
@@ -207,8 +126,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     #ifndef SERVER
     protected int m_PerfDiagSorterSourceDirtyCount;
     #endif
-
-    // T2: per-sorter deferral state for the real rule-check budget.
 	protected ref array<ref LFPG_SorterResumeState> m_SorterResumes;
 	protected ref array<EntityAI> m_SorterOutputContainers;
     #ifndef SERVER
@@ -220,61 +137,29 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     #ifndef SERVER
     protected int m_PerfDiagSorterDeferrals;
     #endif
-
-    // v1.5.0: Motion Sensor dedicated registry
     protected ref array<EntityAI> m_RegisteredSensors;
-
-    // v1.8.0: Pressure Pad dedicated registry
     protected ref array<EntityAI> m_RegisteredPads;
-
-    // v1.9.0: Laser Detector dedicated registry
     protected ref array<EntityAI> m_RegisteredLasers;
-
-    // v2.0: Battery energy accounting state.
-    // Iterated from LFPG_TickSimpleDevices (offset 4, ~5s effective).
-    // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
     protected ref array<EntityAI> m_RegisteredBatteries;
     protected float m_BatteryLastTickMs;
 	protected ref map<string, float> m_BatteryRebuildGeneration;
 	protected ref map<string, float> m_BatteryRebuildDemand;
-
-    // v3.0: Intercom toggle input evaluation registry
     protected ref array<EntityAI> m_RegisteredIntercoms;
-
-    // v3.1: Furnace centralized burn timer registry
-    // Replaces per-device CallLater (N timers → 1 timer)
     protected ref array<EntityAI> m_RegisteredFurnaces;
-
-    // v4.0: Fridge centralized cooling timer registry
-    // Registration-stable phases use parallel arrays removed at the same index.
     protected ref array<EntityAI> m_RegisteredFridges;
     protected ref array<int> m_RegisteredFridgePhases;
     protected int m_NextFridgePhase = 0;
-
-    // v1.0.0: Electric Stove centralized cooking timer registry
     protected ref array<EntityAI> m_RegisteredStoves;
     protected ref array<int> m_RegisteredStovePhases;
     protected int m_NextStovePhase = 0;
-
-    // v4.0: DoorController centralized poll timer registry
     protected ref array<EntityAI> m_RegisteredDoorControllers;
-
-    // v4.1: Solar panel dedicated registry (replaces GetAll+Cast scan)
     protected ref array<EntityAI> m_RegisteredSolars;
-
-    // v4.1: Water pump + sprinkler dedicated registries (replaces GetAll+Cast scan)
-    // T1 and T2 are separate classes (T2 does NOT inherit T1).
     protected ref array<EntityAI> m_RegisteredT1Pumps;
     protected ref array<EntityAI> m_RegisteredT2Pumps;
     protected ref array<EntityAI> m_RegisteredSprinklers;
     protected ref array<int> m_RegisteredSprinklerPhases;
     protected int m_NextSprinklerPhase = 0;
-
-    // v4.1/T2: one 300ms timer evaluates every laser, pads every second
-    // callback, sensors every tenth, and maintains laser beams round-robin.
     protected int m_PlayerDetectCounter;
-
-    // T2: one coarse player-cell index per detection tick, plus rotating cursors.
     protected static const float LFPG_PLAYER_CELL_SIZE_M = 10.0;
 	protected bool m_PlayerCellsBuiltThisTurn = false;
 	protected ref map<string, int> m_PlayerCellIndex;
@@ -318,10 +203,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     #ifndef SERVER
     protected int m_PerfDiagSensorChanges;
     #endif
-
-    // v4.1: Simple Devices consolidated tick sub-counter.
-    // One timer at 1,000ms drives intercoms/DC/furnaces/batteries/fridges with stagger offsets.
-    // Cycle 1-10, reset at 10. Stagger ensures Batteries and Furnaces never fire same tick.
     protected int m_SimpleTickCounter;
     protected int m_FridgePhaseCursor;
     protected int m_StovePhaseCursor;
@@ -336,22 +217,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     #ifndef SERVER
     protected int m_PerfDiagWetPreGateSkips;
     #endif
-
-    // Cached valid device IDs for PruneMissingTargets (built once per self-heal cycle)
     protected ref map<string, bool> m_CachedValidIds;
-	
-    // v5.0: BTC ATM price fetcher (server-only)
     protected ref LFPG_BTCPriceFetcher m_BTCPriceFetcher;
-
-    // v3.1 (GC reduction): Reusable arrays for high-frequency tick functions.
-    // Hoisted from local scope to class members. .Clear() each tick instead of new.
-    // Prevents heap fragmentation on long-running servers (>44K abandoned objects/hr).
     protected ref array<Man>      m_ReusablePlayers;
     protected ref array<string>   m_ReusableMovedIds;
     protected ref array<EntityAI> m_ReusableMovedDevs;
     protected ref array<vector>   m_ReusableMovedOldPositions;
     protected ref array<string>   m_ReusableDisappearedIds;
-
     static const int LFPG_SERVER_SCHEDULER_TICK_MS = 100;
     protected static const int LFPG_VALIDATE_RESOLVE_VANILLA = 1;
     protected static const int LFPG_VALIDATE_SNAPSHOT_PRE = 2;
@@ -382,9 +254,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected int m_SchedSimpleMs;
     protected int m_SchedBtcMs;
     protected int m_SchedBtcIntervalMs;
-
-    // v3.2 (GC reduction): Reusable arrays for BroadcastOwnerWires/BroadcastVanillaWires.
-    // Avoids per-call heap allocation of player list and target position list.
     protected ref array<Man>      m_ReusableBroadcastPlayers;
     protected ref array<vector>   m_ReusableBroadcastPositions;
     protected ref array<string>   m_ReusableReversePorts;
@@ -396,56 +265,26 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     #ifndef SERVER
     protected int m_PerfDiagOwnerDeltaSendCount;
     #endif
-
-    // Vanilla wire persistence path
     protected static const string VANILLA_WIRES_DIR  = "$profile:LF_PowerGrid";
     protected static const string VANILLA_WIRES_FILE = "$profile:LF_PowerGrid\\vanilla_wires.json";
-
-    // Rate limiter stale threshold: entries idle for > 10 minutes are purged
     protected static const float RATE_LIMITER_STALE_SEC = 600.0;
-
-    // S7-4: Sliding window rate limiter — max ops per player per 1-second window.
-    // Prevents RPC spam from malicious or bugged clients even if cooldown is small.
     protected static const int LFPG_RPC_MAX_OPS_PER_SEC = 5;
-
-    // S7-4: Per-player sliding window state (keyed by plain player ID).
-    // m_RateWindowStart: timestamp when the current 1s window began.
-    // m_RateOpsInWindow: number of ops in the current window.
     protected ref map<string, float> m_RateWindowStart;
     protected ref map<string, int>   m_RateOpsInWindow;
-
     protected ref TStringManagedMap m_PendingBroadcastLFPG;
     protected ref TStringManagedRefMap m_PendingOwnerSnapshots;
     protected ref TStringManagedMap m_PendingBroadcastVanilla;
-
-    // Sprint 4.1: Electrical graph (server-only).
-    // Mirrors the wire topology for cycle detection and future propagation.
     protected ref LFPG_ElecGraph m_Graph;
-
-    // Sprint 4.2 S2b (H3): Warmup mode flag.
-    // Set true after PostBulkRebuild / ValidateAllWires; cleared when queue drains.
-    // While active, TickPropagation uses WARMUP_BUDGET instead of NODE_BUDGET.
     protected bool m_WarmupActive;
-
-    // Sprint 4.3: Propagation telemetry accumulators (server-side).
-    // Accumulated between dumps; reset every LFPG_TELEM_INTERVAL_MS.
     protected int m_TelemTickCount;
     protected int m_TelemTotalProcessMs;
     protected int m_TelemPeakProcessMs;
     protected int m_TelemTotalEdgesVisited;
     protected float m_TelemLastDumpMs;
-
-    // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
-    // Replaces N per-device timers (v0.7.29) with a single global timer.
-    // m_TrackedDeviceIds: only devices with active wires (auto-register/unregister).
-    // m_TrackedDeviceIndex: ID → array index for O(1) swap-and-pop removal.
-    // m_TrackCursor: round-robin cursor for batched processing.
-    // m_LastKnownPos: reused from v0.7.23, position snapshot per tracked device.
     protected ref map<string, vector> m_LastKnownPos;
     protected ref array<string>       m_TrackedDeviceIds;
     protected ref map<string, int>    m_TrackedDeviceIndex;
     protected int                     m_TrackCursor;
-
     void LFPG_NetworkManagerImpl()
     {
         m_RateByPlayer = new TStringManagedRefMap;
@@ -466,8 +305,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_DeferredOwnerSnapshots = new TStringManagedRefMap;
         m_DeferredBroadcastVanillaIds = new array<string>;
         m_DeferredBroadcastVanillaObjs = new array<EntityAI>;
-
-        // v1.2.0: Always allocate (Register/Unregister not guarded with #ifdef)
         m_RegisteredSorters = new array<EntityAI>;
         m_SorterItemCache = new array<EntityAI>;
         m_TickAffectedContainers = new array<EntityAI>;
@@ -491,8 +328,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_RegisteredT2Pumps = new array<EntityAI>;
         m_RegisteredSprinklers = new array<EntityAI>;
         m_RegisteredSprinklerPhases = new array<int>;
-
-        // v3.1 (GC reduction): Initialize reusable tick arrays
         m_ReusablePlayers = new array<Man>;
         m_ReusableMovedIds = new array<string>;
         m_ReusableMovedDevs = new array<EntityAI>;
@@ -515,13 +350,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_SchedSimpleMs = 0;
         m_SchedBtcMs = 0;
         m_SchedBtcIntervalMs = 0;
-
         #ifdef SERVER
         m_ControlSessions = new LFPG_ControlSessionRegistry();
-
-        // v0.7.30: Tracked device set for centralized polling.
-        // Always allocated when compiled as server (dedicated + SP host).
-        // Methods have runtime IsServer() guards for extra safety.
         m_TrackedDeviceIds = new array<string>;
         m_ValidationDevices = new array<EntityAI>;
         m_ValidationValidIds = new map<string, bool>;
@@ -545,7 +375,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_PlayerCandidates = new array<Man>;
         m_SprinklerWetPlayers = new array<Man>;
         LFPG_SorterLogic.InitCaches();
-
         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
         if (mw) m_Graph = mw.LFPG_CreateElecGraph();
         if (!m_Graph)
@@ -564,38 +393,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LoadVanillaWires();
         bool bFalse = false;
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(ValidateAllWiresAndPropagate, 5000, bFalse);
-        // Periodic rate limiter cleanup (every 5 minutes)
-        // v0.7.4: periodic vanilla wire flush (deferred persistence)
-        // Sprint 4.2: periodic propagation tick (event-driven via graph dirty queue)
-        // v0.7.30 (Audit 1+2): Centralized position polling with round-robin batching.
-        // Replaces per-device timers. Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
-        // Runtime guard: prevents timer registration in SP/local-host hybrid contexts
-        // where #ifdef SERVER is active but the instance isn't a true dedicated server.
-
-        // v0.8.0: Centralized solar timer — 1 timer for all solar panels.
-        // Seed cached sun state immediately (panels may init before first tick).
         LFPG_ComputeSunState();
-
-        // v1.1.0: Water Pump filter degradation + tank timer
         LFPG_InitTankFillTime();
-
-        // v1.2.0 (Sprint S3): Sorter tick — round-robin batch sorting
-
-        // v4.1: Consolidated player detection tick (lasers 300ms + pads 600ms + sensors 3s).
-        // Replaces 4 separate timers. Sub-counters gate slower devices.
         m_PlayerDetectCounter = 0;
-
-        // v4.1: Consolidated simple devices tick (intercoms/DC/furnaces/batteries/fridges).
-        // Replaces 5 separate timers. Stagger offsets prevent spike alignment.
-        // Intercoms=every tick, DC=%2==1, Furnaces=%5==2, Batteries=%5==4, Fridges=%10==6.
         m_SimpleTickCounter = 0;
         m_BatteryLastTickMs = g_Game.GetTime();
-		
-		
-		// v5.0: BTC ATM price fetcher
         LFPG_BTCConfig.Load();
-
-        // v5.1: Balance provider registry
         LFPG_BalanceProvider_NativeImpl nativeProv = new LFPG_BalanceProvider_NativeImpl();
         LFPG_BalanceRegistry.Register(nativeProv);
         #ifdef LBmaster_Core
@@ -604,7 +407,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         #endif
         string balMode = LFPG_BTCConfig.GetBalanceMode();
         LFPG_BalanceRegistry.Init(balMode);
-
         if (LFPG_BTCConfig.IsEnabled())
         {
             LFPG_BTCPriceFetcher.Create();
@@ -624,18 +426,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             string btcOffMsg = "[NM] BTC ATM system DISABLED by config";
             LFPG_Util.Info(btcOffMsg);
         }
-
         StartServerScheduler();
         #endif
     }
-
-
-
     LFPG_ControlSessionRegistry GetControlSessionRegistry()
     {
         return m_ControlSessions;
     }
-
     override void StartServerScheduler()
     {
         #ifdef SERVER
@@ -643,11 +440,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return;
         if (m_ServerScheduler)
             return;
-
-        // A stopped-to-started transition is a new mission generation.
-        // Runtime control records must never survive that boundary.
         m_ControlSessions = new LFPG_ControlSessionRegistry();
-
         m_SchedPurgeMs = 0;
         m_SchedFlushMs = 0;
         m_SchedPropagationMs = 0;
@@ -664,7 +457,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_Util.Info("[Scheduler] start tick_ms=100");
         #endif
     }
-
     override void StopServerScheduler()
     {
         #ifdef SERVER
@@ -676,77 +468,66 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
     protected void LFPG_ServerSchedulerTick()
     {
         #ifdef SERVER
 		m_PlayerCellsBuiltThisTurn = false;
         if (m_ControlSessions)
             m_ControlSessions.Tick();
-
         m_SchedPurgeMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedPurgeMs >= 300000)
         {
             m_SchedPurgeMs = 0;
             PurgeStaleRateLimiters();
         }
-
         m_SchedFlushMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedFlushMs >= LFPG_VANILLA_FLUSH_S * 1000)
         {
             m_SchedFlushMs = 0;
             FlushVanillaIfDirty();
         }
-
         m_SchedPropagationMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedPropagationMs >= LFPG_PROPAGATE_TICK_MS)
         {
             m_SchedPropagationMs = 0;
             TickPropagation();
         }
-
         m_SchedMovementMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedMovementMs >= LFPG_MOVE_DETECT_TICK_MS)
         {
             m_SchedMovementMs = 0;
             CheckDeviceMovement();
         }
-
         m_SchedSolarMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedSolarMs >= LFPG_SOLAR_CHECK_MS)
         {
             m_SchedSolarMs = 0;
             LFPG_TickSolarPanels();
         }
-
         m_SchedPumpMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedPumpMs >= LFPG_PUMP_CHECK_MS)
         {
             m_SchedPumpMs = 0;
             LFPG_TickWaterPumps();
         }
-
         m_SchedSorterMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedSorterMs >= LFPG_SORTER_TICK_MS)
         {
             m_SchedSorterMs = 0;
             LFPG_TickSorters();
         }
-
         m_SchedPlayerDetectionMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedPlayerDetectionMs >= 300)
         {
             m_SchedPlayerDetectionMs = 0;
             LFPG_TickPlayerDetection();
         }
-
         m_SchedSimpleMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedSimpleMs >= 1000)
         {
             m_SchedSimpleMs = 0;
             LFPG_TickSimpleDevices();
         }
-
         if (m_SchedBtcIntervalMs > 0)
         {
             m_SchedBtcMs += LFPG_SERVER_SCHEDULER_TICK_MS;
@@ -756,40 +537,23 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_SchedBtcMs = 0;
             LFPG_TickBTCPrice();
         }
-
         LFPG_ProcessStartupValidationSlice();
         LFPG_ProcessFullSyncSpread();
         #endif
     }
-
-    // ===========================
-    // Rate limit
-    // ===========================
-    // S7-4: Two-layer rate limiting:
-    //   Layer 1 (sliding window): max LFPG_RPC_MAX_OPS_PER_SEC ops/s per player.
-    //     Blocks burst spam regardless of individual op cooldown.
-    //   Layer 2 (per-op cooldown): existing LFPG_RateLimiter with RpcCooldownSeconds.
-    //     Enforces minimum gap between consecutive ops.
     override bool AllowPlayerAction(PlayerIdentity ident)
     {
         if (!ident) return false;
-
-        // Log-safe id: this key only indexes in-process rate-limit maps and
-        // is printed in the sliding-window warning below.
         string pid = ident.GetId();
         LFPG_ServerSettings st = LFPG_Settings.Get();
         float now = g_Game.GetTime() * 0.001;
-
-        // --- Layer 1: sliding window ---
         float windowStart = 0.0;
         int opsInWindow = 0;
-
         if (m_RateWindowStart.Find(pid, windowStart))
         {
             float elapsed = now - windowStart;
             if (elapsed >= 1.0)
             {
-                // Window expired — start a new one
                 m_RateWindowStart[pid] = now;
                 m_RateOpsInWindow[pid] = 0;
                 opsInWindow = 0;
@@ -798,7 +562,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 if (!m_RateOpsInWindow.Find(pid, opsInWindow))
                     opsInWindow = 0;
-
                 if (opsInWindow >= LFPG_RPC_MAX_OPS_PER_SEC)
                 {
 					string swLog = "[RateLimiter] Sliding window exceeded for " + LFPG_Util.LogUid(pid);
@@ -814,15 +577,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RateOpsInWindow[pid] = 0;
             opsInWindow = 0;
         }
-
-        // Count this op in the window BEFORE Layer 2 check.
-        // Intentional: we count the attempt, not the success. A spammer hitting
-        // the cooldown on every op is still attempting spam — the window fills
-        // up and they get hard-blocked. Legitimate players (1-2 ops/s) never
-        // approach LFPG_RPC_MAX_OPS_PER_SEC=5.
         m_RateOpsInWindow[pid] = opsInWindow + 1;
-
-        // --- Layer 2: per-op cooldown (existing) ---
         ref LFPG_RateLimiter rl;
         Managed rateLimiterRaw;
         if (!m_RateByPlayer.Find(pid, rateLimiterRaw) || !Class.CastTo(rl, rateLimiterRaw) || !rl)
@@ -830,35 +585,24 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             rl = new LFPG_RateLimiter();
             m_RateByPlayer[pid] = rl;
         }
-
         return rl.Allow(now, st.RpcCooldownSeconds);
     }
-
-    // Periodic cleanup: remove rate limiters for disconnected/idle players.
-    // Runs every 5 minutes via CallLater. Prevents unbounded map growth.
-    // S7-3: Also calls PruneNullEntries on DeviceRegistry — covers sessions
-    //        with heavy destruction that don't trigger a full self-heal.
-    // S7-4: Also purges sliding window maps for the same stale players.
     protected void PurgeStaleRateLimiters()
     {
         #ifdef SERVER
         float now = g_Game.GetTime() * 0.001;
         m_StaleRateLimiterKeys.Clear();
-
         int i;
         for (i = 0; i < m_RateByPlayer.Count(); i = i + 1)
         {
             LFPG_RateLimiter rl = LFPG_RateLimiter.Cast(m_RateByPlayer.GetElement(i));
             if (!rl) continue;
-
-            // If NextAllowed is far in the past, player is idle/disconnected
             float idleSec = now - rl.GetNextAllowed();
             if (idleSec > RATE_LIMITER_STALE_SEC)
             {
                 m_StaleRateLimiterKeys.Insert(m_RateByPlayer.GetKey(i));
             }
         }
-
         int removed = m_StaleRateLimiterKeys.Count();
         int k;
         string staleKey;
@@ -866,21 +610,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             staleKey = m_StaleRateLimiterKeys[k];
             m_RateByPlayer.Remove(staleKey);
-            // S7-4: Keep sliding window maps in sync with cooldown map
             m_RateWindowStart.Remove(staleKey);
             m_RateOpsInWindow.Remove(staleKey);
         }
-
 		int warnRemoved = LFPG_Util.PurgeStaleWarnRateLimits(GetGame().GetTickTime(), RATE_LIMITER_STALE_SEC);
 		if (removed > 0 || warnRemoved > 0)
         {
 			string purgeMsg = "[RateLimiter] Purged cooldown=" + removed.ToString() + " warn=" + warnRemoved.ToString() + " stale entries";
             LFPG_Util.Info(purgeMsg);
         }
-
-        // S7-3: Periodic null-entry prune on DeviceRegistry.
-        // Self-heal already calls this, but long sessions with many device
-        // destructions that don't trigger self-heal can accumulate stale refs.
         int pruned = LFPG_DeviceRegistry.Get().PruneNullEntries();
         if (pruned > 0)
         {
@@ -889,14 +627,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ===========================
-    // Vanilla wire storage
-    // ===========================
-
-    // v0.7.38 (RC-01): Port locking for concurrent FinishWiring.
-    // Prevents two RPCs from simultaneously modifying the same destination port.
-    // Lock key format: "targetDeviceId|targetPort".
     override bool IsPortLocked(string lockKey)
     {
         bool locked = false;
@@ -906,26 +636,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         return false;
     }
-
     override void LockPort(string lockKey)
     {
         m_PortLocks.Set(lockKey, true);
     }
-
     override void UnlockPort(string lockKey)
     {
         m_PortLocks.Remove(lockKey);
     }
-
-    // v0.7.38 (RC-07): Startup validation check.
-    // Returns false during the first ~5 seconds while the server
-    // runs ValidateAllWiresAndPropagate. RPC handlers should reject
-    // wiring requests during this window.
     override bool IsStartupValidationDone()
     {
         return m_StartupValidationDone;
     }
-
     override bool IsValidationActive()
     {
         return m_ValidationActive;
@@ -934,28 +656,22 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (ownerDeviceId == "" || !wd)
             return false;
-
         if (wd.m_SourcePort == "")
             wd.m_SourcePort = "output_1";
-
         ref array<ref LFPG_WireData> wires;
         if (!m_VanillaWires.Find(ownerDeviceId, wires) || !wires)
         {
             wires = new array<ref LFPG_WireData>;
             m_VanillaWires[ownerDeviceId] = wires;
         }
-
         LFPG_ServerSettings st = LFPG_Settings.Get();
         int maxWires = LFPG_MAX_WIRES_PER_DEVICE;
         if (st && st.MaxWiresPerDevice > 0)
         {
             maxWires = st.MaxWiresPerDevice;
         }
-
         if (wires.Count() >= maxWires)
             return false;
-
-        // Deduplicate
         int i;
         for (i = 0; i < wires.Count(); i = i + 1)
         {
@@ -964,17 +680,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (e.m_TargetDeviceId == wd.m_TargetDeviceId && e.m_TargetPort == wd.m_TargetPort && e.m_SourcePort == wd.m_SourcePort)
                 return false;
         }
-
         wires.Insert(wd);
-
-        // Incremental updates
         ReverseIdxAdd(wd.m_TargetDeviceId, wd.m_TargetPort, ownerDeviceId);
         PlayerWireCountAdd(wd.m_CreatorId, 1);
         MarkVanillaDirty();
-
         return true;
     }
-
     override array<ref LFPG_WireData> GetVanillaWires(string ownerDeviceId)
     {
         ref array<ref LFPG_WireData> wires;
@@ -982,11 +693,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return wires;
         return null;
     }
-
-    // Get wires for ANY source device (LFPG or vanilla)
     override array<ref LFPG_WireData> GetWiresForDevice(string deviceId)
     {
-        // Try LFPG device first (generic: works for Generator, Splitter, etc.)
         EntityAI obj = LFPG_DeviceRegistry.Get().FindById(deviceId);
         if (obj)
         {
@@ -995,35 +703,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 return LFPG_DeviceAPI.GetDeviceWires(obj);
             }
         }
-
-        // Try vanilla store
         return GetVanillaWires(deviceId);
     }
-
-    // ===========================
-    // Vanilla wire map accessors (Sprint 4.1)
-    // Used by LFPG_ElecGraph.RebuildFromWires to iterate all vanilla wire owners.
-    // ===========================
-
     override int GetVanillaWireOwnerCount()
     {
         return m_VanillaWires.Count();
     }
-
     override string GetVanillaWireOwnerKey(int idx)
     {
         if (idx < 0 || idx >= m_VanillaWires.Count())
             return "";
         return m_VanillaWires.GetKey(idx);
     }
-
-    // ===========================
-    // Electrical graph API (Sprint 4.1)
-    // ===========================
-
-    // Check if a proposed wire would create a directed cycle.
-    // Returns true if cycle detected (wire should be rejected).
-    // Must be called BEFORE the wire is stored.
     override bool CheckCycleBeforeWire(string sourceId, string targetId)
     {
         #ifdef SERVER
@@ -1034,10 +725,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return false;
         #endif
     }
-
-    // v0.7.36 (Audit Feb2026): Pre-check component size before wire storage.
-    // Returns true if the merged component would exceed the node limit.
-    // Called from FinishWiring before any mutations.
     override bool CheckComponentSizeBeforeWire(string sourceId, string targetId)
     {
         #ifdef SERVER
@@ -1048,10 +735,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return false;
         #endif
     }
-
-    // Notify the graph that a wire was successfully added.
-    // Called AFTER the wire is stored in the device or vanilla store.
-    // Sprint 4.2 S2 (H1): returns false if edge was not actually inserted.
     override bool NotifyGraphWireAdded(string sourceId, string targetId, string sourcePort, string targetPort, LFPG_WireData wireRef)
     {
         #ifdef SERVER
@@ -1062,11 +745,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_GraphFullRebuildRequired = true;
         if (inserted)
         {
-            // v0.7.30: Auto-track both endpoints for centralized position polling
             TrackDeviceForPolling(sourceId);
             TrackDeviceForPolling(targetId);
         }
-        // v5.1: Instant sprinkler link refresh on wire connect
         string noRemoved = "";
         LFPG_RefreshPumpSprinklerLink(sourceId, noRemoved);
         return inserted;
@@ -1074,10 +755,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return false;
         #endif
     }
-
-    // v0.7.34 (Bloque E): Notify the graph that a wire was removed.
-    // Called BEFORE or AFTER the wire is removed from the data store.
-    // Removes the directed edge from the graph and marks endpoints dirty.
     override void NotifyGraphWireRemoved(string sourceId, string targetId, string sourcePort, string targetPort)
     {
         #ifdef SERVER
@@ -1110,15 +787,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         m_ExplicitGraphRemovalCredit = sourceId + "|" + targetId + "|" + creditTargetPort;
         m_Graph.OnWireRemoved(sourceId, targetId, sourcePort, targetPort);
-        // v5.1: Instant sprinkler link refresh on wire disconnect
         LFPG_RefreshPumpSprinklerLink(sourceId, targetId);
         #endif
     }
-
-    // v0.7.34 (Bloque E): Begin an atomic graph mutation batch.
-    // While active, orphan node cleanup is deferred to EndGraphMutation.
-    // Use when multiple wires are removed+added in a single operation
-    // (e.g. replace wire = remove old + add new on same target).
     override void BeginGraphMutation()
     {
         #ifdef SERVER
@@ -1127,10 +798,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_Graph.BeginGraphMutation();
         #endif
     }
-
-    // v0.7.34 (Bloque E): End an atomic graph mutation batch.
-    // Flushes deferred orphan cleanup. Nesting-safe: only the
-    // outermost End triggers the flush.
     override void EndGraphMutation()
     {
         #ifdef SERVER
@@ -1139,8 +806,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_Graph.EndGraphMutation();
         #endif
     }
-
-	// Preserve battery offers across node replacement without advancing energy time.
 	protected void CaptureBatteryGraphState()
 	{
 		#ifdef SERVER
@@ -1160,7 +825,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		}
 		#endif
 	}
-
 	protected void RestoreBatteryGraphState()
 	{
 		#ifdef SERVER
@@ -1178,18 +842,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		m_BatteryRebuildDemand.Clear();
 		#endif
 	}
-
-    // Sprint 4.2 S2 (H2): Correct bulk mutation sequence.
-    // After CutWires/CutPort, the graph must be rebuilt BEFORE
-    // marking nodes dirty. This method guarantees the correct order:
-    //   1. Rebuild graph from wire data (clears dirty queue)
-    //   2. Populate electrical states from entities
-    //   3. Mark all sources dirty (re-populates dirty queue)
-    // Sprint 4.2 S2b (H3): Activates warmup budget mode for faster drain.
     override void PostBulkRebuildAndPropagate()
     {
         #ifdef SERVER
-        // A direct bulk rebuild also satisfies a queued CutAll rebuild.
         bool cutGraphRebuild = m_CutGraphRebuildQueued;
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(PostBulkRebuildAndPropagate);
         m_CutGraphRebuildQueued = false;
@@ -1228,26 +883,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_GraphRebuildGeneration = m_GraphRebuildGeneration + 1;
         }
         m_WarmupActive = true;
-
-        // v0.7.38 (RC-02): Immediate flush after rebuild.
-        // If TickPropagation ran earlier in this frame with budget exhaustion,
-        // it may have sync'd transient states to entities. The rebuild just
-        // reconstructed the graph with correct states. Flush immediately
-        // so correct SyncNodeToEntity calls land in the SAME frame.
-        // DayZ SyncVar batching sends only the final value to clients → no flicker.
         int flushBudget = LFPG_PROPAGATE_WARMUP_BUDGET;
         int flushEdge = LFPG_PROPAGATE_EDGE_WARMUP_BUDGET;
         m_Graph.ProcessDirtyQueue(flushBudget, flushEdge);
         if (cutGraphRebuild)
             FlushBroadcasts();
-
         if (cutGraphRebuild && m_ValidationAfterCutRequested)
         {
             m_ValidationAfterCutRequested = false;
             m_ValidationOnlyHealPending = true;
             RequestGlobalSelfHeal();
         }
-
         if (m_IndexHealAfterCut)
         {
             m_IndexHealAfterCut = false;
@@ -1256,123 +902,85 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Notify the graph that a device has been removed.
-    // Called from device EEDelete handlers.
     override void NotifyGraphDeviceRemoved(string deviceId)
     {
         #ifdef SERVER
         if (!m_Graph)
             return;
         m_Graph.OnDeviceRemoved(deviceId);
-        // v0.7.26 (Audit 4): Clean up position tracking for removed device
         m_LastKnownPos.Remove(deviceId);
-        // v0.7.30: Untrack from centralized polling (EEDelete path)
         UntrackDeviceFromPolling(deviceId);
         #endif
     }
-
-    // Get the graph reference for telemetry / debug.
     override LFPG_ElecGraph GetGraph()
     {
         return m_Graph;
     }
-
-    // v1.3.1: Port-level power query.
-    // Returns true if any incoming edge targeting the given port
-    // on the given device has allocated power > 0.
-    // Convenience wrapper around ElecGraph.IsPortReceivingPower().
     override bool IsPortReceivingPower(string deviceId, string portName)
     {
         if (!m_Graph)
             return false;
-
         return m_Graph.IsPortReceivingPower(deviceId, portName);
     }
-
-    // ===========================
-    // Reverse index: "targetId|port" -> wire count + owner list
-    // O(1) lookup instead of full scan.
-    // ===========================
     override void RebuildReverseIdx()
     {
         #ifdef SERVER
-        // A caller that discovered stale index state cannot assume the graph
-        // is also current unless the scoped movement validation proves it.
         m_GraphFullRebuildRequired = true;
         m_ReverseIndexTrusted = false;
         m_ReverseIdx.Clear();
         m_ReverseOwners.Clear();
-
-        // Scan LFPG wire-owning devices (Generator, Splitter, etc.)
         array<EntityAI> all = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(all);
-
         int i;
         for (i = 0; i < all.Count(); i = i + 1)
         {
             if (!LFPG_DeviceAPI.HasWireStore(all[i])) continue;
-
             string ownerId = LFPG_DeviceAPI.GetDeviceId(all[i]);
             ref array<ref LFPG_WireData> gWires = LFPG_DeviceAPI.GetDeviceWires(all[i]);
             if (!gWires) continue;
-
             int gw;
             for (gw = 0; gw < gWires.Count(); gw = gw + 1)
             {
                 LFPG_WireData wd = gWires[gw];
                 if (!wd) continue;
-
                 string tPort = wd.m_TargetPort;
                 if (tPort == "")
                 {
                     tPort = "input_main";
                 }
-
                 string rKey = wd.m_TargetDeviceId + "|" + tPort;
                 int prev = 0;
                 m_ReverseIdx.Find(rKey, prev);
                 m_ReverseIdx[rKey] = prev + 1;
-
-                // Track owner reference
                 ReverseOwnersInsert(rKey, ownerId);
             }
         }
-
-        // Scan vanilla stores
         int vk;
         for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
         {
             string vOwnerId = m_VanillaWires.GetKey(vk);
             ref array<ref LFPG_WireData> vWires = m_VanillaWires.GetElement(vk);
             if (!vWires) continue;
-
             int vw;
             for (vw = 0; vw < vWires.Count(); vw = vw + 1)
             {
                 LFPG_WireData vwd = vWires[vw];
                 if (!vwd) continue;
-
                 string vtPort = vwd.m_TargetPort;
                 if (vtPort == "")
                 {
                     vtPort = "input_main";
                 }
-
                 string vrKey = vwd.m_TargetDeviceId + "|" + vtPort;
                 int vprev = 0;
                 m_ReverseIdx.Find(vrKey, vprev);
                 m_ReverseIdx[vrKey] = vprev + 1;
-
-                // Track owner reference
                 ReverseOwnersInsert(vrKey, vOwnerId);
             }
         }
         m_ReverseIndexTrusted = true;
         #endif
     }
-
-    // Helper: insert ownerDeviceId into m_ReverseOwners[rKey] (deduplicated)
     protected void ReverseOwnersInsert(string rKey, string ownerDeviceId)
     {
         ref array<string> owners;
@@ -1389,8 +997,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         owners.Insert(ownerDeviceId);
     }
-
-    // O(1) lookup via reverse index
     override int CountWiresTargeting(string targetDeviceId, string targetPort)
     {
         #ifdef SERVER
@@ -1398,7 +1004,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             targetPort = "input_main";
         }
-
         string rKey = targetDeviceId + "|" + targetPort;
         int count = 0;
         m_ReverseIdx.Find(rKey, count);
@@ -1407,51 +1012,34 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return 0;
         #endif
     }
-
-    // Returns true if the specified IN port has at least one wire
-    // from a source device that is currently providing power.
-    // Uses m_ReverseOwners for O(owners) lookup (same index as CountWiresTargeting).
-    // Works for SOURCE (generator on + sparkplug) and PASSTHROUGH (splitter powered).
-    // Used by Zen_RaidAlarmRadar for per-port trigger detection.
     override bool IsPortTargetedByPoweredSource(string targetDeviceId, string targetPort)
     {
         #ifdef SERVER
         if (targetDeviceId == "" || targetPort == "")
             return false;
-
         string rKey = targetDeviceId + "|" + targetPort;
-
-        // Quick check: any wires at all? (O(1) via reverse index)
         int count = 0;
         m_ReverseIdx.Find(rKey, count);
         if (count <= 0)
             return false;
-
-        // Get owner device IDs that have wires targeting this port
         ref array<string> owners;
         if (!m_ReverseOwners.Find(rKey, owners))
             return false;
-
         if (!owners)
             return false;
-
         int i;
         for (i = 0; i < owners.Count(); i = i + 1)
         {
             string ownerId = owners[i];
             if (ownerId == "")
                 continue;
-
             EntityAI srcEntity = LFPG_DeviceRegistry.Get().FindById(ownerId);
             if (!srcEntity)
             {
-                // Try vanilla resolution as fallback
                 srcEntity = LFPG_DeviceAPI.ResolveVanillaDevice(ownerId);
             }
-
             if (!srcEntity)
                 continue;
-
 			if (LFPG_DeviceAPI.HasWireStore(srcEntity))
 				m_WireQueryStore = LFPG_DeviceAPI.GetDeviceWires(srcEntity);
 			else
@@ -1477,20 +1065,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			m_WireQueryStore = null;
 			if (!stillTargetsPort)
 				continue;
-
-            // GetSourceOn works for both device types:
-            //   SOURCE:      switch on + sparkplug valid
-            //   PASSTHROUGH: m_PoweredNet (upstream provides power)
             bool srcOn = LFPG_DeviceAPI.GetSourceOn(srcEntity);
             if (srcOn)
                 return true;
         }
         #endif
-
         return false;
     }
-
-    // Incremental reverse index: add one wire entry + track owner
     override void ReverseIdxAdd(string targetDeviceId, string targetPort, string ownerDeviceId = "")
     {
         #ifdef SERVER
@@ -1502,8 +1083,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         int prev = 0;
         m_ReverseIdx.Find(rKey, prev);
         m_ReverseIdx[rKey] = prev + 1;
-
-        // Track owner reference for directed removal
         if (ownerDeviceId != "")
         {
             ref array<string> owners;
@@ -1512,7 +1091,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 owners = new array<string>;
                 m_ReverseOwners[rKey] = owners;
             }
-            // Deduplicate (same owner can have multiple wires to same target)
             bool found = false;
             int oi;
             for (oi = 0; oi < owners.Count(); oi = oi + 1)
@@ -1530,8 +1108,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Incremental reverse index: remove one wire entry
     override void ReverseIdxRemove(string targetDeviceId, string targetPort, string ownerDeviceId = "")
     {
         #ifdef SERVER
@@ -1539,10 +1115,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             targetPort = "input_main";
         }
-
-        // T5 W1-F06: callers that remove directly from an owner store already
-        // carry the source owner here. Mirror an unambiguous single edge into
-        // the graph so their subsequent PostBulk call can stay scoped.
         string explicitRemovalKey = ownerDeviceId + "|" + targetDeviceId + "|" + targetPort;
         bool graphAlreadyNotified = false;
         if (m_ExplicitGraphRemovalCredit != "")
@@ -1565,19 +1137,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     LFPG_ElecEdge reverseEdge = reverseOutEdges[reverseEdgeIndex];
                     if (!reverseEdge || reverseEdge.m_TargetNodeId != targetDeviceId)
                         continue;
-
                     string reverseTargetPort = reverseEdge.m_TargetPort;
                     if (reverseTargetPort == "")
                         reverseTargetPort = "input_main";
                     if (reverseTargetPort != targetPort)
                         continue;
-
                     reverseMatchCount = reverseMatchCount + 1;
                     reverseSourcePort = reverseEdge.m_SourcePort;
                     reverseGraphTargetPort = reverseEdge.m_TargetPort;
                 }
             }
-
             if (reverseMatchCount == 1)
             {
                 m_Graph.OnWireRemoved(ownerDeviceId, targetDeviceId, reverseSourcePort, reverseGraphTargetPort);
@@ -1586,7 +1155,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             else if (reverseMatchCount > 1)
                 m_GraphFullRebuildRequired = true;
         }
-
         string rKey = targetDeviceId + "|" + targetPort;
         int prev = 0;
         if (m_ReverseIdx.Find(rKey, prev))
@@ -1601,22 +1169,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             else
             {
                 m_ReverseIdx[rKey] = prev - 1;
-                // Note: owner ref stays until count reaches 0 or full rebuild.
-                // This is safe because RemoveWiresTargeting validates ownership.
             }
         }
         else
         {
-            // The authoritative store caller is removing a wire that the
-            // index did not contain. Keep cleanup fail-closed until rebuild.
             m_ReverseIndexTrusted = false;
         }
         #endif
     }
-
-    // ===========================
-    // Per-player wire counter (incremental O(1))
-    // ===========================
     override void PlayerWireCountAdd(string creatorId, int delta)
     {
         #ifdef SERVER
@@ -1631,25 +1191,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_WiresByPlayer[creatorId] = next;
         #endif
     }
-
-    // Full recount from all wire stores (used on self-heal)
     protected void RecountAllPlayerWires()
     {
         #ifdef SERVER
         m_WiresByPlayer.Clear();
-
-        // Count LFPG device wires
         array<EntityAI> all = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(all);
-
         int i;
         for (i = 0; i < all.Count(); i = i + 1)
         {
             if (!LFPG_DeviceAPI.HasWireStore(all[i])) continue;
-
             ref array<ref LFPG_WireData> wires = LFPG_DeviceAPI.GetDeviceWires(all[i]);
             if (!wires) continue;
-
             int w;
             for (w = 0; w < wires.Count(); w = w + 1)
             {
@@ -1658,14 +1211,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 PlayerWireCountAdd(wd.m_CreatorId, 1);
             }
         }
-
-        // Count vanilla wires
         int vk;
         for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
         {
             ref array<ref LFPG_WireData> vWires = m_VanillaWires.GetElement(vk);
             if (!vWires) continue;
-
             int vw;
             for (vw = 0; vw < vWires.Count(); vw = vw + 1)
             {
@@ -1676,10 +1226,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Remove all wires targeting a specific device+port from known sources.
-    // Uses m_ReverseOwners for directed lookup: only scans owners that
-    // actually have wires to this target. O(affected_owners) instead of O(all_devices).
     override int RemoveWiresTargeting(string targetDeviceId, string targetPort, string creatorId = "", bool allowOthers = true)
     {
         #ifdef SERVER
@@ -1687,37 +1233,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool filterByCreator = !allowOthers;
         if (filterByCreator && creatorId == "")
             return 0;
-
         string normPort = targetPort;
         if (normPort == "")
         {
             normPort = "input_main";
         }
         string rKey = targetDeviceId + "|" + normPort;
-
-        // Get list of owners that have wires to this target
         ref array<string> owners;
         if (!m_ReverseOwners.Find(rKey, owners) || !owners || owners.Count() == 0)
         {
-            // No owners known — nothing to remove
             return 0;
         }
-
-        // Copy owner list (we'll modify m_ReverseOwners during iteration)
         ref array<string> ownersCopy = new array<string>;
         int oc;
         for (oc = 0; oc < owners.Count(); oc = oc + 1)
         {
             ownersCopy.Insert(owners[oc]);
         }
-
-        // Process each known owner
         int oi;
         for (oi = 0; oi < ownersCopy.Count(); oi = oi + 1)
         {
             string ownerId = ownersCopy[oi];
-
-            // Try LFPG device
             EntityAI ownerObj = LFPG_DeviceRegistry.Get().FindById(ownerId);
             if (ownerObj && LFPG_DeviceAPI.HasWireStore(ownerObj))
             {
@@ -1733,11 +1269,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         LFPG_WireData wd = gWires[gw];
                         if (wd && wd.m_TargetDeviceId == targetDeviceId && wd.m_TargetPort == targetPort && (!filterByCreator || LFPG_WireHelper.CanCreatorCutWire(wd, creatorId, allowOthers)))
                         {
-                            // v0.7.34 (Bloque E): Notify graph before removing wire data.
-                            // Without this, replaced edges stay stale in the graph.
-                            // LFPG wires: use m_SourcePort as-is (no normalization).
-                            // This matches RebuildFromWires which also does NOT normalize
-                            // LFPG wire source ports.
                             if (filterByCreator)
                             {
                                 NotifyGraphWireRemoved(ownerId, targetDeviceId, wd.m_SourcePort, targetPort);
@@ -1747,7 +1278,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                             {
                                 m_Graph.OnWireRemoved(ownerId, targetDeviceId, wd.m_SourcePort, targetPort);
                             }
-
                             PlayerWireCountAdd(wd.m_CreatorId, -1);
                             ownerDeltaOps.Insert(LFPG_WireDeltaOp.REMOVE);
                             ownerDeltaWires.Insert(wd);
@@ -1783,8 +1313,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
                 continue;
             }
-
-            // Try vanilla store
             ref array<ref LFPG_WireData> vWires;
             if (m_VanillaWires.Find(ownerId, vWires) && vWires)
             {
@@ -1795,9 +1323,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     LFPG_WireData vwd = vWires[vw];
                     if (vwd && vwd.m_TargetDeviceId == targetDeviceId && vwd.m_TargetPort == targetPort && (!filterByCreator || LFPG_WireHelper.CanCreatorCutWire(vwd, creatorId, allowOthers)))
                     {
-                        // v0.7.34 (Bloque E): Notify graph before removing wire data.
-                        // Vanilla wires: normalize empty sourcePort to "output_1".
-                        // This matches RebuildFromWires which normalizes vanilla ports.
                         string vSrcP = vwd.m_SourcePort;
                         if (vSrcP == "")
                         {
@@ -1812,7 +1337,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         {
                             m_Graph.OnWireRemoved(ownerId, targetDeviceId, vSrcP, targetPort);
                         }
-
                         PlayerWireCountAdd(vwd.m_CreatorId, -1);
                         vWires.Remove(vw);
                         removed = removed + 1;
@@ -1836,8 +1360,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Clean up reverse index for this target
         if (removed > 0)
         {
             if (!filterByCreator)
@@ -1849,16 +1371,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (!m_CutAllGraphBatchActive)
                 FlushBroadcasts();
         }
-
         return removed;
         #else
         return 0;
         #endif
     }
-
-    // ===========================
-    // Quotas / anti-grief (O(1) via incremental counter)
-    // ===========================
     override bool CanPlayerCreateAnotherWire(PlayerIdentity ident, out string reason)
     {
         reason = "";
@@ -1868,53 +1385,40 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             reason = "no identity";
             return false;
         }
-
         LFPG_ServerSettings st = LFPG_Settings.Get();
         int limit = LFPG_MAX_WIRES_PER_PLAYER;
         if (st && st.MaxWiresPerPlayer > 0)
         {
             limit = st.MaxWiresPerPlayer;
         }
-
         if (limit <= 0)
             return true;
-
         string pid = ident.GetPlainId();
         int count = 0;
         m_WiresByPlayer.Find(pid, count);
-
         if (count >= limit)
         {
             reason = "MaxWiresPerPlayer reached (" + count.ToString() + "/" + limit.ToString() + ")";
             return false;
         }
         #endif
-
         return true;
     }
-
-    // ===========================
-    // Wire geometry validation
-    // ===========================
     override bool ValidateWire(vector startPos, vector endPos, array<vector> waypoints, out string reason)
     {
         reason = "";
-
         int wpCount = 0;
         if (waypoints)
         {
             wpCount = waypoints.Count();
         }
-
         if (wpCount > LFPG_MAX_WAYPOINTS)
         {
             reason = "Too many waypoints";
             return false;
         }
-
         vector prev = startPos;
         float total = 0.0;
-
         int i;
         for (i = 0; i < wpCount; i = i + 1)
         {
@@ -1927,7 +1431,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             total = total + seg;
             prev = waypoints[i];
         }
-
         float lastSeg = vector.Distance(prev, endPos);
         if (lastSeg > LFPG_MAX_SEGMENT_LEN_M)
         {
@@ -1935,21 +1438,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return false;
         }
         total = total + lastSeg;
-
         if (total > LFPG_MAX_WIRE_LEN_M)
         {
             reason = "Wire too long total";
             return false;
         }
-
         return true;
     }
-
-    // ===========================
-    // Broadcast batching
-    // ===========================
-    // Queue a broadcast instead of sending immediately.
-    // Call FlushBroadcasts() when all mutations are done.
     override void QueueBroadcastOwner(EntityAI owner)
     {
         if (!owner) return;
@@ -1960,7 +1455,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_PendingOwnerSnapshots.Remove(devId);
         m_PendingBroadcastLFPG[devId] = owner;
     }
-
     protected bool AppendOwnerSnapshotPosition(array<vector> positions, vector position)
     {
         if (!positions)
@@ -1969,23 +1463,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return true;
         if (positions.Count() >= LFPG_OWNER_SNAPSHOT_MAX_INTEREST_POSITIONS)
             return false;
-
         positions.Insert(position);
         return true;
     }
-
     protected void StorePendingOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
     {
         if (!snapshot || snapshot.m_OwnerDeviceId == "")
             return;
-
         array<vector> combinedPositions = new array<vector>;
         LFPG_OwnerBroadcastSnapshot previousSnapshot;
         LFPG_OwnerBroadcastSnapshot mergedSnapshot;
         int snapshotIndex;
         int previousIndex;
         bool broadcastAll = snapshot.m_BroadcastAll;
-
         if (m_CutAllGraphBatchActive && m_CutAllHasPreviousOwnerPosition)
         {
             if (!AppendOwnerSnapshotPosition(combinedPositions, m_CutAllPreviousOwnerPosition))
@@ -1996,7 +1486,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (!AppendOwnerSnapshotPosition(combinedPositions, snapshot.m_TargetPositions[snapshotIndex]))
                 broadcastAll = true;
         }
-
         Managed previousPendingSnapshotRaw;
         if (m_PendingOwnerSnapshots.Find(snapshot.m_OwnerDeviceId, previousPendingSnapshotRaw) && Class.CastTo(previousSnapshot, previousPendingSnapshotRaw) && previousSnapshot)
         {
@@ -2010,7 +1499,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     broadcastAll = true;
             }
         }
-
         if (broadcastAll)
             combinedPositions.Clear();
         mergedSnapshot = new LFPG_OwnerBroadcastSnapshot(snapshot.m_OwnerDeviceId, snapshot.m_OwnerLow, snapshot.m_OwnerHigh, snapshot.m_JSON, snapshot.m_Generation, snapshot.m_OwnerPosition, combinedPositions);
@@ -2018,16 +1506,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_PendingBroadcastLFPG.Remove(snapshot.m_OwnerDeviceId);
         m_PendingOwnerSnapshots[snapshot.m_OwnerDeviceId] = mergedSnapshot;
     }
-
     override void QueueBroadcastOwnerSnapshot(EntityAI owner, array<vector> targetPositions, bool broadcastAll)
     {
         if (!owner)
             return;
-
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "")
             return;
-
         int ownerLow = 0;
         int ownerHigh = 0;
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
@@ -2035,16 +1520,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         vector ownerPosition = owner.GetPosition();
         LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(owner);
         LFPG_OwnerBroadcastSnapshot snapshot;
-
         owner.GetNetworkID(ownerLow, ownerHigh);
         if (wireOwner)
             generation = wireOwner.LFPG_GetWireGeneration();
-
         snapshot = new LFPG_OwnerBroadcastSnapshot(ownerId, ownerLow, ownerHigh, json, generation, ownerPosition, targetPositions);
         snapshot.m_BroadcastAll = broadcastAll;
         StorePendingOwnerSnapshot(snapshot);
     }
-
     protected void QueueBroadcastOwnerSnapshotFromWires(EntityAI owner, array<ref LFPG_WireData> interestWires)
     {
         LFPG_OwnerBroadcastSnapshot snapshot;
@@ -2052,36 +1534,28 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (snapshot)
             StorePendingOwnerSnapshot(snapshot);
     }
-
     protected bool CoalescePendingOwnerSnapshot(EntityAI owner, array<ref LFPG_WireData> extraInterestWires)
     {
         if (!owner)
             return false;
-
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "")
             return false;
         if (!m_PendingOwnerSnapshots.Contains(ownerId))
             return false;
-
         LFPG_OwnerBroadcastSnapshot snapshot;
         snapshot = CaptureOwnerBroadcastSnapshot(owner, extraInterestWires);
         if (snapshot)
             StorePendingOwnerSnapshot(snapshot);
         return true;
     }
-
     override void QueueBroadcastVanilla(string ownerDeviceId, EntityAI ownerObj)
     {
         if (ownerDeviceId == "" || !ownerObj) return;
         m_PendingBroadcastVanilla[ownerDeviceId] = ownerObj;
     }
-
-    // Flush all queued broadcasts (deduplicated by owner).
-    // Called once after a batch of mutations finishes.
     override void FlushBroadcasts()
     {
-        // Flush LFPG owners
         int i;
         for (i = 0; i < m_PendingBroadcastLFPG.Count(); i = i + 1)
         {
@@ -2092,9 +1566,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         m_PendingBroadcastLFPG.Clear();
-
-        // Flush value-only LFPG owner snapshots after live owners. Queue-time
-        // exclusion guarantees that only the latest state exists for an ID.
         int snapshotIndex;
         for (snapshotIndex = 0; snapshotIndex < m_PendingOwnerSnapshots.Count(); snapshotIndex = snapshotIndex + 1)
         {
@@ -2103,8 +1574,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 BroadcastOwnerSnapshot(snapshot);
         }
         m_PendingOwnerSnapshots.Clear();
-
-        // Flush vanilla owners
         int v;
         for (v = 0; v < m_PendingBroadcastVanilla.Count(); v = v + 1)
         {
@@ -2117,10 +1586,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         m_PendingBroadcastVanilla.Clear();
     }
-
-    // ===========================
-    // Sync: LFPG source -> clients
-    // ===========================
 	protected bool CanReceiveWireBroadcast(PlayerBase player)
 	{
 		if (!player || !player.GetIdentity())
@@ -2129,16 +1594,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			return player == m_FullSyncPlayer;
 		if (m_FullSyncInProgress && player == m_FullSyncPlayer)
 			return false;
-		// Tambien se excluye a quien esta EN COLA, no solo al destinatario activo.
-		// Mientras m_FullSyncPlayer sigue siendo null (espera del self-heal de arranque)
-		// un joiner encolado recibiria snapshots y deltas en vivo; el mutex global que
-		// habia antes diferia todo ese trafico.
 		if (m_FullSyncPendingPlayers && m_FullSyncPendingPlayers.Find(player) >= 0)
 			return false;
 		return true;
 	}
-
-	// Positions are prepared once by the caller; retain only actual recipients.
 	protected bool SelectWireBroadcastRecipients(vector ownerPosition)
 	{
 		m_ReusableBroadcastPlayers.Clear();
@@ -2161,7 +1620,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		}
 		return m_ReusableBroadcastPlayers.Count() > 0;
 	}
-
     override void BroadcastOwnerWires(EntityAI owner)
     {
         if (!owner) return;
@@ -2170,11 +1628,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (CoalescePendingOwnerSnapshot(owner, null))
             return;
         m_PendingOwnerSnapshots.Remove(ownerId);
-
-		// Keep ordered replay for the joining player; publish to everyone else now.
 		if (m_FullSyncInProgress && m_FullSyncPlayer)
 			DeferOwnerSnapshot(owner, null);
-
         m_ReusableBroadcastPositions.Clear();
         ref array<ref LFPG_WireData> preOwnerWires = LFPG_DeviceAPI.GetDeviceWires(owner);
         if (preOwnerWires)
@@ -2190,7 +1645,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     m_ReusableBroadcastPositions.Insert(preTarget.GetPosition());
             }
         }
-
 		if (!SelectWireBroadcastRecipients(owner.GetPosition()))
 			return;
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
@@ -2200,30 +1654,24 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             snapshotGeneration = snapshotWireOwner.LFPG_GetWireGeneration();
         }
-
         int low = 0;
         int high = 0;
         owner.GetNetworkID(low, high);
-
         if (LFPG_LOG_LEVEL >= 2)
         {
             string bcastMsg = "[BroadcastOwnerWires] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " type=" + owner.GetType() + " jsonLen=" + json.Length().ToString();
             LFPG_Util.Debug(bcastMsg);
         }
-
-        // v0.7.35 D8: Warn if blob approaching practical RPC size limit
         if (json.Length() > 12000)
         {
             string bcastWarn = "[BroadcastOwnerWires] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
             LFPG_Util.Warn(bcastWarn);
         }
-
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
-
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
             rpc.Write(ownerId);
@@ -2238,12 +1686,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
-
     protected EntityAI ResolveOwnerSnapshotTarget(LFPG_WireData wire)
     {
         if (!wire)
             return null;
-
         EntityAI target = null;
         if (wire.m_TargetDeviceId != "")
             target = LFPG_DeviceRegistry.Get().FindById(wire.m_TargetDeviceId);
@@ -2251,16 +1697,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             target = LFPG_DeviceAPI.ResolveByNetworkId(wire.m_TargetNetLow, wire.m_TargetNetHigh);
         return target;
     }
-
     protected LFPG_OwnerBroadcastSnapshot CaptureOwnerBroadcastSnapshot(EntityAI owner, array<ref LFPG_WireData> extraInterestWires)
     {
         if (!owner)
             return null;
-
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "")
             return null;
-
         array<vector> targetPositions = new array<vector>;
         array<ref LFPG_WireData> currentWires = LFPG_DeviceAPI.GetDeviceWires(owner);
         LFPG_WireData interestWire;
@@ -2268,7 +1711,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         int currentIndex;
         int extraIndex;
         bool broadcastAll = false;
-
         if (currentWires)
         {
             for (currentIndex = 0; currentIndex < currentWires.Count(); currentIndex = currentIndex + 1)
@@ -2283,7 +1725,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     broadcastAll = true;
             }
         }
-
         if (extraInterestWires)
         {
             for (extraIndex = 0; extraIndex < extraInterestWires.Count(); extraIndex = extraIndex + 1)
@@ -2298,41 +1739,34 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     broadcastAll = true;
             }
         }
-
         int ownerLow = 0;
         int ownerHigh = 0;
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
         int generation = -1;
         vector ownerPosition = owner.GetPosition();
         LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(owner);
-
         owner.GetNetworkID(ownerLow, ownerHigh);
         if (wireOwner)
             generation = wireOwner.LFPG_GetWireGeneration();
-
         LFPG_OwnerBroadcastSnapshot snapshot = new LFPG_OwnerBroadcastSnapshot(ownerId, ownerLow, ownerHigh, json, generation, ownerPosition, targetPositions);
         snapshot.m_BroadcastAll = broadcastAll;
         return snapshot;
     }
-
     protected void StoreDeferredOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
     {
         if (!snapshot || snapshot.m_OwnerDeviceId == "")
             return;
-
         array<vector> combinedPositions = new array<vector>;
         LFPG_OwnerBroadcastSnapshot previousSnapshot;
         LFPG_OwnerBroadcastSnapshot mergedSnapshot;
         int snapshotIndex;
         int previousIndex;
         bool broadcastAll = snapshot.m_BroadcastAll;
-
         for (snapshotIndex = 0; snapshotIndex < snapshot.m_TargetPositions.Count() && !broadcastAll; snapshotIndex = snapshotIndex + 1)
         {
             if (!AppendOwnerSnapshotPosition(combinedPositions, snapshot.m_TargetPositions[snapshotIndex]))
                 broadcastAll = true;
         }
-
         Managed previousDeferredSnapshotRaw;
         if (m_DeferredOwnerSnapshots.Find(snapshot.m_OwnerDeviceId, previousDeferredSnapshotRaw) && Class.CastTo(previousSnapshot, previousDeferredSnapshotRaw) && previousSnapshot)
         {
@@ -2346,14 +1780,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     broadcastAll = true;
             }
         }
-
         if (broadcastAll)
             combinedPositions.Clear();
         mergedSnapshot = new LFPG_OwnerBroadcastSnapshot(snapshot.m_OwnerDeviceId, snapshot.m_OwnerLow, snapshot.m_OwnerHigh, snapshot.m_JSON, snapshot.m_Generation, snapshot.m_OwnerPosition, combinedPositions);
         mergedSnapshot.m_BroadcastAll = broadcastAll;
         m_DeferredOwnerSnapshots[snapshot.m_OwnerDeviceId] = mergedSnapshot;
     }
-
     protected void DeferOwnerSnapshot(EntityAI owner, array<ref LFPG_WireData> extraInterestWires)
     {
         LFPG_OwnerBroadcastSnapshot snapshot;
@@ -2361,24 +1793,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (snapshot)
             StoreDeferredOwnerSnapshot(snapshot);
     }
-
     protected void BroadcastOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
     {
         if (!snapshot || snapshot.m_OwnerDeviceId == "")
             return;
-
 		if (m_FullSyncInProgress && m_FullSyncPlayer)
 			StoreDeferredOwnerSnapshot(snapshot);
-
         m_ReusableBroadcastPlayers.Clear();
         g_Game.GetPlayers(m_ReusableBroadcastPlayers);
-
         if (LFPG_LOG_LEVEL >= 2)
         {
             string snapshotMsg = "[BroadcastOwnerSnapshot] owner=" + snapshot.m_OwnerDeviceId + " generation=" + snapshot.m_Generation.ToString() + " jsonLen=" + snapshot.m_JSON.Length().ToString();
             LFPG_Util.Debug(snapshotMsg);
         }
-
         float syncMaxDist = LFPG_CULL_DISTANCE_M + 20.0;
         float syncMaxDistSq = syncMaxDist * syncMaxDist;
         int playerIndex;
@@ -2388,13 +1815,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool inRange;
         ScriptRPC rpc;
         bool guaranteed = true;
-
         for (playerIndex = 0; playerIndex < m_ReusableBroadcastPlayers.Count(); playerIndex = playerIndex + 1)
         {
             player = PlayerBase.Cast(m_ReusableBroadcastPlayers[playerIndex]);
 			if (!CanReceiveWireBroadcast(player))
                 continue;
-
             playerPosition = player.GetPosition();
             inRange = snapshot.m_BroadcastAll;
             if (!inRange)
@@ -2412,7 +1837,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             if (!inRange)
                 continue;
-
             rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
             rpc.Write(snapshot.m_OwnerDeviceId);
@@ -2426,41 +1850,31 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, recipient);
         }
     }
-
-    // ===========================
-    // Sync: LFPG source mutation delta -> current interested clients
-    // ===========================
     override void BroadcastOwnerWireDelta(EntityAI owner, array<int> operations, array<ref LFPG_WireData> deltaWires)
     {
         if (!owner || !operations || !deltaWires)
             return;
-
         int entryCount = operations.Count();
         if (entryCount <= 0 || entryCount > LFPG_WIRE_DELTA_MAX_ENTRIES)
             return;
         if (deltaWires.Count() != entryCount)
             return;
-
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "")
             return;
         if (CoalescePendingOwnerSnapshot(owner, deltaWires))
             return;
         m_PendingOwnerSnapshots.Remove(ownerId);
-
 		if (m_FullSyncInProgress && m_FullSyncPlayer)
 			DeferOwnerSnapshot(owner, deltaWires);
-
         LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(owner);
         if (!wireOwner)
         {
             BroadcastOwnerWires(owner);
             return;
         }
-
 		int e;
         m_ReusableBroadcastPositions.Clear();
-
         LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
         ref array<ref LFPG_WireData> currentWires = LFPG_DeviceAPI.GetDeviceWires(owner);
         if (currentWires)
@@ -2478,8 +1892,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Removed targets are no longer in currentWires but still need the delta.
         for (e = 0; e < entryCount; e = e + 1)
         {
             LFPG_WireData interestWire = deltaWires[e];
@@ -2491,10 +1903,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_ReusableBroadcastPositions.Insert(interestTarget.GetPosition());
             }
         }
-
 		if (!SelectWireBroadcastRecipients(owner.GetPosition()))
 			return;
-
 		array<string> entryJsons = new array<string>;
 		int payloadChars = 0;
 		for (e = 0; e < entryCount; e = e + 1)
@@ -2502,11 +1912,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			int operation = operations[e];
 			if (operation != LFPG_WireDeltaOp.ADD && operation != LFPG_WireDeltaOp.REMOVE && operation != LFPG_WireDeltaOp.UPDATE)
 				return;
-
 			LFPG_WireData deltaWire = deltaWires[e];
 			if (!deltaWire)
 				return;
-
 			LFPG_PersistBlob entryBlob = new LFPG_PersistBlob();
 			entryBlob.wires.Insert(deltaWire);
 			string entryJson = "";
@@ -2519,19 +1927,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			entryJsons.Insert(entryJson);
 			payloadChars = payloadChars + entryJson.Length();
 		}
-
 		int low = 0;
 		int high = 0;
 		owner.GetNetworkID(low, high);
 		int generation = wireOwner.LFPG_GetWireGeneration();
-
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb)
                 continue;
-
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_DELTA);
             rpc.Write(ownerId);
@@ -2548,7 +1953,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			if (!recipient)
 				continue;
 			rpc.Send(pb, LFPG_RPC_CHANNEL, true, recipient);
-
             #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
             {
@@ -2568,15 +1972,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             #endif
         }
     }
-
-    // ===========================
-    // Sync: vanilla source -> clients
-    // ===========================
     override void BroadcastVanillaWires(string ownerDeviceId, EntityAI ownerObj)
     {
         if (ownerDeviceId == "" || !ownerObj) return;
-
-		// Replay the latest vanilla state only to the active FullSync player.
 		if (m_FullSyncInProgress && m_FullSyncPlayer)
         {
             int vanillaDeferredIndex = m_DeferredBroadcastVanillaIds.Find(ownerDeviceId);
@@ -2590,10 +1988,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_DeferredBroadcastVanillaObjs[vanillaDeferredIndex] = ownerObj;
             }
         }
-
         ref array<ref LFPG_WireData> wires = GetVanillaWires(ownerDeviceId);
-
-        // v0.7.35 B-CRIT2: Collect target positions from vanilla wires
         m_ReusableBroadcastPositions.Clear();
         if (wires)
         {
@@ -2603,7 +1998,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 if (!wires[tw]) continue;
                 if (wires[tw].m_TargetDeviceId == "") continue;
-
                 EntityAI targetObj = reg.FindById(wires[tw].m_TargetDeviceId);
                 if (targetObj)
                 {
@@ -2611,11 +2005,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
 		if (!SelectWireBroadcastRecipients(ownerObj.GetPosition()))
 			return;
-
-		// Serialize using PersistBlob format (same as LFPG)
 		LFPG_PersistBlob blob = new LFPG_PersistBlob();
 		blob.ver = LFPG_PERSIST_VER;
 		if (wires)
@@ -2626,7 +2017,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 				blob.wires.Insert(wires[w]);
 			}
 		}
-
 		string json;
 		string err;
 		if (!JsonFileLoader<LFPG_PersistBlob>.MakeData(blob, json, err, false))
@@ -2634,17 +2024,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			json = "";
 		}
 		int vanillaSnapshotGeneration = -1;
-
 		int low = 0;
 		int high = 0;
 		ownerObj.GetNetworkID(low, high);
-
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
-
             ScriptRPC rpc = new ScriptRPC();
             rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
             rpc.Write(ownerDeviceId);
@@ -2659,16 +2046,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
-
-    // ===========================
-    // Sync: vanilla source -> single player (unicast)
-    // ===========================
     override void SendVanillaWiresTo(PlayerBase player, string ownerDeviceId, EntityAI ownerObj)
     {
         if (!player || ownerDeviceId == "" || !ownerObj) return;
-
         ref array<ref LFPG_WireData> wires = GetVanillaWires(ownerDeviceId);
-
         LFPG_PersistBlob blob = new LFPG_PersistBlob();
         blob.ver = LFPG_PERSIST_VER;
         if (wires)
@@ -2679,7 +2060,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 blob.wires.Insert(wires[w]);
             }
         }
-
         string json;
         string err;
         if (!JsonFileLoader<LFPG_PersistBlob>.MakeData(blob, json, err, false))
@@ -2687,11 +2067,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             json = "";
         }
         int vanillaUnicastGeneration = -1;
-
         int low = 0;
         int high = 0;
         ownerObj.GetNetworkID(low, high);
-
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
         rpc.Write(ownerDeviceId);
@@ -2704,7 +2082,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		if (!recipient)
 			return;
 		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -2719,16 +2096,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ===========================
-    // Full sync to joining player
-    // ===========================
     override void SendFullSyncTo(PlayerBase player)
     {
         if (!player) return;
         if (m_FullSyncPlayer == player) return;
         if (m_FullSyncPendingPlayers.Find(player) >= 0) return;
-
         bool wasIdle = !m_FullSyncInProgress;
         m_FullSyncPendingPlayers.Insert(player);
         m_FullSyncInProgress = true;
@@ -2737,7 +2109,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (wasIdle && m_StartupValidationDone && !m_ValidationActive)
             LFPG_StartNextFullSync();
     }
-
     protected void LFPG_StartNextFullSync()
     {
 		m_FullSyncInProgress = false;
@@ -2752,12 +2123,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (candidate && candidate.GetIdentity())
                 m_FullSyncPlayer = candidate;
         }
-
         if (!m_FullSyncPlayer)
         {
             return;
         }
-
         m_FullSyncInProgress = true;
         m_FullSyncOwners.Clear();
         LFPG_DeviceRegistry.Get().GetAll(m_FullSyncOwners);
@@ -2770,7 +2139,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_FullSyncPlayerPos = m_FullSyncPlayer.GetPosition();
         float maxDist = LFPG_CULL_DISTANCE_M + 20.0;
         m_FullSyncMaxDistSq = maxDist * maxDist;
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -2787,18 +2155,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (!owner) return;
         if (!LFPG_DeviceAPI.HasWireStore(owner)) return;
         if (LFPG_WorldUtil.DistSq(m_FullSyncPlayerPos, owner.GetPosition()) > m_FullSyncMaxDistSq) return;
-
         string devId = LFPG_DeviceAPI.GetDeviceId(owner);
         string json = LFPG_DeviceAPI.GetWiresJSON(owner);
         LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(owner);
         int generation = -1;
         if (wireOwner)
             generation = wireOwner.LFPG_GetWireGeneration();
-
         int low = 0;
         int high = 0;
         owner.GetNetworkID(low, high);
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -2815,7 +2180,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             string fsWarn = "[FullSync] LARGE BLOB dev=" + devId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
             LFPG_Util.Warn(fsWarn);
         }
-
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
         rpc.Write(devId);
@@ -2835,20 +2199,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (!m_StartupValidationDone || m_ValidationActive)
             return;
-
         if (!m_FullSyncInProgress)
         {
             if (m_StartupValidationDone && !m_ValidationActive && m_FullSyncPendingPlayers.Count() > 0)
                 LFPG_StartNextFullSync();
             return;
         }
-
         if (!m_FullSyncPlayer || !m_FullSyncPlayer.GetIdentity())
         {
             LFPG_StartNextFullSync();
             return;
         }
-
         int examined = 0;
         while (examined < LFPG_FULLSYNC_SENDS_PER_TICK && m_FullSyncOwnerCursor < m_FullSyncOwners.Count())
         {
@@ -2857,7 +2218,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             examined = examined + 1;
             LFPG_SendFullSyncOwner(owner);
         }
-
         while (examined < LFPG_FULLSYNC_SENDS_PER_TICK && m_FullSyncOwnerCursor >= m_FullSyncOwners.Count() && m_FullSyncVanillaCursor < m_FullSyncVanillaIds.Count())
         {
             string vanillaId = m_FullSyncVanillaIds[m_FullSyncVanillaCursor];
@@ -2868,14 +2228,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (LFPG_WorldUtil.DistSq(m_FullSyncPlayerPos, vanillaObj.GetPosition()) > m_FullSyncMaxDistSq) continue;
             SendVanillaWiresTo(m_FullSyncPlayer, vanillaId, vanillaObj);
         }
-
         if (m_FullSyncOwnerCursor >= m_FullSyncOwners.Count() && m_FullSyncVanillaCursor >= m_FullSyncVanillaIds.Count())
             LFPG_StartNextFullSync();
     }
-    // v0.7.38 (RC-05): Flush broadcasts that were deferred during FullSync.
-    // Called immediately after m_FullSyncInProgress is cleared.
-    // Re-broadcasts the LATEST state for each deferred owner, not the state
-    // at deferral time, ensuring clients always receive current data.
     protected void FlushDeferredBroadcasts()
     {
         int snapshotIndex;
@@ -2894,8 +2249,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         m_DeferredOwnerSnapshots.Clear();
-
-        // Flush vanilla deferred broadcasts
         int vi;
         for (vi = 0; vi < m_DeferredBroadcastVanillaIds.Count(); vi = vi + 1)
         {
@@ -2909,35 +2262,21 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_DeferredBroadcastVanillaIds.Clear();
         m_DeferredBroadcastVanillaObjs.Clear();
     }
-
-    // ===========================
-    // v0.7.35 D1: Device-specific sync (unicast)
-    // Sends wire blobs for all owners relevant to deviceId:
-    //   1. If deviceId is a wire-owner → send its own blob
-    //   2. Any wire-owner whose wires target deviceId → send those blobs
-    //   3. Vanilla wires owned by or targeting deviceId
-    // ===========================
     override void SendDeviceSyncTo(PlayerBase player, string deviceId)
     {
         if (!player || deviceId == "")
             return;
-
         map<string, bool> sentOwners = new map<string, bool>;
         SendDeviceSyncToBatched(player, deviceId, sentOwners);
     }
-
     override void SendDeviceSyncToBatched(PlayerBase player, string deviceId, map<string, bool> sentOwners)
     {
         if (!player || deviceId == "" || !sentOwners)
             return;
-
         LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
         if (!reg)
             return;
-
         bool hasRelevantState = false;
-
-        // 1. Send state owned directly by the requested device.
         EntityAI deviceObj = reg.FindById(deviceId);
         if (deviceObj && LFPG_DeviceAPI.HasWireStore(deviceObj))
         {
@@ -2957,9 +2296,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 sentOwners[deviceId] = true;
             }
         }
-
-        // 2. Resolve incoming owners directly from the graph reverse relationship.
-        // No registry-wide or wire-owner-wide scan is performed here.
         if (m_Graph)
         {
             ref array<ref LFPG_ElecEdge> incomingEdges = m_Graph.GetIncoming(deviceId);
@@ -2971,18 +2307,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     LFPG_ElecEdge edge = incomingEdges[i];
                     if (!edge || edge.m_SourceNodeId == "")
                         continue;
-
                     string ownerId = edge.m_SourceNodeId;
                     if (sentOwners.Contains(ownerId))
                     {
                         hasRelevantState = true;
                         continue;
                     }
-
                     EntityAI ownerObj = reg.FindById(ownerId);
                     if (!ownerObj)
                         continue;
-
                     if (LFPG_DeviceAPI.HasWireStore(ownerObj))
                     {
                         hasRelevantState = true;
@@ -2998,31 +2331,25 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
         if (deviceObj && !hasRelevantState)
         {
             SendEmptyDeviceCableStateTo(player, deviceObj, deviceId);
         }
-
         if (LFPG_LOG_LEVEL >= 2)
         {
             string sdMsg = "[SendDeviceSyncTo] Completed for deviceId=" + deviceId;
             LFPG_Util.Debug(sdMsg);
         }
     }
-
-    // Helper: authoritative empty state for a known device with no cable relationship.
     override void SendEmptyDeviceCableStateTo(PlayerBase player, EntityAI deviceObj, string deviceId)
     {
         if (!player || !deviceObj || deviceId == "")
             return;
-
         int low = 0;
         int high = 0;
         deviceObj.GetNetworkID(low, high);
         string json = LFPG_WireHelper.GetJSON(null);
         int emptyGeneration = -1;
-
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
         rpc.Write(deviceId);
@@ -3034,7 +2361,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		if (!recipient)
 			return;
 		rpc.Send(player, LFPG_RPC_CHANNEL, true, recipient);
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -3049,12 +2375,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Helper: unicast a single owner's wire blob to one player
     override void SendOwnerBlobTo(PlayerBase player, EntityAI ownerObj, string ownerId)
     {
         if (!player || !ownerObj || ownerId == "") return;
-
         string json = LFPG_DeviceAPI.GetWiresJSON(ownerObj);
         LFPG_WireOwnerBase ownerWireState = LFPG_WireOwnerBase.Cast(ownerObj);
         int ownerGeneration = -1;
@@ -3062,11 +2385,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             ownerGeneration = ownerWireState.LFPG_GetWireGeneration();
         }
-
         int low = 0;
         int high = 0;
         ownerObj.GetNetworkID(low, high);
-
         ScriptRPC rpc = new ScriptRPC();
         rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
         rpc.Write(ownerId);
@@ -3079,7 +2400,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		if (!recipient)
 			return;
 		rpc.Send(player, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -3093,46 +2413,29 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             Print(perfSnapshot);
         }
         #endif
-
         if (LFPG_LOG_LEVEL >= 2)
         {
             string sobMsg = "[SendOwnerBlobTo] owner=" + ownerId + " net=" + low.ToString() + ":" + high.ToString() + " jsonLen=" + json.Length().ToString();
             LFPG_Util.Debug(sobMsg);
         }
-
-        // v0.7.35 D8: Warn if blob approaching practical RPC size limit
         if (json.Length() > 12000)
         {
             string sobWarn = "[SendOwnerBlobTo] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
             LFPG_Util.Warn(sobWarn);
         }
     }
-
-    // ===========================
-    // Propagation (Sprint 4.2: event-driven via graph)
-    // ===========================
-
-    // Request propagation from a source device.
-    // Sprint 4.2: Marks the source node dirty in the graph.
-    // The periodic TickPropagation() will process it via ProcessDirtyQueue.
     override void RequestPropagate(string sourceDeviceId)
     {
         #ifdef SERVER
         if (sourceDeviceId == "") return;
-
         if (!m_Graph)
         {
             string gNullMsg = "[Propagate] Graph null, cannot propagate " + sourceDeviceId;
             LFPG_Util.Warn(gNullMsg);
             return;
         }
-
-        // Refresh source on/off state in the graph from the entity
         m_Graph.RefreshSourceState(sourceDeviceId);
-
-        // Mark dirty — will be picked up by next TickPropagation
         m_Graph.MarkNodeDirty(sourceDeviceId, LFPG_DIRTY_INTERNAL);
-
         if (LFPG_LOG_LEVEL >= 2)
         {
             string qdMsg = "[Propagate] Queued dirty: " + sourceDeviceId;
@@ -3140,17 +2443,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Sprint 4.2+4.3: Periodic propagation tick.
-    // Called every LFPG_PROPAGATE_TICK_MS (100ms = 10Hz).
-    // Sprint 4.2 S2b (H3): Uses WARMUP_BUDGET during startup/self-heal drain.
-    // Sprint 4.3: Accumulates telemetry, dumps every LFPG_TELEM_INTERVAL_MS.
    protected void TickPropagation()
     {
         #ifdef SERVER
         if (!m_Graph)
             return;
-
         int nodeBudget = LFPG_PROPAGATE_NODE_BUDGET;
         int edgeBudget = LFPG_PROPAGATE_EDGE_BUDGET;
         if (m_WarmupActive)
@@ -3160,9 +2457,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         else
         {
-            // v0.7.26 (Audit 4): Dynamic budget scaling for large dirty queues.
-            // When queue is deep, double the edge budget to prevent "phantom brownout"
-            // where propagation can't keep up and consumers flicker.
             int queueSize = m_Graph.GetDirtyQueueSize();
             if (queueSize > LFPG_DYNAMIC_BUDGET_QUEUE_THRESHOLD)
             {
@@ -3170,16 +2464,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 nodeBudget = nodeBudget * 2;
             }
         }
-
         int remaining = m_Graph.ProcessDirtyQueue(nodeBudget, edgeBudget);
-
         if (remaining <= 0 && m_WarmupActive)
         {
             m_WarmupActive = false;
             string wdMsg = "[Propagate] Warmup drain complete";
             LFPG_Util.Info(wdMsg);
         }
-
         if (remaining > 0 || m_Graph.GetLastEdgesVisited() > 0)
         {
             if (LFPG_LOG_LEVEL >= 2)
@@ -3188,11 +2479,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_Util.Debug(tickMsg);
             }
         }
-
-        // Sprint 4.3: Accumulate propagation telemetry
         int processMs = m_Graph.GetLastProcessMs();
         int edgesUsed = m_Graph.GetLastEdgesVisited();
-
         m_TelemTickCount = m_TelemTickCount + 1;
         m_TelemTotalProcessMs = m_TelemTotalProcessMs + processMs;
         m_TelemTotalEdgesVisited = m_TelemTotalEdgesVisited + edgesUsed;
@@ -3200,8 +2488,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_TelemPeakProcessMs = processMs;
         }
-
-        // Periodic telemetry dump
         float nowMs = g_Game.GetTime();
         float elapsed = nowMs - m_TelemLastDumpMs;
         if (m_TelemLastDumpMs < 0.0)
@@ -3210,7 +2496,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         else if (elapsed >= LFPG_TELEM_INTERVAL_MS && m_TelemTickCount > 0)
         {
-            // v0.7.26 (Audit 4): Division-by-zero guard for telemetry averages.
             int avgMs = 0;
             int avgEdges = 0;
             if (m_TelemTickCount > 0)
@@ -3219,7 +2504,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 avgEdges = m_TelemTotalEdgesVisited / m_TelemTickCount;
             }
             int overloadCount = m_Graph.GetOverloadedSourceCount();
-
             if (LFPG_LOG_LEVEL >= 2)
             {
                 string tLog = "[Telemetry-Propagation]";
@@ -3234,8 +2518,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 tLog = tLog + " epoch=" + m_Graph.GetCurrentEpoch().ToString();
                 LFPG_Util.Debug(tLog);
             }
-
-            // Reset accumulators
             m_TelemTickCount = 0;
             m_TelemTotalProcessMs = 0;
             m_TelemPeakProcessMs = 0;
@@ -3244,48 +2526,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-
-    // ===========================
-    // v0.7.30 (Audit 1+2): Centralized position polling
-    // ===========================
-    // Round-robin batched: processes LFPG_MOVE_DETECT_BATCH_SIZE devices per
-    // tick from m_TrackedDeviceIds. Only devices with active wires are tracked.
-    // Replaces: (a) full-scan CheckDeviceMovement every 3s (v0.7.23-0.7.29)
-    //           (b) N per-device timers in generator/lamp (v0.7.29)
-    // Uses DistSq to avoid sqrt per check.
-    //
-    // v0.7.38 (RC-03): Safety invariant — concurrent CutAllWiresFromDevice.
-    // If an RPC calls CutAllWiresFromDevice (→ UntrackDeviceFromPolling with
-    // swap-and-pop) between the batch read and process phases, some devices
-    // may be skipped in the current batch. This is harmless:
-    //   - Skipped devices are checked in the next round-robin cycle
-    //   - UntrackDeviceFromPolling is idempotent (m_TrackedDeviceIndex guard)
-    //   - Cursor is advanced AFTER all untracking, with post-mutation clamp
-    // No fix needed; invariant holds by design.
-
-    // ---- Track / Untrack ----
-    // Called when wires are added or removed. Maintains the set of devices
-    // that need position monitoring. O(1) insert, O(1) swap-and-pop removal.
-
     override void TrackDeviceForPolling(string deviceId)
     {
         #ifdef SERVER
         if (!g_Game.IsServer())
             return;
-
         if (deviceId == "")
             return;
-
         int existingIdx;
         if (m_TrackedDeviceIndex.Find(deviceId, existingIdx))
             return;  // already tracked
-
         int idx = m_TrackedDeviceIds.Count();
         m_TrackedDeviceIds.Insert(deviceId);
         m_TrackedDeviceIndex.Set(deviceId, idx);
-
-        // Initialize position snapshot
         EntityAI dev = LFPG_DeviceRegistry.Get().FindById(deviceId);
         if (dev)
         {
@@ -3293,59 +2546,39 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
     override void UntrackDeviceFromPolling(string deviceId)
     {
         #ifdef SERVER
         if (!g_Game.IsServer())
             return;
-
         if (deviceId == "")
             return;
-
         int idx;
         if (!m_TrackedDeviceIndex.Find(deviceId, idx))
             return;  // not tracked
-
         int lastIdx = m_TrackedDeviceIds.Count() - 1;
-
         if (idx < lastIdx)
         {
-            // Swap with last element to keep array compact
             string lastId = m_TrackedDeviceIds[lastIdx];
             m_TrackedDeviceIds[idx] = lastId;
             m_TrackedDeviceIndex.Set(lastId, idx);
         }
-
-        // Pop last
         m_TrackedDeviceIds.Remove(lastIdx);
         m_TrackedDeviceIndex.Remove(deviceId);
-
-        // Clean up position tracking
         m_LastKnownPos.Remove(deviceId);
-
-        // Clamp cursor to valid range
         if (m_TrackCursor >= m_TrackedDeviceIds.Count())
         {
             m_TrackCursor = 0;
         }
         #endif
     }
-
-    // ---- DeviceHasAnyWires ----
-    // Returns true if the device has any owned wires (output side) or
-    // any incoming wires (input side via reverse index).
-    // Used by CutAllWiresFromDevice to decide whether to untrack.
     protected bool DeviceHasAnyWires(EntityAI device, string deviceId)
     {
         #ifdef SERVER
         if (!g_Game.IsServer())
             return false;
-
         if (!device || deviceId == "")
             return false;
-
-        // Check owned wires (sources, splitters)
         if (LFPG_DeviceAPI.HasWireStore(device))
         {
             ref array<ref LFPG_WireData> ownedWires = LFPG_DeviceAPI.GetDeviceWires(device);
@@ -3354,14 +2587,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 return true;
             }
         }
-
 		m_WireQueryStore = GetVanillaWires(deviceId);
 		bool hasVanillaOutputs = m_WireQueryStore && m_WireQueryStore.Count() > 0;
 		m_WireQueryStore = null;
 		if (hasVanillaOutputs)
 			return true;
-
-        // Check incoming wires via reverse index (consumers, passthroughs)
         int portCount = LFPG_DeviceAPI.GetPortCount(device);
         int pci;
         for (pci = 0; pci < portCount; pci = pci + 1)
@@ -3377,38 +2607,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         #endif
-
         return false;
     }
-
-    // ---- RebuildTrackedDevices ----
-    // Rebuilds the tracked set from current wire state. Called after
-    // ValidateAllWiresAndPropagate (startup, self-heal) to ensure
-    // the tracked set matches the validated wire topology.
     protected void RebuildTrackedDevices()
     {
         #ifdef SERVER
         if (!g_Game.IsServer())
             return;
-
         m_TrackedDeviceIds.Clear();
         m_TrackedDeviceIndex.Clear();
         m_TrackCursor = 0;
-
         ref array<EntityAI> allDevs = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevs);
-
         int i;
         for (i = 0; i < allDevs.Count(); i = i + 1)
         {
             EntityAI dev = allDevs[i];
             if (!dev)
                 continue;
-
             string devId = LFPG_DeviceAPI.GetOrCreateDeviceId(dev);
             if (devId == "")
                 continue;
-
             if (DeviceHasAnyWires(dev, devId))
             {
                 int insertIdx = m_TrackedDeviceIds.Count();
@@ -3417,39 +2636,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_LastKnownPos.Set(devId, dev.GetPosition());
             }
         }
-
         string rtdMsg = "[Movement] RebuildTrackedDevices: tracking " + m_TrackedDeviceIds.Count().ToString() + " wired devices";
         LFPG_Util.Info(rtdMsg);
         #endif
     }
-
-    // v0.7.48 (Bug 2): Clean wires for a vanilla device that disappeared.
-    // Entity is gone — works by deviceId only. Handles:
-    //   1. Collect neighbors from graph (before edges are removed)
-    //   2. Owned wires in m_VanillaWires: reverse index + player quota
-    //   3. Incoming wires via reverse index scan
-    //   4. Graph cleanup via OnDeviceRemoved (single call, all edges + node)
-    //   5. SetPowered(false) on neighbor devices
-    //   6. Flush broadcasts + schedule self-heal for client ConnCache resync
-    //   7. Untrack neighbors that lost all wires
-    //
-    // Cannot broadcast the disappeared device's wires directly (entity is gone,
-    // no NetworkID for RPC). Client-side cleanup happens via:
-    //   - CableRenderer.CullTick: nullOwnerTicks destroys visual cables (~5s)
-    //   - Self-heal: full broadcast refreshes ConnCache (500ms deferred)
     protected void CleanDisappearedVanillaDevice(string deviceId)
     {
         #ifdef SERVER
         if (deviceId == "" || deviceId.IndexOf("vp:") != 0)
             return;
-
         bool anyChanged = false;
-
-        // --- 1. Collect neighbor IDs from graph BEFORE removing edges ---
-        // Graph has the authoritative topology. Using graph edges is more
-        // reliable than scanning m_VanillaWires alone (catches both directions).
         ref array<string> neighborIds = new array<string>;
-
         if (m_Graph)
         {
             ref array<ref LFPG_ElecEdge> outEdges = m_Graph.GetOutgoing(deviceId);
@@ -3465,7 +2662,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     }
                 }
             }
-
             ref array<ref LFPG_ElecEdge> inEdges = m_Graph.GetIncoming(deviceId);
             if (inEdges)
             {
@@ -3480,10 +2676,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // --- 2. Clear owned wires: reverse index + player quota + graph ---
-        // ReverseIdxRemove mirrors an unambiguous outgoing edge into the graph.
-        // Ambiguous duplicates set m_GraphFullRebuildRequired instead.
         ref array<ref LFPG_WireData> vWires;
         if (m_VanillaWires.Find(deviceId, vWires) && vWires)
         {
@@ -3502,9 +2694,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             anyChanged = true;
         }
         m_VanillaWires.Remove(deviceId);
-
-		// The entity is gone: retain the index scan to cover ports absent from the graph.
-		// Reuse the member port list; do not allocate a prefix-scan array per disappearance.
 		string keyPrefix = deviceId + "|";
 		int prefixLength = keyPrefix.Length();
 		m_ReusableReversePorts.Clear();
@@ -3526,14 +2715,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			if (RemoveWiresTargeting(deviceId, m_ReusableReversePorts[portIndex]) > 0)
 				anyChanged = true;
 		}
-
-        // --- 4. Graph node cleanup ---
-        // Bug #18 fix: OnDeviceRemoved was removed. Outgoing edges are now
-        // cleaned in step 2 via OnWireRemoved; incoming edges in step 3 via
-        // RemoveWiresTargeting. OnWireRemoved calls CleanupOrphanNode which
-        // removes the node once all edges are gone — no separate call needed.
-
-        // --- 5. SetPowered(false) on neighbor devices ---
         int ni;
         for (ni = 0; ni < neighborIds.Count(); ni = ni + 1)
         {
@@ -3547,37 +2728,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_DeviceAPI.SetPowered(neighborDev, false);
             }
         }
-
-        // --- 6. Persistence, propagation, broadcasts, self-heal ---
         if (anyChanged)
         {
             MarkVanillaDirty();
             PostBulkRebuildAndPropagate();
             FlushBroadcasts();
-
-            // v0.7.48: Immediate vanilla flush for crash safety.
-            // Same pattern as CutAllWiresFromDevice (v0.7.32 Audit P2).
-            // MarkVanillaDirty defers writes for at most 5s. If server crashes
-            // before that timer fires, deleted wires reappear on restart —
-            // re-creating the phantom port this fix is meant to solve.
-            // Device disappearance is infrequent; synchronous I/O is negligible.
             if (m_VanillaDirty)
             {
                 FlushVanillaIfDirty();
             }
-
             LFPG_Util.Warn("[VanillaGone] Cleaned wires for disappeared device " + deviceId);
         }
-
-        // Clean position tracking
         m_LastKnownPos.Remove(deviceId);
-
-        // Schedule self-heal for client ConnCache resync.
-        // Cannot send targeted RPC without entity's NetworkID.
-        // Self-heal broadcasts fresh wire data to all clients (500ms deferred).
         RequestGlobalSelfHeal();
-
-        // --- 7. Untrack neighbors that lost all wires ---
         int nui;
         for (nui = 0; nui < neighborIds.Count(); nui = nui + 1)
         {
@@ -3597,59 +2760,42 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ---- CheckDeviceMovement (round-robin batched) ----
-    // Processes LFPG_MOVE_DETECT_BATCH_SIZE devices per tick.
-    // Uses LFPG_WorldUtil.DistSq to avoid sqrt per check.
-    // Devices that moved have all wires cut and are untracked.
-    // Disappeared devices (null in registry) are silently untracked.
     protected void CheckDeviceMovement()
     {
         #ifdef SERVER
         if (!g_Game.IsServer())
             return;
-
         int totalTracked = m_TrackedDeviceIds.Count();
         if (totalTracked == 0)
             return;
-
-        // Clamp cursor
         if (m_TrackCursor >= totalTracked)
         {
             m_TrackCursor = 0;
         }
-
         int batchEnd = m_TrackCursor + LFPG_MOVE_DETECT_BATCH_SIZE;
         if (batchEnd > totalTracked)
         {
             batchEnd = totalTracked;
         }
-
-        // Collect moved/disappeared devices (can't modify tracked array during iteration)
         m_ReusableMovedIds.Clear();
         m_ReusableMovedDevs.Clear();
         m_ReusableMovedOldPositions.Clear();
         m_ReusableDisappearedIds.Clear();
-
         int i;
         for (i = m_TrackCursor; i < batchEnd; i = i + 1)
         {
             string devId = m_TrackedDeviceIds[i];
             if (devId == "")
                 continue;
-
             EntityAI dev = LFPG_DeviceRegistry.Get().FindById(devId);
             if (!dev)
             {
-                // Device disappeared from registry — mark for untrack
                 m_ReusableDisappearedIds.Insert(devId);
                 continue;
             }
-
             vector currentPos = dev.GetPosition();
             vector lastPos;
             bool hadPos = m_LastKnownPos.Find(devId, lastPos);
-
             if (hadPos)
             {
                 float distSq = LFPG_WorldUtil.DistSq(currentPos, lastPos);
@@ -3659,86 +2805,45 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     m_ReusableMovedDevs.Insert(dev);
                     m_ReusableMovedOldPositions.Insert(lastPos);
                 }
-                // v0.7.33 (Fix #21): Do NOT update baseline position every tick.
-                // Previous behavior reset m_LastKnownPos each tick, so micro-drift
-                // (e.g., 0.1m/tick from physics jitter) never accumulated past
-                // the 0.3m threshold. Now the baseline stays at the position when
-                // the device was first tracked (wire connected). Drift accumulates
-                // until it crosses the threshold, triggering wire disconnect.
-                // Baseline is reset when device is untracked+retracked (new wire).
             }
             else
             {
-                // First time tracking this device — record initial baseline
                 m_LastKnownPos.Set(devId, currentPos);
             }
         }
-
-        // Advance cursor (wraps naturally on next tick)
-        // v0.7.36 (Audit Feb2026): Cursor advancement deferred to AFTER all
-        // untracking. Previously set here before untracking, which caused the
-        // cursor to point past the shrunk array when multiple devices were
-        // removed in the same batch. Each UntrackDeviceFromPolling call would
-        // independently clamp to 0, creating uneven scan rates.
-        // Now we advance once at the end after all array mutations are done.
         int newCursor = batchEnd;
-
-        // v0.7.48 (Bug 2): Process disappeared devices.
-        // LFPG devices have EEDelete/EEItemLocationChanged hooks that call
-        // CutAllWiresFromDevice. Vanilla devices (vp: prefix) do NOT have
-        // these hooks, so their wires become orphans when they disappear.
-        // Clean vanilla wires immediately instead of waiting for self-heal.
         int di;
         for (di = 0; di < m_ReusableDisappearedIds.Count(); di = di + 1)
         {
             string goneId = m_ReusableDisappearedIds[di];
-
             if (goneId.IndexOf("vp:") == 0)
             {
                 LFPG_Util.Warn("[Movement] Vanilla device disappeared id=" + goneId + " — cleaning orphan wires");
                 CleanDisappearedVanillaDevice(goneId);
             }
-
             UntrackDeviceFromPolling(goneId);
         }
-
-        // Process moved devices
         int mi;
         for (mi = 0; mi < m_ReusableMovedIds.Count(); mi = mi + 1)
         {
             EntityAI movedDev = m_ReusableMovedDevs[mi];
             string movedId = m_ReusableMovedIds[mi];
             vector movedOldPosition = m_ReusableMovedOldPositions[mi];
-
             string mvMsg = "[Movement] Device " + movedId + " type=" + movedDev.GetType() + " moved — disconnecting wires";
             LFPG_Util.Warn(mvMsg);
-
-            // CutAllWiresFromDevice handles: owned wires, vanilla wires,
-            // incoming wires, graph cleanup, SetPowered(false) on neighbors,
-            // and auto-untrack via the hook at the end of CutAllWiresFromDevice.
-            // movedId is the pre-move index key; vanilla cannot re-derive it.
             CutAllWiresFromMovedDevice(movedDev, movedOldPosition, movedId);
-
-            // Generator-specific: force source off when physically moved.
-            // CutAllWiresFromDevice handles consumers/passthroughs via
-            // SetPowered(false), but generators produce (not consume).
             LFPG_Generator gen = LFPG_Generator.Cast(movedDev);
             if (gen && gen.LFPG_GetSwitchState())
             {
                 gen.LFPG_ToggleSource();
             }
         }
-
-        // Trigger self-heal if any devices moved
         if (m_ReusableMovedIds.Count() > 0)
         {
             string mvCntMsg = "[Movement] " + m_ReusableMovedIds.Count().ToString() + " devices moved, requesting self-heal";
             LFPG_Util.Info(mvCntMsg);
             RequestGlobalSelfHeal(true);
         }
-
-        // v0.7.36 (Audit Feb2026): Final cursor update after all array mutations.
-        // Single clamp ensures cursor is valid for the post-untrack array size.
         int trackedCount = m_TrackedDeviceIds.Count();
         if (trackedCount == 0)
         {
@@ -3754,11 +2859,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-
-    // ===========================
-    // Self-healing
-    // ===========================
     override void RequestGlobalSelfHeal(bool validationOnlyAfterCut = false)
     {
         #ifdef SERVER
@@ -3772,7 +2872,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(DoGlobalSelfHeal, 500, bOnce);
         #endif
     }
-
     protected void DoGlobalSelfHeal()
     {
         #ifdef SERVER
@@ -3780,7 +2879,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         ValidateAllWiresAndPropagate();
         #endif
     }
-
     override void ValidateAllWiresAndPropagate()
     {
         #ifdef SERVER
@@ -3789,7 +2887,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationRerunRequested = true;
             return;
         }
-
         m_ValidationActive = true;
         m_ValidationRerunRequested = false;
         m_ValidationPhase = LFPG_VALIDATE_RESOLVE_VANILLA;
@@ -3837,14 +2934,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationPhase = LFPG_VALIDATE_SNAPSHOT_PRE;
         }
     }
-
     protected void LFPG_ValidationSnapshotPre()
     {
         LFPG_DeviceRegistry.Get().GetAll(m_ValidationDevices);
         m_ValidationCursor = 0;
         m_ValidationPhase = LFPG_VALIDATE_RESOLVE_LFPG;
     }
-
     protected void LFPG_ValidationResolveLFPGTargets()
     {
         int end = Math.Min(m_ValidationCursor + LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK, m_ValidationDevices.Count());
@@ -3870,7 +2965,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationPhase = LFPG_VALIDATE_SNAPSHOT_FINAL;
         }
     }
-
     protected void LFPG_ValidationSnapshotFinal()
     {
         LFPG_DeviceRegistry.Get().PruneNullEntries();
@@ -3897,7 +2991,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationPhase = LFPG_VALIDATE_REFRESH_LFPG;
         }
     }
-
     protected void LFPG_ValidationRefreshLFPGNetworkIds()
     {
         int end = Math.Min(m_ValidationCursor + LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK, m_ValidationDevices.Count());
@@ -3976,7 +3069,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationPhase = LFPG_VALIDATE_PRUNE_LFPG;
         }
     }
-
     protected void LFPG_ValidationPruneLFPGOwners()
     {
         int end = Math.Min(m_ValidationCursor + LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK, m_ValidationDevices.Count());
@@ -4009,7 +3101,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_GraphFullRebuildRequired = false;
         m_ValidationPhase = LFPG_VALIDATE_SCHEDULE_PRUNE;
     }
-
     protected void LFPG_ValidationScheduleDeferredPrune()
     {
         if (!m_DeferredPruneScheduled)
@@ -4021,7 +3112,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         m_ValidationPhase = LFPG_VALIDATE_GRAPH_REBUILD;
     }
-
     protected void LFPG_ValidationRebuildGraph()
     {
         bool graphRebuiltAfterValidationStart = m_GraphRebuildGeneration != m_ValidationGraphGeneration;
@@ -4038,14 +3128,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_ValidationSkipGraphRebuild = false;
         m_ValidationPhase = LFPG_VALIDATE_GRAPH_POPULATE;
     }
-
     protected void LFPG_ValidationPopulateGraph()
     {
         if (m_Graph)
             m_Graph.PopulateAllNodeElecStates();
         m_ValidationPhase = LFPG_VALIDATE_GRAPH_MARK;
     }
-
     protected void LFPG_ValidationMarkGraph()
     {
         if (m_Graph)
@@ -4059,13 +3147,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         m_ValidationPhase = LFPG_VALIDATE_PRUNE_POSITIONS;
     }
-
     protected void LFPG_ValidationPrunePositions()
     {
         PruneStaleLastKnownPositions();
         m_ValidationPhase = LFPG_VALIDATE_REBUILD_TRACKED;
     }
-
     protected void LFPG_ValidationRebuildTracked()
     {
         RebuildTrackedDevices();
@@ -4076,7 +3162,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         int durationMs = g_Game.GetTime() - m_ValidationStartMs;
         int deviceCount = m_ValidationDevices.Count();
         m_ValidationActive = false;
-
         if (m_ValidationRerunRequested)
         {
             m_ValidationRerunRequested = false;
@@ -4084,27 +3169,22 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             ValidateAllWiresAndPropagate();
             return;
         }
-
         bool wasStartupPending = !m_StartupValidationDone;
         m_StartupValidationDone = true;
         if (wasStartupPending)
             LFPG_Util.Info("[SelfHeal] Startup validation done — RPCs enabled");
-
         string summary = "[SelfHeal] phased summary duration_ms=";
         summary = summary + durationMs.ToString();
         summary = summary + " devices=" + deviceCount.ToString();
         summary = summary + " owners_pruned=" + m_ValidationOwnersPruned.ToString();
         LFPG_Util.Info(summary);
-
         if (m_FullSyncPendingPlayers.Count() > 0)
             LFPG_StartNextFullSync();
     }
-
     protected void LFPG_ProcessStartupValidationSlice()
     {
         if (!m_ValidationActive)
             return;
-
         if (m_ValidationPhase == LFPG_VALIDATE_RESOLVE_VANILLA)
         {
             LFPG_ValidationResolveVanillaOwners();
@@ -4182,30 +3262,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         LFPG_ValidationFinalize();
     }
-    // Returns cached valid IDs map if available (during self-heal cycle).
-    // Devices call this from LFPG_PruneMissingTargets to avoid building
-    // the same map N times. Returns null outside of self-heal.
     override map<string, bool> GetCachedValidIds()
     {
         return m_CachedValidIds;
     }
-
-    // v0.7.4: prune vanilla wire entries whose owner or target device
-    // can no longer be resolved. After devices are moved or destroyed,
-    // their position-based IDs change and wires become orphans.
-    // Also removes empty owner entries from m_VanillaWires.
     protected int PruneUnresolvableVanillaWires()
     {
         #ifdef SERVER
         int totalPruned = 0;
         ref array<string> emptyOwners = new array<string>;
-
         int vk;
         for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
         {
             string ownerId = m_VanillaWires.GetKey(vk);
-
-            // Check if owner can be resolved
             EntityAI ownerObj = LFPG_DeviceRegistry.Get().FindById(ownerId);
             if (!ownerObj)
             {
@@ -4213,7 +3282,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             if (!ownerObj)
             {
-                // Owner gone: remove all wires for this owner
                 ref array<ref LFPG_WireData> ownerWires = m_VanillaWires.GetElement(vk);
                 int ownerCount = 0;
                 if (ownerWires)
@@ -4224,12 +3292,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 emptyOwners.Insert(ownerId);
                 continue;
             }
-
-            // Owner exists: check each wire's target
             ref array<ref LFPG_WireData> wires = m_VanillaWires.GetElement(vk);
             if (!wires)
                 continue;
-
             int w = wires.Count() - 1;
             while (w >= 0)
             {
@@ -4241,7 +3306,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     w = w - 1;
                     continue;
                 }
-
                 EntityAI tObj = LFPG_DeviceRegistry.Get().FindById(wd.m_TargetDeviceId);
                 if (!tObj)
                 {
@@ -4254,24 +3318,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     wires.Remove(w);
                     totalPruned = totalPruned + 1;
                 }
-
                 w = w - 1;
             }
-
-            // If owner has no remaining wires, mark for removal
             if (wires.Count() == 0)
             {
                 emptyOwners.Insert(ownerId);
             }
         }
-
-        // Remove empty owner entries
         int eo;
         for (eo = 0; eo < emptyOwners.Count(); eo = eo + 1)
         {
             m_VanillaWires.Remove(emptyOwners[eo]);
         }
-
         if (totalPruned > 0)
         {
             string shPruneMsg = "[SelfHeal] Pruned " + totalPruned.ToString() + " unresolvable vanilla wire(s), " + emptyOwners.Count().ToString() + " empty owner(s)";
@@ -4283,22 +3341,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return 0;
         #endif
     }
-
-    // v4.7: Deferred vanilla wire prune + rebuild.
-    // Fires ~35s post-init (30s after initial validation at 5s).
-    // Re-resolves ALL vanilla wire endpoints, prunes truly dead wires,
-    // and rebuilds the graph with the clean state.
-    // Reason: At 5s post-init, DayZ may not have loaded all entities yet.
-    // Pruning at 5s permanently deletes wires to late-loading devices.
-    // By 35s, all entities should be positioned and resolvable.
     protected void DeferredVanillaPruneAndRebuild()
     {
         #ifdef SERVER
         int deferredStartMs = g_Game.GetTime();
         int newlyResolved = 0;
         LFPG_Util.Info("[DeferredPrune] Starting deferred vanilla wire validation...");
-
-        // Step 1: Re-resolve all vanilla wire endpoints (same as Step 1 in ValidateAllWiresAndPropagate)
         int vr;
         for (vr = 0; vr < m_VanillaWires.Count(); vr = vr + 1)
         {
@@ -4332,8 +3380,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Also re-resolve LFPG device wire targets that are vanilla
         array<EntityAI> allDev = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDev);
         int pa;
@@ -4360,15 +3406,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Step 2: Now prune — entities that STILL can't be resolved are truly gone
         int vanillaPruneCount = PruneUnresolvableVanillaWires();
-
-        // Step 3: Also prune LFPG device wires targeting unresolvable vanilla devices
         LFPG_DeviceRegistry.Get().PruneNullEntries();
         array<EntityAI> allAfterPrune = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allAfterPrune);
-
         m_CachedValidIds = new map<string, bool>;
         int vi;
         for (vi = 0; vi < allAfterPrune.Count(); vi = vi + 1)
@@ -4379,7 +3420,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_CachedValidIds[did] = true;
             }
         }
-
         int pruneCount = 0;
         int pi;
         for (pi = 0; pi < allAfterPrune.Count(); pi = pi + 1)
@@ -4393,26 +3433,20 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         m_CachedValidIds = null;
-
         bool vanillaDirtyBeforeFlush = m_VanillaDirty;
         bool needsDeferredRebuild = false;
         if (newlyResolved > 0 || pruneCount > 0 || vanillaPruneCount > 0 || vanillaDirtyBeforeFlush)
         {
             needsDeferredRebuild = true;
         }
-
-        // Step 4: Flush vanilla wires if anything changed
         if (m_VanillaDirty)
         {
             FlushVanillaIfDirty();
         }
-
         string deferredRebuildResult = "skipped";
         if (needsDeferredRebuild)
         {
             deferredRebuildResult = "executed";
-
-            // Step 5: Rebuild graph with clean state (includes newly-resolved vanilla devices)
             if (m_Graph)
             {
 				CaptureBatteryGraphState();
@@ -4421,13 +3455,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_GraphRebuildGeneration = m_GraphRebuildGeneration + 1;
                 m_Graph.PopulateAllNodeElecStates();
                 m_Graph.MarkSourcesDirty();
-
                 int flushBudget = LFPG_PROPAGATE_WARMUP_BUDGET;
                 int flushEdge = LFPG_PROPAGATE_EDGE_WARMUP_BUDGET;
                 m_Graph.ProcessDirtyQueue(flushBudget, flushEdge);
             }
-
-            // Step 6: Rebuild indexes
             RebuildReverseIdx();
 			RecountAllPlayerWires();
             m_GraphFullRebuildRequired = false;
@@ -4437,7 +3468,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             LFPG_Util.Info("[DeferredPrune] rebuild=skipped newly_resolved=0 lfpg_pruned=0 vanilla_pruned=0 vanilla_dirty=0");
         }
-
         int deferredDurationMs = g_Game.GetTime() - deferredStartMs;
         int vanillaDirtySummary = 0;
         if (vanillaDirtyBeforeFlush)
@@ -4448,19 +3478,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_Util.Info(deferredSummary);
         #endif
     }
-
-    // v0.7.26 (Audit 4): Remove stale entries from m_LastKnownPos.
-    // Called during self-heal. Only keeps entries for devices currently
-    // registered. Prevents unbounded map growth on long-running servers
-    // where devices are placed and destroyed over time.
     protected void PruneStaleLastKnownPositions()
     {
         #ifdef SERVER
         if (m_LastKnownPos.Count() == 0)
             return;
-
         ref array<string> staleIds = new array<string>;
-
         int pk;
         for (pk = 0; pk < m_LastKnownPos.Count(); pk = pk + 1)
         {
@@ -4468,7 +3491,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             EntityAI posObj = LFPG_DeviceRegistry.Get().FindById(posKey);
             if (!posObj)
             {
-                // Also check vanilla resolution
                 posObj = LFPG_DeviceAPI.ResolveVanillaDevice(posKey);
             }
             if (!posObj)
@@ -4476,13 +3498,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 staleIds.Insert(posKey);
             }
         }
-
         int sk;
         for (sk = 0; sk < staleIds.Count(); sk = sk + 1)
         {
             m_LastKnownPos.Remove(staleIds[sk]);
         }
-
         if (staleIds.Count() > 0)
         {
             string shStaleMsg = "[SelfHeal] Pruned " + staleIds.Count().ToString() + " stale position tracking entries";
@@ -4490,30 +3510,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ===========================
-    // Vanilla wire persistence (v0.7.4: deferred)
-    // ===========================
-
-    // Mark vanilla wire store as needing a save.
-    // Actual disk I/O deferred to the next periodic flush.
     override void MarkVanillaDirty()
     {
         #ifdef SERVER
         m_VanillaDirty = true;
         #endif
     }
-
-    // Periodic callback: flush to disk only if dirty.
-    // Called every LFPG_VANILLA_FLUSH_S seconds (5s).
-    // v4.7: Promoted from protected to public — also called from
-    // RPCServerHandler.HandleFinishWiring for immediate vanilla persistence.
     override void FlushVanillaIfDirty()
     {
         #ifdef SERVER
         if (!m_VanillaDirty)
             return;
-
         bool saveOk = SaveVanillaWires();
         if (saveOk)
         {
@@ -4521,7 +3528,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_VanillaSaveFailureCount = 0;
             return;
         }
-
         m_VanillaDirty = true;
         m_VanillaSaveFailureCount = m_VanillaSaveFailureCount + 1;
         int now = g_Game.GetTime();
@@ -4534,9 +3540,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // Explicit flush for shutdown/mission finish.
-    // Call from MissionServer cleanup to ensure no data loss.
     override void FlushVanillaOnShutdown()
     {
         #ifdef SERVER
@@ -4557,46 +3560,35 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
     protected bool SaveVanillaWires()
     {
         #ifdef SERVER
-        // v0.7.16 H6: Don't overwrite if file was from a newer schema version.
-        // Saving would strip unknown fields and downgrade the version marker.
         if (m_VanillaReadOnly)
         {
             string saveBlockMsg = "[VanillaWires] SAVE BLOCKED: loaded from schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Upgrade the mod to save changes.";
             LFPG_Util.Warn(saveBlockMsg);
             return true;
         }
-
         if (!FileExist(VANILLA_WIRES_DIR))
             MakeDirectory(VANILLA_WIRES_DIR);
-
-        // Build a flat array of owner+wire pairs for serialization
         LFPG_VanillaWireStore store = new LFPG_VanillaWireStore();
-
         int vk;
         for (vk = 0; vk < m_VanillaWires.Count(); vk = vk + 1)
         {
             string ownerId = m_VanillaWires.GetKey(vk);
             ref array<ref LFPG_WireData> wires = m_VanillaWires.GetElement(vk);
             if (!wires) continue;
-
             int w;
             for (w = 0; w < wires.Count(); w = w + 1)
             {
                 LFPG_WireData wd = wires[w];
                 if (!wd) continue;
-
                 LFPG_VanillaWireEntry entry = new LFPG_VanillaWireEntry();
                 entry.m_OwnerDeviceId = ownerId;
                 entry.m_TargetDeviceId = wd.m_TargetDeviceId;
                 entry.m_TargetPort = wd.m_TargetPort;
                 entry.m_SourcePort = wd.m_SourcePort;
                 entry.m_CreatorId = wd.m_CreatorId;
-
-                // Persist waypoints (v0.7.3)
                 if (wd.m_Waypoints && wd.m_Waypoints.Count() > 0)
                 {
                     int wp;
@@ -4605,12 +3597,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         entry.m_Waypoints.Insert(wd.m_Waypoints[wp]);
                     }
                 }
-
                 store.entries.Insert(entry);
             }
         }
-
-        // v0.7.15 (Sprint 3 P2b): Atomic save with backup rotation
         bool saveOk = LFPG_FileUtil.AtomicSaveVanillaWires(VANILLA_WIRES_FILE, store);
         if (saveOk)
         {
@@ -4626,18 +3615,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         #endif
         return true;
     }
-
     protected void LoadVanillaWires()
     {
         #ifdef SERVER
-        // PR-A: typed recovery prefers parseable orphan .tmp over .bak.new/.bak.
         if (!LFPG_FileUtil.EnsureVanillaWiresFileOrRestore(VANILLA_WIRES_FILE))
         {
             string vFreshMsg = "[VanillaWires] No saved file found, starting fresh.";
             LFPG_Util.Info(vFreshMsg);
             return;
         }
-
         LFPG_VanillaWireStore store = new LFPG_VanillaWireStore();
         string err;
         if (!JsonFileLoader<LFPG_VanillaWireStore>.LoadFile(VANILLA_WIRES_FILE, store, err))
@@ -4646,32 +3632,23 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Warn(vLoadErr);
             return;
         }
-
         if (!store.entries)
         {
             string vEmptyMsg = "[VanillaWires] Loaded empty store.";
             LFPG_Util.Info(vEmptyMsg);
             return;
         }
-
-        // v0.7.16 H6: Track loaded version for save guard
         m_VanillaLoadedVer = store.ver;
-
-        // v0.7.16 H6: If loaded from a newer schema, enter read-only mode
         if (m_VanillaLoadedVer > LFPG_VANILLA_PERSIST_VER)
         {
             m_VanillaReadOnly = true;
             string vSchemaMsg = "[VanillaWires] Schema v" + m_VanillaLoadedVer.ToString() + " > current v" + LFPG_VANILLA_PERSIST_VER.ToString() + ". Entering READ-ONLY mode to protect data. Upgrade the mod.";
             LFPG_Util.Warn(vSchemaMsg);
         }
-
         int loaded = 0;
         int discarded = 0;
         int duplicates = 0;
-
-        // v0.7.16 H3: Map-based O(N) dedup per owner instead of O(N²) IsDuplicate
         ref map<string, ref map<string, bool>> dedupByOwner = new map<string, ref map<string, bool>>;
-
         int i;
         for (i = 0; i < store.entries.Count(); i = i + 1)
         {
@@ -4682,14 +3659,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 discarded = discarded + 1;
                 continue;
             }
-
             LFPG_WireData wd = new LFPG_WireData();
             wd.m_TargetDeviceId = entry.m_TargetDeviceId;
             wd.m_TargetPort = entry.m_TargetPort;
             wd.m_SourcePort = entry.m_SourcePort;
             wd.m_CreatorId = entry.m_CreatorId;
-
-            // Restore waypoints (v0.7.3)
             if (entry.m_Waypoints && entry.m_Waypoints.Count() > 0)
             {
                 int wp;
@@ -4698,22 +3672,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     wd.m_Waypoints.Insert(entry.m_Waypoints[wp]);
                 }
             }
-
-            // v0.7.15 (Sprint 3 P2): Exhaustive per-wire validation
             if (!LFPG_WireHelper.ValidateWireData(wd, "VanillaWires"))
             {
                 discarded = discarded + 1;
                 continue;
             }
-
-            // v0.7.16 H3: O(1) dedup via map per owner
             ref map<string, bool> ownerDedup;
             if (!dedupByOwner.Find(entry.m_OwnerDeviceId, ownerDedup) || !ownerDedup)
             {
                 ownerDedup = new map<string, bool>;
                 dedupByOwner.Set(entry.m_OwnerDeviceId, ownerDedup);
             }
-
             string dedupKey = wd.m_TargetDeviceId + "|" + wd.m_TargetPort + "|" + wd.m_SourcePort;
             bool isDup = false;
             ownerDedup.Find(dedupKey, isDup);
@@ -4724,19 +3693,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             bool bDedup = true;
             ownerDedup.Set(dedupKey, bDedup);
-
-            // Insert into wire map
             ref array<ref LFPG_WireData> wires;
             if (!m_VanillaWires.Find(entry.m_OwnerDeviceId, wires) || !wires)
             {
                 wires = new array<ref LFPG_WireData>;
                 m_VanillaWires[entry.m_OwnerDeviceId] = wires;
             }
-
             wires.Insert(wd);
             loaded = loaded + 1;
         }
-
         string loadMsg = "[VanillaWires] Loaded " + loaded.ToString() + " entries from " + store.entries.Count().ToString();
         if (discarded > 0)
         {
@@ -4749,9 +3714,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_Util.Info(loadMsg);
         #endif
     }
-	
-    // previousOwnerPosition is snapshot interest only. knownDeviceId is the
-    // pre-move index key and must not be recomputed from the new position.
     override void CutAllWiresFromMovedDevice(EntityAI device, vector previousOwnerPosition, string knownDeviceId = "")
     {
         m_CutAllHasPreviousOwnerPosition = true;
@@ -4759,21 +3721,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         CutAllWiresFromDevice(device, knownDeviceId);
         m_CutAllHasPreviousOwnerPosition = false;
     }
-
 	override void CutAllWiresFromDevice(EntityAI device, string knownDeviceId = "")
     {
         #ifdef SERVER
         if (!device)
             return;
-
-        // knownDeviceId is required when the live entity cannot yield the
-        // indexed id (vanilla vp: after a move, or a tearing-down object).
         string deviceId = knownDeviceId;
         if (deviceId == "")
             deviceId = LFPG_DeviceAPI.GetDeviceId(device);
         if (deviceId == "")
             return;
-
         bool anyChanged = false;
         bool reverseIndexConsistent = false;
         ref map<string, int> graphIncomingByPort = new map<string, int>;
@@ -4784,18 +3741,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             if (LFPG_DeviceAPI.GetPortDir(device, declaredPortIndex) != LFPG_PortDir.IN)
                 continue;
-
             string declaredPortName = LFPG_DeviceAPI.GetPortName(device, declaredPortIndex);
             if (declaredPortName == "")
                 declaredPortName = "input_main";
             declaredInputPorts.Set(deviceId + "|" + declaredPortName, true);
         }
-
-        // --- v0.7.28 (Bug 2+3): Collect all graph neighbors BEFORE cutting ---
-        // When wires are cut, the graph node for this device gets removed.
-        // If we don't force SetPowered(false) on neighbors first, they
-        // become orphan nodes that never receive a powered=false update.
-        // Collect now while the graph still has the edges.
         ref array<string> neighborIds = new array<string>;
         if (m_Graph)
         {
@@ -4823,13 +3773,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     if (piEdge && piEdge.m_SourceNodeId != "")
                     {
                         neighborIds.Insert(piEdge.m_SourceNodeId);
-
                         string incomingPort = piEdge.m_TargetPort;
                         if (incomingPort == "")
                         {
                             incomingPort = "input_main";
-                            // A raw legacy empty port cannot be removed by the
-                            // exact-port directed path; force the targetId scan.
                             reverseIndexConsistent = false;
                         }
                         string incomingKey = deviceId + "|" + incomingPort;
@@ -4839,7 +3786,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         int graphPortCount = 0;
                         graphIncomingByPort.Find(incomingKey, graphPortCount);
                         graphIncomingByPort.Set(incomingKey, graphPortCount + 1);
-
                         ref array<string> indexedOwners;
                         if (!m_ReverseOwners.Find(incomingKey, indexedOwners) || !indexedOwners)
                         {
@@ -4864,9 +3810,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // T5 W4-F06: the graph and reverse index jointly provide a cheap
-        // per-device health signal. A mismatch alone enables the global backstop.
         int graphPortIndex;
         for (graphPortIndex = 0; graphPortIndex < graphIncomingByPort.Count(); graphPortIndex = graphPortIndex + 1)
         {
@@ -4877,13 +3820,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (indexedPortTotal != graphPortTotal)
                 reverseIndexConsistent = false;
         }
-
         int healthPortIndex;
         for (healthPortIndex = 0; healthPortIndex < portCount; healthPortIndex = healthPortIndex + 1)
         {
             if (LFPG_DeviceAPI.GetPortDir(device, healthPortIndex) != LFPG_PortDir.IN)
                 continue;
-
             string healthPortName = LFPG_DeviceAPI.GetPortName(device, healthPortIndex);
             if (healthPortName == "")
                 healthPortName = "input_main";
@@ -4894,19 +3835,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (indexedHealthCount != graphHealthCount)
                 reverseIndexConsistent = false;
         }
-
         m_CutAllGraphBatchActive = true;
-
-        // --- 1. Clear OWNED wires (output side) ---
-        // Individual graph removals are suppressed for the duration of this
-        // CutAll batch. Section 6 removes the node once, then the shared
-        // callback rebuilds after all same-tick CutAll calls have settled.
         if (LFPG_DeviceAPI.HasWireStore(device))
         {
             ref array<ref LFPG_WireData> ownedWires = LFPG_DeviceAPI.GetDeviceWires(device);
             if (ownedWires && ownedWires.Count() > 0)
             {
-                // Update reverse index and player counts before clearing
                 array<vector> ownedTargetPositions = new array<vector>;
                 EntityAI ownedTarget;
                 bool ownedBroadcastAll = false;
@@ -4926,14 +3860,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     }
                     ow = ow - 1;
                 }
-
                 LFPG_DeviceAPI.ClearDeviceWires(device);
                 QueueBroadcastOwnerSnapshot(device, ownedTargetPositions, ownedBroadcastAll);
                 anyChanged = true;
             }
         }
-
-        // --- 2. Clear vanilla store wires (if vanilla source) ---
         if (deviceId.IndexOf("vp:") == 0)
         {
             ref array<ref LFPG_WireData> vWires;
@@ -4956,8 +3887,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 anyChanged = true;
             }
         }
-
-        // --- 3. Remove wires TARGETING this device's IN ports ---
         int pi;
         for (pi = 0; pi < portCount; pi = pi + 1)
         {
@@ -4977,12 +3906,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // --- 4. Brute-force fallback for stale reverse index ---
-        // Same pattern as v0.7.25 Bug 3 fix in PlayerRPC CUT_WIRES.
-        // Scans all devices for wires targeting us that the index missed.
-        // T5 W4-F06: only pay O(V) when the graph/index comparison above
-        // proves the per-device reverse index inconsistent.
         if (!m_ReverseIndexTrusted)
             reverseIndexConsistent = false;
         if (!reverseIndexConsistent)
@@ -5000,12 +3923,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     continue;
                 if (!LFPG_DeviceAPI.HasWireStore(srcDev))
                     continue;
-
                 string srcId = LFPG_DeviceAPI.GetDeviceId(srcDev);
                 ref array<ref LFPG_WireData> srcWires = LFPG_DeviceAPI.GetDeviceWires(srcDev);
                 if (!srcWires)
                     continue;
-
                 bool srcChanged = false;
                 m_ReusableCutAllFallbackWires.Clear();
                 int sw = srcWires.Count() - 1;
@@ -5024,7 +3945,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     }
                     sw = sw - 1;
                 }
-
                 if (srcChanged)
                 {
                     LFPG_WireOwnerBase srcWireOwner = LFPG_WireOwnerBase.Cast(srcDev);
@@ -5037,10 +3957,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     m_ReusableCutAllFallbackWires.Clear();
                 }
             }
-
-            // Vanilla owners are stored in m_VanillaWires rather than on an
-            // entity with HasWireStore, so the registry loop above cannot see
-            // them. Cover them in the same mismatch-only backstop.
             int fallbackVanillaOwnerIndex;
             for (fallbackVanillaOwnerIndex = 0; fallbackVanillaOwnerIndex < m_VanillaWires.Count(); fallbackVanillaOwnerIndex = fallbackVanillaOwnerIndex + 1)
             {
@@ -5048,7 +3964,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 ref array<ref LFPG_WireData> fallbackVanillaWires = m_VanillaWires.GetElement(fallbackVanillaOwnerIndex);
                 if (!fallbackVanillaWires)
                     continue;
-
                 bool fallbackVanillaChanged = false;
                 int fallbackVanillaWireIndex = fallbackVanillaWires.Count() - 1;
                 while (fallbackVanillaWireIndex >= 0)
@@ -5065,7 +3980,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     }
                     fallbackVanillaWireIndex = fallbackVanillaWireIndex - 1;
                 }
-
                 if (fallbackVanillaChanged)
                 {
                     MarkVanillaDirty();
@@ -5077,42 +3991,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
         if (!reverseIndexConsistent)
         {
             m_ReverseIndexTrusted = false;
             m_IndexHealAfterCut = true;
         }
-
         m_CutAllGraphBatchActive = false;
-
-        // --- 5. Cleanup tracking state ---
         m_LastKnownPos.Remove(deviceId);
-
-        // --- 5b. Queue powered=false on device and all neighbors (v0.7.28) ---
-        // Apply these in the coalesced rebuild callback, immediately before
-        // rebuild+propagation, so alternate paths are restored in one frame.
         EntityAI neighborDev;
         if (anyChanged)
         {
             m_CutPendingPowerOff.Set(deviceId, true);
-
-            // Propagation will re-enable neighbors with an alternate path.
             int nbi;
             for (nbi = 0; nbi < neighborIds.Count(); nbi = nbi + 1)
                 m_CutPendingPowerOff.Set(neighborIds[nbi], true);
         }
-
-        // --- 6. Notify graph and propagate ---
-
         if (anyChanged)
         {
             if (m_Graph)
             {
                 m_Graph.OnDeviceRemoved(deviceId);
             }
-            // T5 W4-F06: defer to the next system-queue turn so a same-tick
-            // kill/delete or K-device cascade shares one final graph rebuild.
             if (!m_CutGraphRebuildQueued)
             {
                 m_CutGraphRebuildQueued = true;
@@ -5124,16 +4023,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 string cutAllMsg = "[CutAll] All wires removed for device " + deviceId + " type=" + device.GetType();
                 LFPG_Util.Info(cutAllMsg);
             }
-
-            // T5 R21-T5-003: broadcasts stay queued until the coalesced
-            // PostBulk callback. A same-tick K-device cascade therefore emits
-            // one deduplicated final batch after graph rebuild+propagation.
-
-            // v0.7.32 (Audit P2): Immediate vanilla flush after critical cut.
-            // MarkVanillaDirty() was called in section 2, but FlushVanillaIfDirty
-            // runs on a 5s timer. Integrity cuts still flush immediately, so vanilla
-            // wires are lost. CutAll is infrequent enough that synchronous
-            // flush has negligible perf impact.
             if (m_VanillaDirty)
             {
                 FlushVanillaIfDirty();
@@ -5141,20 +4030,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         else if (m_IndexHealAfterCut && !m_CutGraphRebuildQueued)
         {
-            // No wire store changed, so there is no graph rebuild to wait for.
-            // Run the full atomic index/recount heal and do not skip its graph pass.
             m_IndexHealAfterCut = false;
             RequestGlobalSelfHeal();
         }
-
-        // --- 7. Untrack from centralized polling (v0.7.30) ---
-        // CutAll removes all owned + incoming wires, so device no longer
-        // needs position monitoring. UntrackDeviceFromPolling is a no-op
-        // if the device wasn't tracked.
-        // Also untrack neighbors that may have lost all their wires
-        // as a result of this cut (e.g. consumer whose only source was cut).
         UntrackDeviceFromPolling(deviceId);
-
         int nui;
         for (nui = 0; nui < neighborIds.Count(); nui = nui + 1)
         {
@@ -5169,34 +4048,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             else
             {
-                // Neighbor disappeared — clean up
                 UntrackDeviceFromPolling(neighborId);
             }
         }
         #endif
     }
-
-    // ===========================
-    // v0.8.0: Centralized Solar Timer
-    // ===========================
-    // Single timer replaces N per-panel CallLater timers.
-    // Benefits:
-    //   - 1 GetDate() call instead of N (100 panels = 100x savings)
-    //   - Atomic state change (all panels transition in same frame)
-    //   - No timer leak on panel delete (no per-panel timer to stop)
-    //   - Eliminates race condition where panels in the same tick
-    //     see different sun states during dawn/dusk transition
-
-    // Public getter: panels read cached sun state on EEInit
-    // (avoids per-panel GetDate call during initialization).
     override bool LFPG_GetCachedSunState()
     {
         return m_SolarHasSun;
     }
-
-	// ===========================
-    // v5.0: BTC Price getters (for RPC handlers in Sprint 3)
-    // ===========================
     override float LFPG_GetBTCPrice()
     {
         if (m_BTCPriceFetcher)
@@ -5205,7 +4065,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         return LFPG_BTC_PRICE_UNAVAILABLE;
     }
-
     override bool LFPG_IsBTCPriceAvailable()
     {
         if (m_BTCPriceFetcher)
@@ -5214,7 +4073,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         return false;
     }
-
     override float LFPG_GetBTC24hChange()
     {
         if (m_BTCPriceFetcher)
@@ -5223,39 +4081,28 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         return 0.0;
     }
-
-    // Read world time once, update cached sun state.
-    // Called by constructor (seed) and by LFPG_TickSolarPanels (periodic).
     protected void LFPG_ComputeSunState()
     {
         #ifdef SERVER
         if (!g_Game)
             return;
-
         World world = g_Game.GetWorld();
         if (!world)
             return;
-
         int year = 0;
         int month = 0;
         int day = 0;
         int hour = 0;
         int minute = 0;
         world.GetDate(year, month, day, hour, minute);
-
         bool hasSun = false;
         if (hour >= LFPG_SOLAR_DAWN_HOUR && hour < LFPG_SOLAR_DUSK_HOUR)
         {
             hasSun = true;
         }
-
         m_SolarHasSun = hasSun;
         #endif
     }
-	
-	// ===========================
-    // v5.0: BTC Price Tick
-    // ===========================
     protected void LFPG_TickBTCPrice()
     {
         #ifdef SERVER
@@ -5265,27 +4112,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-	
-    // Periodic tick (every LFPG_SOLAR_CHECK_MS = 15s).
-    // Recomputes sun state; if unchanged, returns immediately (O(1)).
-    // If changed, iterates registered solar panels.
-    // LFPG_SolarPanel_T2 inherits LFPG_SolarPanel → auto-registered via base.
     protected void LFPG_TickSolarPanels()
     {
         #ifdef SERVER
         bool prevSun = m_SolarHasSun;
         LFPG_ComputeSunState();
-
-        // No transition → nothing to do. This is the common case
-        // (dawn/dusk only happens twice per in-game day).
         if (m_SolarHasSun == prevSun)
             return;
-
-        // Sun state changed — update all registered solar panels
         int total = m_RegisteredSolars.Count();
         if (total == 0)
             return;
-
         int i;
         int updated = 0;
         LFPG_SolarPanel panel;
@@ -5293,15 +4129,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             if (i >= m_RegisteredSolars.Count())
                 break;
-
             panel = LFPG_SolarPanel.Cast(m_RegisteredSolars[i]);
             if (!panel)
                 continue;
-
             panel.LFPG_UpdateSunState(m_SolarHasSun);
             updated = updated + 1;
         }
-
         string msg = "[Solar] Sun changed to ";
         msg = msg + m_SolarHasSun.ToString();
         msg = msg + ", updated ";
@@ -5310,16 +4143,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_Util.Info(msg);
         #endif
     }
-
-    // ===========================
-    // v1.1.0: Water Pump Timer
-    // ===========================
-    // v5.1: Instant pump↔sprinkler link refresh.
-    // Called from NotifyGraphWireAdded/Removed so sprinkler state
-    // updates immediately on wire connect/disconnect instead of
-    // waiting up to 60s for the periodic tick.
-    // removedTargetId: "" on add, actual targetId on remove.
-    // ===========================
     override void LFPG_RefreshPumpSprinklerLink(string sourceId, string removedTargetId)
     {
         #ifdef SERVER
@@ -5327,14 +4150,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         EntityAI srcEnt = reg.FindById(sourceId);
         if (!srcEnt)
             return;
-
-        // Check if source is a pump (T1 or T2)
         LFPG_WaterPump rp1 = LFPG_WaterPump.Cast(srcEnt);
         LFPG_WaterPump_T2 rp2 = LFPG_WaterPump_T2.Cast(srcEnt);
         if (!rp1 && !rp2)
             return;
-
-        // Handle removed target: reset sprinkler that was just disconnected
         if (removedTargetId != "")
         {
             EntityAI removedEnt = reg.FindById(removedTargetId);
@@ -5354,12 +4173,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Rescan pump's current wires for sprinkler connections
         array<ref LFPG_WireData> rpWires;
         bool rpPowered;
         float rpTank = 0.0;
-
         if (rp1)
         {
             rpWires = rp1.LFPG_GetWires();
@@ -5371,7 +4187,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             rpPowered = rp2.LFPG_GetPoweredNet();
             rpTank = rp2.LFPG_GetTankLevel();
         }
-
         int rpSprCount = 0;
         int rwi;
         int rpWireCount = rpWires.Count();
@@ -5380,42 +4195,30 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         EntityAI rpTEnt;
         LFPG_Sprinkler rpTSpr;
         bool rpSprActive;
-
-        // Pass 1: Count sprinklers + set water source + T1 activation
         for (rwi = 0; rwi < rpWireCount; rwi = rwi + 1)
         {
             rpWd = rpWires[rwi];
             if (!rpWd)
                 continue;
-
             rpTid = rpWd.m_TargetDeviceId;
             if (rpTid == "")
                 continue;
-
-            // v5.1: Skip the sprinkler being deleted/disconnected
             if (rpTid == removedTargetId)
                 continue;
-
             rpTEnt = reg.FindById(rpTid);
             if (!rpTEnt)
                 continue;
-
             rpTSpr = LFPG_Sprinkler.Cast(rpTEnt);
             if (!rpTSpr)
                 continue;
-
             rpSprCount = rpSprCount + 1;
             rpTSpr.LFPG_SetHasWaterSource(true);
             rpTSpr.LFPG_SetWaterSourceId(sourceId);
-
-            // T1: activate immediately (no tank dependency)
             if (rp1)
             {
                 rpTSpr.LFPG_SetSprinklerActive(rpPowered);
             }
         }
-
-        // Update pump state
         bool rpHasSpr = false;
         if (rp1)
         {
@@ -5428,10 +4231,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         else
         {
             rp2.LFPG_SetConnectedSprinklerCount(rpSprCount);
-
-            // T2 Pass 2: Activate sprinklers based on final count.
-            // 1-2 sprinklers: always active if powered (sustainable flow).
-            // 3+: require tank > 0.
             rpSprActive = false;
             if (rpPowered)
             {
@@ -5444,59 +4243,40 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     rpSprActive = true;
                 }
             }
-
             for (rwi = 0; rwi < rpWireCount; rwi = rwi + 1)
             {
                 rpWd = rpWires[rwi];
                 if (!rpWd)
                     continue;
-
                 rpTid = rpWd.m_TargetDeviceId;
                 if (rpTid == "")
                     continue;
-
                 if (rpTid == removedTargetId)
                     continue;
-
                 rpTEnt = reg.FindById(rpTid);
                 if (!rpTEnt)
                     continue;
-
                 rpTSpr = LFPG_Sprinkler.Cast(rpTEnt);
                 if (!rpTSpr)
                     continue;
-
                 rpTSpr.LFPG_SetSprinklerActive(rpSprActive);
             }
         }
         #endif
     }
-
-    // ===========================
-    // Two sub-systems:
-    //   1. Filter degradation: real-time (ms), 1 qty point per LFPG_PUMP_FILTER_INTERVAL_MS (2%/h)
-    //   2. Tank fill: in-game hour based, LFPG_PUMP_TANK_FILL_PER_HOUR per hour
-
-    // Seed tank fill hour from world time
     protected void LFPG_InitTankFillTime()
     {
         #ifdef SERVER
         m_TankFillLastMs = g_Game.GetTime();
         #endif
     }
-
-    // Periodic tick (every LFPG_PUMP_CHECK_MS = 60s)
-    // v4.1: Uses dedicated registries instead of GetAll+Cast.
     protected void LFPG_TickWaterPumps()
     {
         #ifdef SERVER
         float nowMs = g_Game.GetTime();
         float thresholdMs = LFPG_PUMP_FILTER_INTERVAL_MS;
-
-        // --- Compute tank fill amount from real elapsed ms ---
         float fillAmount = 0.0;
         bool doTankFill = false;
-
         if (m_TankFillLastMs >= 0.0)
         {
             float elapsedFillMs = nowMs - m_TankFillLastMs;
@@ -5510,49 +4290,33 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
         }
-
-        // Early-out only after the stamp above. Returning before it defers fill
-        // work: the next tick with a pump present applies the whole idle period.
         if (m_RegisteredSprinklers.Count() == 0 && m_RegisteredT1Pumps.Count() == 0 && m_RegisteredT2Pumps.Count() == 0)
         {
             return;
         }
-
-        // ============================================================
-        // Phase A: Reset sprinklers + filter degradation (registries).
-        // Replaces GetAll+Cast full scan with direct registry iteration.
-        // ============================================================
         int i;
         int sprTotal = m_RegisteredSprinklers.Count();
         LFPG_Sprinkler castSpr;
         float elapsed;
-
-        // Reset all registered sprinklers (Phase B/C re-activates if connected)
         for (i = 0; i < sprTotal; i = i + 1)
         {
             if (i >= m_RegisteredSprinklers.Count())
                 break;
-
             castSpr = LFPG_Sprinkler.Cast(m_RegisteredSprinklers[i]);
             if (!castSpr)
                 continue;
-
             castSpr.LFPG_SetHasWaterSource(false);
             castSpr.LFPG_SetSprinklerActive(false);
         }
-
-        // T1 filter degradation
         int t1Total = m_RegisteredT1Pumps.Count();
         LFPG_WaterPump castT1;
         for (i = 0; i < t1Total; i = i + 1)
         {
             if (i >= m_RegisteredT1Pumps.Count())
                 break;
-
             castT1 = LFPG_WaterPump.Cast(m_RegisteredT1Pumps[i]);
             if (!castT1)
                 continue;
-
             elapsed = nowMs - castT1.LFPG_GetFilterLastMs();
             if (elapsed >= thresholdMs)
             {
@@ -5560,19 +4324,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 castT1.LFPG_SetFilterLastMs(nowMs);
             }
         }
-
-        // T2 filter degradation
         int t2Total = m_RegisteredT2Pumps.Count();
         LFPG_WaterPump_T2 castT2;
         for (i = 0; i < t2Total; i = i + 1)
         {
             if (i >= m_RegisteredT2Pumps.Count())
                 break;
-
             castT2 = LFPG_WaterPump_T2.Cast(m_RegisteredT2Pumps[i]);
             if (!castT2)
                 continue;
-
             elapsed = nowMs - castT2.LFPG_GetFilterLastMs();
             if (elapsed >= thresholdMs)
             {
@@ -5580,11 +4340,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 castT2.LFPG_SetFilterLastMs(nowMs);
             }
         }
-
-        // ============================================================
-        // Phase B: T1 pumps — wire scan → activate connected sprinklers,
-        //          set m_HasSprinklerOutput.
-        // ============================================================
         LFPG_DeviceRegistry reg = LFPG_DeviceRegistry.Get();
         int t1Count = m_RegisteredT1Pumps.Count();
         int pi;
@@ -5600,47 +4355,37 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool pumpPowered;
         string pumpId;
         bool hasSprOut;
-
         for (pi = 0; pi < t1Count; pi = pi + 1)
         {
             if (pi >= m_RegisteredT1Pumps.Count())
                 break;
-
             curT1 = LFPG_WaterPump.Cast(m_RegisteredT1Pumps[pi]);
             if (!curT1)
                 continue;
-
             wires = curT1.LFPG_GetWires();
             wireCount = wires.Count();
             sprCount = 0;
             pumpPowered = curT1.LFPG_GetPoweredNet();
             pumpId = curT1.LFPG_GetDeviceId();
-
             for (wi = 0; wi < wireCount; wi = wi + 1)
             {
                 wd = wires[wi];
                 if (!wd)
                     continue;
-
                 targetId = wd.m_TargetDeviceId;
                 if (targetId == "")
                     continue;
-
                 targetEnt = reg.FindById(targetId);
                 if (!targetEnt)
                     continue;
-
                 targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
-
-                // Sprinkler found on this T1 output
                 sprCount = sprCount + 1;
                 targetSpr.LFPG_SetHasWaterSource(true);
                 targetSpr.LFPG_SetWaterSourceId(pumpId);
                 targetSpr.LFPG_SetSprinklerActive(pumpPowered);
             }
-
             hasSprOut = false;
             if (sprCount > 0)
             {
@@ -5648,11 +4393,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             curT1.LFPG_SetHasSprinklerOutput(hasSprOut);
         }
-
-        // ============================================================
-        // Phase C: T2 pumps — wire scan → activate connected sprinklers,
-        //          set m_ConnectedSprinklerCount, adjusted tank fill.
-        // ============================================================
         int t2Count = m_RegisteredT2Pumps.Count();
         LFPG_WaterPump_T2 curT2B;
         bool sprActive;
@@ -5663,51 +4403,38 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         float netFill;
         int incomingType;
         int currentType;
-
         for (pi = 0; pi < t2Count; pi = pi + 1)
         {
             if (pi >= m_RegisteredT2Pumps.Count())
                 break;
-
             curT2B = LFPG_WaterPump_T2.Cast(m_RegisteredT2Pumps[pi]);
             if (!curT2B)
                 continue;
-
             wires = curT2B.LFPG_GetWires();
             wireCount = wires.Count();
             sprCount = 0;
             pumpPowered = curT2B.LFPG_GetPoweredNet();
             pumpId = curT2B.LFPG_GetDeviceId();
             curTank = curT2B.LFPG_GetTankLevel();
-
-            // Pass 1: Count sprinklers + set water source (no activation yet)
             for (wi = 0; wi < wireCount; wi = wi + 1)
             {
                 wd = wires[wi];
                 if (!wd)
                     continue;
-
                 targetId = wd.m_TargetDeviceId;
                 if (targetId == "")
                     continue;
-
                 targetEnt = reg.FindById(targetId);
                 if (!targetEnt)
                     continue;
-
                 targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
-
                 sprCount = sprCount + 1;
                 targetSpr.LFPG_SetHasWaterSource(true);
                 targetSpr.LFPG_SetWaterSourceId(pumpId);
             }
-
             curT2B.LFPG_SetConnectedSprinklerCount(sprCount);
-
-            // Determine activation: 1-2 sprinklers always work if powered
-            // (net flow >= 0, system is sustainable). 3+ require tank > 0.
             sprActive = false;
             if (pumpPowered)
             {
@@ -5720,43 +4447,29 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     sprActive = true;
                 }
             }
-
-            // Pass 2: Activate sprinklers with final decision
             for (wi = 0; wi < wireCount; wi = wi + 1)
             {
                 wd = wires[wi];
                 if (!wd)
                     continue;
-
                 targetId = wd.m_TargetDeviceId;
                 if (targetId == "")
                     continue;
-
                 targetEnt = reg.FindById(targetId);
                 if (!targetEnt)
                     continue;
-
                 targetSpr = LFPG_Sprinkler.Cast(targetEnt);
                 if (!targetSpr)
                     continue;
-
                 targetSpr.LFPG_SetSprinklerActive(sprActive);
             }
-
-            // --- T2 tank fill with sprinkler drain adjustment ---
             if (doTankFill && pumpPowered)
             {
                 level = curT2B.LFPG_GetTankLevel();
-
-                // netFill = fillAmount * (1.0 - sprCount * 0.5)
-                // 0 spr → +fill, 1 → +0.5*fill, 2 → 0, 3 → -0.5*fill
                 sprDrainFactor = sprCount * 0.5;
                 netFactor = 1.0 - sprDrainFactor;
                 netFill = fillAmount * netFactor;
-
                 level = level + netFill;
-
-                // Clamp to [0, max]
                 if (level < 0.0)
                 {
                     level = 0.0;
@@ -5765,8 +4478,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 {
                     level = LFPG_PUMP_TANK_MAX;
                 }
-
-                // Determine incoming water type (only when net positive)
                 if (netFill > 0.0)
                 {
                     incomingType = LIQUID_RIVERWATER;
@@ -5774,9 +4485,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     {
                         incomingType = LIQUID_CLEANWATER;
                     }
-
                     currentType = curT2B.LFPG_GetTankLiquidType();
-
                     if (level < 0.01)
                     {
                         curT2B.LFPG_SetTankLiquidType(incomingType);
@@ -5786,19 +4495,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         curT2B.LFPG_SetTankLiquidType(LIQUID_RIVERWATER);
                     }
                 }
-
                 curT2B.LFPG_SetTankLevel(level);
             }
         }
         #endif
     }
-
-    // ===========================
-    // v4.1: Solar Panel Registry
-    // ===========================
-    // Replaces GetAll+Cast full scan in TickSolarPanels.
-    // LFPG_SolarPanel_T2 inherits LFPG_SolarPanel → registered via base class.
-
     override void RegisterSolar(LFPG_SolarPanel panel)
     {
         if (!panel)
@@ -5808,7 +4509,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredSolars.Insert(panel);
         }
     }
-
     override void UnregisterSolar(LFPG_SolarPanel panel)
     {
         if (!panel)
@@ -5819,13 +4519,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredSolars.Remove(idx);
         }
     }
-
-    // ===========================
-    // v4.1: Water Pump + Sprinkler Registries
-    // ===========================
-    // Replaces GetAll+Cast full scan in TickWaterPumps Phase A.
-    // T1 and T2 are separate classes (T2 does NOT inherit T1).
-
     override void RegisterT1Pump(LFPG_WaterPump pump)
     {
         if (!pump)
@@ -5835,7 +4528,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredT1Pumps.Insert(pump);
         }
     }
-
     override void UnregisterT1Pump(LFPG_WaterPump pump)
     {
         if (!pump)
@@ -5846,7 +4538,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredT1Pumps.Remove(idx);
         }
     }
-
     override void RegisterT2Pump(LFPG_WaterPump_T2 pump)
     {
         if (!pump)
@@ -5856,7 +4547,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredT2Pumps.Insert(pump);
         }
     }
-
     override void UnregisterT2Pump(LFPG_WaterPump_T2 pump)
     {
         if (!pump)
@@ -5867,7 +4557,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredT2Pumps.Remove(idx);
         }
     }
-
     override void RegisterSprinkler(LFPG_Sprinkler spr)
     {
         if (!spr)
@@ -5881,7 +4570,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_NextSprinklerPhase = 0;
         }
     }
-
     override void UnregisterSprinkler(LFPG_Sprinkler spr)
     {
         if (!spr)
@@ -5893,20 +4581,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredSprinklerPhases.Remove(idx);
         }
     }
-
-    // ===========================
-    // v1.2.0 (Sprint S3): Sorter Tick
-    // ===========================
-    // Round-robin batch processing. Each tick processes up to
-    // LFPG_SORTER_BATCH_SIZE Sorters. Each Sorter moves up to
-    // LFPG_SORTER_ITEMS_PER_TICK items from its linked container
-    // to downstream containers based on filter rules.
-    //
-    // Pattern: identical to CheckDeviceMovement round-robin.
-    // Timer: 5000ms (LFPG_SORTER_TICK_MS).
-
-    // v1.2.0 (Sprint S5): Dedicated registry — avoids iterating all devices.
-    // Called from LFPG_Sorter.EEInit / EEDelete / EEKilled.
     override void RegisterSorter(LFPG_Sorter sorter)
     {
         if (!sorter)
@@ -5918,7 +4592,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			m_SorterResumes.Insert(resumeState);
         }
     }
-
     override void UnregisterSorter(LFPG_Sorter sorter)
     {
         if (!sorter)
@@ -5932,14 +4605,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_SorterCursor = m_SorterCursor - 1;
         }
     }
-
 	protected void LFPG_ClearSorterResume(int sorterIndex)
 	{
 		if (sorterIndex < 0 || sorterIndex >= m_SorterResumes.Count())
 			return;
 		m_SorterResumes[sorterIndex].Clear();
 	}
-
 	protected int CollectSorterOutputs(LFPG_Sorter sorter, array<EntityAI> destinations)
 	{
 		destinations.Clear();
@@ -5955,7 +4626,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		}
 		return wireMask;
 	}
-
     protected void LFPG_TickSorters()
     {
         #ifdef SERVER
@@ -6002,7 +4672,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         EntityAI dirtySource;
         float linkDistanceSq;
         float linkRadiusSq;
-
         total = m_RegisteredSorters.Count();
         if (total == 0)
         {
@@ -6011,11 +4680,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         if (m_SorterCursor >= total)
             m_SorterCursor = 0;
-
         batchEnd = m_SorterCursor + LFPG_SORTER_BATCH_SIZE;
         if (batchEnd > total)
             batchEnd = total;
-
         m_TickAffectedContainers.Clear();
         m_TickDirtyDestinations.Clear();
         m_TickDirtySources.Clear();
@@ -6024,12 +4691,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         configMissesTick = 0;
         deferralsTick = 0;
         budgetExhausted = false;
-
         for (sorterIndex = m_SorterCursor; sorterIndex < batchEnd; sorterIndex = sorterIndex + 1)
         {
             if (sorterIndex >= m_RegisteredSorters.Count())
                 break;
-
             sorter = LFPG_Sorter.Cast(m_RegisteredSorters[sorterIndex]);
             if (!sorter)
             {
@@ -6046,14 +4711,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_ClearSorterResume(sorterIndex);
                 continue;
             }
-
             filterConfig = sorter.LFPG_GetFilterConfig();
             if (!filterConfig)
             {
                 LFPG_ClearSorterResume(sorterIndex);
                 continue;
             }
-
             inputContainer = sorter.LFPG_GetLinkedContainer();
             if (inputContainer)
             {
@@ -6089,7 +4752,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_ClearSorterResume(sorterIndex);
                 continue;
             }
-
             inputCargo = inputContainer.GetInventory().GetCargo();
             if (!inputCargo)
             {
@@ -6102,14 +4764,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_ClearSorterResume(sorterIndex);
                 continue;
             }
-
 			hasWireMask = CollectSorterOutputs(sorter, m_SorterOutputContainers);
             if (hasWireMask == 0)
             {
                 LFPG_ClearSorterResume(sorterIndex);
                 continue;
             }
-
 			resumeState = m_SorterResumes[sorterIndex];
 			resumeItem = resumeState.m_Item;
 			resumeItemIndex = resumeState.m_ItemIndex;
@@ -6124,7 +4784,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 					storedResumeValid = inputCargo.GetItem(resumeItemIndex) == resumeItem;
 				if (!storedResumeValid)
 				{
-					// Cargo indices can shift after moves; relocate only the saved item.
 					resumeItemIndex = inputCargo.FindEntityInCargo(resumeItem);
 					storedResumeValid = resumeItemIndex >= 0;
 				}
@@ -6139,19 +4798,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			}
 			else if (!resumeState.MatchesRoutes(hasWireMask, wireGeneration, m_SorterOutputContainers))
 			{
-				// A newly available earlier output must be reconsidered first.
 				resumeOutput = 0;
 				resumeRule = 0;
 			}
-
-			// Copy a bounded mutation-safe window plus the next resume anchor.
 			m_SorterItemCache.Clear();
 			cacheEnd = resumeItemIndex + LFPG_SORTER_MAX_EVAL + 1;
 			if (cacheEnd > itemCount)
 				cacheEnd = itemCount;
 			for (itemIndex = resumeItemIndex; itemIndex < cacheEnd; itemIndex = itemIndex + 1)
 				m_SorterItemCache.Insert(inputCargo.GetItem(itemIndex));
-
             moved = 0;
             evaluated = 0;
 			for (itemIndex = 0; itemIndex < m_SorterItemCache.Count(); itemIndex = itemIndex + 1)
@@ -6162,7 +4817,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 					resumeState.Store(sortItem, resumeItemIndex + itemIndex, 0, 0, filterConfig, hasWireMask, wireGeneration, inputContainer, m_SorterOutputContainers);
                     break;
                 }
-
                 sortItem = m_SorterItemCache[itemIndex];
 				evaluated = evaluated + 1;
                 if (!sortItem)
@@ -6173,7 +4827,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         LFPG_ClearSorterResume(sorterIndex);
                     continue;
                 }
-
                 nextOutput = 0;
                 nextRule = 0;
                 itemRuleChecks = 0;
@@ -6188,7 +4841,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 outputIndex = LFPG_SorterLogic.EvaluateItemBudgeted(sortItem, filterConfig, hasWireMask, resumeOutput, resumeRule, budgetRemaining, nextOutput, nextRule, itemRuleChecks, itemConfigMisses, itemDeferred);
                 ruleChecksTick = ruleChecksTick + itemRuleChecks;
                 configMissesTick = configMissesTick + itemConfigMisses;
-
                 if (itemDeferred)
                 {
 					resumeState.Store(sortItem, resumeItemIndex + itemIndex, nextOutput, nextRule, filterConfig, hasWireMask, wireGeneration, inputContainer, m_SorterOutputContainers);
@@ -6196,20 +4848,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     budgetExhausted = true;
                     break;
                 }
-
                 LFPG_ClearSorterResume(sorterIndex);
                 resumeItem = null;
                 resumeOutput = 0;
                 resumeRule = 0;
                 if (outputIndex < 0)
                     continue;
-
 				destinationContainer = m_SorterOutputContainers[outputIndex];
                 if (!destinationContainer)
                     continue;
                 if (destinationContainer == inputContainer)
                     continue;
-
                 moveResult = LFPG_SorterLogic.MoveItemToContainerReusable(sortItem, destinationContainer, m_SorterMoveSourceLocation, m_SorterMoveDestinationLocation);
                 if (moveResult)
                 {
@@ -6220,17 +4869,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                         m_TickAffectedContainers.Insert(destinationContainer);
                 }
             }
-
             if (itemIndex >= m_SorterItemCache.Count() && !budgetExhausted)
                 LFPG_ClearSorterResume(sorterIndex);
-
             if (moved > 0)
             {
                 if (m_TickDirtySources.Find(inputContainer) < 0)
                     m_TickDirtySources.Insert(inputContainer);
                 if (m_TickAffectedContainers.Find(inputContainer) < 0)
                     m_TickAffectedContainers.Insert(inputContainer);
-
                 if (LFPG_LOG_LEVEL >= 2)
                 {
                     string tickDiag = "[TickSorters] moved=";
@@ -6242,17 +4888,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     LFPG_Util.Debug(tickDiag);
                 }
             }
-
 			if (budgetExhausted)
 			{
-				// Keep this sorter's resume state, but give the next sorter a turn.
 				m_SorterCursor = sorterIndex + 1;
 				if (m_SorterCursor >= total)
 					m_SorterCursor = 0;
 				break;
 			}
         }
-
         dirtyDestCommitCount = 0;
         dirtySourceCommitCount = 0;
         for (dirtyDestIndex = 0; dirtyDestIndex < m_TickDirtyDestinations.Count(); dirtyDestIndex = dirtyDestIndex + 1)
@@ -6274,7 +4917,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             dirtySource.SetSynchDirty();
             dirtySourceCommitCount = dirtySourceCommitCount + 1;
         }
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -6291,7 +4933,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             Print(perfSorter);
         }
         #endif
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -6318,13 +4959,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             Print(perfBudget);
         }
         #endif
-
         if (m_TickAffectedContainers.Count() > 0)
         {
             string emptyExclude = "";
             BroadcastCargoRefreshToNearby(m_TickAffectedContainers, emptyExclude);
         }
-
         if (!budgetExhausted)
         {
             m_SorterCursor = batchEnd;
@@ -6333,30 +4972,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ===========================
-    // v5.0: Cargo Refresh Broadcast
-    // Sends SORTER_CARGO_REFRESH RPC to players within 15m of any
-    // affected container. Fixes Bug 2: other players viewing containers
-    // now get explicit UI refresh after sort operations.
-    // ===========================
     override void BroadcastCargoRefreshToNearby(array<EntityAI> containers, string excludePlayerId)
     {
         #ifdef SERVER
         if (!containers)
             return;
-
         int containerCount = containers.Count();
         if (containerCount <= 0)
             return;
-
-        // Reuse class-level player array (avoid GC in periodic ticks)
         m_ReusablePlayers.Clear();
         g_Game.GetPlayers(m_ReusablePlayers);
         int playerCount = m_ReusablePlayers.Count();
         if (playerCount <= 0)
             return;
-
         float maxDistSq = 225.0;
         int pi = 0;
         int ci = 0;
@@ -6370,35 +4998,26 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool isNear = false;
         int notified = 0;
         int refreshSubId = LFPG_RPC_SubId.SORTER_CARGO_REFRESH;
-
         for (pi = 0; pi < playerCount; pi = pi + 1)
         {
             man = m_ReusablePlayers[pi];
             if (!man)
                 continue;
-
             pb = PlayerBase.Cast(man);
             if (!pb)
                 continue;
-
             pid = pb.GetIdentity();
             if (!pid)
                 continue;
-
-            // Exclude the requester (they already got SORT_ACK)
             pidStr = pid.GetId();
             if (excludePlayerId != "" && pidStr == excludePlayerId)
                 continue;
-
             playerPos = pb.GetPosition();
             isNear = false;
-
-            // Check distance to any affected container
             for (ci = 0; ci < containerCount; ci = ci + 1)
             {
                 if (!containers[ci])
                     continue;
-
                 containerPos = containers[ci].GetPosition();
                 distSq = LFPG_WorldUtil.DistSq(playerPos, containerPos);
                 if (distSq <= maxDistSq)
@@ -6407,17 +5026,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     break;
                 }
             }
-
             if (!isNear)
                 continue;
-
-            // Send lightweight refresh RPC (no payload beyond SubId)
             ScriptRPC refreshRpc = new ScriptRPC();
             refreshRpc.Write(refreshSubId);
             refreshRpc.Send(pb, LFPG_RPC_CHANNEL, true, pid);
             notified = notified + 1;
         }
-
         if (notified > 0)
         {
             if (LFPG_LOG_LEVEL >= 2)
@@ -6431,17 +5046,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
-    // ===========================
-    // v1.2.0 (Sprint S3): Sorter Sort (RPC handler)
-    // ===========================
-    // Called by PlayerRPC after validating proximity + type.
-    // Sorter already resolved and validated upstream.
-
-    // v3.2: Returns moved count (-1 = error/skip, 0+ = items moved).
-    // Caller (PlayerRPC) sends SORT_ACK with the result.
-    // v5.0: excludePlayerId — player ID string of the requester to skip
-    //        in the cargo refresh broadcast (they get SORT_ACK instead).
     override int HandleSorterRequestSort(LFPG_Sorter sorter, string excludePlayerId)
     {
         #ifdef SERVER
@@ -6451,16 +5055,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Warn(w0);
             return -1;
         }
-
-        // Must be powered
         if (!sorter.LFPG_IsPowered())
         {
             string d0 = "[Sorter] REQUEST_SORT: sorter not powered";
             LFPG_Util.Debug(d0);
             return -1;
         }
-
-        // Resolve source container
         EntityAI container = sorter.LFPG_GetLinkedContainer();
         if (!container)
         {
@@ -6468,16 +5068,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Warn(w1);
             return -1;
         }
-
-        // S3.1: Source container must be accessible
         if (!LFPG_SorterLogic.CanTakeFromContainer(container, null))
         {
             string w2 = "[Sorter] REQUEST_SORT: container not accessible";
             LFPG_Util.Warn(w2);
             return -1;
         }
-
-        // Must have filter config
         LFPG_SortConfig filterConfig = sorter.LFPG_GetFilterConfig();
         if (!filterConfig)
         {
@@ -6485,8 +5081,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Warn(w3);
             return -1;
         }
-
-        // Must have cargo
         if (!container.GetInventory())
         {
             string w4 = "[Sorter] REQUEST_SORT: no inventory";
@@ -6500,7 +5094,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Warn(w5);
             return -1;
         }
-
 		int maxEval = 200;
         int itemCount = srcCargo.GetItemCount();
         if (itemCount <= 0)
@@ -6509,24 +5102,18 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             LFPG_Util.Debug(d1);
             return 0;
         }
-
 		array<EntityAI> outputContainers = new array<EntityAI>;
 		int hasWireMask = CollectSorterOutputs(sorter, outputContainers);
-
         if (hasWireMask == 0)
         {
             string d2 = "[Sorter] REQUEST_SORT: no wired outputs, bin-pack only";
             LFPG_Util.Debug(d2);
-            // v5.0: Repack in-place (no ground round-trip)
             LFPG_SorterLogic.RepackCargoInPlace(container);
-            // v5.0: Broadcast to nearby players
             array<EntityAI> repackOnly = new array<EntityAI>;
             repackOnly.Insert(container);
             BroadcastCargoRefreshToNearby(repackOnly, excludePlayerId);
             return 0;
         }
-
-        // Collect items into cache (index mutation safe)
         array<EntityAI> sortCache = new array<EntityAI>;
         int ci = 0;
         EntityAI sortItem = null;
@@ -6538,79 +5125,50 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 sortCache.Insert(sortItem);
             }
         }
-
-        // Sort pass: evaluate all items, move matched ones
         int moved = 0;
         int evaluated = 0;
         int outputIdx = 0;
         EntityAI destContainer = null;
         bool moveResult = false;
-
-        // Collect unique dest containers to dirty after sort
         array<EntityAI> dirtiedDests = new array<EntityAI>;
-
         for (ci = 0; ci < sortCache.Count(); ci = ci + 1)
         {
             if (evaluated >= maxEval)
                 break;
-
             sortItem = sortCache[ci];
             if (!sortItem)
                 continue;
-
             evaluated = evaluated + 1;
-
-            // Per-item source release check
             if (!container.CanReleaseCargo(sortItem))
                 continue;
-
-            // Evaluate filter rules
             outputIdx = LFPG_SorterLogic.EvaluateItem(sortItem, filterConfig, hasWireMask);
             if (outputIdx < 0)
                 continue;
-
-            // Resolve destination via wire topology
 			destContainer = outputContainers[outputIdx];
             if (!destContainer)
                 continue;
-
-            // Skip self
             if (destContainer == container)
                 continue;
-
-            // Move item
             moveResult = LFPG_SorterLogic.MoveItemToContainer(sortItem, destContainer);
             if (moveResult)
             {
                 moved = moved + 1;
-
-                // Track dest for batch dirty (skip duplicates)
                 if (dirtiedDests.Find(destContainer) < 0)
                 {
                     dirtiedDests.Insert(destContainer);
                 }
             }
         }
-
-        // Force network sync on all affected destination containers
-        // so clients refresh their cached cargo views.
         int di = 0;
         for (di = 0; di < dirtiedDests.Count(); di = di + 1)
         {
             dirtiedDests[di].SetSynchDirty();
         }
-
-        // v4.2: Dirty source container so client refreshes cargo view.
         if (moved > 0)
         {
             container.SetSynchDirty();
         }
-
-        // v5.0: Repack remaining items in source (in-place, no ground round-trip)
         LFPG_SorterLogic.RepackCargoInPlace(container);
-
-        // v5.0: Broadcast cargo refresh to nearby players (excluding requester)
-        // Requester already gets SORT_ACK which triggers their own UI refresh.
         array<EntityAI> affectedContainers = new array<EntityAI>;
         affectedContainers.Insert(container);
         for (di = 0; di < dirtiedDests.Count(); di = di + 1)
@@ -6621,23 +5179,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         BroadcastCargoRefreshToNearby(affectedContainers, excludePlayerId);
-
         string sortLog = "[Sorter] REQUEST_SORT: evaluated=";
         sortLog = sortLog + evaluated.ToString();
         sortLog = sortLog + " moved=";
         sortLog = sortLog + moved.ToString();
         LFPG_Util.Info(sortLog);
-
         return moved;
         #endif
         return -1;
     }
-
-    // ===========================
-    // v1.5.0: Motion Sensor Registration
-    // v1.8.0: Pressure Pad Registration
-    // ===========================
-
     override void RegisterMotionSensor(LFPG_MotionSensor sensor)
     {
         if (!sensor)
@@ -6647,7 +5197,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredSensors.Insert(sensor);
         }
     }
-
     override void UnregisterMotionSensor(LFPG_MotionSensor sensor)
     {
         if (!sensor)
@@ -6658,7 +5207,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredSensors.Remove(idx);
         }
     }
-
     override void RegisterPressurePad(LFPG_PressurePad pad)
     {
         if (!pad)
@@ -6668,7 +5216,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredPads.Insert(pad);
         }
     }
-
     override void UnregisterPressurePad(LFPG_PressurePad pad)
     {
         if (!pad)
@@ -6679,8 +5226,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredPads.Remove(idx);
         }
     }
-
-    // v1.9.0: Laser Detector Registration
     override void RegisterLaserDetector(LFPG_LaserDetector laser)
     {
         if (!laser)
@@ -6691,7 +5236,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             laser.LFPG_UpdateBeamRaycast();
         }
     }
-
     override void UnregisterLaserDetector(LFPG_LaserDetector laser)
     {
         if (!laser)
@@ -6702,8 +5246,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredLasers.Remove(idx);
         }
     }
-
-    // v3.0: Intercom Registration (for toggle input evaluation)
     override void RegisterIntercom(LFPG_Intercom ic)
     {
         if (!ic)
@@ -6713,7 +5255,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredIntercoms.Insert(ic);
         }
     }
-
     override void UnregisterIntercom(LFPG_Intercom ic)
     {
         if (!ic)
@@ -6724,13 +5265,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredIntercoms.Remove(idx);
         }
     }
-
-    // ===========================
-    // v3.1: Furnace Registration
-    // ===========================
-    // Tick absorbed into LFPG_TickSimpleDevices (offset 2, ~5s effective).
-    // Only active furnaces (m_SourceOn) are registered.
-
     override void RegisterFurnace(LFPG_Furnace furnace)
     {
         if (!furnace)
@@ -6740,7 +5274,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredFurnaces.Insert(furnace);
         }
     }
-
     override void UnregisterFurnace(LFPG_Furnace furnace)
     {
         if (!furnace)
@@ -6751,12 +5284,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredFurnaces.Remove(idx);
         }
     }
-
-    // ===========================
-    // v4.0: Fridge Registration
-    // ===========================
-    // Tick absorbed into LFPG_TickSimpleDevices (offset 6, ~10s effective).
-
     override void RegisterFridge(LFPG_Fridge fridge)
     {
         if (!fridge)
@@ -6770,7 +5297,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_NextFridgePhase = 0;
         }
     }
-
     override void UnregisterFridge(LFPG_Fridge fridge)
     {
         if (!fridge)
@@ -6782,12 +5308,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredFridgePhases.Remove(idx);
         }
     }
-
-    // ===========================
-    // v1.0.0: Electric Stove Registration
-    // ===========================
-    // Tick absorbed into LFPG_TickSimpleDevices (offset 1, every 3rd tick = ~3s).
-
     override void RegisterStove(LFPG_ElectricStove stove)
     {
         if (!stove)
@@ -6801,7 +5321,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_NextStovePhase = 0;
         }
     }
-
     override void UnregisterStove(LFPG_ElectricStove stove)
     {
         if (!stove)
@@ -6813,12 +5332,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredStovePhases.Remove(idx);
         }
     }
-
-    // ===========================
-    // v4.0: DoorController Registration
-    // ===========================
-    // Tick absorbed into LFPG_TickSimpleDevices (offset 1, ~2s effective).
-
     override void RegisterDoorController(LFPG_DoorController dc)
     {
         if (!dc)
@@ -6828,7 +5341,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredDoorControllers.Insert(dc);
         }
     }
-
     override void UnregisterDoorController(LFPG_DoorController dc)
     {
         if (!dc)
@@ -6839,14 +5351,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredDoorControllers.Remove(idx);
         }
     }
-
-    // ===========================
-    // v4.1: Consolidated Simple Devices Tick
-    // ===========================
-    // Single 1,000ms timer drives the simple-device registries.
-    // Intercom/door/furnace/battery cadence is preserved; T2 assigns stable
-    // 10-phase fridge/sprinkler buckets and 3-phase stove buckets.
-    // OPT-2: Early-out when all registries empty.
     protected void LFPG_TickSimpleDevices()
     {
         #ifdef SERVER
@@ -6881,7 +5385,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_Fridge fridgeDevice;
         LFPG_ElectricStove stoveDevice;
         LFPG_Sprinkler sprinklerDevice;
-
         totalIc = m_RegisteredIntercoms.Count();
         totalDc = m_RegisteredDoorControllers.Count();
         totalFur = m_RegisteredFurnaces.Count();
@@ -6892,11 +5395,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         totalSimple = totalIc + totalDc + totalFur + totalBat + totalFri + totalStv + totalSpr;
         if (totalSimple == 0)
             return;
-
         m_SimpleTickCounter = m_SimpleTickCounter + 1;
         if (m_SimpleTickCounter >= 10)
             m_SimpleTickCounter = 0;
-
         for (intercomIndex = 0; intercomIndex < totalIc; intercomIndex = intercomIndex + 1)
         {
             if (intercomIndex >= m_RegisteredIntercoms.Count())
@@ -6905,7 +5406,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (intercomDevice)
                 intercomDevice.LFPG_EvaluateToggleInput();
         }
-
         doorMod = m_SimpleTickCounter % 2;
         if (doorMod == 1)
         {
@@ -6918,7 +5418,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     doorController.LFPG_OnDoorPoll();
             }
         }
-
         furnaceMod = m_SimpleTickCounter % 5;
         if (furnaceMod == 2)
         {
@@ -6931,11 +5430,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     furnaceDevice.LFPG_BurnTick();
             }
         }
-
         batteryMod = m_SimpleTickCounter % 5;
         if (batteryMod == 4 && totalBat > 0)
             LFPG_TickBatteriesInternal();
-
         for (fridgeIndex = 0; fridgeIndex < totalFri; fridgeIndex = fridgeIndex + 1)
         {
             if (fridgeIndex >= m_RegisteredFridges.Count())
@@ -6949,7 +5446,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_FridgePhaseCursor = m_FridgePhaseCursor + 1;
         if (m_FridgePhaseCursor >= 10)
             m_FridgePhaseCursor = 0;
-
         stoveDelta = 3.0;
         for (stoveIndex = 0; stoveIndex < totalStv; stoveIndex = stoveIndex + 1)
         {
@@ -6964,7 +5460,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_StovePhaseCursor = m_StovePhaseCursor + 1;
         if (m_StovePhaseCursor >= 3)
             m_StovePhaseCursor = 0;
-
         wetAppliedTick = 0;
         wetCoalescedTick = 0;
         wetPreGateTick = 0;
@@ -7000,7 +5495,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 continue;
             if (!sprinklerDevice.LFPG_GetSprinklerActive())
                 continue;
-
             hasPlayerCell = LFPG_HasPlayerCellNear(sprinklerDevice.GetPosition(), LFPG_SPRINKLER_RADIUS);
             if (!hasPlayerCell)
                 wetPreGateTick = wetPreGateTick + 1;
@@ -7013,7 +5507,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_SprinklerPhaseCursor = m_SprinklerPhaseCursor + 1;
         if (m_SprinklerPhaseCursor >= 10)
             m_SprinklerPhaseCursor = 0;
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -7037,13 +5530,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         #endif
         #endif
     }
-
-    // ===========================
-    // v4.1: Consolidated Player Detection Tick
-    // ===========================
-    // One 300ms callback builds a coarse player index once, then evaluates
-    // every due device (pads every 600ms, sensors every 3s).
-    // Beam transforms refresh immediately; maintenance uses a bounded full cycle.
     protected void LFPG_RebuildPlayerCells()
     {
 		if (m_PlayerCellsBuiltThisTurn)
@@ -7062,7 +5548,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         vector playerPos;
         int cellX;
         int cellZ;
-
         m_ReusablePlayers.Clear();
         g_Game.GetPlayers(m_ReusablePlayers);
         m_PlayerCellPlayers.Clear();
@@ -7073,7 +5558,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_PlayerCellCount.Clear();
         m_PlayerCellWrite.Clear();
         m_PlayerCellOrdered.Clear();
-
         playerTotal = m_ReusablePlayers.Count();
         for (playerIndex = 0; playerIndex < playerTotal; playerIndex = playerIndex + 1)
         {
@@ -7085,7 +5569,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             playerBase = PlayerBase.Cast(playerMan);
             if (!playerBase)
                 continue;
-
             playerPos = playerBase.GetPosition();
             cellX = Math.Floor(playerPos[0] / LFPG_PLAYER_CELL_SIZE_M);
             cellZ = Math.Floor(playerPos[2] / LFPG_PLAYER_CELL_SIZE_M);
@@ -7101,12 +5584,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 m_PlayerCellCount.Insert(0);
                 m_PlayerCellWrite.Insert(0);
             }
-
             m_PlayerCellPlayers.Insert(playerMan);
             m_PlayerCellMembership.Insert(cellIndex);
             m_PlayerCellCount[cellIndex] = m_PlayerCellCount[cellIndex] + 1;
         }
-
         prefix = 0;
         cellTotal = m_PlayerCellX.Count();
         for (cellIndex = 0; cellIndex < cellTotal; cellIndex = cellIndex + 1)
@@ -7127,7 +5608,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_PlayerCellWrite[cellIndex] = writeIndex + 1;
         }
     }
-
     protected int LFPG_CollectPlayerCandidates(vector center, float radius)
     {
         int minCellX;
@@ -7139,14 +5619,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         int memberIndex;
         int memberEnd;
         Man candidate;
-
         m_PlayerCandidates.Clear();
         minCellX = Math.Floor((center[0] - radius) / LFPG_PLAYER_CELL_SIZE_M);
         maxCellX = Math.Floor((center[0] + radius) / LFPG_PLAYER_CELL_SIZE_M);
         minCellZ = Math.Floor((center[2] - radius) / LFPG_PLAYER_CELL_SIZE_M);
         maxCellZ = Math.Floor((center[2] + radius) / LFPG_PLAYER_CELL_SIZE_M);
         cellTotal = m_PlayerCellX.Count();
-
         for (cellIndex = 0; cellIndex < cellTotal; cellIndex = cellIndex + 1)
         {
             if (m_PlayerCellX[cellIndex] < minCellX)
@@ -7157,7 +5635,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 continue;
             if (m_PlayerCellZ[cellIndex] > maxCellZ)
                 continue;
-
             memberIndex = m_PlayerCellStart[cellIndex];
             memberEnd = memberIndex + m_PlayerCellCount[cellIndex];
             while (memberIndex < memberEnd)
@@ -7168,17 +5645,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 memberIndex = memberIndex + 1;
             }
         }
-
         return m_PlayerCandidates.Count();
     }
-
     protected bool LFPG_HasPlayerCellNear(vector center, float radius)
     {
         if (LFPG_CollectPlayerCandidates(center, radius) > 0)
             return true;
         return false;
     }
-
     protected void LFPG_TickPlayerDetection()
     {
         #ifdef SERVER
@@ -7214,14 +5688,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         LFPG_MotionSensor sensor;
         bool stateChanged;
         string deviceId;
-
         totalLasers = m_RegisteredLasers.Count();
         totalPads = m_RegisteredPads.Count();
         totalSensors = m_RegisteredSensors.Count();
         totalDetect = totalLasers + totalPads + totalSensors;
         if (totalDetect == 0)
             return;
-
         m_PlayerDetectCounter = m_PlayerDetectCounter + 1;
         padMod = m_PlayerDetectCounter % 2;
         padDue = false;
@@ -7234,7 +5706,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (totalSensors > 0)
                 sensorDue = true;
         }
-
         needPlayers = false;
         if (totalLasers > 0)
             needPlayers = true;
@@ -7244,7 +5715,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             needPlayers = true;
         if (needPlayers)
             LFPG_RebuildPlayerCells();
-
         nowMs = g_Game.GetTime();
         raycasts = 0;
         for (scanIndex = 0; scanIndex < totalLasers; scanIndex = scanIndex + 1)
@@ -7260,11 +5730,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 raycasts = raycasts + 1;
             }
         }
-
         if (m_LaserRaycastCursor >= totalLasers)
             m_LaserRaycastCursor = 0;
-        // ceil(N / 23) per 300ms slice covers N in at most 23 slices:
-        // 23 * 300ms = 6.9s, matching the pre-T2 global maintenance cycle.
         maintenanceBudget = (totalLasers + 22) / 23;
         if (maintenanceBudget < 4)
             maintenanceBudget = 4;
@@ -7289,7 +5756,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 maintenanceRaycasts = maintenanceRaycasts + 1;
             }
         }
-
         laserEvaluated = 0;
         laserDormant = 0;
         laserChanged = 0;
@@ -7309,7 +5775,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 laser = LFPG_LaserDetector.Cast(m_RegisteredLasers[registryIndex]);
                 if (!laser)
                     continue;
-
                 candidateCount = LFPG_CollectPlayerCandidates(laser.GetPosition(), LFPG_LASER_BEAM_RANGE_M + 1.0);
                 laserEvaluated = laserEvaluated + 1;
                 if (candidateCount == 0)
@@ -7334,7 +5799,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_Util.Debug(laserMsg);
             }
         }
-
         padEvaluated = 0;
         padDormant = 0;
         padChanged = 0;
@@ -7354,7 +5818,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 pad = LFPG_PressurePad.Cast(m_RegisteredPads[registryIndex]);
                 if (!pad)
                     continue;
-
                 candidateCount = LFPG_CollectPlayerCandidates(pad.GetPosition(), 1.0);
                 padEvaluated = padEvaluated + 1;
                 if (candidateCount == 0)
@@ -7379,7 +5842,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_Util.Debug(padMsg);
             }
         }
-
         sensorEvaluated = 0;
         sensorDormant = 0;
         sensorChanged = 0;
@@ -7399,7 +5861,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 sensor = LFPG_MotionSensor.Cast(m_RegisteredSensors[registryIndex]);
                 if (!sensor)
                     continue;
-
                 candidateCount = LFPG_CollectPlayerCandidates(sensor.GetPosition(), LFPG_SENSOR_RANGE_M);
                 sensorEvaluated = sensorEvaluated + 1;
                 if (candidateCount == 0)
@@ -7424,7 +5885,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_Util.Debug(sensorMsg);
             }
         }
-
         #ifndef SERVER
         if (LFPG_PERFDIAG_ENABLED)
         {
@@ -7468,23 +5928,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         #endif
         #endif
     }
-
-    // ===========================
-    // v2.0: Battery Registration + Energy Accounting
-    // ===========================
-    // Pattern: identical to Sensor/Laser registration.
-    // EntityAI typed — LF_Battery methods resolved via dynamic dispatch.
-    // v4.1: Timer absorbed into LFPG_TickSimpleDevices (offset 4, ~5s effective).
-    //
-    // Energy accounting per battery per tick:
-    //   1. Read node.m_InputPower (actual received from upstream)
-    //   2. Sum outgoing edge allocations (actual delivered downstream)
-    //   3. netFlow = received - delivered (+ = charging, - = discharging)
-    //   4. Apply efficiency (charge only), self-discharge, health cap
-    //   5. Hysteresis: toggle m_DischargeEnabled at 1%/5% thresholds
-    //   6. Recompute m_VirtualGeneration + m_SoftDemand on graph node
-    //   7. MarkNodeDirty if changed significantly
-
     override void RegisterBattery(EntityAI battery)
     {
         if (!battery)
@@ -7494,7 +5937,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredBatteries.Insert(battery);
         }
     }
-
     override void UnregisterBattery(EntityAI battery)
     {
         if (!battery)
@@ -7505,43 +5947,26 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_RegisteredBatteries.Remove(idx);
         }
     }
-
-    // v4.1: Battery energy accounting (called from LFPG_TickSimpleDevices, offset 4).
-    // Uses real delta time via m_BatteryLastTickMs. ~5s effective interval.
     protected void LFPG_TickBatteriesInternal()
     {
         #ifdef SERVER
         int batCount = m_RegisteredBatteries.Count();
         if (batCount <= 0)
             return;
-
         if (!m_Graph)
             return;
-
-        // Real delta time (prevents drift on laggy servers).
-        // g_Game.GetTime() returns milliseconds (same as water pump / tank timers).
         float nowMs = g_Game.GetTime();
         float deltaMs = nowMs - m_BatteryLastTickMs;
         m_BatteryLastTickMs = nowMs;
-
-        // Guard: skip if delta is nonsensical (first tick, time travel, etc.)
         if (deltaMs < 100.0)
             return;
         if (deltaMs > 30000.0)
         {
             deltaMs = 30000.0;
         }
-
         float deltaSec = deltaMs / 1000.0;
-
-        // v4.3 (Audit fix F5): Direct Cast replaces CallFunctionParams for reads.
-        // Eliminates 8 string-resolved dispatches per battery per tick.
-        // Both BatteryBase and BatteryAdapter expose identical API names.
-        // Writes also use direct Cast (no hoisted strings needed).
         string hpZone = "";
         string hpPart = "";
-
-        // Iterate all registered batteries.
         int bi;
         int dirtyCount = 0;
         for (bi = 0; bi < batCount; bi = bi + 1)
@@ -7549,19 +5974,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             EntityAI batEnt = m_RegisteredBatteries[bi];
             if (!batEnt)
                 continue;
-
-            // Get deviceId via dynamic dispatch.
             string batId = LFPG_DeviceAPI.GetDeviceId(batEnt);
             if (batId == "")
                 continue;
-
-            // Get graph node. Battery must be wired to have a node.
             ref LFPG_ElecNode node = m_Graph.GetNode(batId);
             if (!node)
                 continue;
-
-            // --- Read battery entity state via direct Cast (v4.3) ---
-            // Try BatteryBase first (Medium/Large — most common), then Adapter.
             float storedEnergy = 0.0;
             float maxStored = 0.0;
             float maxCharge = 0.0;
@@ -7570,7 +5988,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             float selfDischargeRate = 0.0;
             bool dischargeEnabled = true;
             bool outputEnabled = true;
-
             LFPG_BatteryBase batBase = LFPG_BatteryBase.Cast(batEnt);
             LFPG_BatteryAdapter batAdapt = null;
             if (batBase)
@@ -7603,12 +6020,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     continue;
                 }
             }
-
-            // Skip if not a real battery (maxStored = 0 means entity doesn't implement battery API).
             if (maxStored < LFPG_PROPAGATION_EPSILON)
                 continue;
-
-            // --- Health-based capacity reduction ---
             float healthRatio = 1.0;
             float maxHP = batEnt.GetMaxHealth(hpZone, hpPart);
             if (maxHP > 0.1)
@@ -7625,25 +6038,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
             }
             float effectiveMax = maxStored * healthRatio;
-
-            // --- Compute net energy flow ---
-            // Input: what the battery actually received from upstream.
             float inputReceived = node.m_InputPower;
-
-            // Output: sum of allocated power on outgoing edges (actual downstream delivery).
             float outputDelivered = m_Graph.SumOutgoingAllocations(batId);
-
-            // Net flow: positive = surplus (charge), negative = deficit (discharge).
-            // Subtract selfConsumption: input that was consumed by the battery device
-            // itself (e.g. monitoring circuits). For current tiers consumption=0,
-            // but architecturally correct for future self-consuming battery variants.
             float selfCons = node.m_Consumption;
             float netFlow = inputReceived - outputDelivered - selfCons;
-
-            // v2.4 (Battery oscillation fix): Clamp netFlow to physical limits.
-            // Defensive cap: even if graph has transient desync between epochs,
-            // stored energy never corrupts. Also fixes chargeRateDisplay which
-            // reads netFlow directly (previously showed -171 u/s uncapped).
             if (netFlow > maxCharge)
             {
                 netFlow = maxCharge;
@@ -7653,13 +6051,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 netFlow = negMaxDischarge;
             }
-
-            // --- Apply energy delta ---
             float energyDelta = 0.0;
             if (netFlow > LFPG_PROPAGATION_EPSILON)
             {
-                // Charging: apply efficiency loss.
-                // Cap by maxChargeRate.
                 float chargeWatts = netFlow;
                 if (chargeWatts > maxCharge)
                 {
@@ -7669,8 +6063,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             else if (netFlow < -LFPG_PROPAGATION_EPSILON)
             {
-                // Discharging: 1:1 from storage (loss was on charge side).
-                // Cap by maxDischargeRate.
                 float dischargeWatts = -netFlow;
                 if (dischargeWatts > maxDischarge)
                 {
@@ -7678,12 +6070,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
                 energyDelta = -dischargeWatts * deltaSec;
             }
-
-            // Self-discharge (idle drain).
             float selfDrain = storedEnergy * selfDischargeRate * deltaSec / 3600.0;
             energyDelta = energyDelta - selfDrain;
-
-            // Apply delta and clamp.
             float newStored = storedEnergy + energyDelta;
             if (newStored < 0.0)
             {
@@ -7693,32 +6081,20 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 newStored = effectiveMax;
             }
-
-            // --- Hysteresis: toggle discharge enable ---
             float offThreshold = effectiveMax * LFPG_BATTERY_DISCHARGE_OFF_PCT;
             float onThreshold = effectiveMax * LFPG_BATTERY_DISCHARGE_ON_PCT;
             bool newDischargeEnabled = dischargeEnabled;
-
             if (dischargeEnabled && newStored < offThreshold)
             {
-                // Depleted below 1% → disable discharge.
                 newDischargeEnabled = false;
             }
             else if (!dischargeEnabled && newStored > onThreshold)
             {
-                // Recovered above 5% → re-enable discharge.
                 newDischargeEnabled = true;
             }
-
-            // --- Compute new graph node fields ---
-            // v2.0: outputEnabled gates discharge. When switch is OFF,
-            // virtualGen=0 (battery doesn't offer power to grid).
-            // softDemand is NOT gated — battery charges even with switch OFF.
             float newVirtualGen = 0.0;
             if (outputEnabled && newDischargeEnabled && newStored > LFPG_PROPAGATION_EPSILON)
             {
-                // Cap by energy budget: can't promise more than storage can sustain
-                // for the duration of one tick.
                 float energyBudgetW = newStored / deltaSec;
                 newVirtualGen = maxDischarge;
                 if (newVirtualGen > energyBudgetW)
@@ -7726,12 +6102,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     newVirtualGen = energyBudgetW;
                 }
             }
-
             float newSoftDemand = 0.0;
             float freeSpace = effectiveMax - newStored;
             if (freeSpace > LFPG_PROPAGATION_EPSILON)
             {
-                // Cap by charge rate AND by what can be stored in one tick.
                 float spaceBudgetW = freeSpace / deltaSec;
                 newSoftDemand = maxCharge;
                 if (newSoftDemand > spaceBudgetW)
@@ -7739,11 +6113,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     newSoftDemand = spaceBudgetW;
                 }
             }
-
-            // v4.2: chargeRateDisplay derived from actual stored delta, NOT netFlow.
-            // v4.3 (Audit fix F1): Post-clamp guard. The effectiveMax clamp on
-            // newStored can produce a larger delta than physical rates allow
-            // (e.g. healthRatio drops → effectiveMax < storedEnergy → snap down).
             float chargeRateDisplay = (newStored - storedEnergy) / deltaSec;
             if (chargeRateDisplay > maxCharge)
             {
@@ -7754,8 +6123,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 chargeRateDisplay = negMaxDischDisplay;
             }
-
-            // --- Write back to entity (v4.3: direct Cast, no CallFunctionParams) ---
             if (batBase)
             {
                 batBase.LFPG_SetStoredEnergy(newStored);
@@ -7774,8 +6141,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 }
                 batAdapt.LFPG_SetChargeRateCurrent(chargeRateDisplay);
             }
-
-            // --- Update graph node + mark dirty if changed ---
             float vgDelta = newVirtualGen - node.m_VirtualGeneration;
             if (vgDelta < 0.0)
             {
@@ -7786,7 +6151,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 sdDelta = -sdDelta;
             }
-
             bool needsDirty = false;
             if (vgDelta > LFPG_PROPAGATION_EPSILON)
             {
@@ -7796,17 +6160,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 needsDirty = true;
             }
-
             node.m_VirtualGeneration = newVirtualGen;
             node.m_SoftDemand = newSoftDemand;
-
             if (needsDirty)
             {
                 m_Graph.MarkNodeDirty(batId, LFPG_DIRTY_INPUT);
                 dirtyCount = dirtyCount + 1;
             }
         }
-
         if (dirtyCount > 0)
         {
             if (LFPG_LOG_LEVEL >= 2)
@@ -7821,5 +6182,4 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
-
 };
