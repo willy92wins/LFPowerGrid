@@ -615,7 +615,6 @@ class LFPG_Generator : PowerGenerator
 
     void LFPG_SetPowered(bool powered)
     {
-        // Source device ignores SetPowered (it generates, doesn't consume)
     }
 
     // v0.7.8: Energy capacity (units/s this source can deliver)
@@ -1156,7 +1155,6 @@ class LF_TestLamp : Spotlight
         super.OnVariablesSynchronized();
         LFPG_TryRegister();
 
-        #ifndef SERVER
         bool hasLight = (m_LFPG_Light != null);
         if (LFPG_LOG_LEVEL >= 2)
         {
@@ -1184,7 +1182,6 @@ class LF_TestLamp : Spotlight
                 r.RequestDeviceSync(m_DeviceId, this);
             }
         }
-        #endif
     }
     #endif
 
@@ -1323,9 +1320,6 @@ class LF_TestLamp : Spotlight
         super.OnStoreSave(ctx);
         ctx.Write(m_DeviceIdLow);
         ctx.Write(m_DeviceIdHigh);
-        // v0.7.42: m_PoweredNet removed from persistence.
-        // It is a derived state from the electrical graph — only
-        // propagation should set it. Field default (false) is correct.
     }
 
     override bool OnStoreLoad(ParamsReadContext ctx, int version)
@@ -1349,8 +1343,6 @@ class LF_TestLamp : Spotlight
 
         LFPG_UpdateDeviceIdString();
 
-        // v0.7.42: m_PoweredNet no longer persisted.
-        // Field default (false) is correct; propagation re-derives it.
 
         return true;
     }
@@ -1376,8 +1368,7 @@ class LF_TestLamp : Spotlight
         {
             m_LFPG_Light.AttachOnObject(this, "0 1.1 0");
             m_LFPG_Light.SetLifetime(1000000);
-            bool bEnable = true;
-            m_LFPG_Light.SetEnabled(bEnable);
+            m_LFPG_Light.SetEnabled(true);
 
             string clOkMsg = "[LF_TestLamp] CreateLight: OK at " + lightPos.ToString();
             LFPG_Util.Info(clOkMsg);
