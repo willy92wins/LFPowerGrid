@@ -12,7 +12,6 @@
 // scripts/3_Game/LFPG_Data.c so LFPG_FileUtil can reference them
 // for AtomicSaveBalances + typed .tmp recovery.
 // =========================================================
-
 // ---- Compound rollback snapshot ----
 class LFPG_BalanceCompoundSnapshot
 {
@@ -20,7 +19,6 @@ class LFPG_BalanceCompoundSnapshot
     bool m_Existed;
     int m_Value;
 };
-
 // ---- Native provider implementation ----
 class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
 {
@@ -34,25 +32,21 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     protected static ref map<string, int> s_ClaimErrorWindowStartMs;
     protected static ref map<string, int> s_ClaimErrorCounts;
     protected static bool s_FutureVersionReadOnly;
-
     // PR-A: corrupt-load latch. Set true if LoadFromDisk detects unparseable
     // file; blocks subsequent SaveToDisk so the corrupt file is preserved as
     // .corrupt.<ts>_<rnd> evidence (not silently overwritten with empty map).
     // Process-lifetime only: auto-clears on next server restart.
     protected static bool s_DiskInhibited;
-
     // PR-A.5: rate-limit the inhibited-save warn so an active server with N
     // players doesn't spam RPT (each AddBalance/RemoveBalance hits SaveToDisk).
     // Log the first attempt, then summarize every 60s with cumulative count.
     protected static int s_InhibitedSaveCount;
     protected static float s_LastInhibitedWarnTime;
-
     // Save coalescing is scoped to one synchronous compound balance action.
     protected static int s_CompoundActionDepth;
     protected static bool s_CompoundActionDirty;
     protected static bool s_CompoundDirtyBefore;
     protected static ref array<ref LFPG_BalanceCompoundSnapshot> s_CompoundPreState;
-
     void LFPG_BalanceProvider_NativeImpl()
     {
         m_Name = "Native";
@@ -70,12 +64,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
     // Wire-reachable claim errors: first three per UID/device in each minute.
     protected static const int LFPG_BTC_CLAIM_ERROR_WINDOW_MS = 60000;
     protected static const int LFPG_BTC_CLAIM_ERROR_MAX_PER_WINDOW = 3;
-
     static int GetBalanceCap()
     {
         return LFPG_NATIVE_BALANCE_CAP;
     }
-
     static bool IsClaimStoreWritable()
     {
         return !s_FutureVersionReadOnly && !s_DiskInhibited;
@@ -97,7 +89,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         if (!s_ClaimErrorCounts)
             s_ClaimErrorCounts = new map<string, int>;
     }
-
     protected static bool AllowClaimErrorLog(string uid, string deviceId)
     {
         EnsureClaimState();
@@ -108,7 +99,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             key = "unknown";
         if (!g_Game)
             return true;
-
         int nowMs = g_Game.GetTime();
         int windowStart = 0;
         int count = 0;
@@ -127,13 +117,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         {
             count = s_ClaimErrorCounts.Get(key);
         }
-
         if (count >= LFPG_BTC_CLAIM_ERROR_MAX_PER_WINDOW)
             return false;
         s_ClaimErrorCounts.Set(key, count + 1);
         return true;
     }
-
     protected static string FindDeviceClaimUID(string deviceId)
     {
         EnsureClaimState();
@@ -146,20 +134,17 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return "";
     }
-
     protected static void LogClaimError(string message, string uid, string deviceId)
     {
         if (AllowClaimErrorLog(uid, deviceId))
             LFPG_Util.Error(message);
     }
-
     static void ReportKillDropDenied(string deviceId, int stock)
     {
         string message;
         message = "[LFPG_BTCAtm] CRITICAL kill drop denied; stock stranded=" + stock.ToString() + " deviceId=" + deviceId;
         LFPG_Util.Error(message);
     }
-
     protected static bool HasDeviceClaims(string deviceId)
     {
         EnsureClaimState();
@@ -172,7 +157,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return false;
     }
-
     protected static bool TryGetLastDeviceTarget(string deviceId, out int target)
     {
         target = 0;
@@ -195,7 +179,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return found;
     }
-
     protected static int FindLastPendingDeviceClaimIndex(string deviceId)
     {
         EnsureClaimState();
@@ -222,7 +205,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return count;
     }
-
     protected static array<ref LFPG_BalanceClaim> CollectDeviceClaims(string deviceId)
     {
         array<ref LFPG_BalanceClaim> result = new array<ref LFPG_BalanceClaim>;
@@ -236,7 +218,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return result;
     }
-
     protected static array<ref LFPG_BalanceClaim> BuildClaimsWithoutIndex(int excludedIndex)
     {
         array<ref LFPG_BalanceClaim> result = new array<ref LFPG_BalanceClaim>;
@@ -249,7 +230,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return result;
     }
-
     // Enforce arrays are managed reference objects. Rollback needs a distinct
     // container, so copy every element reference instead of aliasing s_Claims.
     protected static array<ref LFPG_BalanceClaim> CopyClaimReferences()
@@ -260,7 +240,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             result.Insert(s_Claims[i]);
         return result;
     }
-
     protected static array<ref LFPG_BalanceClaim> RemoveDeviceClaimPrefix(string deviceId, int removeCount)
     {
         array<ref LFPG_BalanceClaim> removed = new array<ref LFPG_BalanceClaim>;
@@ -281,7 +260,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return removed;
     }
-
     protected static bool PersistRemoveDeviceClaimPrefix(string deviceId, int removeCount)
     {
         if (removeCount <= 0)
@@ -308,12 +286,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return true;
     }
-
     protected static bool PersistRemoveDeviceClaimIndices(string deviceId, array<int> removeIndices)
     {
         if (!removeIndices || removeIndices.Count() == 0)
             return true;
-
         int validateIndex = 0;
         int previousIndex = -1;
         for (validateIndex = 0; validateIndex < removeIndices.Count(); validateIndex = validateIndex + 1)
@@ -326,13 +302,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return false;
             previousIndex = claimIndex;
         }
-
         array<ref LFPG_BalanceClaim> previousClaims = CopyClaimReferences();
         bool dirtyBefore = s_CompoundActionDirty;
         int removeIndex = removeIndices.Count() - 1;
         for (removeIndex = removeIndices.Count() - 1; removeIndex >= 0; removeIndex = removeIndex - 1)
             s_Claims.RemoveOrdered(removeIndices[removeIndex]);
-
         s_CompoundActionDirty = true;
         if (!SaveToDisk())
         {
@@ -344,7 +318,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return true;
     }
-
     protected static bool IsPendingPhysicalClaim(LFPG_BalanceClaim claim)
     {
         if (!claim)
@@ -357,7 +330,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         return true;
     }
-
     protected static bool ChainHasPendingPhysical(array<ref LFPG_BalanceClaim> chain)
     {
         if (!chain)
@@ -370,7 +342,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return false;
     }
-
     protected static bool ChainHasPhysicalEvidence(array<ref LFPG_BalanceClaim> chain)
     {
         if (!chain)
@@ -388,12 +359,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return false;
     }
-
     protected static bool DeviceHasPhysicalEvidence(string deviceId)
     {
         return ChainHasPhysicalEvidence(CollectDeviceClaims(deviceId));
     }
-
     protected static bool ChainHasRetainedPhysical(array<ref LFPG_BalanceClaim> chain)
     {
         if (!chain)
@@ -412,7 +381,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return false;
     }
-
     // RETAINED physical only. PENDING is the in-flight segment; the broader
     // DeviceHasPhysicalEvidence predicate would refuse a live mutation against itself.
     static bool DeviceHasRetainedPhysicalEvidence(string deviceId)
@@ -420,7 +388,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         EnsureLoaded();
         return ChainHasRetainedPhysical(CollectDeviceClaims(deviceId));
     }
-
     protected static bool StockOutflowBlockedByRetainedEvidence(string deviceId, int stockBefore, int stockTarget)
     {
         if (stockTarget == stockBefore)
@@ -432,7 +399,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LogClaimError("[LFPG_Balance_Native] Stock deposit/outflow blocked by retained evidence deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
         return true;
     }
-
     protected static string FormatClaimSnapshot(LFPG_BalanceClaim claim)
     {
         if (!claim)
@@ -464,7 +430,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         msg = msg + "]";
         return msg;
     }
-
     protected static void LogRetainedPhysicalCritical(string deviceId, int loadedStock, array<ref LFPG_BalanceClaim> retainedClaims, array<int> previousStates, string reason)
     {
         string header = "[LFPG_Balance_Native] CRITICAL physical ATM evidence retained; records kept inert deviceId=";
@@ -479,7 +444,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         header = header + " reason=";
         header = header + reason;
         LFPG_Util.Error(header);
-
         int i = 0;
         int beforeState = 0;
         string line = "";
@@ -496,7 +460,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             line = line + FormatClaimSnapshot(claim);
             LFPG_Util.Error(line);
         }
-
         array<ref LFPG_BalanceClaim> available = CollectDeviceClaims(deviceId);
         int availableIndex = 0;
         for (availableIndex = 0; availableIndex < available.Count(); availableIndex = availableIndex + 1)
@@ -508,12 +471,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error(line);
         }
     }
-
     protected static bool PersistRetainSelectedClaims(string deviceId, array<ref LFPG_BalanceClaim> selectedClaims, int loadedStock, string reason)
     {
         if (!selectedClaims || selectedClaims.Count() == 0)
             return true;
-
         int i = 0;
         LFPG_BalanceClaim claim = null;
         for (i = 0; i < selectedClaims.Count(); i = i + 1)
@@ -526,7 +487,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             if (claim.state != LFPG_CLAIM_PENDING)
                 return false;
         }
-
         array<int> previousStates = new array<int>;
         array<ref LFPG_BalanceClaim> mutated = new array<ref LFPG_BalanceClaim>;
         for (i = 0; i < selectedClaims.Count(); i = i + 1)
@@ -538,10 +498,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             previousStates.Insert(claim.state);
             claim.state = LFPG_CLAIM_RETAINED;
         }
-
         if (mutated.Count() == 0)
             return true;
-
         bool dirtyBefore = s_CompoundActionDirty;
         s_CompoundActionDirty = true;
         if (!SaveToDisk())
@@ -556,7 +514,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LogRetainedPhysicalCritical(deviceId, loadedStock, mutated, previousStates, reason);
         return true;
     }
-
     protected static void LogAmbiguousChain(string deviceId, int stock, array<ref LFPG_BalanceClaim> chain, string reason)
     {
         string msg = "[LFPG_Balance_Native] Ambiguous ATM claim chain; stock mutation blocked deviceId=";
@@ -598,7 +555,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         LogClaimError(msg, FindDeviceClaimUID(deviceId), deviceId);
     }
-
     protected static bool PersistRemoveClaimAt(int claimIndex)
     {
         if (claimIndex < 0 || claimIndex >= s_Claims.Count())
@@ -615,7 +571,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return true;
     }
-
     static bool DebitWithStockClaim(PlayerBase player, string deviceId, int sessionLow, int sessionHigh, int sequence, int debit, int stockBefore, int stockTarget, out int debited)
     {
         debited = 0;
@@ -628,18 +583,15 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         if (s_CompoundActionDepth != 0)
             return false;
-
         EnsureLoaded();
         EnsureClaimState();
         if (!IsClaimStoreWritable())
             return false;
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 			return false;
-
         string uid = GetUID(player);
         if (uid == "")
             return false;
-
         int pendingPurchaseCount = CountPendingPurchaseClaims(deviceId);
         if (pendingPurchaseCount >= LFPG_BTC_MAX_CLAIMS_PER_DEVICE)
         {
@@ -647,7 +599,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 LFPG_Util.Error("[LFPG_Balance_Native] Account Buy claim denied: per-device pending claim cap reached uid=" + LFPG_Util.LogUid(uid) + " deviceId=" + deviceId);
             return false;
         }
-
         if (HasDeviceClaims(deviceId))
         {
             if (!s_ReconciledDevices.Contains(deviceId))
@@ -662,14 +613,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     return false;
             }
         }
-
         int current = 0;
         bool hadBalance = s_Balances.Contains(uid);
         if (hadBalance)
             current = s_Balances.Get(uid);
         if (current < debit)
             return false;
-
         LFPG_BalanceClaim claim = new LFPG_BalanceClaim();
         claim.uid = uid;
         claim.deviceId = deviceId;
@@ -683,7 +632,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         claim.bootsSinceRefund = 0;
         claim.orphanBoots = 0;
         claim.ambigBoots = 0;
-
         bool dirtyBefore = s_CompoundActionDirty;
         s_Balances.Set(uid, current - debit);
         s_Claims.Insert(claim);
@@ -700,7 +648,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Debit+claim rollback: atomic balance snapshot was not durable", uid, deviceId);
             return false;
         }
-
         s_CompoundActionDirty = dirtyBefore;
         s_ReconciledDevices.Set(deviceId, true);
         s_ReappliedThisBoot.Remove(deviceId);
@@ -713,7 +660,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_ReconciledDevices.Remove(deviceId);
         LogClaimError("[LFPG_Balance_Native] Durable claim exists but stock apply failed; ATM blocked until boot reconcile deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
     }
-
     static bool CanPrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
     {
         if (stockBefore == stockTarget)
@@ -722,7 +668,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         if (s_CompoundActionDepth != 0)
             return false;
-
         EnsureLoaded();
         EnsureClaimState();
         if (!IsClaimStoreWritable())
@@ -737,13 +682,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         if (FindLastPendingDeviceClaimIndex(deviceId) < 0)
             return true;
-
         int previousTarget = 0;
         if (!TryGetLastDeviceTarget(deviceId, previousTarget))
             return false;
         return previousTarget == stockBefore;
     }
-
     static bool PrepareStockMutation(string deviceId, int stockBefore, int stockTarget)
     {
         if (stockBefore == stockTarget)
@@ -752,7 +695,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return false;
         if (s_CompoundActionDepth != 0)
             return false;
-
         EnsureLoaded();
         EnsureClaimState();
         if (!IsClaimStoreWritable())
@@ -777,7 +719,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return false;
             }
         }
-
         // Keep every physical transition, including the first and direction changes.
         bool dirtyBefore = s_CompoundActionDirty;
         LFPG_BalanceClaim physical = new LFPG_BalanceClaim();
@@ -791,7 +732,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         physical.orphanBoots = 0;
         physical.ambigBoots = 0;
         s_Claims.Insert(physical);
-
         if (!SaveToDisk())
         {
             int insertedPhysicalIndex = s_Claims.Find(physical);
@@ -827,7 +767,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         if (changed.Count() == 0)
             return true;
-
         if (!SaveToDisk())
         {
             for (i = 0; i < changed.Count(); i = i + 1)
@@ -842,7 +781,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return true;
     }
-
     protected static bool DeviceClaimRecordsValidForTimeline(array<ref LFPG_BalanceClaim> chain)
     {
         int i = 0;
@@ -864,7 +802,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return true;
     }
-
     protected static array<ref LFPG_BalanceClaim> CollectPendingTimeline(array<ref LFPG_BalanceClaim> chain)
     {
         array<ref LFPG_BalanceClaim> timeline = new array<ref LFPG_BalanceClaim>;
@@ -877,7 +814,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return timeline;
     }
-
     protected static array<int> BuildClaimIndices(string deviceId, array<ref LFPG_BalanceClaim> selectedClaims)
     {
         array<int> result = new array<int>;
@@ -892,7 +828,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return result;
     }
-
     protected static array<int> FindChainProvenPurchaseIndices(string deviceId)
     {
         array<int> result = new array<int>;
@@ -902,7 +837,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_BalanceClaim purchase = s_Claims[i];
             if (!purchase || purchase.deviceId != deviceId || purchase.state != LFPG_CLAIM_PENDING || purchase.debit <= 0)
                 continue;
-
             bool physicalLater = false;
             int laterIndex = i + 1;
             for (laterIndex = i + 1; laterIndex < s_Claims.Count(); laterIndex = laterIndex + 1)
@@ -919,7 +853,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return result;
     }
-
     protected static bool PersistRemoveChainProvenPurchases(string deviceId, out bool removedAny)
     {
         removedAny = false;
@@ -932,7 +865,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LFPG_Util.Info("[LFPG_Balance_Native] Chain-proven purchases cleared without refund deviceId=" + deviceId);
         return true;
     }
-
     protected static bool PersistAmbiguousObservation(string deviceId, array<ref LFPG_BalanceClaim> timeline, array<int> previousValues, bool dirtyBefore)
     {
         if (SaveToDisk())
@@ -940,7 +872,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_CompoundActionDirty = dirtyBefore;
             return true;
         }
-
         int i = 0;
         for (i = 0; i < timeline.Count(); i = i + 1)
             timeline[i].ambigBoots = previousValues[i];
@@ -949,7 +880,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LogClaimError("[LFPG_Balance_Native] Ambiguous present-ATM observation was not durable deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
         return false;
     }
-
     protected static bool RefundAndClearAmbiguousClaims(string deviceId, array<ref LFPG_BalanceClaim> timeline, array<int> previousValues, bool dirtyBefore, map<string, int> refundByUid)
     {
         array<string> refundUids = new array<string>;
@@ -977,7 +907,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             else
                 existedFlags.Insert(0);
         }
-
         array<int> removeIndices = BuildClaimIndices(deviceId, timeline);
         if (removeIndices.Count() != timeline.Count())
         {
@@ -985,7 +914,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             PersistAmbiguousObservation(deviceId, timeline, previousValues, dirtyBefore);
             return false;
         }
-
         array<ref LFPG_BalanceClaim> previousClaims = CopyClaimReferences();
         for (refundIndex = 0; refundIndex < refundUids.Count(); refundIndex = refundIndex + 1)
         {
@@ -993,12 +921,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             int creditedAmount = refundByUid.Get(creditedUid);
             s_Balances.Set(creditedUid, previousBalances[refundIndex] + creditedAmount);
         }
-
         int removeIndex = removeIndices.Count() - 1;
         for (removeIndex = removeIndices.Count() - 1; removeIndex >= 0; removeIndex = removeIndex - 1)
             s_Claims.RemoveOrdered(removeIndices[removeIndex]);
         s_CompoundActionDirty = true;
-
         if (!SaveToDisk())
         {
             for (refundIndex = 0; refundIndex < refundUids.Count(); refundIndex = refundIndex + 1)
@@ -1018,7 +944,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Ambiguous multi-claim refund+clear save failed; balances and claims restored deviceId=" + deviceId, FindDeviceClaimUID(deviceId), deviceId);
             return false;
         }
-
         s_CompoundActionDirty = dirtyBefore;
         string uidList = "";
         for (refundIndex = 0; refundIndex < refundUids.Count(); refundIndex = refundIndex + 1)
@@ -1036,12 +961,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LFPG_Util.Warn(refundMsg);
         return true;
     }
-
     protected static bool ObserveAmbiguousPresentTimeline(string deviceId, array<ref LFPG_BalanceClaim> timeline, int stock)
     {
         if (s_AmbiguousObservedThisBoot.Contains(deviceId))
             return false;
-
         if (ChainHasPendingPhysical(timeline) || DeviceHasPhysicalEvidence(deviceId))
         {
             if (!PersistRetainSelectedClaims(deviceId, timeline, stock, "ambiguous present timeline contained physical evidence"))
@@ -1049,7 +972,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_AmbiguousObservedThisBoot.Set(deviceId, true);
             return true;
         }
-
         array<int> previousValues = new array<int>;
         bool refundReady = false;
         bool aggregationValid = true;
@@ -1063,7 +985,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 claim.ambigBoots = claim.ambigBoots + 1;
             if (claim.ambigBoots >= 2)
                 refundReady = true;
-
             if (claim.debit > 0)
             {
                 int accumulated = 0;
@@ -1077,7 +998,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         s_AmbiguousObservedThisBoot.Set(deviceId, true);
         bool dirtyBefore = s_CompoundActionDirty;
-
         if (!refundReady)
         {
             PersistAmbiguousObservation(deviceId, timeline, previousValues, dirtyBefore);
@@ -1091,17 +1011,14 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         return RefundAndClearAmbiguousClaims(deviceId, timeline, previousValues, dirtyBefore, refundByUid);
     }
-
     protected static void HandlePendingNoMatch(string deviceId, int stock, array<ref LFPG_BalanceClaim> chain, string reason)
     {
         LogAmbiguousChain(deviceId, stock, chain, reason);
-
         if (ChainHasPhysicalEvidence(chain))
         {
             bool removedProvenPhysical = false;
             if (!PersistRemoveChainProvenPurchases(deviceId, removedProvenPhysical))
                 return;
-
             array<ref LFPG_BalanceClaim> remainingUnprovenChain = CollectDeviceClaims(deviceId);
             array<ref LFPG_BalanceClaim> remainingUnprovenPending = CollectPendingTimeline(remainingUnprovenChain);
             if (remainingUnprovenPending.Count() == 0)
@@ -1114,11 +1031,9 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_ReconciledDevices.Set(deviceId, true);
             return;
         }
-
         bool removedProven = false;
         if (!PersistRemoveChainProvenPurchases(deviceId, removedProven))
             return;
-
         array<ref LFPG_BalanceClaim> currentChain = CollectDeviceClaims(deviceId);
         array<ref LFPG_BalanceClaim> remainingTimeline = CollectPendingTimeline(currentChain);
         if (remainingTimeline.Count() == 0)
@@ -1126,7 +1041,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_ReconciledDevices.Set(deviceId, true);
             return;
         }
-
         if (ObserveAmbiguousPresentTimeline(deviceId, remainingTimeline, stock))
             s_ReconciledDevices.Set(deviceId, true);
     }
@@ -1147,7 +1061,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             claimIndex = claimIndex + 1;
         }
     }
-
     protected static void ReconcilePendingChain(LFPG_BTCAtmBase atm, string deviceId, array<ref LFPG_BalanceClaim> chain)
     {
         int stock = atm.LFPG_GetBtcStock();
@@ -1156,14 +1069,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogAmbiguousChain(deviceId, stock, chain, "invalid claim record or state");
             return;
         }
-
         array<ref LFPG_BalanceClaim> timeline = CollectPendingTimeline(chain);
         if (timeline.Count() == 0)
         {
             LogAmbiguousChain(deviceId, stock, chain, "pending reconcile has no pending timeline records");
             return;
         }
-
         array<int> positions = new array<int>;
         bool pendingValidationFailed = false;
         bool discontinuity = false;
@@ -1181,21 +1092,18 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 if (timelineClaim.stockBefore < 0 || timelineClaim.stockTarget < 0 || timelineClaim.stockBefore == timelineClaim.stockTarget)
                     pendingValidationFailed = true;
             }
-
             if (i == 0)
                 positions.Insert(timelineClaim.stockBefore);
             else if (timeline[i - 1].stockTarget != timelineClaim.stockBefore)
                 discontinuity = true;
             positions.Insert(timelineClaim.stockTarget);
         }
-
         if (discontinuity)
         {
             string discontinuityMsg = "[LFPG_Balance_Native] Timeline discontinuity retained for legacy compatibility deviceId=";
             discontinuityMsg = discontinuityMsg + deviceId;
             LFPG_Util.Info(discontinuityMsg);
         }
-
         if (pendingValidationFailed)
         {
             HandlePendingNoMatch(deviceId, stock, chain, "pending timeline transition failed lenient validation");
@@ -1206,7 +1114,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
             return;
         }
-
         int cursor = -1;
         for (i = 0; i < positions.Count(); i = i + 1)
         {
@@ -1217,7 +1124,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 cursor = i;
                 continue;
             }
-
             bool cursorAdvanceProven = true;
             int purchaseIndex = cursor;
             for (purchaseIndex = cursor; purchaseIndex < i; purchaseIndex = purchaseIndex + 1)
@@ -1225,7 +1131,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 LFPG_BalanceClaim candidatePurchase = timeline[purchaseIndex];
                 if (candidatePurchase.debit <= 0)
                     continue;
-
                 bool physicalLaterInCandidatePrefix = false;
                 int physicalIndex = purchaseIndex + 1;
                 for (physicalIndex = purchaseIndex + 1; physicalIndex < i; physicalIndex = physicalIndex + 1)
@@ -1257,14 +1162,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
             return;
         }
-
         int prefixCount = cursor;
         if (prefixCount > timeline.Count())
         {
             LogAmbiguousChain(deviceId, stock, chain, "timeline cursor exceeded record count");
             return;
         }
-
         if (prefixCount > 0)
         {
             bool prefixCleared = false;
@@ -1287,7 +1190,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             }
         }
-
         int running = stock;
         bool hadReapply = false;
         bool purchaseRebaseDirty = false;
@@ -1295,7 +1197,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         array<ref LFPG_BalanceClaim> rebasedPurchases = new array<ref LFPG_BalanceClaim>;
         array<int> previousPurchaseBefore = new array<int>;
         array<int> previousPurchaseTarget = new array<int>;
-
         for (i = prefixCount; i < timeline.Count(); i = i + 1)
         {
             LFPG_BalanceClaim tailClaim = timeline[i];
@@ -1304,7 +1205,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 physicalTail.Insert(tailClaim);
                 continue;
             }
-
             int purchaseDelta = tailClaim.stockTarget - tailClaim.stockBefore;
             if (running < 0 || purchaseDelta <= 0 || purchaseDelta > LFPG_NATIVE_BALANCE_CAP - running)
             {
@@ -1317,7 +1217,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 LogAmbiguousChain(deviceId, stock, chain, "purchase reapply arithmetic exceeded Native integer bounds");
                 return;
             }
-
             rebasedPurchases.Insert(tailClaim);
             previousPurchaseBefore.Insert(tailClaim.stockBefore);
             previousPurchaseTarget.Insert(tailClaim.stockTarget);
@@ -1327,7 +1226,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             running = running + purchaseDelta;
             tailClaim.stockTarget = running;
         }
-
         if (physicalTail.Count() > 0)
         {
             if (!PersistRetainSelectedClaims(deviceId, physicalTail, stock, "physical timeline tail could not be fitted to loaded stock"))
@@ -1342,7 +1240,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             }
         }
-
         if (physicalTail.Count() == 0 && purchaseRebaseDirty)
         {
             bool rebaseDirtyBefore = s_CompoundActionDirty;
@@ -1361,7 +1258,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
             s_CompoundActionDirty = rebaseDirtyBefore;
         }
-
         int applyPurchaseIndex = 0;
         for (applyPurchaseIndex = 0; applyPurchaseIndex < rebasedPurchases.Count(); applyPurchaseIndex = applyPurchaseIndex + 1)
         {
@@ -1375,7 +1271,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
             hadReapply = true;
         }
-
         ResetDeviceOrphanBoots(deviceId);
         array<ref LFPG_BalanceClaim> survivingChain = CollectDeviceClaims(deviceId);
         array<ref LFPG_BalanceClaim> survivingTimeline = CollectPendingTimeline(survivingChain);
@@ -1388,7 +1283,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             }
         }
-
         s_ReconciledDevices.Set(deviceId, true);
         if (hadReapply)
         {
@@ -1432,10 +1326,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogAmbiguousChain(deviceId, stock, chain, "refunded reconcile has no purchase tombstone");
             return;
         }
-
         LFPG_BalanceClaim first = refundedPurchases[0];
         int restoredStock = stock;
-
         if (stock != first.stockBefore)
         {
             for (i = refundedPurchases.Count() - 1; i >= 0; i = i - 1)
@@ -1450,7 +1342,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 }
             }
         }
-
         if (restoredStock != stock)
         {
             if (!atm.LFPG_ApplyClaimedStockTarget(restoredStock))
@@ -1467,7 +1358,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_FaultInject.ShouldCrash("E16_crash_after_apply");
             return;
         }
-
         array<int> refundedIndices = BuildClaimIndices(deviceId, refundedPurchases);
         if (refundedIndices.Count() == refundedPurchases.Count() && PersistRemoveDeviceClaimIndices(deviceId, refundedIndices))
         {
@@ -1475,7 +1365,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Warn("[LFPG_Balance_Native] Late ATM hive stock already matched refunded compensation; tombstones cleared durably deviceId=" + deviceId);
         }
     }
-
     static void ReconcileLoadedAtm(LFPG_BTCAtmBase atm)
     {
         if (!g_Game || !g_Game.IsServer())
@@ -1484,12 +1373,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             return;
         if (s_CompoundActionDepth != 0)
             return;
-
         EnsureLoaded();
         EnsureClaimState();
         if (s_FutureVersionReadOnly)
             return;
-
         string deviceId = atm.LFPG_GetDeviceId();
         if (deviceId == "")
             return;
@@ -1510,13 +1397,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_ReconciledDevices.Set(deviceId, true);
             return;
         }
-
         if (!DeviceClaimRecordsValidForTimeline(chain))
         {
             LogAmbiguousChain(deviceId, atm.LFPG_GetBtcStock(), chain, "invalid claim state or record");
             return;
         }
-
         int pendingCount = 0;
         int refundedCount = 0;
         int i = 0;
@@ -1527,7 +1412,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             else if (chain[i].state == LFPG_CLAIM_REFUNDED)
                 refundedCount = refundedCount + 1;
         }
-
         if (pendingCount > 0)
         {
             ReconcilePendingChain(atm, deviceId, chain);
@@ -1550,7 +1434,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Orphan claim refund rejected: invalid pending claim identity or debit", "", "");
             return false;
         }
-
         int current = 0;
         bool hadBalance = s_Balances.Contains(claim.uid);
         if (hadBalance)
@@ -1560,7 +1443,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Orphan claim refund rejected: stored balance outside Native bounds uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
-
         int room = LFPG_NATIVE_BALANCE_CAP - current;
         int refunded = claim.debit;
         if (refunded > room)
@@ -1570,7 +1452,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Orphan claim refund was not exact; claim remains PENDING uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
-
         // A Native debit refunds to the Native ledger. If the live provider is
         // no longer Native (a provider migration between reboots, now reachable
         // once LBmaster_Core compiles), crediting s_Balances would resurrect
@@ -1591,7 +1472,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Orphan claim refund held: active provider is " + heldProvider + ", not Native; claim remains PENDING for admin migration uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
-
         bool dirtyBefore = s_CompoundActionDirty;
         int previousState = claim.state;
         int previousBoots = claim.bootsSinceRefund;
@@ -1610,12 +1490,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LogClaimError("[LFPG_Balance_Native] Orphan claim refund save failed; claim remains PENDING uid=" + LFPG_Util.LogUid(claim.uid), claim.uid, claim.deviceId);
             return false;
         }
-
         s_CompoundActionDirty = dirtyBefore;
         LFPG_Util.Warn("[LFPG_Balance_Native] Orphan ATM claim refunded and tombstoned uid=" + LFPG_Util.LogUid(claim.uid) + " deviceId=" + claim.deviceId);
         return true;
     }
-
     protected static bool AdvanceOrPruneRefundedClaimAt(int claimIndex)
     {
         if (s_CompoundActionDepth != 0)
@@ -1623,7 +1501,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         LFPG_BalanceClaim claim = s_Claims[claimIndex];
         if (!claim || claim.state != LFPG_CLAIM_REFUNDED)
             return false;
-
         int nextBoot = claim.bootsSinceRefund + 1;
         if (nextBoot >= 3)
         {
@@ -1633,7 +1510,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             // Compact only when a present load already matches restoredStock.
             return false;
         }
-
         int previousBoot = claim.bootsSinceRefund;
         bool dirtyBefore = s_CompoundActionDirty;
         claim.bootsSinceRefund = nextBoot;
@@ -1647,7 +1523,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_CompoundActionDirty = dirtyBefore;
         return false;
     }
-
     protected static bool ObserveAbsentPendingClaimAt(int claimIndex)
     {
         LFPG_BalanceClaim claim = s_Claims[claimIndex];
@@ -1669,7 +1544,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_CompoundActionDirty = dirtyBefore;
             return false;
         }
-
         retainSet.Insert(claim);
         if (claim.debit > 0)
         {
@@ -1696,19 +1570,16 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         claim.orphanBoots = previousOrphanBoots;
         return false;
     }
-
     static void SweepOrphanClaims()
     {
         if (!g_Game || !g_Game.IsServer())
             return;
         if (s_CompoundActionDepth != 0)
             return;
-
         EnsureLoaded();
         EnsureClaimState();
         if (s_FutureVersionReadOnly)
             return;
-
         LFPG_Util.Info("[LFPG_Balance_Native] Orphan sweep pass executed");
         int nullIndex = 0;
         while (nullIndex < s_Claims.Count())
@@ -1721,7 +1592,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             if (!PersistRemoveClaimAt(nullIndex))
                 nullIndex = nullIndex + 1;
         }
-
         array<string> deviceIds = new array<string>;
         int collectIndex = 0;
         for (collectIndex = 0; collectIndex < s_Claims.Count(); collectIndex = collectIndex + 1)
@@ -1730,7 +1600,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             if (collectedClaim && deviceIds.Find(collectedClaim.deviceId) < 0)
                 deviceIds.Insert(collectedClaim.deviceId);
         }
-
         int deviceIndex = 0;
         for (deviceIndex = 0; deviceIndex < deviceIds.Count(); deviceIndex = deviceIndex + 1)
         {
@@ -1739,13 +1608,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 continue;
 			if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
 				continue;
-
             EntityAI device = null;
             if (deviceId != "")
                 device = LFPG_DeviceRegistry.Get().FindById(deviceId);
             if (device)
                 continue;
-
             array<ref LFPG_BalanceClaim> absentChain = CollectDeviceClaims(deviceId);
             if (!DeviceClaimRecordsValidForTimeline(absentChain))
             {
@@ -1753,14 +1620,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 s_OrphanObservedThisBoot.Set(deviceId, true);
                 continue;
             }
-
             bool removedProven = false;
             if (!ChainHasPhysicalEvidence(absentChain))
             {
                 if (!PersistRemoveChainProvenPurchases(deviceId, removedProven))
                     continue;
             }
-
             int claimIndex = 0;
             while (claimIndex < s_Claims.Count())
             {
@@ -1770,7 +1635,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     claimIndex = claimIndex + 1;
                     continue;
                 }
-
                 if (claim.state == LFPG_CLAIM_PENDING)
                 {
                     bool removedPending = ObserveAbsentPendingClaimAt(claimIndex);
@@ -1792,7 +1656,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     claimIndex = claimIndex + 1;
                     continue;
                 }
-
                 LogClaimError("[LFPG_Balance_Native] Invalid orphan claim retained fail-closed deviceId=" + deviceId, claim.uid, deviceId);
                 claimIndex = claimIndex + 1;
             }
@@ -1814,8 +1677,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_Loaded = false;
         s_CompoundActionDirty = false;
     }
-
-
     protected static void ClearCompoundPreState()
     {
         if (!s_CompoundPreState)
@@ -1824,15 +1685,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_CompoundPreState.Clear();
         s_CompoundDirtyBefore = false;
     }
-
     protected static void CaptureCompoundPreState(string uid, bool existed, int value)
     {
         if (s_CompoundActionDepth <= 0)
             return;
-
         if (!s_CompoundPreState)
             s_CompoundPreState = new array<ref LFPG_BalanceCompoundSnapshot>;
-
         int index = 0;
         while (index < s_CompoundPreState.Count())
         {
@@ -1841,14 +1699,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             index = index + 1;
         }
-
         LFPG_BalanceCompoundSnapshot snapshot = new LFPG_BalanceCompoundSnapshot();
         snapshot.m_UID = uid;
         snapshot.m_Existed = existed;
         snapshot.m_Value = value;
         s_CompoundPreState.Insert(snapshot);
     }
-
     static void BeginCompoundBalanceAction()
     {
         if (s_CompoundActionDepth != 0)
@@ -1864,17 +1720,14 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     s_CompoundActionDirty = true;
             }
         }
-
         ClearCompoundPreState();
         s_CompoundDirtyBefore = s_CompoundActionDirty;
         s_CompoundActionDepth = s_CompoundActionDepth + 1;
     }
-
     static bool EndCompoundBalanceAction()
     {
         if (s_CompoundActionDepth <= 0)
             return true;
-
         s_CompoundActionDepth = s_CompoundActionDepth - 1;
         if (s_CompoundActionDepth > 0)
             return true;
@@ -1883,19 +1736,16 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             ClearCompoundPreState();
             return true;
         }
-
         bool saved = SaveToDisk();
         if (!saved)
         {
             s_CompoundActionDirty = true;
             return false;
         }
-
         s_CompoundActionDirty = false;
         ClearCompoundPreState();
         return true;
     }
-
     static void RevertCompoundBalanceAction()
     {
         if (s_CompoundPreState)
@@ -1914,29 +1764,24 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 index = index + 1;
             }
         }
-
         s_CompoundActionDirty = s_CompoundDirtyBefore;
         s_CompoundActionDepth = 0;
         ClearCompoundPreState();
     }
-
     static bool FlushBalanceOnShutdown()
     {
         s_CompoundActionDepth = 0;
         if (!s_CompoundActionDirty)
             return true;
-
         bool saved = SaveToDisk();
         if (!saved)
         {
             s_CompoundActionDirty = true;
             return false;
         }
-
         s_CompoundActionDirty = false;
         return true;
     }
-
     protected static bool SaveBalanceMutation()
     {
         if (s_CompoundActionDepth > 0)
@@ -1944,7 +1789,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_CompoundActionDirty = true;
             return true;
         }
-
         bool saved = SaveToDisk();
         if (saved)
             s_CompoundActionDirty = false;
@@ -1955,35 +1799,26 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         string uid = GetUID(player);
         if (uid == "")
             return 0;
-
         EnsureLoaded();
-
         if (s_FutureVersionReadOnly)
             return 0;
-
         if (s_Balances.Contains(uid))
         {
             int bal = s_Balances.Get(uid);
             return bal;
         }
-
         return 0;
     }
-
     override int AddBalance(PlayerBase player, int amount)
     {
         if (amount <= 0)
             return 0;
-
         string uid = GetUID(player);
         if (uid == "")
             return 0;
-
         EnsureLoaded();
-
         if (s_FutureVersionReadOnly)
             return 0;
-
         int current = 0;
         bool hadBalance = s_Balances.Contains(uid);
         if (hadBalance)
@@ -1992,7 +1827,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         if (current < 0 || current >= LFPG_NATIVE_BALANCE_CAP)
             return 0;
-
         int room = LFPG_NATIVE_BALANCE_CAP - current;
         int toAdd = amount;
         if (toAdd > room)
@@ -2006,12 +1840,10 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         if (toAdd <= 0)
             return 0;
-
         int newBal = current + toAdd;
         CaptureCompoundPreState(uid, hadBalance, current);
         bool dirtyBefore = s_CompoundActionDirty;
         s_Balances.Set(uid, newBal);
-
         if (!SaveBalanceMutation())
         {
             if (hadBalance)
@@ -2022,7 +1854,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error("[LFPG_Balance_Native] Add rollback: balance snapshot was not durable");
             return 0;
         }
-
         string logMsg = "[LFPG_Balance_Native] Add uid=";
         logMsg = logMsg + LFPG_Util.LogUid(uid);
         logMsg = logMsg + " +";
@@ -2030,24 +1861,18 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         logMsg = logMsg + " -> ";
         logMsg = logMsg + newBal.ToString();
         LFPG_Util.Info(logMsg);
-
         return toAdd;
     }
-
     override int RemoveBalance(PlayerBase player, int amount)
     {
         if (amount <= 0)
             return 0;
-
         string uid = GetUID(player);
         if (uid == "")
             return 0;
-
         EnsureLoaded();
-
         if (s_FutureVersionReadOnly)
             return 0;
-
         int current = 0;
         bool hadBalance = s_Balances.Contains(uid);
         if (hadBalance)
@@ -2056,19 +1881,16 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         }
         if (current < 0)
             return 0;
-
         // Cannot remove more than available
         int toRemove = amount;
         if (toRemove > current)
         {
             toRemove = current;
         }
-
         int newBal = current - toRemove;
         CaptureCompoundPreState(uid, hadBalance, current);
         bool dirtyBefore = s_CompoundActionDirty;
         s_Balances.Set(uid, newBal);
-
         if (!SaveBalanceMutation())
         {
             if (hadBalance)
@@ -2079,7 +1901,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error("[LFPG_Balance_Native] Remove rollback: balance snapshot was not durable");
             return 0;
         }
-
         string logMsg = "[LFPG_Balance_Native] Remove uid=";
         logMsg = logMsg + LFPG_Util.LogUid(uid);
         logMsg = logMsg + " -";
@@ -2087,45 +1908,34 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         logMsg = logMsg + " -> ";
         logMsg = logMsg + newBal.ToString();
         LFPG_Util.Info(logMsg);
-
         return toRemove;
     }
-
     // ---- Static API for external mods ----
-
     static int ReadPlayerBalance(string uid)
     {
         EnsureLoaded();
-
         if (s_FutureVersionReadOnly)
             return 0;
-
         if (s_Balances.Contains(uid))
         {
             int bal = s_Balances.Get(uid);
             return bal;
         }
-
         return 0;
     }
-
     static bool WritePlayerBalance(string uid, int balance)
     {
         if (uid == "")
             return false;
         if (balance < 0 || balance > LFPG_NATIVE_BALANCE_CAP)
             return false;
-
         EnsureLoaded();
-
         if (s_FutureVersionReadOnly)
             return false;
-
         int current = 0;
         bool hadBalance = s_Balances.Contains(uid);
         if (hadBalance)
             current = s_Balances.Get(uid);
-
         CaptureCompoundPreState(uid, hadBalance, current);
         bool dirtyBefore = s_CompoundActionDirty;
         s_Balances.Set(uid, balance);
@@ -2139,39 +1949,30 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error("[LFPG_Balance_Native] Set rollback: balance snapshot was not durable");
             return false;
         }
-
         return true;
     }
-
     // ---- Internal ----
-
     protected static string GetUID(PlayerBase player)
     {
         if (!player)
             return "";
-
         PlayerIdentity identity = player.GetIdentity();
         if (!identity)
             return "";
-
         string uid = identity.GetPlainId();
         return uid;
     }
-
     protected static void EnsureLoaded()
     {
         if (s_Loaded)
             return;
-
         if (!s_Balances)
         {
             s_Balances = new map<string, int>;
         }
-
         LoadFromDisk();
         s_Loaded = true;
     }
-
     protected static void LoadFromDisk()
     {
         if (!s_Balances)
@@ -2185,15 +1986,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
         s_ReappliedThisBoot.Clear();
         s_OrphanObservedThisBoot.Clear();
         s_AmbiguousObservedThisBoot.Clear();
-
         string settingsDir = LFPG_BTC_SETTINGS_DIR;
         if (!FileExist(settingsDir))
         {
             MakeDirectory(settingsDir);
         }
-
         string filePath = LFPG_BALANCE_NATIVE_FILE;
-
         // A future target must be latched before typed orphan recovery can
         // inspect or promote any sibling file over it.
         int rawVersion = 0;
@@ -2206,7 +2004,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             }
         }
-
         // PR-A: typed recovery prefers parseable orphan .tmp over .bak.new/.bak.
         // Returns false only if no candidate (target/.tmp/.bak.new/.bak) exists.
         if (!LFPG_FileUtil.EnsureBalancesFileOrRestore(filePath))
@@ -2216,7 +2013,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Info(noFileMsg);
             return;
         }
-
         // PR-A.6 R21-PR-A5-001 defense-in-depth: if PromoteOrphanTmp aborted
         // and PreserveOrphanTmpEvidence ALSO failed, the .tmp could still be
         // on disk and the next AtomicSave Step 1 would overwrite it. Inhibit
@@ -2233,7 +2029,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             LFPG_Util.Error(defMsg);
             s_DiskInhibited = true;
         }
-
         // Recovery can materialize target from .tmp/.bak when it was absent;
         // classify that recovered file before the normal typed load as well.
         rawVersion = 0;
@@ -2246,7 +2041,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 return;
             }
         }
-
         LFPG_BalanceData data = new LFPG_BalanceData();
         string err;
         bool ok = JsonFileLoader<LFPG_BalanceData>.LoadFile(filePath, data, err);
@@ -2283,10 +2077,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             s_DiskInhibited = true;
             return;
         }
-
         if (!data.entries)
             data.entries = new array<ref LFPG_BalanceEntry>;
-
         int i = 0;
         int count = data.entries.Count();
         for (i = 0; i < count; i = i + 1)
@@ -2296,13 +2088,11 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 continue;
             if (entry.uid == "")
                 continue;
-
             int loadedBalance = entry.balance;
             if (loadedBalance < 0)
                 loadedBalance = 0;
             else if (loadedBalance > LFPG_NATIVE_BALANCE_CAP)
                 loadedBalance = LFPG_NATIVE_BALANCE_CAP;
-
             if (loadedBalance != entry.balance)
             {
                 string clampMsg = "[LFPG_Balance_Native] Clamped loaded balance uid=";
@@ -2313,10 +2103,8 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                 clampMsg = clampMsg + loadedBalance.ToString();
                 LFPG_Util.Warn(clampMsg);
             }
-
             s_Balances.Set(entry.uid, loadedBalance);
         }
-
         if (data.claims)
         {
             int claimIndex = 0;
@@ -2327,20 +2115,17 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
                     s_Claims.Insert(loadedClaim);
             }
         }
-
         string loadMsg = "[LFPG_Balance_Native] Loaded ";
         loadMsg = loadMsg + count.ToString();
         loadMsg = loadMsg + " player balances from ";
         loadMsg = loadMsg + filePath;
         LFPG_Util.Info(loadMsg);
     }
-
     protected static bool SaveToDisk()
     {
         if (s_FutureVersionReadOnly)
             return false;
         EnsureClaimState();
-
         // PR-A P1-7: refuse to overwrite a corrupt file detected at load.
         // PR-A.5 R21-PR-A-003: rate-limit warn (first hit + every 60s with
         // cumulative count) so an active server doesn't spam RPT during
@@ -2361,16 +2146,13 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             }
             return false;
         }
-
         string settingsDir = LFPG_BTC_SETTINGS_DIR;
         if (!FileExist(settingsDir))
         {
             MakeDirectory(settingsDir);
         }
-
         LFPG_BalanceData data = new LFPG_BalanceData();
         data.ver = 2;
-
         // Rebuild entries array from map
         if (s_Balances)
         {
@@ -2380,14 +2162,12 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             {
                 string uid = s_Balances.GetKey(i);
                 int bal = s_Balances.GetElement(i);
-
                 ref LFPG_BalanceEntry entry = new LFPG_BalanceEntry();
                 entry.uid = uid;
                 entry.balance = bal;
                 data.entries.Insert(entry);
             }
         }
-
         int claimIndex = 0;
         for (claimIndex = 0; claimIndex < s_Claims.Count(); claimIndex = claimIndex + 1)
         {
@@ -2395,7 +2175,6 @@ class LFPG_BalanceProvider_NativeImpl extends LFPG_BalanceProvider_Native
             if (claim)
                 data.claims.Insert(claim);
         }
-
         string filePath = LFPG_BALANCE_NATIVE_FILE;
         // PR-A P0-1: route through AtomicSave (tmp + bak.new swap + verify).
         bool saved = LFPG_FileUtil.AtomicSaveBalances(filePath, data);
