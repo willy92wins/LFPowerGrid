@@ -286,20 +286,6 @@ modded class Hologram
         return false;
     }
 
-#ifndef SERVER
-    protected bool LFPG_IsDifferentModelKit()
-    {
-        if (!m_Parent)
-            return false;
-
-        LFPG_KitBaseDeployable deployKit = LFPG_KitBaseDeployable.Cast(m_Parent);
-        if (deployKit)
-        {
-            return true;
-        }
-        return false;
-    }
-
     // ============================================
     // Placement helpers (v3.0: virtual dispatch)
     // All read from m_LFPG_CachedSameKit (set once per frame
@@ -612,10 +598,7 @@ modded class Hologram
             }
 
             // For different-model kits, apply position offset
-            if (LFPG_IsDifferentModelKit())
-            {
-                floorPos = LFPG_ApplyDiffModelPosOffset(floorPos);
-            }
+            floorPos = LFPG_ApplyDiffModelPosOffset(floorPos);
 
             LFPG_ApplySmoothed(floorPos, floorOri, timeslice, projection);
             return;
@@ -670,10 +653,7 @@ modded class Hologram
             vector wallFallPos = LFPG_GroundSnap(hitPos, LFPG_HOLO_SURFACE_WALL_FALLBACK);
             vector wallFallOri = LFPG_CalcFloorOrientation();
 
-            if (LFPG_IsDifferentModelKit())
-            {
-                wallFallPos = LFPG_ApplyDiffModelPosOffset(wallFallPos);
-            }
+            wallFallPos = LFPG_ApplyDiffModelPosOffset(wallFallPos);
 
             LFPG_ApplySmoothed(wallFallPos, wallFallOri, timeslice, projection);
             return;

@@ -201,8 +201,6 @@ class LFPG_RPCClientHandler
         int readNetHigh = 0;
         float readYawOffset = 0.0;
         float readPitchOffset = 0.0;
-        vector assembledPos = "0 0 0";
-        vector assembledOri = "0 0 0";
         int ri = 0;
 
         while (ri < camCount)
@@ -230,16 +228,9 @@ class LFPG_RPCClientHandler
             if (!ctx.Read(readPitchOffset))
                 break;
 
-            assembledPos[0] = readPx;
-            assembledPos[1] = readPy;
-            assembledPos[2] = readPz;
-            assembledOri[0] = readOx;
-            assembledOri[1] = readOy;
-            assembledOri[2] = readOz;
-
             ref LFPG_CameraListEntry entry = new LFPG_CameraListEntry();
-            entry.m_Pos   = assembledPos;
-            entry.m_Ori   = assembledOri;
+            entry.m_Pos   = Vector(readPx, readPy, readPz);
+            entry.m_Ori   = Vector(readOx, readOy, readOz);
             entry.m_Label = readLabel;
             entry.m_NetLow = readNetLow;
             entry.m_NetHigh = readNetHigh;

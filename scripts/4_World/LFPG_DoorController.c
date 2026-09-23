@@ -746,12 +746,9 @@ class LFPG_DoorController : LFPG_DeviceBase
             {
                 // Unlock first if locked (setting-dependent)
                 bool lockSetting = LFPG_Settings.Get().DoorControllerLockBuildingDoors;
-                if (lockSetting)
+                if (lockSetting && b.IsDoorLocked(m_DoorIndex))
                 {
-                    if (b.IsDoorLocked(m_DoorIndex))
-                    {
-                        b.UnlockDoor(m_DoorIndex, false);
-                    }
+                    b.UnlockDoor(m_DoorIndex, false);
                 }
 
                 if (!b.IsDoorOpen(m_DoorIndex))
@@ -808,18 +805,15 @@ class LFPG_DoorController : LFPG_DeviceBase
 
                 // Lock after close (setting-dependent)
                 bool lockSetting = LFPG_Settings.Get().DoorControllerLockBuildingDoors;
-                if (lockSetting)
+                if (lockSetting && !b.IsDoorLocked(m_DoorIndex))
                 {
-                    if (!b.IsDoorLocked(m_DoorIndex))
-                    {
-                        b.LockDoor(m_DoorIndex, true);
+                    b.LockDoor(m_DoorIndex, true);
 
-                        string lockMsg = "[LFPG_DoorController] Locked building door idx=";
-                        lockMsg = lockMsg + m_DoorIndex.ToString();
-                        lockMsg = lockMsg + " id=";
-                        lockMsg = lockMsg + m_DeviceId;
-                        LFPG_Util.Debug(lockMsg);
-                    }
+                    string lockMsg = "[LFPG_DoorController] Locked building door idx=";
+                    lockMsg = lockMsg + m_DoorIndex.ToString();
+                    lockMsg = lockMsg + " id=";
+                    lockMsg = lockMsg + m_DeviceId;
+                    LFPG_Util.Debug(lockMsg);
                 }
             }
             return;
