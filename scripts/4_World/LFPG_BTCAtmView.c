@@ -126,7 +126,6 @@ class LFPG_BTCAtmView extends ScriptView
     static const string PROC_WHITE = "#(argb,8,8,3)color(1,1,1,1,CO)";
     static const int COL_AMBER_BTN    = 0xFFB8880F;
     static const int COL_STATUS_OK_BG = 0x1734D399;
-    static const int COL_STATUS_ERR_BG = 0x17F87171;
 
     // ── Button UserID constants (BTC-5: consistent naming) ──
     static const int UID_TAB_CASH      = 120;
@@ -183,14 +182,10 @@ class LFPG_BTCAtmView extends ScriptView
             {
                 Input inp = g_Game.GetInput();
                 if (inp)
-                {
                     inp.ChangeGameFocus(-1);
-                }
                 UIManager uiMgr = g_Game.GetUIManager();
                 if (uiMgr)
-                {
                     uiMgr.ShowUICursor(false);
-                }
                 m_FocusLocked = false;
             }
         }
@@ -214,9 +209,7 @@ class LFPG_BTCAtmView extends ScriptView
                 m_FadingIn = false;
             }
             if (BTCAtmPanel)
-            {
                 BTCAtmPanel.SetAlpha(m_FadeAlpha);
-            }
         }
 
         if (m_Dragging)
@@ -231,17 +224,13 @@ class LFPG_BTCAtmView extends ScriptView
             float dragMinY = 5.0;
             ClampPanelPos(newX, newY, dragMinY, clampedX, clampedY);
             if (BTCAtmPanel)
-            {
                 BTCAtmPanel.SetPos(clampedX, clampedY);
-            }
         }
 
         // Controller timers (status feedback)
         LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(GetController());
         if (ctrl)
-        {
             ctrl.TickTimers(dt);
-        }
     }
 
     // =========================================================
@@ -283,13 +272,9 @@ class LFPG_BTCAtmView extends ScriptView
             while (closeXChild)
             {
                 if (!closeXImg)
-                {
                     closeXImg = ImageWidget.Cast(closeXChild);
-                }
                 if (!closeXTxt)
-                {
                     closeXTxt = TextWidget.Cast(closeXChild);
-                }
                 closeXChild = closeXChild.GetSibling();
             }
             BtnCloseXBg = closeXImg;
@@ -407,13 +392,9 @@ class LFPG_BTCAtmView extends ScriptView
         while (child)
         {
             if (!foundBg)
-            {
                 foundBg = ImageWidget.Cast(child);
-            }
             if (!foundTxt)
-            {
                 foundTxt = TextWidget.Cast(child);
-            }
             child = child.GetSibling();
         }
 
@@ -673,9 +654,7 @@ class LFPG_BTCAtmView extends ScriptView
         if (!img)
             return;
         if (!m_ColorsInitialized)
-        {
             img.LoadImageFile(0, PROC_WHITE);
-        }
         img.SetColor(color);
         CacheColorLocal(img, color);
     }
@@ -728,17 +707,11 @@ class LFPG_BTCAtmView extends ScriptView
     override bool OnClick(Widget w, int x, int y, int button)
     {
         if (!m_IsOpen)
-        {
             return super.OnClick(w, x, y, button);
-        }
         if (!w)
-        {
             return super.OnClick(w, x, y, button);
-        }
         if (button != 0)
-        {
             return super.OnClick(w, x, y, button);
-        }
 
         // Find enclosing ButtonWidget
         Widget check = w;
@@ -747,21 +720,15 @@ class LFPG_BTCAtmView extends ScriptView
         {
             btn = ButtonWidget.Cast(check);
             if (btn)
-            {
                 break;
-            }
             check = check.GetParent();
         }
         if (!btn)
-        {
             return super.OnClick(w, x, y, button);
-        }
 
         LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(GetController());
         if (!ctrl)
-        {
             return super.OnClick(w, x, y, button);
-        }
 
         int uid = btn.GetUserID();
 
@@ -820,42 +787,32 @@ class LFPG_BTCAtmView extends ScriptView
                 {
                     int restoreCol = FindCachedColor(m_HoveredBg);
                     if (restoreCol != 0)
-                    {
                         m_HoveredBg.SetColor(restoreCol);
-                    }
                     m_HoveredBg = null;
                 }
                 float px = 0.0;
                 float py = 0.0;
                 if (BTCAtmPanel)
-                {
                     BTCAtmPanel.GetPos(px, py);
-                }
                 m_DragOffX = x - px;
                 m_DragOffY = y - py;
             }
         }
 
         if (IsInteractiveWidget(w))
-        {
             return false;
-        }
         return true;
     }
 
     override bool OnMouseButtonUp(Widget w, int x, int y, int button)
     {
         if (button == 0)
-        {
             m_Dragging = false;
-        }
         if (!m_IsOpen)
             return false;
 
         if (IsInteractiveWidget(w))
-        {
             return false;
-        }
         return true;
     }
 
@@ -876,9 +833,7 @@ class LFPG_BTCAtmView extends ScriptView
             {
                 baseColor = FindCachedColor(m_HoveredBg);
                 if (baseColor != 0)
-                {
                     m_HoveredBg.SetColor(baseColor);
-                }
                 m_HoveredBg = null;
                 baseColor = 0;
             }
@@ -903,9 +858,7 @@ class LFPG_BTCAtmView extends ScriptView
         {
             baseColor = FindCachedColor(m_HoveredBg);
             if (baseColor != 0)
-            {
                 m_HoveredBg.SetColor(baseColor);
-            }
             m_HoveredBg = null;
         }
         return false;
@@ -927,13 +880,9 @@ class LFPG_BTCAtmView extends ScriptView
         {
             btnCheck = ButtonWidget.Cast(check);
             if (btnCheck)
-            {
                 return false;
-            }
             if (check == HeaderFrame)
-            {
                 return true;
-            }
             check = check.GetParent();
         }
         return false;
@@ -951,14 +900,10 @@ class LFPG_BTCAtmView extends ScriptView
         {
             btnCast = ButtonWidget.Cast(check);
             if (btnCast)
-            {
                 return true;
-            }
             editCast = EditBoxWidget.Cast(check);
             if (editCast)
-            {
                 return true;
-            }
             check = check.GetParent();
         }
         return false;
@@ -975,9 +920,7 @@ class LFPG_BTCAtmView extends ScriptView
         {
             btn = ButtonWidget.Cast(check);
             if (btn)
-            {
                 break;
-            }
             check = check.GetParent();
         }
         if (!btn)
@@ -987,8 +930,7 @@ class LFPG_BTCAtmView extends ScriptView
         if (!child)
             return null;
 
-        ImageWidget bg = ImageWidget.Cast(child);
-        return bg;
+        return ImageWidget.Cast(child);
     }
 
     protected void ClampPanelPos(float inX, float inY, float minY, out float outX, out float outY)
@@ -999,9 +941,7 @@ class LFPG_BTCAtmView extends ScriptView
         float panW = 0.0;
         float panH = 0.0;
         if (BTCAtmPanel)
-        {
             BTCAtmPanel.GetSize(panW, panH);
-        }
 
         float maxX = scrW - panW;
         float maxY = scrH - panH;
@@ -1068,16 +1008,12 @@ class LFPG_BTCAtmView extends ScriptView
             return;
         UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
-        {
             uiMgr.ShowUICursor(true);
-        }
         if (!m_FocusLocked)
         {
             Input inp = g_Game.GetInput();
             if (inp)
-            {
                 inp.ChangeGameFocus(1);
-            }
             m_FocusLocked = true;
         }
         #endif
@@ -1090,16 +1026,12 @@ class LFPG_BTCAtmView extends ScriptView
             return;
         UIManager uiMgr = g_Game.GetUIManager();
         if (uiMgr)
-        {
             uiMgr.ShowUICursor(false);
-        }
         if (m_FocusLocked)
         {
             Input inp = g_Game.GetInput();
             if (inp)
-            {
                 inp.ChangeGameFocus(-1);
-            }
             m_FocusLocked = false;
         }
         #endif
@@ -1141,9 +1073,7 @@ class LFPG_BTCAtmView extends ScriptView
     static void Close()
     {
         if (s_Instance)
-        {
             s_Instance.DoClose();
-        }
     }
 
     static bool IsOpen()
@@ -1171,9 +1101,7 @@ class LFPG_BTCAtmView extends ScriptView
             }
         }
         if (g_Game)
-        {
             s_EscCloseTime = g_Game.GetTickTime();
-        }
         s_Instance.DoClose();
         return true;
     }
@@ -1210,9 +1138,7 @@ class LFPG_BTCAtmView extends ScriptView
             return;
         LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(s_Instance.GetController());
         if (ctrl)
-        {
             ctrl.RefreshFromClientData();
-        }
     }
 
     static void OnPriceUnavailable()
@@ -1223,9 +1149,7 @@ class LFPG_BTCAtmView extends ScriptView
             return;
         LFPG_BTCAtmController ctrl = LFPG_BTCAtmController.Cast(s_Instance.GetController());
         if (ctrl)
-        {
             ctrl.RefreshFromClientData();
-        }
     }
 
     // =========================================================
@@ -1252,9 +1176,7 @@ class LFPG_BTCAtmView extends ScriptView
         m_FadeAlpha = 0.0;
         m_FadingIn = true;
         if (BTCAtmPanel)
-        {
             BTCAtmPanel.SetAlpha(0.0);
-        }
 
         ShowCursor();
 
@@ -1305,9 +1227,7 @@ class LFPG_BTCAtmView extends ScriptView
 
         Widget root = GetLayoutRoot();
         if (root)
-        {
             root.Show(false);
-        }
 
         #ifndef SERVER
         if (m_ControlsLocked && g_Game && g_Game.GetMission())
