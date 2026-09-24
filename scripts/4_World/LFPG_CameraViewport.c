@@ -46,7 +46,6 @@
 
 static const float LFPG_CCTV_SCANLINE_SPACING = 8.0;
 static const float LFPG_CCTV_SCANLINE_ALPHA   = 0.15;
-static const float LFPG_CCTV_SCROLL_SPEED     = 20.0;
 static const float LFPG_CCTV_VIGNETTE_ALPHA   = 0.60;
 static const float LFPG_CCTV_VIGNETTE_W       = 55.0;
 static const float LFPG_CCTV_MAX_DURATION_S   = 120.0;
@@ -83,7 +82,6 @@ class LFPG_CameraViewport
     // ---- Camera (engine-managed via SelectSpectator) ----
     protected Object    m_ViewCamObj;
     protected bool      m_Active;
-    protected float     m_ScanlineOffset;
     protected float     m_ActiveDuration;
 
     // ---- Player reference (guardada antes de SelectSpectator) ----
@@ -156,7 +154,6 @@ class LFPG_CameraViewport
     {
         m_ViewCamObj     = null;
         m_Active         = false;
-        m_ScanlineOffset = 0.0;
         m_CameraLabel    = "";
         m_ActiveDuration = 0.0;
         m_PlayerRef      = null;
@@ -457,7 +454,6 @@ class LFPG_CameraViewport
         LFPG_Util.Debug("[CameraViewport] DIAG: post-EnterCamera OK");
 
         m_Active         = true;
-        m_ScanlineOffset = 0.0;
         m_ActiveDuration = 0.0;
         m_ExitCooldown   = 0;
         m_ExitPhase      = 0;
@@ -756,7 +752,7 @@ class LFPG_CameraViewport
     // =========================================================
     // Cycling
     // =========================================================
-    void CycleNext()
+    protected void CycleBy(int step)
     {
         if (!m_Active)
             return;
@@ -765,9 +761,11 @@ class LFPG_CameraViewport
 
         CommitCurrentAim(true, true);
 
-        int nextIdx = m_CameraIndex + 1;
+        int nextIdx = m_CameraIndex + step;
         if (nextIdx >= m_CameraTotal)
             nextIdx = 0;
+        if (nextIdx < 0)
+            nextIdx = m_CameraTotal - 1;
 
         bool ok = EnterCamera(nextIdx);
         if (ok)
@@ -777,25 +775,14 @@ class LFPG_CameraViewport
         }
     }
 
+    void CycleNext()
+    {
+        CycleBy(1);
+    }
+
     void CyclePrev()
     {
-        if (!m_Active)
-            return;
-        if (m_CameraTotal <= 1)
-            return;
-
-        CommitCurrentAim(true, true);
-
-        int prevIdx = m_CameraIndex - 1;
-        if (prevIdx < 0)
-            prevIdx = m_CameraTotal - 1;
-
-        bool ok = EnterCamera(prevIdx);
-        if (ok)
-        {
-            UpdateOverlayLabel();
-            ShowCycleMessage();
-        }
+        CycleBy(-1);
     }
 
     protected void ShowCycleMessage()
@@ -874,7 +861,6 @@ class LFPG_CameraViewport
 
         m_CameraLabel    = "";
         m_ActiveDuration = 0.0;
-        m_ScanlineOffset = 0.0;
         m_CameraList     = null;
         m_CameraIndex    = 0;
         m_CameraTotal    = 0;
@@ -970,7 +956,6 @@ class LFPG_CameraViewport
 
         m_CameraLabel = "";
         m_ActiveDuration = 0.0;
-        m_ScanlineOffset = 0.0;
         m_YawOffset = 0.0;
         m_PitchOffset = 0.0;
         m_KeyW = false;
@@ -1069,7 +1054,6 @@ class LFPG_CameraViewport
 
             m_CameraLabel    = "";
             m_ActiveDuration = 0.0;
-            m_ScanlineOffset = 0.0;
             m_YawOffset      = 0.0;
             m_PitchOffset    = 0.0;
             m_KeyW = false;
@@ -1158,14 +1142,7 @@ class LFPG_CameraViewport
         if (m_BlinkTimer >= 0.7)
         {
             m_BlinkTimer = 0.0;
-            if (m_RecVisible)
-            {
-                m_RecVisible = false;
-            }
-            else
-            {
-                m_RecVisible = true;
-            }
+            m_RecVisible = !m_RecVisible;
             if (m_wRecLabel)
             {
                 m_wRecLabel.Show(m_RecVisible);
@@ -1204,11 +1181,7 @@ class LFPG_CameraViewport
         }
 
         // ---- WASD camera pan ----
-        bool anyPan = false;
-        if (m_KeyA || m_KeyD || m_KeyW || m_KeyS)
-        {
-            anyPan = true;
-        }
+        bool anyPan = (m_KeyA || m_KeyD || m_KeyW || m_KeyS);
 
         if (anyPan && m_ViewCamObj)
         {
@@ -1263,13 +1236,6 @@ class LFPG_CameraViewport
 
         if (m_AimDirty && !anyPan)
             CommitCurrentAim(false, false);
-
-        // ---- Scanlines advance ----
-        m_ScanlineOffset = m_ScanlineOffset + (LFPG_CCTV_SCROLL_SPEED * timeslice);
-        while (m_ScanlineOffset >= LFPG_CCTV_SCANLINE_SPACING)
-        {
-            m_ScanlineOffset = m_ScanlineOffset - LFPG_CCTV_SCANLINE_SPACING;
-        }
     }
 
     // =========================================================
@@ -1424,22 +1390,16 @@ class LFPG_CameraViewport
     protected ref array<ref LFPG_CameraListEntry> m_CameraList;
     protected vector m_BaseOrientation;
 
-    void LFPG_CameraViewport()
-    {
-    }
+    void LFPG_CameraViewport() {}
 
     static LFPG_CameraViewport Get()
     {
         return null;
     }
 
-    static void Reset()
-    {
-    }
+    static void Reset() {}
 
-    static void SafeAbort()
-    {
-    }
+    static void SafeAbort() {}
 
     bool IsActive()
     {
@@ -1456,9 +1416,7 @@ class LFPG_CameraViewport
         return false;
     }
 
-    void EnterFromList(array<ref LFPG_CameraListEntry> entries)
-    {
-    }
+    void EnterFromList(array<ref LFPG_CameraListEntry> entries) {}
 
     protected bool EnterCamera(int index)
     {
@@ -1470,28 +1428,16 @@ class LFPG_CameraViewport
         return false;
     }
 
-    void HandleKeyUp(int key)
-    {
-    }
+    void HandleKeyUp(int key) {}
 
-    void CycleNext()
-    {
-    }
+    void CycleNext() {}
 
-    void CyclePrev()
-    {
-    }
+    void CyclePrev() {}
 
-    void DoExitCleanup()
-    {
-    }
+    void DoExitCleanup() {}
 
-    void Tick(float timeslice)
-    {
-    }
+    void Tick(float timeslice) {}
 
-    void DrawOverlay()
-    {
-    }
+    void DrawOverlay() {}
 };
 #endif
