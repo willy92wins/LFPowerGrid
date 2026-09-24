@@ -1802,6 +1802,21 @@ class LFPG_RPCServerHandlerImpl
         LFPG_Util.Info(logMsg);
     }
 
+    protected static void PublishOwnerCutDelta(EntityAI owner, array<int> deltaOps, array<ref LFPG_WireData> deltaWires)
+    {
+        LFPG_WireOwnerBase wireOwner = LFPG_WireOwnerBase.Cast(owner);
+        if (wireOwner)
+        {
+            wireOwner.LFPG_CommitWireMutation();
+            LFPG_NetworkManager.Get().BroadcastOwnerWireDelta(owner, deltaOps, deltaWires);
+        }
+        else
+        {
+            owner.SetSynchDirty();
+            LFPG_NetworkManager.Get().BroadcastOwnerWires(owner);
+        }
+    }
+
     static void HandleCutPort(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         if (!sender) return;
@@ -1907,17 +1922,7 @@ class LFPG_RPCServerHandlerImpl
                 }
                 if (changed)
                 {
-                    LFPG_WireOwnerBase portWireOwner = LFPG_WireOwnerBase.Cast(obj);
-                    if (portWireOwner)
-                    {
-                        portWireOwner.LFPG_CommitWireMutation();
-                        LFPG_NetworkManager.Get().BroadcastOwnerWireDelta(obj, portDeltaOps, portDeltaWires);
-                    }
-                    else
-                    {
-                        obj.SetSynchDirty();
-                        LFPG_NetworkManager.Get().BroadcastOwnerWires(obj);
-                    }
+                    PublishOwnerCutDelta(obj, portDeltaOps, portDeltaWires);
                 }
             }
             else
@@ -2056,17 +2061,7 @@ class LFPG_RPCServerHandlerImpl
 
             if (srcChanged)
             {
-                LFPG_WireOwnerBase fallbackWireOwner = LFPG_WireOwnerBase.Cast(srcDev);
-                if (fallbackWireOwner)
-                {
-                    fallbackWireOwner.LFPG_CommitWireMutation();
-                    LFPG_NetworkManager.Get().BroadcastOwnerWireDelta(srcDev, fallbackDeltaOps, fallbackDeltaWires);
-                }
-                else
-                {
-                    srcDev.SetSynchDirty();
-                    LFPG_NetworkManager.Get().BroadcastOwnerWires(srcDev);
-                }
+                PublishOwnerCutDelta(srcDev, fallbackDeltaOps, fallbackDeltaWires);
                 LFPG_NetworkManager.Get().RequestPropagate(srcId);
             }
         }
@@ -2696,12 +2691,10 @@ class LFPG_RPCServerHandlerImpl
         // For each output port, find the wire, follow to target Sorter,
         // then get that Sorter's linked container type name.
         // Hoist all loop variables before the loop (Enforce Script).
-        string destName0 = "";
-        string destName1 = "";
-        string destName2 = "";
-        string destName3 = "";
-        string destName4 = "";
-        string destName5 = "";
+        array<string> destNames = new array<string>;
+        int destSlot = 0;
+        for (destSlot = 0; destSlot < 6; destSlot = destSlot + 1)
+            destNames.Insert("");
 
         array<ref LFPG_WireData> wires = sorter.LFPG_GetWires();
         if (wires)
@@ -2754,13 +2747,7 @@ class LFPG_RPCServerHandlerImpl
                     break;
                 }
 
-                // Assign to the correct dest slot
-                if (oi == 0) { destName0 = resolvedName; }
-                else if (oi == 1) { destName1 = resolvedName; }
-                else if (oi == 2) { destName2 = resolvedName; }
-                else if (oi == 3) { destName3 = resolvedName; }
-                else if (oi == 4) { destName4 = resolvedName; }
-                else if (oi == 5) { destName5 = resolvedName; }
+                destNames.Set(oi, resolvedName);
             }
         }
 
@@ -2771,12 +2758,8 @@ class LFPG_RPCServerHandlerImpl
         rpc.Write(netHigh);
         rpc.Write(filterJSON);
         rpc.Write(containerName);
-        rpc.Write(destName0);
-        rpc.Write(destName1);
-        rpc.Write(destName2);
-        rpc.Write(destName3);
-        rpc.Write(destName4);
-        rpc.Write(destName5);
+        for (destSlot = 0; destSlot < 6; destSlot = destSlot + 1)
+            rpc.Write(destNames[destSlot]);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, sender);
 
         string logMsg = "[SorterConfigRequest] Sent config for ";
@@ -2934,7 +2917,6 @@ class LFPG_RPCServerHandlerImpl
             {
                 containerName = currentLinked.GetDisplayName();
             }
-            ackStatus = LFPG_SORTER_ACK_NONE;
         }
         else if (candidate == currentLinked)
         {
