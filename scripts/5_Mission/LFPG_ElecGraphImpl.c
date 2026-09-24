@@ -982,6 +982,24 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
+    // NetworkID, requeue and sync caches are keyed by device id. The
+    // primary removed node never reaches CleanupOrphanNode, and the
+    // charger timestamp is not covered by the full-rebuild Clear path.
+    protected void DropRemovedNodeMaps(string deviceId)
+    {
+        m_Nodes.Remove(deviceId);
+        m_Outgoing.Remove(deviceId);
+        m_Incoming.Remove(deviceId);
+        m_NodeNetLow.Remove(deviceId);
+        m_NodeNetHigh.Remove(deviceId);
+        m_RequeueEpoch.Remove(deviceId);
+        m_LastSyncPowered.Remove(deviceId);
+        m_LastSyncOverloaded.Remove(deviceId);
+        m_LastSyncEntity.Remove(deviceId);
+        m_ChargerLastChargeSec.Remove(deviceId);
+        m_NodeCount = m_Nodes.Count();
+    }
+
     override void OnDeviceRemoved(string deviceId)
     {
         #ifdef SERVER
@@ -1031,22 +1049,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             }
         }
 
-        m_Nodes.Remove(deviceId);
-        m_Outgoing.Remove(deviceId);
-        m_Incoming.Remove(deviceId);
-        // v0.7.45 (H5): Clean up cached NetworkIDs for the removed node.
-        // Without this, m_NodeNetLow/High grow unbounded on servers with
-        // device turnover. CleanupOrphanNode handles neighbors, but the
-        // primary removed node never passes through that path.
-        m_NodeNetLow.Remove(deviceId);
-        m_NodeNetHigh.Remove(deviceId);
-        m_RequeueEpoch.Remove(deviceId);
-        m_LastSyncPowered.Remove(deviceId);
-        m_LastSyncOverloaded.Remove(deviceId);
-        m_LastSyncEntity.Remove(deviceId);
-        // v5.1: Clean up charger delta-time timestamp for removed node
-        m_ChargerLastChargeSec.Remove(deviceId);
-        m_NodeCount = m_Nodes.Count();
+        DropRemovedNodeMaps(deviceId);
 
         int ai;
         for (ai = 0; ai < affectedNeighbors.Count(); ai = ai + 1)
@@ -1318,6 +1321,18 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // Internal helpers
     // ===========================
 
+    // Live source switch: scripted sources report GetSourceOn; vanilla
+    // energy managers report IsWorking. Missing EM stays off.
+    protected bool ReadLiveSourceOn(EntityAI obj)
+    {
+        if (LFPG_DeviceAPI.IsSource(obj))
+            return LFPG_DeviceAPI.GetSourceOn(obj);
+        ComponentEnergyManager em = obj.GetCompEM();
+        if (em)
+            return em.IsWorking();
+        return false;
+    }
+
     protected void EnsureNode(string deviceId, EntityAI obj)
     {
         #ifdef SERVER
@@ -1354,20 +1369,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
                 node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
-                bool sourceOn = false;
-                if (LFPG_DeviceAPI.IsSource(obj))
-                {
-                    sourceOn = LFPG_DeviceAPI.GetSourceOn(obj);
-                }
-                else
-                {
-                    ComponentEnergyManager emSrc = obj.GetCompEM();
-                    if (emSrc)
-                    {
-                        sourceOn = emSrc.IsWorking();
-                    }
-                }
-                node.m_Powered = sourceOn;
+                node.m_Powered = ReadLiveSourceOn(obj);
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
@@ -1638,18 +1640,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     m_ComponentSizes.Remove(orphanComponent);
             }
 
-            m_Nodes.Remove(deviceId);
-            m_Outgoing.Remove(deviceId);
-            m_Incoming.Remove(deviceId);
-            m_NodeNetLow.Remove(deviceId);
-            m_NodeNetHigh.Remove(deviceId);
-            m_RequeueEpoch.Remove(deviceId);
-            m_LastSyncPowered.Remove(deviceId);
-            m_LastSyncOverloaded.Remove(deviceId);
-            m_LastSyncEntity.Remove(deviceId);
-            // v5.1: Clean up charger delta-time timestamp for removed node
-            m_ChargerLastChargeSec.Remove(deviceId);
-            m_NodeCount = m_Nodes.Count();
+            DropRemovedNodeMaps(deviceId);
         }
         #endif
     }
@@ -3594,18 +3585,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
                 node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
-                bool sourceOn = false;
-                if (LFPG_DeviceAPI.IsSource(obj))
-                {
-                    sourceOn = LFPG_DeviceAPI.GetSourceOn(obj);
-                }
-                else
-                {
-                    ComponentEnergyManager em = obj.GetCompEM();
-                    if (em)
-                        sourceOn = em.IsWorking();
-                }
-                node.m_Powered = sourceOn;
+                node.m_Powered = ReadLiveSourceOn(obj);
             }
             else if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
             {
@@ -3660,20 +3640,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
         {
-            bool sourceOn = false;
-            ComponentEnergyManager em;
-            if (LFPG_DeviceAPI.IsSource(obj))
-            {
-                sourceOn = LFPG_DeviceAPI.GetSourceOn(obj);
-            }
-            else
-            {
-                em = obj.GetCompEM();
-                if (em)
-                    sourceOn = em.IsWorking();
-            }
-
-            node.m_Powered = sourceOn;
+            node.m_Powered = ReadLiveSourceOn(obj);
             node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);
             MarkNodeDirty(nodeId, LFPG_DIRTY_INTERNAL);
             return;
