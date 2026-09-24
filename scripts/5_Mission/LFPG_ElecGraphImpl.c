@@ -982,9 +982,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
-    // NetworkID, requeue and sync caches are keyed by device id. The
-    // primary removed node never reaches CleanupOrphanNode, and the
-    // charger timestamp is not covered by the full-rebuild Clear path.
+#ifdef SERVER
+    // v0.7.45 (H5): Clean up cached NetworkIDs for the removed node.
+    // Without this, m_NodeNetLow/High grow unbounded on servers with
+    // device turnover. CleanupOrphanNode handles neighbors, but the
+    // primary removed node never passes through that path.
     protected void DropRemovedNodeMaps(string deviceId)
     {
         m_Nodes.Remove(deviceId);
@@ -999,6 +1001,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_ChargerLastChargeSec.Remove(deviceId);
         m_NodeCount = m_Nodes.Count();
     }
+#endif
 
     override void OnDeviceRemoved(string deviceId)
     {
@@ -1321,6 +1324,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     // Internal helpers
     // ===========================
 
+#ifdef SERVER
     // Live source switch: scripted sources report GetSourceOn; vanilla
     // energy managers report IsWorking. Missing EM stays off.
     protected bool ReadLiveSourceOn(EntityAI obj)
@@ -1332,6 +1336,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return em.IsWorking();
         return false;
     }
+#endif
 
     protected void EnsureNode(string deviceId, EntityAI obj)
     {

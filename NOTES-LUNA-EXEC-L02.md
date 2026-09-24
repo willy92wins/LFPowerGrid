@@ -11,12 +11,13 @@ Regla por línea: vacía = blanco; si el trim empieza por `//` o `/*`, o la lín
 
 | | total | exec | comentario | blanco | #if* | #endif |
 |---|---:|---:|---:|---:|---:|---:|
-| antes | 4384 | 3105 | 831 | 448 | 34 | 34 |
-| después | 4351 | 3072 | 830 | 449 | 34 | 34 |
+| antes (b0c9438) | 4384 | 3105 | 831 | 448 | 34 | 34 |
+| r0 (81e539c) | 4351 | 3072 | 830 | 449 | 34 | 34 |
+| r1 (este tip) | 4356 | 3076 | 831 | 449 | 36 | 36 |
 
-- Exec: 3105 → 3072 (−33).
-- Comentario eliminado neto: 1 (6 quitados, 5 de contrato en los helpers nuevos). No se vende como exec.
-- Blanco: 448 → 449 (+1 separador entre métodos). No se vende como exec.
+- Exec vs b0c9438: 3105 → 3076 (−29). El dedupe sigue en −33; r1 suma 4 exec (`#ifdef SERVER` + `#endif` × 2).
+- Comentario vs b0c9438: 831 → 831 (0). r0 había dejado −1; r1 restaura el bloque H5 (4 líneas) en lugar del resumen de 3.
+- Blanco vs b0c9438: 448 → 449 (+1 separador). No se vende como exec.
 
 ## Reducciones exec
 
@@ -48,16 +49,29 @@ No se borró ningún método por 0 llamadores. No hay bloque dead que pegar.
 
 ## Preprocesador
 
-Ninguna línea `#if` / `#ifdef` / `#ifndef` / `#else` / `#endif` entra en el diff. Siguen 34 = 34, todos a profundidad 0, un guarda por método como antes.
+r0 no tocó directivas (34 = 34). r1 añade dos pares porque no había un `#ifdef SERVER` adyacente donde meter el helper sin mover otro código a través de una guarda. Los métodos vecinos abren su `#ifdef` dentro del cuerpo, no alrededor de la definición.
+
+| | #if* | #endif | profundidad final |
+|---|---:|---:|---:|
+| b0c9438 | 34 | 34 | 0 |
+| r1 | 36 | 36 | 0 |
+
+Guardas nuevas, las dos a profundidad 0, sin `#else`:
+
+- `DropRemovedNodeMaps`: `#ifdef SERVER` en la línea del método, `#endif` justo después de su cierre.
+- `ReadLiveSourceOn`: igual, entre el separador "Internal helpers" y `EnsureNode`.
 
 Equivalencia:
 
-- Con `SERVER` definido: las llamadas nuevas están dentro de los `#ifdef SERVER` que ya envolvían el código inline (`OnDeviceRemoved`, `CleanupOrphanNode`, `EnsureNode`, `PopulateAllNodeElecStates`, `RefreshSourceState`). Mismo orden de efectos.
-- Sin `SERVER`: esos call sites no se compilan. Los helpers nuevos no llevan guarda, igual que `WouldExceedGlobalNodeLimit` y `ClearPropagationMemos`. Ningún `#else` los llama. Los `return` de cliente de los métodos públicos no cambian.
+- Con `SERVER` definido: las dos definiciones existen. Las cinco llamadas siguen dentro de los `#ifdef SERVER` de `OnDeviceRemoved`, `CleanupOrphanNode`, `EnsureNode`, `PopulateAllNodeElecStates` y `RefreshSourceState`. Mismo orden de efectos que r0.
+- Sin `SERVER`: definiciones y call sites desaparecen juntos. Ningún `#else` cambió. Los `return` de cliente de los métodos públicos no cambian.
+
+## Fix r1 (rechazo Sol de #37)
+
+- B1: definiciones de `DropRemovedNodeMaps` y `ReadLiveSourceOn` envueltas en `#ifdef SERVER` / `#endif`. El cuerpo del dedupe no se movió.
+- B2: el resumen de tres líneas sobre los mapas vuelve al texto H5 de b0c9438 (disparador: el nodo principal no pasa por `CleanupOrphanNode`; coste: `m_NodeNetLow` / `m_NodeNetHigh` crecen sin límite con la rotación de dispositivos).
 
 ## Riesgo residual y no verificado
 
-- Los helpers se compilan también en cliente porque viven fuera del `#ifdef`. No se invocan desde ramas cliente. Si Enforce rechazara `ComponentEnergyManager` o los mapas en el módulo cliente, fallaría el arranque: no hay compilador Enforce en este entorno.
-- `script_validator.py` no está en esta VM (la ruta del Knowledge Pack de Windows no existe). No corrido.
-- Sin carga de mundo y sin prueba in-game.
-- `AGENTS.md` pide no commitear; este brief manda el commit en `chore/luna-exec-l02`. Manda el brief.
+- Sin compilador Enforce y sin arranque in-game. `script_validator.py` no está en esta VM.
+- `AGENTS.md` pide no commitear; el brief manda el commit en `chore/luna-exec-l02`. Manda el brief.
