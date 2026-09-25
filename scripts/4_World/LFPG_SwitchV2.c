@@ -54,32 +54,14 @@ class LFPG_SwitchV2_Kit : LFPG_KitBase
 // ---------------------------------------------------------
 // DEVICE: PASSTHROUGH (1 IN + 1 OUT), latching toggle
 // ---------------------------------------------------------
-class LFPG_SwitchV2 : LFPG_WireOwnerBase
+class LFPG_SwitchV2 : LFPG_SwitchDeviceBase
 {
     // ---- Device-specific SyncVars ----
-    protected bool m_PoweredNet = false;
-    protected bool m_SwitchOn   = false;
-    protected bool m_Overloaded = false;
 
     // ============================================
     // Constructor
     // ============================================
-    void LFPG_SwitchV2()
-    {
-        string varPowered  = "m_PoweredNet";
-        string varSwitch   = "m_SwitchOn";
-        string varOverload = "m_Overloaded";
-        RegisterNetSyncVariableBool(varPowered);
-        RegisterNetSyncVariableBool(varSwitch);
-        RegisterNetSyncVariableBool(varOverload);
 
-        string pIn  = "input_1";
-        string pOut = "output_1";
-        string lIn  = "Input 1";
-        string lOut = "Output 1";
-        LFPG_AddPort(pIn, LFPG_PortDir.IN, lIn);
-        LFPG_AddPort(pOut, LFPG_PortDir.OUT, lOut);
-    }
 
     // ============================================
     // Actions
@@ -93,45 +75,6 @@ class LFPG_SwitchV2 : LFPG_WireOwnerBase
     // ============================================
     // DeviceAPI overrides
     // ============================================
-    override int LFPG_GetDeviceType()
-    {
-        return LFPG_DeviceType.PASSTHROUGH;
-    }
-
-    override bool LFPG_IsSource()
-    {
-        return true;
-    }
-
-    override bool LFPG_GetSourceOn()
-    {
-        return m_PoweredNet;
-    }
-
-    override bool LFPG_IsGateCapable()
-    {
-        return true;
-    }
-
-    override bool LFPG_IsGateOpen()
-    {
-        return m_SwitchOn;
-    }
-
-    override float LFPG_GetConsumption()
-    {
-        return 0.0;
-    }
-
-    override float LFPG_GetCapacity()
-    {
-        return LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
-    }
-
-    override bool LFPG_IsPowered()
-    {
-        return m_PoweredNet;
-    }
 
     override void LFPG_SetPowered(bool powered)
     {
@@ -153,29 +96,10 @@ class LFPG_SwitchV2 : LFPG_WireOwnerBase
         #endif
     }
 
-    override bool LFPG_GetOverloaded()
-    {
-        return m_Overloaded;
-    }
-
-    override void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val)
-        {
-            m_Overloaded = val;
-            SetSynchDirty();
-        }
-        #endif
-    }
-
     // ============================================
     // Device-specific methods
     // ============================================
-    bool LFPG_GetSwitchOn()
-    {
-        return m_SwitchOn;
-    }
+
 
     void LFPG_ToggleSwitch()
     {
@@ -219,47 +143,6 @@ class LFPG_SwitchV2 : LFPG_WireOwnerBase
     // ============================================
     // Hooks: lifecycle
     // ============================================
-    override void LFPG_OnKilled()
-    {
-        #ifdef SERVER
-        bool dirty = false;
-        if (m_PoweredNet)
-        {
-            m_PoweredNet = false;
-            dirty = true;
-        }
-        if (m_SwitchOn)
-        {
-            m_SwitchOn = false;
-            dirty = true;
-        }
-        if (dirty)
-        {
-            SetSynchDirty();
-        }
-        #endif
-    }
-
-    override void LFPG_OnWiresCut()
-    {
-        #ifdef SERVER
-        bool dirty = false;
-        if (m_PoweredNet)
-        {
-            m_PoweredNet = false;
-            dirty = true;
-        }
-        if (m_SwitchOn)
-        {
-            m_SwitchOn = false;
-            dirty = true;
-        }
-        if (dirty)
-        {
-            SetSynchDirty();
-        }
-        #endif
-    }
 
     // ============================================
     // Hook: visual sync (client)
