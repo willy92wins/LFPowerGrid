@@ -6,6 +6,7 @@
 //                       Light effect on/off via m_PoweredNet.
 //
 // v4.0: Migrated from Inventory_Base to LFPG_WireOwnerBase.
+// Lifecycle, ports and SyncVars live in LFPG_LampDeviceBase.
 // =========================================================
 
 static const string LFPG_CEILING_RVMAT_OFF = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light.rvmat";
@@ -25,164 +26,15 @@ class LFPG_CeilingLight_Kit : LFPG_KitBase
 };
 
 // ---------------------------------------------------------
-// DEVICE - PASSTHROUGH : LFPG_WireOwnerBase
+// DEVICE - PASSTHROUGH : LFPG_LampDeviceBase
 // ---------------------------------------------------------
-class LFPG_CeilingLight : LFPG_WireOwnerBase
+class LFPG_CeilingLight : LFPG_LampDeviceBase
 {
-    protected bool m_PoweredNet = false;
-    protected bool m_Overloaded = false;
-
 #ifndef SERVER
-    // Client-side light effect (NOT ref — engine object)
-    protected ScriptedLightBase m_LFPG_Light;
-#endif
-
-    void LFPG_CeilingLight()
-    {
-        string pIn = "input_1";
-        LFPG_AddPort(pIn, LFPG_PortDir.IN, "Input");
-        string pOut = "output_1";
-        LFPG_AddPort(pOut, LFPG_PortDir.OUT, "Output");
-
-        string varP = "m_PoweredNet";
-        RegisterNetSyncVariableBool(varP);
-        string varO = "m_Overloaded";
-        RegisterNetSyncVariableBool(varO);
-    }
-
-    override int LFPG_GetDeviceType() { return LFPG_DeviceType.PASSTHROUGH; }
-    override float LFPG_GetConsumption() { return 10.0; }
-    override float LFPG_GetCapacity() { return 50.0; }
-    override bool LFPG_IsSource() { return true; }
-    override bool LFPG_GetSourceOn() { return m_PoweredNet; }
-    override bool LFPG_IsPowered() { return m_PoweredNet; }
-
-    override void LFPG_SetPowered(bool powered)
-    {
-        #ifdef SERVER
-        if (m_PoweredNet == powered)
-            return;
-        m_PoweredNet = powered;
-        SetSynchDirty();
-        if (LFPG_LOG_LEVEL >= 2)
-        {
-            string dbgMsg = "[LFPG_CeilingLight] SetPowered(";
-            dbgMsg = dbgMsg + powered.ToString();
-            dbgMsg = dbgMsg + ") id=";
-            dbgMsg = dbgMsg + m_DeviceId;
-            LFPG_Util.Debug(dbgMsg);
-        }
-        #endif
-    }
-
-    override bool LFPG_GetOverloaded() { return m_Overloaded; }
-
-    override void LFPG_SetOverloaded(bool val)
-    {
-        #ifdef SERVER
-        if (m_Overloaded != val)
-        {
-            m_Overloaded = val;
-            SetSynchDirty();
-        }
-        #endif
-    }
-
-    // ---- Lifecycle hooks ----
-    override void LFPG_OnKilled()
-    {
-        #ifdef SERVER
-        if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
-        #endif
-        #ifndef SERVER
-        LFPG_DestroyLight();
-        #endif
-    }
-
-    override void LFPG_OnDeleted()
-    {
-        #ifndef SERVER
-        LFPG_DestroyLight();
-        #endif
-    }
-
-    override void LFPG_OnWiresCut()
-    {
-        #ifdef SERVER
-        if (m_PoweredNet) { m_PoweredNet = false; SetSynchDirty(); }
-        #endif
-    }
-
-    // ---- VarSync: light + rvmat (WireOwnerBase hook) ----
-    override void LFPG_OnVarSyncDevice()
-    {
-        #ifndef SERVER
-        if (m_PoweredNet)
-        {
-            LFPG_CreateLight();
-            LFPG_SetRvmatOn();
-        }
-        else
-        {
-            LFPG_DestroyLight();
-            LFPG_SetRvmatOff();
-        }
-        #endif
-    }
-
-    // ---- Client-side light effects ----
-#ifndef SERVER
-    protected void LFPG_CreateLight()
-    {
-        if (m_LFPG_Light)
-            return;
-
-        string memLight = "light";
-        if (MemoryPointExists(memLight))
-        {
-            m_LFPG_Light = LFPG_CeilingLightEffect.Cast(ScriptedLightBase.CreateLightAtObjMemoryPoint(LFPG_CeilingLightEffect, this, memLight));
-        }
-        else
-        {
-            vector lightPos = GetPosition();
-            lightPos[1] = lightPos[1] - 0.15;
-            m_LFPG_Light = LFPG_CeilingLightEffect.Cast(ScriptedLightBase.CreateLight(LFPG_CeilingLightEffect, lightPos));
-            if (m_LFPG_Light)
-            {
-                m_LFPG_Light.AttachOnObject(this);
-            }
-        }
-
-        if (m_LFPG_Light)
-        {
-            m_LFPG_Light.SetLifetime(1000000);
-            m_LFPG_Light.SetEnabled(true);
-        }
-    }
-#endif
-
-#ifndef SERVER
-    protected void LFPG_DestroyLight()
-    {
-        if (!m_LFPG_Light)
-            return;
-
-        m_LFPG_Light.FadeOut();
-        m_LFPG_Light = null;
-    }
-#endif
-
-#ifndef SERVER
-    protected void LFPG_SetRvmatOn()
-    {
-        SetObjectMaterial(0, LFPG_CEILING_RVMAT_ON);
-    }
-#endif
-
-#ifndef SERVER
-    protected void LFPG_SetRvmatOff()
-    {
-        SetObjectMaterial(0, LFPG_CEILING_RVMAT_OFF);
-    }
+    override typename LFPG_GetLightEffectType() { return LFPG_CeilingLightEffect; }
+    // Ceiling mount: without a "light" memory point, drop the light below the fixture.
+    override float LFPG_GetLightFallbackDropY() { return 0.15; }
+    override string LFPG_GetRvmatOn() { return LFPG_CEILING_RVMAT_ON; }
+    override string LFPG_GetRvmatOff() { return LFPG_CEILING_RVMAT_OFF; }
 #endif
 };
