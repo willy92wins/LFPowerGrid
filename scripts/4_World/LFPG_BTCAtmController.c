@@ -576,7 +576,10 @@ class LFPG_BTCAtmController extends ViewController
     // =========================================================
     // RPC senders (client to server) - session-bound mutations
     // =========================================================
-    protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
+    // Wire contract (read by LFPG_BTCHelper server handlers): subId, netLow,
+    // netHigh, amount, [useAccount only when hasUseAccount], serverSessionLow,
+    // serverSessionHigh, sequence. Amount-only messages must NOT carry the bool.
+    protected void SendBTCMutationRpc(int subId, int netLow, int netHigh, int amount, bool hasUseAccount, bool useAccount)
     {
         if (!g_Game)
             return;
@@ -599,103 +602,33 @@ class LFPG_BTCAtmController extends ViewController
         rpc.Write(subId);
         rpc.Write(netLow);
         rpc.Write(netHigh);
-        rpc.Write(btcAmount);
+        rpc.Write(amount);
+        if (hasUseAccount)
+            rpc.Write(useAccount);
         rpc.Write(serverSessionLow);
         rpc.Write(serverSessionHigh);
         rpc.Write(sequence);
         rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+    }
+
+    protected void SendBTCRpc(int subId, int netLow, int netHigh, int btcAmount)
+    {
+        SendBTCMutationRpc(subId, netLow, netHigh, btcAmount, false, false);
     }
 
     protected void SendBTCSellRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
-        if (!g_Game)
-            return;
-
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (!player)
-            return;
-
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        if (!LFPG_BTCAtmClientData.BeginMutation(subId, serverSessionLow, serverSessionHigh, sequence))
-        {
-            if (LFPG_BTCAtmClientData.TakeSessionRefreshRequest())
-                RequestBTCSession(player, netLow, netHigh);
-            return;
-        }
-
-        ScriptRPC rpc = new ScriptRPC();
-        rpc.Write(subId);
-        rpc.Write(netLow);
-        rpc.Write(netHigh);
-        rpc.Write(btcAmount);
-        rpc.Write(useAccount);
-        rpc.Write(serverSessionLow);
-        rpc.Write(serverSessionHigh);
-        rpc.Write(sequence);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        SendBTCMutationRpc(subId, netLow, netHigh, btcAmount, true, useAccount);
     }
 
     protected void SendBTCBuyRpc(int subId, int netLow, int netHigh, int btcAmount, bool useAccount)
     {
-        if (!g_Game)
-            return;
-
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (!player)
-            return;
-
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        if (!LFPG_BTCAtmClientData.BeginMutation(subId, serverSessionLow, serverSessionHigh, sequence))
-        {
-            if (LFPG_BTCAtmClientData.TakeSessionRefreshRequest())
-                RequestBTCSession(player, netLow, netHigh);
-            return;
-        }
-
-        ScriptRPC rpc = new ScriptRPC();
-        rpc.Write(subId);
-        rpc.Write(netLow);
-        rpc.Write(netHigh);
-        rpc.Write(btcAmount);
-        rpc.Write(useAccount);
-        rpc.Write(serverSessionLow);
-        rpc.Write(serverSessionHigh);
-        rpc.Write(sequence);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        SendBTCMutationRpc(subId, netLow, netHigh, btcAmount, true, useAccount);
     }
 
     protected void SendBTCCashRpc(int subId, int netLow, int netHigh, int eurAmount)
     {
-        if (!g_Game)
-            return;
-
-        PlayerBase player = PlayerBase.Cast(g_Game.GetPlayer());
-        if (!player)
-            return;
-
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        if (!LFPG_BTCAtmClientData.BeginMutation(subId, serverSessionLow, serverSessionHigh, sequence))
-        {
-            if (LFPG_BTCAtmClientData.TakeSessionRefreshRequest())
-                RequestBTCSession(player, netLow, netHigh);
-            return;
-        }
-
-        ScriptRPC rpc = new ScriptRPC();
-        rpc.Write(subId);
-        rpc.Write(netLow);
-        rpc.Write(netHigh);
-        rpc.Write(eurAmount);
-        rpc.Write(serverSessionLow);
-        rpc.Write(serverSessionHigh);
-        rpc.Write(sequence);
-        rpc.Send(player, LFPG_RPC_CHANNEL, true, null);
+        SendBTCMutationRpc(subId, netLow, netHigh, eurAmount, false, false);
     }
 
     protected void RequestBTCSession(PlayerBase player, int netLow, int netHigh)
