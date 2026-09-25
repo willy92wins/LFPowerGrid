@@ -205,6 +205,9 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected int m_SchedBtcMs;
     protected int m_SchedBtcIntervalMs;
     protected ref array<Man>      m_ReusableBroadcastPlayers;
+    protected ref array<Man>      m_ReusableBroadcastBatchPlayers;
+    // Non-owning context, set only during synchronous FlushBroadcasts.
+    protected array<Man>          m_ActiveBroadcastBatchPlayers;
     protected ref array<vector>   m_ReusableBroadcastPositions;
     protected ref array<string>   m_ReusableReversePorts;
     protected ref array<EntityAI> m_ReusableCutAllDevices;
@@ -284,6 +287,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_ReusableMovedOldPositions = new array<vector>;
         m_ReusableDisappearedIds = new array<string>;
         m_ReusableBroadcastPlayers = new array<Man>;
+        m_ReusableBroadcastBatchPlayers = new array<Man>;
+        m_ActiveBroadcastBatchPlayers = null;
         m_ReusableBroadcastPositions = new array<vector>;
         m_ReusableReversePorts = new array<string>;
         m_ReusableCutAllDevices = new array<EntityAI>;
@@ -1519,6 +1524,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     }
     override void FlushBroadcasts()
     {
+        if (m_PendingBroadcastLFPG.Count() == 0 && m_PendingOwnerSnapshots.Count() == 0 && m_PendingBroadcastVanilla.Count() == 0)
+            return;
+        m_ReusableBroadcastBatchPlayers.Clear();
+        g_Game.GetPlayers(m_ReusableBroadcastBatchPlayers);
+        m_ActiveBroadcastBatchPlayers = m_ReusableBroadcastBatchPlayers;
         int i;
         for (i = 0; i < m_PendingBroadcastLFPG.Count(); i = i + 1)
         {
@@ -1548,6 +1558,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         m_PendingBroadcastVanilla.Clear();
+        m_ActiveBroadcastBatchPlayers = null;
+        m_ReusableBroadcastBatchPlayers.Clear();
     }
 	protected bool CanReceiveWireBroadcast(PlayerBase player)
 	{
@@ -1561,10 +1573,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 			return false;
 		return true;
 	}
+    protected void LFPG_LoadBroadcastPlayers()
+    {
+        m_ReusableBroadcastPlayers.Clear();
+        if (m_ActiveBroadcastBatchPlayers)
+            m_ReusableBroadcastPlayers.Copy(m_ActiveBroadcastBatchPlayers);
+        else
+            g_Game.GetPlayers(m_ReusableBroadcastPlayers);
+    }
 	protected bool SelectWireBroadcastRecipients(vector ownerPosition)
 	{
-		m_ReusableBroadcastPlayers.Clear();
-		g_Game.GetPlayers(m_ReusableBroadcastPlayers);
+		LFPG_LoadBroadcastPlayers();
 		float maxDistance = LFPG_CULL_DISTANCE_M + 20.0;
 		float maxDistanceSq = maxDistance * maxDistance;
 		for (int playerIndex = m_ReusableBroadcastPlayers.Count() - 1; playerIndex >= 0; playerIndex = playerIndex - 1)
@@ -1737,8 +1756,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             return;
 		if (m_FullSyncInProgress && m_FullSyncPlayer)
 			StoreDeferredOwnerSnapshot(snapshot);
-        m_ReusableBroadcastPlayers.Clear();
-        g_Game.GetPlayers(m_ReusableBroadcastPlayers);
+        LFPG_LoadBroadcastPlayers();
         if (LFPG_LOG_LEVEL >= 2)
         {
             string snapshotMsg = "[BroadcastOwnerSnapshot] owner=" + snapshot.m_OwnerDeviceId + " generation=" + snapshot.m_Generation.ToString() + " jsonLen=" + snapshot.m_JSON.Length().ToString();
