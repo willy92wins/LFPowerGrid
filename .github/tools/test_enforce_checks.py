@@ -104,6 +104,24 @@ class DetectsDefects(unittest.TestCase):
                     b"#endif\n"
                     b"#endif\n"})
 
+    def test_orphan_endif(self):
+        self.assert_fires("PREPROC-BALANCE",
+                          {"a.c": b"#ifdef SERVER\n" + CLEAN + b"#endif\n#endif\n"})
+
+    def test_orphan_else(self):
+        self.assert_fires("PREPROC-BALANCE", {"a.c": CLEAN + b"#else\n"})
+
+    def test_unclosed_ifdef_server(self):
+        self.assert_fires("PREPROC-BALANCE", {"a.c": b"#ifdef SERVER\n" + CLEAN})
+
+    def test_contradictory_guard_is_warning_only(self):
+        """#ifndef X inside #ifdef X is dead code: WARN, not FAIL (yet)."""
+        rc, out = run_on({"a.c": b"#ifdef SERVER\n#ifndef SERVER\n" + CLEAN
+                                 + b"#endif\n#endif\n"})
+        self.assertIn("WARN | PREPROC-CONTRA", out)
+        self.assertNotIn("FAIL |", out)
+        self.assertEqual(rc, 0)
+
     def test_filehandle_numeric_init(self):
         self.assert_fires("FILEHANDLE_INIT",
                           {"a.c": b"class A\n{\n    FileHandle h = 0;\n};\n"})
@@ -151,6 +169,15 @@ class StaysQuiet(unittest.TestCase):
                     b"#else\n"
                     b"class AuditSame { void F() {} };\n"
                     b"#endif\n"})
+
+    def test_preproc_in_comment_or_else_branch_is_quiet(self):
+        """Directives inside comments are not counted; #ifndef X in the #else
+        of #ifdef X is redundant, not contradictory."""
+        rc, out = run_on({"a.c": b"// #endif\n/* #ifdef SERVER */\n"
+                                 b"#ifdef SERVER\n#else\n#ifndef SERVER\n"
+                                 + CLEAN + b"#endif\n#endif\n"})
+        self.assertEqual(rc, 0, out)
+        self.assertIn("FAIL=0  WARN=0", out)
 
     def test_config_cpp_is_not_enforce_script(self):
         """config.cpp repeats nested class names by design (one per entity)."""
