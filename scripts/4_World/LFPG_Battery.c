@@ -144,36 +144,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     override vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint = "";
-        if (portName == LFPG_PORT_INPUT_1)
-        {
-            memPoint = "port_input_0";
-        }
-        else if (portName == LFPG_PORT_OUTPUT_1)
-        {
-            memPoint = "port_output_0";
-        }
-        else
-        {
-            string portPrefix = "port_";
-            memPoint = portPrefix + portName;
-        }
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        vector offset = "0 0.02 0";
-        if (portName == LFPG_PORT_INPUT_1)
-        {
-            offset = "0 0.02 -0.05";
-        }
-        else if (portName == LFPG_PORT_OUTPUT_1)
-        {
-            offset = "0 0.02 0.05";
-        }
-        return ModelToWorld(offset);
+        return LFPG_GetMappedPortWorldPos(portName, 0.02, 0.05, 0.02, true);
     }
 
     // ============================================

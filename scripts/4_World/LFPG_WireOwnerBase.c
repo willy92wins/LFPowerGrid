@@ -288,6 +288,55 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     }
 
     // ============================================
+    // Port world pos for p3ds that number ports _0 while LFPG uses _1.
+    // Shared by Battery/Adapter/MotionSensor/PressurePad/Laser/PushButton
+    // and the switches (B9). Leaves keep LFPG_GetPortWorldPos as a thin
+    // override that only passes their model-space offsets.
+    //   input_1  -> port_input_0,  fallback "0 ioY -ioZ"
+    //   output_1 -> port_output_0, fallback "0 ioY  ioZ"
+    //   other    -> port_<name> (only if probeUnknown), fallback "0 defaultY 0"
+    // No allocations beyond the port_<name> string the leaves already built.
+    // ============================================
+    protected vector LFPG_GetMappedPortWorldPos(string portName, float ioY, float ioZ, float defaultY, bool probeUnknown)
+    {
+        string memPoint = "";
+        bool isInput = (portName == LFPG_PORT_INPUT_1);
+        bool isOutput = (portName == LFPG_PORT_OUTPUT_1);
+        if (isInput)
+        {
+            memPoint = "port_input_0";
+        }
+        else if (isOutput)
+        {
+            memPoint = "port_output_0";
+        }
+        else if (probeUnknown)
+        {
+            string portPrefix = "port_";
+            memPoint = portPrefix + portName;
+        }
+
+        if (memPoint != "")
+        {
+            if (MemoryPointExists(memPoint))
+            {
+                return ModelToWorld(GetMemoryPointPos(memPoint));
+            }
+        }
+
+        vector offset = Vector(0, defaultY, 0);
+        if (isInput)
+        {
+            offset = Vector(0, ioY, -ioZ);
+        }
+        else if (isOutput)
+        {
+            offset = Vector(0, ioY, ioZ);
+        }
+        return ModelToWorld(offset);
+    }
+
+    // ============================================
     // Hooks for concrete device (empty — subclass overrides)
     // ============================================
     void LFPG_OnInitDevice() {}

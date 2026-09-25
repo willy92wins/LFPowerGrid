@@ -138,39 +138,9 @@ class LFPG_MotionSensor : LFPG_WireOwnerBase
     // ============================================
     override vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint = "";
-        string inName = "input_1";
-        string outName = "output_1";
-
-        if (portName == inName)
-        {
-            memPoint = "port_input_0";
-        }
-        else if (portName == outName)
-        {
-            memPoint = "port_output_0";
-        }
-
-        if (memPoint != "")
-        {
-            if (MemoryPointExists(memPoint))
-            {
-                return ModelToWorld(GetMemoryPointPos(memPoint));
-            }
-        }
-
-        // Fallback: hardcoded offsets
-        vector offset = "0 0.02 0";
-        if (portName == inName)
-        {
-            offset = "0 0.02 -0.03";
-        }
-        else if (portName == outName)
-        {
-            offset = "0 0.02 0.03";
-        }
-
-        return ModelToWorld(offset);
+        // probeUnknown=false: only input_1/output_1 are probed as memory points;
+        // any other name goes straight to the hardcoded default offset.
+        return LFPG_GetMappedPortWorldPos(portName, 0.02, 0.03, 0.02, false);
     }
 
     // ============================================
