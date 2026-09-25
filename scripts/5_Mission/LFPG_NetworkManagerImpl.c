@@ -1466,17 +1466,23 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         positions.Insert(position);
         return true;
     }
-    protected void StorePendingOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
+    // Merges snapshot with the one already queued for the same owner in queue and stores the result.
+    // Invariant: combined positions keep insertion order and are deduped: [cut-all previous owner
+    // position,] new targets, previous owner position, previous targets. Exceeding
+    // LFPG_OWNER_SNAPSHOT_MAX_INTEREST_POSITIONS (or a previous broadcast-all) trips broadcastAll and
+    // clears the list. includeCutAllPrevious is only set by the Pending queue; Deferred never folds it.
+    // Returns false (queue untouched) for a null snapshot or empty owner id.
+    protected bool StoreOwnerSnapshotInQueue(TStringManagedRefMap queue, LFPG_OwnerBroadcastSnapshot snapshot, bool includeCutAllPrevious)
     {
         if (!snapshot || snapshot.m_OwnerDeviceId == "")
-            return;
+            return false;
         array<vector> combinedPositions = new array<vector>;
         LFPG_OwnerBroadcastSnapshot previousSnapshot;
         LFPG_OwnerBroadcastSnapshot mergedSnapshot;
         int snapshotIndex;
         int previousIndex;
         bool broadcastAll = snapshot.m_BroadcastAll;
-        if (m_CutAllGraphBatchActive && m_CutAllHasPreviousOwnerPosition)
+        if (includeCutAllPrevious && m_CutAllGraphBatchActive && m_CutAllHasPreviousOwnerPosition)
         {
             if (!AppendOwnerSnapshotPosition(combinedPositions, m_CutAllPreviousOwnerPosition))
                 broadcastAll = true;
@@ -1486,8 +1492,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (!AppendOwnerSnapshotPosition(combinedPositions, snapshot.m_TargetPositions[snapshotIndex]))
                 broadcastAll = true;
         }
-        Managed previousPendingSnapshotRaw;
-        if (m_PendingOwnerSnapshots.Find(snapshot.m_OwnerDeviceId, previousPendingSnapshotRaw) && Class.CastTo(previousSnapshot, previousPendingSnapshotRaw) && previousSnapshot)
+        Managed previousQueuedSnapshotRaw;
+        if (queue.Find(snapshot.m_OwnerDeviceId, previousQueuedSnapshotRaw) && Class.CastTo(previousSnapshot, previousQueuedSnapshotRaw) && previousSnapshot)
         {
             if (previousSnapshot.m_BroadcastAll)
                 broadcastAll = true;
@@ -1503,8 +1509,14 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             combinedPositions.Clear();
         mergedSnapshot = new LFPG_OwnerBroadcastSnapshot(snapshot.m_OwnerDeviceId, snapshot.m_OwnerLow, snapshot.m_OwnerHigh, snapshot.m_JSON, snapshot.m_Generation, snapshot.m_OwnerPosition, combinedPositions);
         mergedSnapshot.m_BroadcastAll = broadcastAll;
-        m_PendingBroadcastLFPG.Remove(snapshot.m_OwnerDeviceId);
-        m_PendingOwnerSnapshots[snapshot.m_OwnerDeviceId] = mergedSnapshot;
+        queue[snapshot.m_OwnerDeviceId] = mergedSnapshot;
+        return true;
+    }
+    protected void StorePendingOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
+    {
+        // A pending snapshot supersedes a plain queued broadcast for the same owner.
+        if (StoreOwnerSnapshotInQueue(m_PendingOwnerSnapshots, snapshot, true))
+            m_PendingBroadcastLFPG.Remove(snapshot.m_OwnerDeviceId);
     }
     override void QueueBroadcastOwnerSnapshot(EntityAI owner, array<vector> targetPositions, bool broadcastAll)
     {
@@ -1754,37 +1766,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     }
     protected void StoreDeferredOwnerSnapshot(LFPG_OwnerBroadcastSnapshot snapshot)
     {
-        if (!snapshot || snapshot.m_OwnerDeviceId == "")
-            return;
-        array<vector> combinedPositions = new array<vector>;
-        LFPG_OwnerBroadcastSnapshot previousSnapshot;
-        LFPG_OwnerBroadcastSnapshot mergedSnapshot;
-        int snapshotIndex;
-        int previousIndex;
-        bool broadcastAll = snapshot.m_BroadcastAll;
-        for (snapshotIndex = 0; snapshotIndex < snapshot.m_TargetPositions.Count() && !broadcastAll; snapshotIndex = snapshotIndex + 1)
-        {
-            if (!AppendOwnerSnapshotPosition(combinedPositions, snapshot.m_TargetPositions[snapshotIndex]))
-                broadcastAll = true;
-        }
-        Managed previousDeferredSnapshotRaw;
-        if (m_DeferredOwnerSnapshots.Find(snapshot.m_OwnerDeviceId, previousDeferredSnapshotRaw) && Class.CastTo(previousSnapshot, previousDeferredSnapshotRaw) && previousSnapshot)
-        {
-            if (previousSnapshot.m_BroadcastAll)
-                broadcastAll = true;
-            if (!broadcastAll && !AppendOwnerSnapshotPosition(combinedPositions, previousSnapshot.m_OwnerPosition))
-                broadcastAll = true;
-            for (previousIndex = 0; previousIndex < previousSnapshot.m_TargetPositions.Count() && !broadcastAll; previousIndex = previousIndex + 1)
-            {
-                if (!AppendOwnerSnapshotPosition(combinedPositions, previousSnapshot.m_TargetPositions[previousIndex]))
-                    broadcastAll = true;
-            }
-        }
-        if (broadcastAll)
-            combinedPositions.Clear();
-        mergedSnapshot = new LFPG_OwnerBroadcastSnapshot(snapshot.m_OwnerDeviceId, snapshot.m_OwnerLow, snapshot.m_OwnerHigh, snapshot.m_JSON, snapshot.m_Generation, snapshot.m_OwnerPosition, combinedPositions);
-        mergedSnapshot.m_BroadcastAll = broadcastAll;
-        m_DeferredOwnerSnapshots[snapshot.m_OwnerDeviceId] = mergedSnapshot;
+        StoreOwnerSnapshotInQueue(m_DeferredOwnerSnapshots, snapshot, false);
     }
     protected void DeferOwnerSnapshot(EntityAI owner, array<ref LFPG_WireData> extraInterestWires)
     {
