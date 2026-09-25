@@ -139,6 +139,22 @@ class LFPG_ServerSettings
     // 1.0 = same as campfire, 1.5 = 50% warmer, 2.0 = double. Campfire = 1.0.
     float FurnaceHeatStrengthMultiplier = 1.25;
 
+    // ---- Heater Heat Emission ----
+    // When true, a powered heater that is switched on warms nearby players,
+    // the same way the furnace does. Defaults ON: warming players is the
+    // whole point of the appliance, unlike the furnace where heat is a
+    // side effect of burning.
+    bool HeaterHeatEnabled = true;
+
+    // Radius (meters) where players receive full warmth.
+    float HeaterHeatFullWarmthRadiusM = 2.0;
+
+    // Radius (meters) where warmth fades to zero. Must be > FullWarmthRadiusM.
+    float HeaterHeatFadeOutRadiusM = 4.0;
+
+    // Heat intensity as a multiplier of a vanilla campfire.
+    float HeaterHeatStrengthMultiplier = 1.0;
+
     void LFPG_ServerSettings()
     {
         VanillaCustomConsumption = new array<ref LFPG_VanillaConsumptionEntry>;
@@ -496,6 +512,52 @@ class LFPG_Settings
             msg = msg + floatVal.ToString();
             LFPG_Util.Warn(msg);
 			settings.FurnaceHeatStrengthMultiplier = floatVal;
+        }
+
+        // ---- Heater heat emission validation ----
+        floatVal = ClampFloat(settings.HeaterHeatFullWarmthRadiusM, LFPG_SETTINGS_MIN_HEAT_RADIUS, LFPG_SETTINGS_MAX_HEAT_FULL_R);
+        if (floatVal != settings.HeaterHeatFullWarmthRadiusM)
+        {
+            msg = "Settings: HeaterHeatFullWarmthRadiusM=";
+            msg = msg + settings.HeaterHeatFullWarmthRadiusM.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            settings.HeaterHeatFullWarmthRadiusM = floatVal;
+        }
+
+        floatVal = ClampFloat(settings.HeaterHeatFadeOutRadiusM, LFPG_SETTINGS_MIN_HEAT_RADIUS, LFPG_SETTINGS_MAX_HEAT_FADE_R);
+        if (floatVal != settings.HeaterHeatFadeOutRadiusM)
+        {
+            msg = "Settings: HeaterHeatFadeOutRadiusM=";
+            msg = msg + settings.HeaterHeatFadeOutRadiusM.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            settings.HeaterHeatFadeOutRadiusM = floatVal;
+        }
+
+        // Ensure FullWarmth < FadeOut
+        if (settings.HeaterHeatFullWarmthRadiusM >= settings.HeaterHeatFadeOutRadiusM)
+        {
+            msg = "Settings: HeaterHeatFullWarmthRadiusM (";
+            msg = msg + settings.HeaterHeatFullWarmthRadiusM.ToString();
+            msg = msg + ") must be < FadeOutRadiusM (";
+            msg = msg + settings.HeaterHeatFadeOutRadiusM.ToString();
+            msg = msg + "). Adjusting FadeOut to Full+2.";
+            LFPG_Util.Warn(msg);
+            settings.HeaterHeatFadeOutRadiusM = settings.HeaterHeatFullWarmthRadiusM + 2.0;
+        }
+
+        floatVal = ClampFloat(settings.HeaterHeatStrengthMultiplier, LFPG_SETTINGS_MIN_HEAT_MULT, LFPG_SETTINGS_MAX_HEAT_MULT);
+        if (floatVal != settings.HeaterHeatStrengthMultiplier)
+        {
+            msg = "Settings: HeaterHeatStrengthMultiplier=";
+            msg = msg + settings.HeaterHeatStrengthMultiplier.ToString();
+            msg = msg + " clamped to ";
+            msg = msg + floatVal.ToString();
+            LFPG_Util.Warn(msg);
+            settings.HeaterHeatStrengthMultiplier = floatVal;
         }
     }
 

@@ -34,6 +34,9 @@ modded class MissionBaseWorld
     // this one is reached from client code, so both missions override it.
     LFPG_NetworkManager LFPG_CreateNetworkManager() { return null; }
 
+    // Both gameplay missions supply server actions, including offline sessions.
+    LFPG_ServerActions LFPG_CreateServerActions() { return null; }
+
     // Server RPC handlers live in the mission arena; the World arena only
     // carries this seam. Base is a no-op so a client mission drops silently.
     void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx) { }

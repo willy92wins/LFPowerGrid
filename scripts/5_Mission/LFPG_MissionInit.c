@@ -83,6 +83,8 @@ modded class MissionServer
 
     override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
 
+    override LFPG_ServerActions LFPG_CreateServerActions() { return new LFPG_ServerActionsImpl(); }
+
     override void LFPG_DispatchServerRPC(PlayerBase player, PlayerIdentity sender, int subId, ParamsReadContext ctx)
     {
         LFPG_RPCServerHandlerImpl.Dispatch(player, sender, subId, ctx);
@@ -123,6 +125,10 @@ modded class MissionServer
 modded class MissionGameplay
 {
     override LFPG_NetworkManager LFPG_CreateNetworkManager() { return new LFPG_NetworkManagerImpl(); }
+
+    // Offline sessions run MissionGameplay without a MissionServer, so the
+    // factory has to answer here too or a heater never heats in singleplayer.
+    override LFPG_ServerActions LFPG_CreateServerActions() { return new LFPG_ServerActionsImpl(); }
 
     protected bool m_LFPG_WasActive      = false;
     protected bool m_LFPG_SyncRequested   = false;

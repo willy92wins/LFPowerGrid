@@ -94,6 +94,9 @@ modded class ActionConstructor
         // --- Fridge ---
         actions.Insert(LFPG_ActionToggleFridgeDoor);
 
+        // --- Heater ---
+        actions.Insert(LFPG_ActionToggleHeater);
+
         // --- Electric Stove ---
         actions.Insert(LFPG_ActionToggleBurner0);
         actions.Insert(LFPG_ActionToggleBurner1);
