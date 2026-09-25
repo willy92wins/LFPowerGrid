@@ -1720,11 +1720,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #endif
     }
 
-	
-	
-	
-	
-	
+
+
+
+
+
     // ===========================
     // Public accessors
     // ===========================
@@ -4001,7 +4001,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             overloaded = true;
         }
 
-		// Pass 2: Snapshot entry allocations and assign the hard portion.
+		// Pass 2: Hard-only allocations are final and can be compared inline.
+		bool compareInline = totalSoftDemand <= LFPG_PROPAGATION_EPSILON;
 		m_PreviousAllocations.Clear();
         // v2.0: When soft demand exists and not overloaded, allocate only
         // the hard portion per edge. Soft surplus handled in Pass 3.
@@ -4012,14 +4013,16 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         for (ai = 0; ai < edgeCount; ai = ai + 1)
         {
             m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
-			m_PreviousAllocations.Insert(0.0);
+			if (!compareInline)
+				m_PreviousAllocations.Insert(0.0);
             ref LFPG_ElecEdge allocEdge = outEdges[ai];
             if (!allocEdge)
                 continue;
             if ((allocEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
                 continue;
 
-			m_PreviousAllocations[ai] = allocEdge.m_AllocatedPower;
+			if (!compareInline)
+				m_PreviousAllocations[ai] = allocEdge.m_AllocatedPower;
             float newAlloc = 0.0;
             if (!overloaded)
             {
@@ -4045,6 +4048,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     // No soft demand anywhere → full demand (existing behavior).
                     newAlloc = allocEdge.m_Demand;
                 }
+            }
+            if (compareInline && !m_AllocChanged)
+            {
+                float hardDelta = newAlloc - allocEdge.m_AllocatedPower;
+                if (hardDelta < 0.0)
+                    hardDelta = -hardDelta;
+                if (hardDelta > LFPG_PROPAGATION_EPSILON)
+                    m_AllocChanged = true;
             }
             allocEdge.m_AllocatedPower = newAlloc;
             totalAllocated = totalAllocated + newAlloc;
@@ -4098,28 +4109,31 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             }
         }
 
-		// Only the final allocation can trigger downstream re-enqueue.
-		LFPG_ElecEdge finalEdge;
-		float finalDelta;
-		for (int ci = 0; ci < edgeCount; ci = ci + 1)
+		if (!compareInline)
 		{
-			if (m_AllocChanged)
-				break;
-			m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
-			finalEdge = outEdges[ci];
-			if (!finalEdge)
-				continue;
-			if ((finalEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
-				continue;
+			// Only the final allocation can trigger downstream re-enqueue.
+			LFPG_ElecEdge finalEdge;
+			float finalDelta;
+			for (int ci = 0; ci < edgeCount; ci = ci + 1)
+			{
+				if (m_AllocChanged)
+					break;
+				m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+				finalEdge = outEdges[ci];
+				if (!finalEdge)
+					continue;
+				if ((finalEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+					continue;
 
-			finalDelta = finalEdge.m_AllocatedPower - m_PreviousAllocations[ci];
-			if (finalDelta < 0.0)
-			{
-				finalDelta = -finalDelta;
-			}
-			if (finalDelta > LFPG_PROPAGATION_EPSILON)
-			{
-				m_AllocChanged = true;
+				finalDelta = finalEdge.m_AllocatedPower - m_PreviousAllocations[ci];
+				if (finalDelta < 0.0)
+				{
+					finalDelta = -finalDelta;
+				}
+				if (finalDelta > LFPG_PROPAGATION_EPSILON)
+				{
+					m_AllocChanged = true;
+				}
 			}
 		}
 
