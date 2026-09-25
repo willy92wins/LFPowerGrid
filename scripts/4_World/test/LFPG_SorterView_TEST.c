@@ -137,19 +137,15 @@ class LFPG_SorterScaleContext_TEST extends LFPG_UIScaler
 	}
 };
 
-class LFPG_SorterView_TEST extends ScriptView
+class LFPG_SorterView_TEST extends LFPG_FloatingViewBase
 {
     protected static ref LFPG_SorterView_TEST s_Instance;
     protected static int s_PerfDiagConstructionCount;
     // A7: ESC timestamp guard (prevents engine pause menu on release)
     protected static float s_EscCloseTime = 0.0;
-    protected bool m_IsOpen;
     protected bool m_FocusLocked;
 
     // ── Drag state ──
-    protected bool m_Dragging;
-    protected float m_DragOffX;
-    protected float m_DragOffY;
 
     // ── Hover color cache (v2.2, M4: per-widget via SetUserData) ──
     // Strong refs to prevent GC — SetUserData does NOT hold strong ref!
@@ -163,7 +159,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // weak ref by design (no `ref`); destroyed widgets nullify on their own.
     protected ref array<Widget> m_TintedWidgets;
     // Currently hovered bg (null if none)
-    protected ImageWidget m_HoveredBg;
     // N3: Tracks whether controls are enabled (unpaired = false).
     // Set from Controller via static setter; read by OnMouseEnter.
     protected bool m_ControlsEnabled;
@@ -712,8 +707,6 @@ class LFPG_SorterView_TEST extends ScriptView
         string wn = "";
         Widget btn = null;
 
-
-
         // Category buttons (200+i)
         int ci = 0;
         string catPrefix = "CatBtn";
@@ -911,7 +904,7 @@ class LFPG_SorterView_TEST extends ScriptView
     }
 
     // M4: O(1) color retrieval via GetUserData — replaces O(n) array scan
-    protected int FindCachedColor(Widget w)
+    override protected int FindCachedColor(Widget w)
     {
         if (!w)
             return 0;
@@ -947,72 +940,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // =========================================================
     // Drag: MouseDown on header starts drag (Bug #4)
     // =========================================================
-    override bool OnMouseButtonDown(Widget w, int x, int y, int button)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        // Header drag (LMB only)
-        if (button == 0)
-        {
-            if (IsHeaderWidget(w))
-            {
-                m_Dragging = true;
-                // FIX 4: Restore hover color before drag moves panel
-                if (m_HoveredBg)
-                {
-                    int restoreCol = FindCachedColor(m_HoveredBg);
-                    if (restoreCol != 0)
-                    {
-                        m_HoveredBg.SetColor(restoreCol);
-                    }
-                    m_HoveredBg = null;
-                }
-                float px = 0.0;
-                float py = 0.0;
-                if (SorterPanel)
-                {
-                    SorterPanel.GetPos(px, py);
-                }
-                m_DragOffX = x - px;
-                m_DragOffY = y - py;
-            }
-        }
-
-        // v2.6 fix: If the click landed on an interactive widget
-        // (ButtonWidget or EditBoxWidget), return false so the widget's
-        // internal handler can process it → OnClick → Relay_Command.
-        // Returning true was consuming the event BEFORE ButtonWidget
-        // could generate OnClick, breaking ALL button clicks.
-        // ChangeGameFocus(1) + SetDisabled(true) already prevent
-        // game-side click-through (movement, attacks, interactions).
-        if (IsInteractiveWidget(w))
-        {
-            return false;
-        }
-
-        // Consume non-interactive clicks (panel bg, headers, labels)
-        // so mouse events don't leak to game layer.
-        return true;
-    }
-
-    override bool OnMouseButtonUp(Widget w, int x, int y, int button)
-    {
-        if (button == 0)
-        {
-            m_Dragging = false;
-        }
-        if (!m_IsOpen)
-            return false;
-
-        // v2.6 fix: Let interactive widgets receive mouse-up too
-        // (ButtonWidget needs both down+up to fire OnClick).
-        if (IsInteractiveWidget(w))
-        {
-            return false;
-        }
-        return true;
-    }
 
     // =========================================================
     // v2.7: Manual OnClick dispatch — robust fallback.
@@ -1140,67 +1067,14 @@ class LFPG_SorterView_TEST extends ScriptView
 
     // Walk the parent chain to see if widget is in the HeaderFrame
     // Stops if we hit a ButtonWidget (don't drag on buttons inside header)
-    protected bool IsHeaderWidget(Widget w)
-    {
-        if (!w)
-            return false;
-        if (!HeaderFrame)
-            return false;
 
-        Widget check = w;
-        ButtonWidget btnCheck = null;
-        while (check)
-        {
-            // If we hit a button first, it's a button click, not drag
-            btnCheck = ButtonWidget.Cast(check);
-            if (btnCheck)
-            {
-                return false;
-            }
-            if (check == HeaderFrame)
-            {
-                return true;
-            }
-            check = check.GetParent();
-        }
-        return false;
-    }
 
     // v2.6: Walk the parent chain to check if w is (or is inside)
     // a ButtonWidget, EditBoxWidget, or ScrollWidget.
     // Used by OnMouseButtonDown/Up to decide whether to consume
     // the event (return true) or let the widget handle it
     // (return false → Relay_Command / scroll / text input fires).
-    protected bool IsInteractiveWidget(Widget w)
-    {
-        if (!w)
-            return false;
 
-        Widget check = w;
-        ButtonWidget btnCast = null;
-        EditBoxWidget editCast = null;
-        ScrollWidget scrollCast = null;
-        while (check)
-        {
-            btnCast = ButtonWidget.Cast(check);
-            if (btnCast)
-            {
-                return true;
-            }
-            editCast = EditBoxWidget.Cast(check);
-            if (editCast)
-            {
-                return true;
-            }
-            scrollCast = ScrollWidget.Cast(check);
-            if (scrollCast)
-            {
-                return true;
-            }
-            check = check.GetParent();
-        }
-        return false;
-    }
 
     // =========================================================
     // M5: DPI-safe position clamp — shared between CenterPanel and drag.
@@ -1208,71 +1082,6 @@ class LFPG_SorterView_TEST extends ScriptView
     // At DPI > 100%, physical screen is larger than logical viewport.
     // Caps ensure panel stays visible regardless of DPI.
     // =========================================================
-    protected void ClampPanelPos(float inX, float inY, float minY, out float outX, out float outY)
-    {
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float panW = 0.0;
-        float panH = 0.0;
-        if (SorterPanel)
-        {
-            SorterPanel.GetSize(panW, panH);
-        }
-
-        // DPI-safe max — at DPI > 100%, physical > logical viewport
-        float maxX = scrW - panW;
-        float maxY = scrH - panH;
-        float dpiCapX = panW;
-        float dpiCapY = panH * 0.5;
-        if (maxX > dpiCapX)
-        {
-            maxX = dpiCapX;
-        }
-        if (maxY > dpiCapY)
-        {
-            maxY = dpiCapY;
-        }
-        // At very low resolutions, max could be < min
-        if (maxX < 0.0)
-        {
-            maxX = 0.0;
-        }
-        if (maxY < minY)
-        {
-            maxY = minY;
-        }
-
-        outX = inX;
-        outY = inY;
-        if (outX < 0.0) { outX = 0.0; }
-        if (outY < minY) { outY = minY; }
-        if (outX > maxX) { outX = maxX; }
-        if (outY > maxY) { outY = maxY; }
-    }
-
-    protected void CenterPanel()
-    {
-        if (!SorterPanel)
-            return;
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float panW = 0.0;
-        float panH = 0.0;
-        SorterPanel.GetSize(panW, panH);
-
-        // Ideal centered position
-        float cx = (scrW - panW) * 0.5;
-        float cy = (scrH - panH) * 0.5;
-
-        // M5: Clamp via shared helper (minY=0 for centering)
-        float clampedX = 0.0;
-        float clampedY = 0.0;
-        float minY = 0.0;
-        ClampPanelPos(cx, cy, minY, clampedX, clampedY);
-        SorterPanel.SetPos(clampedX, clampedY);
-    }
 
     // =========================================================
     // Pairing state visual update (Bug #5)
@@ -1477,15 +1286,7 @@ class LFPG_SorterView_TEST extends ScriptView
     // A7: ESC cooldown check — true if UI was closed < 200ms ago
     static bool IsEscCooldown()
     {
-        if (s_EscCloseTime <= 0.0)
-            return false;
-        if (!g_Game)
-            return false;
-        float now = g_Game.GetTickTime();
-        float elapsed = now - s_EscCloseTime;
-        if (elapsed < 0.2)
-            return true;
-        return false;
+        return LFPG_FloatingViewBase.LFPG_SharedEscCooldown(s_EscCloseTime);
     }
 
     // S2 fix: Cleanup deletes instance properly (prevents leak).
@@ -1835,108 +1636,14 @@ class LFPG_SorterView_TEST extends ScriptView
     // =========================================================
     // Hover feedback (v2.2) — lighten button bg on mouse enter
     // =========================================================
-    override bool OnMouseEnter(Widget w, int x, int y)
-    {
-        if (!m_IsOpen)
-            return false;
-        // N3: No hover flash on disabled/dimmed buttons
-        if (!m_ControlsEnabled)
-            return false;
-
-        ImageWidget bg = FindButtonBg(w);
-        int baseColor = 0;
-        int hoverColor = 0;
-        if (bg)
-        {
-            // Restore previous hover first (guards against Enter-before-Leave race)
-            if (m_HoveredBg && m_HoveredBg != bg)
-            {
-                baseColor = FindCachedColor(m_HoveredBg);
-                if (baseColor != 0)
-                {
-                    m_HoveredBg.SetColor(baseColor);
-                }
-                m_HoveredBg = null;
-                baseColor = 0;
-            }
-
-            baseColor = FindCachedColor(bg);
-            if (baseColor != 0)
-            {
-                m_HoveredBg = bg;
-                hoverColor = LightenARGB(baseColor, 20);
-                bg.SetColor(hoverColor);
-            }
-        }
-        return false;
-    }
-
-    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
-    {
-        // FIX 5: Guard symmetric with OnMouseEnter
-        if (!m_IsOpen)
-            return false;
-
-        int baseColor = 0;
-        if (m_HoveredBg)
-        {
-            baseColor = FindCachedColor(m_HoveredBg);
-            if (baseColor != 0)
-            {
-                m_HoveredBg.SetColor(baseColor);
-            }
-            m_HoveredBg = null;
-        }
-        return false;
-    }
 
     // Walk up from w to find enclosing ButtonWidget, then return first ImageWidget child
-    protected ImageWidget FindButtonBg(Widget w)
-    {
-        if (!w)
-            return null;
 
-        Widget check = w;
-        ButtonWidget btn = null;
-        while (check)
-        {
-            btn = ButtonWidget.Cast(check);
-            if (btn)
-            {
-                break;
-            }
-            check = check.GetParent();
-        }
-
-        if (!btn)
-            return null;
-
-        // First child is the Bg ImageWidget
-        Widget child = btn.GetChildren();
-        if (!child)
-            return null;
-
-        ImageWidget bg = ImageWidget.Cast(child);
-        return bg;
-    }
 
     // Lighten an ARGB color by adding 'amount' to RGB channels (clamped to 255)
     static int LightenARGB(int color, int amount)
     {
-        int a = (color >> 24) & 0xFF;
-        int r = (color >> 16) & 0xFF;
-        int g = (color >> 8) & 0xFF;
-        int b = color & 0xFF;
-
-        r = r + amount;
-        g = g + amount;
-        b = b + amount;
-
-        if (r > 255) { r = 255; }
-        if (g > 255) { g = 255; }
-        if (b > 255) { b = 255; }
-
-        return (a << 24) | (r << 16) | (g << 8) | b;
+        return LFPG_FloatingViewBase.LFPG_SharedLightenARGB(color, amount);
     }
 
     // =========================================================
@@ -2255,5 +1962,21 @@ class LFPG_SorterView_TEST extends ScriptView
 
     // [IS2 cleanup] Sprint 1 accessors deleted — controller now caches
     // widgets directly in m_*_TEST fields, no view-side accessors needed.
+    override protected Widget LFPG_ViewPanel()
+    {
+        return SorterPanel;
+    }
+    override protected Widget LFPG_ViewHeader()
+    {
+        return HeaderFrame;
+    }
+    override protected bool LFPG_ViewIncludesScroll()
+    {
+        return true;
+    }
+    override protected bool LFPG_ViewAllowsHover()
+    {
+        return m_ControlsEnabled;
+    }
 };
 #endif
