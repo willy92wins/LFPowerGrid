@@ -1,0 +1,24 @@
+# LFPowerGrid - carpeta compilable.
+#
+# El fuente del mod SI se versiona aqui, assets binarios incluidos: es lo que
+# AddonBuilder binariza. Lo que no entra es el PRODUCTO del build.
+#
+# Que empaqueta AddonBuilder lo decide `include.lst`
+# (*.c;*.asi;*.anm;*.paa;*.rvmat;*.layout;*.ogg;*.ptc;*.csv), asi que los .md de
+# notas, `reviews/`, `harness/` y `.github/` viven aqui sin llegar al PBO.
+
+# --- Producto del build: ~100 MB, se regenera, y su firma ----------------
+# El par PBO+bisign de la raiz se deja a proposito en disco (decision del dueno,
+# 2026-05-20) pero no se versiona.
+*.pbo
+*.bisign
+
+# --- Indices y copias que dejan los despachos por worktree --------------
+.git-index-*
+.publish-*/
+.fixes/
+.lane/
+
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.pyc

@@ -97,3 +97,42 @@ Ramas vivas en `origin`: `chore/luna-reduce-loc-l02`, `chore/luna-reduce-loc-l05
 | `lane/hx3b-models` | `5e4b5ebf3888fd09bd9715a862836bb5835c8b2c` | 2026-09-16 | vacia | main | — | HX3b: modelos de paridad del sorter manual (F07) y del tick por fases  |
 | `lane/hx3c-smoke-power` | `34472f70f137250e6c6205c1c6891afbb195b372` | 2026-09-16 | vacia | main | — | HX3c: perfil de potencia viable para el smoke de fixture_grid |
 
+## Resultado del cierre — 2026-09-26
+
+De las 65 ramas del mod y 9 de `_dev` que lista la tabla de arriba, **quedan vivas 3 y
+1**: `main`, `feat/heater` y `lane/pr4-estado` en el mod, `main` en `_dev`. Las otras 70
+se cerraron, cada una con una prueba comprobada contra git en el momento de borrarla:
+
+| prueba | ramas | que significa |
+|---|---|---|
+| contenida en un tip que se queda | 36 | su punta es ancestro de `main`, `feat/heater` o `lane/pr4-estado`: no se pierde ni un commit |
+| parche ya en main | 14 | entraron por squash-merge (PR MERGED): el commit original queda fuera de toda ref, su contenido esta en `main` |
+| congelada en etiqueta | 5 | trabajo rechazado o candidato retirado, ver mas abajo |
+
+Antes de borrar se retiraron **65 worktrees de trabajo** que tenian esas ramas
+retenidas — `git branch -D` se niega mientras un worktree la ocupa. Vivian en `%TEMP%`
+(`lfpg-olas-0-1-wt`, `orq-dispatch/lfpg-luna-reduce-loc-*`, el scratchpad de la sesion)
+y sumaban **23,8 GB**. Se comprobo antes de tirarlos que no llevaban trabajo propio: sus
+360 cambios pendientes eran borrados de ficheros de log que git si tiene, y los 14
+ficheros sin versionar de `wt/cuta`, `wt/cutacc` y `wt/cutent` son los mismos documentos
+ya comiteados en `_dev/reviews/2026-09-17-*`, identicos byte a byte salvo el BOM.
+
+### Etiquetas de archivo
+
+| etiqueta | era | por que se congela |
+|---|---|---|
+| `archive/rc-1.2.5-b` | `rc/1.2.5-b` | candidato de sentada marcado «NO fusionar»; la 1.2.5 salio por `3e5ab8a` |
+| `archive/lane-fixes-20260918` | `lane/fixes-20260918` | FIX-2, reconocer kits por clase base: el dueno eligio lo contrario (`44cfb86`) |
+| `archive/chore-luna-reduce-loc-l02` | esa rama | PR #15 CERRADO; solo se acepto la parte de LOC ejecutable, por #37 |
+| `archive/chore-luna-reduce-loc-l05` | esa rama | PR #18 CERRADO; la parte ejecutable entro por #36 |
+| `archive/chore-luna-reduce-loc-l10` | esa rama | PR #23 CERRADO; la parte ejecutable entro por #38 |
+| `archive/feat-heater` | sigue siendo rama | seguro: el calefactor no esta en el remoto |
+| `archive/lane-pr4-estado` | sigue siendo rama | seguro: el recorte de huella no esta en el remoto |
+
+Para devolver cualquiera a la vida: `git branch <nombre> <sha de la tabla de arriba>`.
+
+### Lo que sigue en el remoto
+
+`origin` conserva `main` y las tres ramas de los PRs cerrados sin fusionar
+(`chore/luna-reduce-loc-l02`, `-l05`, `-l10`). Borrar esas tres del remoto es la unica
+parte de este cierre que no se hizo: es una accion hacia fuera y la decide el dueno.
