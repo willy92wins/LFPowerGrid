@@ -72,9 +72,6 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
     protected int   m_StoredEnergyX10   = 0;
 	protected int m_MaxStoredEnergyX10 = 0;
     protected int   m_ChargeRateX10    = 0;
-    #ifndef SERVER
-    protected int   m_PerfDiagChargeRateDirtyCount = 0;
-    #endif
 
     // ---- Internal state (server-only, not synced) ----
     protected EntityAI m_AttachedBattery;
@@ -653,20 +650,6 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
 
         m_ChargeRateX10 = rateX10;
         SetSynchDirty();
-
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagChargeRateDirtyCount = m_PerfDiagChargeRateDirtyCount + 1;
-            string perfDiag = "LFPG_PERFDIAG battery_dirty count=";
-            perfDiag = perfDiag + m_PerfDiagChargeRateDirtyCount.ToString();
-            perfDiag = perfDiag + " deviceId=";
-            perfDiag = perfDiag + m_DeviceId;
-            perfDiag = perfDiag + " rateX10=";
-            perfDiag = perfDiag + rateX10.ToString();
-            Print(perfDiag);
-        }
-        #endif
         #endif
     }
 

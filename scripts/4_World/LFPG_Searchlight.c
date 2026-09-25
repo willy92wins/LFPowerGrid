@@ -50,12 +50,6 @@ class LFPG_Searchlight : LFPG_DeviceBase
     protected float m_SplashY    = 0.0;
     protected float m_SplashZ    = 0.0;
     protected float m_SplashRaycastLastMs = -1.0;
-    #ifndef SERVER
-    protected int m_PerfDiagAimCommitCount;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSplashRaycastCount;
-    #endif
 
     // ---- Server-only: operator tracking (NOT SyncVars, NOT persisted) ----
     protected int m_OperatorNetLow  = 0;
@@ -651,26 +645,6 @@ class LFPG_Searchlight : LFPG_DeviceBase
     {
         #ifdef SERVER
         SetSynchDirty();
-
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagAimCommitCount = m_PerfDiagAimCommitCount + 1;
-            if (splashRaycasted)
-            {
-                m_PerfDiagSplashRaycastCount = m_PerfDiagSplashRaycastCount + 1;
-            }
-            string perfAim = "LFPG_PERFDIAG searchlight_commit count=";
-            perfAim = perfAim + m_PerfDiagAimCommitCount.ToString();
-            perfAim = perfAim + " raycast_count=";
-            perfAim = perfAim + m_PerfDiagSplashRaycastCount.ToString();
-            perfAim = perfAim + " raycasted=";
-            perfAim = perfAim + splashRaycasted.ToString();
-            perfAim = perfAim + " deviceId=";
-            perfAim = perfAim + m_DeviceId;
-            Print(perfAim);
-        }
-        #endif
         #endif
     }
 

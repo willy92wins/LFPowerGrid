@@ -120,23 +120,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected ref array<EntityAI> m_TickDirtySources;
     protected ref InventoryLocation m_SorterMoveSourceLocation;
     protected ref InventoryLocation m_SorterMoveDestinationLocation;
-    #ifndef SERVER
-    protected int m_PerfDiagSorterDestDirtyCount;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSorterSourceDirtyCount;
-    #endif
 	protected ref array<ref LFPG_SorterResumeState> m_SorterResumes;
 	protected ref array<EntityAI> m_SorterOutputContainers;
-    #ifndef SERVER
-    protected int m_PerfDiagSorterRuleChecks;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSorterConfigMisses;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSorterDeferrals;
-    #endif
     protected ref array<EntityAI> m_RegisteredSensors;
     protected ref array<EntityAI> m_RegisteredPads;
     protected ref array<EntityAI> m_RegisteredLasers;
@@ -176,47 +161,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected int m_PadDetectCursor;
     protected int m_SensorDetectCursor;
     protected int m_LaserRaycastCursor;
-    #ifndef SERVER
-    protected int m_PerfDiagLaserEvaluations;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagPadEvaluations;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSensorEvaluations;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagLaserDormant;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagPadDormant;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSensorDormant;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagLaserChanges;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagPadChanges;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagSensorChanges;
-    #endif
     protected int m_SimpleTickCounter;
     protected int m_FridgePhaseCursor;
     protected int m_StovePhaseCursor;
     protected int m_SprinklerPhaseCursor;
     protected ref array<Man> m_SprinklerWetPlayers;
-    #ifndef SERVER
-    protected int m_PerfDiagWetApplied;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagWetCoalesced;
-    #endif
-    #ifndef SERVER
-    protected int m_PerfDiagWetPreGateSkips;
-    #endif
     protected ref map<string, bool> m_CachedValidIds;
     protected ref LFPG_BTCPriceFetcher m_BTCPriceFetcher;
     protected ref array<Man>      m_ReusablePlayers;
@@ -4917,48 +4866,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             dirtySource.SetSynchDirty();
             dirtySourceCommitCount = dirtySourceCommitCount + 1;
         }
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagSorterDestDirtyCount = m_PerfDiagSorterDestDirtyCount + dirtyDestCommitCount;
-            m_PerfDiagSorterSourceDirtyCount = m_PerfDiagSorterSourceDirtyCount + dirtySourceCommitCount;
-            string perfSorter = "LFPG_PERFDIAG sorter_dirty dest_tick=";
-            perfSorter = perfSorter + dirtyDestCommitCount.ToString();
-            perfSorter = perfSorter + " source_tick=";
-            perfSorter = perfSorter + dirtySourceCommitCount.ToString();
-            perfSorter = perfSorter + " dest_total=";
-            perfSorter = perfSorter + m_PerfDiagSorterDestDirtyCount.ToString();
-            perfSorter = perfSorter + " source_total=";
-            perfSorter = perfSorter + m_PerfDiagSorterSourceDirtyCount.ToString();
-            Print(perfSorter);
-        }
-        #endif
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagSorterRuleChecks = m_PerfDiagSorterRuleChecks + ruleChecksTick;
-            m_PerfDiagSorterConfigMisses = m_PerfDiagSorterConfigMisses + configMissesTick;
-            m_PerfDiagSorterDeferrals = m_PerfDiagSorterDeferrals + deferralsTick;
-            int budgetUsed = ruleChecksTick + configMissesTick;
-            string perfBudget = "LFPG_PERFDIAG sorter_budget rule_checks=";
-            perfBudget = perfBudget + ruleChecksTick.ToString();
-            perfBudget = perfBudget + " config_misses=";
-            perfBudget = perfBudget + configMissesTick.ToString();
-            perfBudget = perfBudget + " used=";
-            perfBudget = perfBudget + budgetUsed.ToString();
-            perfBudget = perfBudget + " budget=";
-            perfBudget = perfBudget + LFPG_SORTER_RULECHECK_BUDGET.ToString();
-            perfBudget = perfBudget + " deferrals=";
-            perfBudget = perfBudget + deferralsTick.ToString();
-            perfBudget = perfBudget + " checks_total=";
-            perfBudget = perfBudget + m_PerfDiagSorterRuleChecks.ToString();
-            perfBudget = perfBudget + " misses_total=";
-            perfBudget = perfBudget + m_PerfDiagSorterConfigMisses.ToString();
-            perfBudget = perfBudget + " deferrals_total=";
-            perfBudget = perfBudget + m_PerfDiagSorterDeferrals.ToString();
-            Print(perfBudget);
-        }
-        #endif
         if (m_TickAffectedContainers.Count() > 0)
         {
             string emptyExclude = "";
@@ -5507,27 +5414,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_SprinklerPhaseCursor = m_SprinklerPhaseCursor + 1;
         if (m_SprinklerPhaseCursor >= 10)
             m_SprinklerPhaseCursor = 0;
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagWetApplied = m_PerfDiagWetApplied + wetAppliedTick;
-            m_PerfDiagWetCoalesced = m_PerfDiagWetCoalesced + wetCoalescedTick;
-            m_PerfDiagWetPreGateSkips = m_PerfDiagWetPreGateSkips + wetPreGateTick;
-            string wetDiag = "LFPG_PERFDIAG sprinkler_wet applied=";
-            wetDiag = wetDiag + wetAppliedTick.ToString();
-            wetDiag = wetDiag + " coalesced=";
-            wetDiag = wetDiag + wetCoalescedTick.ToString();
-            wetDiag = wetDiag + " pregate_skips=";
-            wetDiag = wetDiag + wetPreGateTick.ToString();
-            wetDiag = wetDiag + " applied_total=";
-            wetDiag = wetDiag + m_PerfDiagWetApplied.ToString();
-            wetDiag = wetDiag + " coalesced_total=";
-            wetDiag = wetDiag + m_PerfDiagWetCoalesced.ToString();
-            wetDiag = wetDiag + " pregate_total=";
-            wetDiag = wetDiag + m_PerfDiagWetPreGateSkips.ToString();
-            Print(wetDiag);
-        }
-        #endif
         #endif
     }
     protected void LFPG_RebuildPlayerCells()
@@ -5885,47 +5771,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 LFPG_Util.Debug(sensorMsg);
             }
         }
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagLaserEvaluations = m_PerfDiagLaserEvaluations + laserEvaluated;
-            m_PerfDiagPadEvaluations = m_PerfDiagPadEvaluations + padEvaluated;
-            m_PerfDiagSensorEvaluations = m_PerfDiagSensorEvaluations + sensorEvaluated;
-            m_PerfDiagLaserDormant = m_PerfDiagLaserDormant + laserDormant;
-            m_PerfDiagPadDormant = m_PerfDiagPadDormant + padDormant;
-            m_PerfDiagSensorDormant = m_PerfDiagSensorDormant + sensorDormant;
-            m_PerfDiagLaserChanges = m_PerfDiagLaserChanges + laserChanged;
-            m_PerfDiagPadChanges = m_PerfDiagPadChanges + padChanged;
-            m_PerfDiagSensorChanges = m_PerfDiagSensorChanges + sensorChanged;
-            string detectDiag = "LFPG_PERFDIAG detection laser_eval=";
-            detectDiag = detectDiag + laserEvaluated.ToString();
-            detectDiag = detectDiag + " pad_eval=";
-            detectDiag = detectDiag + padEvaluated.ToString();
-            detectDiag = detectDiag + " sensor_eval=";
-            detectDiag = detectDiag + sensorEvaluated.ToString();
-            detectDiag = detectDiag + " laser_dormant=";
-            detectDiag = detectDiag + laserDormant.ToString();
-            detectDiag = detectDiag + " pad_dormant=";
-            detectDiag = detectDiag + padDormant.ToString();
-            detectDiag = detectDiag + " sensor_dormant=";
-            detectDiag = detectDiag + sensorDormant.ToString();
-            detectDiag = detectDiag + " laser_changed=";
-            detectDiag = detectDiag + laserChanged.ToString();
-            detectDiag = detectDiag + " pad_changed=";
-            detectDiag = detectDiag + padChanged.ToString();
-            detectDiag = detectDiag + " sensor_changed=";
-            detectDiag = detectDiag + sensorChanged.ToString();
-            detectDiag = detectDiag + " raycasts=";
-            detectDiag = detectDiag + raycasts.ToString();
-            detectDiag = detectDiag + " laser_eval_total=";
-            detectDiag = detectDiag + m_PerfDiagLaserEvaluations.ToString();
-            detectDiag = detectDiag + " pad_eval_total=";
-            detectDiag = detectDiag + m_PerfDiagPadEvaluations.ToString();
-            detectDiag = detectDiag + " sensor_eval_total=";
-            detectDiag = detectDiag + m_PerfDiagSensorEvaluations.ToString();
-            Print(detectDiag);
-        }
-        #endif
         #endif
     }
     override void RegisterBattery(EntityAI battery)

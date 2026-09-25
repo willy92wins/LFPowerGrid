@@ -370,9 +370,6 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
     protected bool  m_Overloaded             = false;
     protected float m_TankLevel              = 0.0;
     protected int   m_TankLiquidType         = 0;
-    #ifndef SERVER
-    protected int   m_PerfDiagTankDirtyCount = 0;
-    #endif
     protected int   m_ConnectedSprinklerCount = 0;
 
     // ---- Server-only ----
@@ -709,20 +706,6 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
 
         m_TankLevel = clampedLevel;
         SetSynchDirty();
-
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagTankDirtyCount = m_PerfDiagTankDirtyCount + 1;
-            string perfLevel = "LFPG_PERFDIAG pump_dirty cause=level count=";
-            perfLevel = perfLevel + m_PerfDiagTankDirtyCount.ToString();
-            perfLevel = perfLevel + " deviceId=";
-            perfLevel = perfLevel + m_DeviceId;
-            perfLevel = perfLevel + " level=";
-            perfLevel = perfLevel + clampedLevel.ToString();
-            Print(perfLevel);
-        }
-        #endif
         #endif
     }
 
@@ -739,20 +722,6 @@ class LFPG_WaterPump_T2 : LFPG_WireOwnerBase
 
         m_TankLiquidType = liqType;
         SetSynchDirty();
-
-        #ifndef SERVER
-        if (LFPG_PERFDIAG_ENABLED)
-        {
-            m_PerfDiagTankDirtyCount = m_PerfDiagTankDirtyCount + 1;
-            string perfType = "LFPG_PERFDIAG pump_dirty cause=liquid_type count=";
-            perfType = perfType + m_PerfDiagTankDirtyCount.ToString();
-            perfType = perfType + " deviceId=";
-            perfType = perfType + m_DeviceId;
-            perfType = perfType + " liquidType=";
-            perfType = perfType + liqType.ToString();
-            Print(perfType);
-        }
-        #endif
         #endif
     }
 
