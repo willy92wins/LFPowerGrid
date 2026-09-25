@@ -454,36 +454,7 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
     // ---- Port world position (p3d uses _0) ----
     override vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint;
-        if (portName == "input_1")
-        {
-            memPoint = "port_input_0";
-        }
-        else if (portName == "output_1")
-        {
-            memPoint = "port_output_0";
-        }
-        else
-        {
-            memPoint = "port_";
-            memPoint = memPoint + portName;
-        }
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        vector offset = "0 0.05 0";
-        if (portName == "input_1")
-        {
-            offset = "0 0.05 -0.08";
-        }
-        else if (portName == "output_1")
-        {
-            offset = "0 0.05 0.08";
-        }
-        return ModelToWorld(offset);
+        return LFPG_GetMappedPortWorldPos(portName, 0.05, 0.08, 0.05, true);
     }
 
     // ---- NM registration + beam renderer ----

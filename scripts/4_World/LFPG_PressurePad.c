@@ -125,37 +125,7 @@ class LFPG_PressurePad : LFPG_WireOwnerBase
     // ============================================
     override vector LFPG_GetPortWorldPos(string portName)
     {
-        string memPoint;
-        if (portName == "input_1")
-        {
-            memPoint = "port_input_0";
-        }
-        else if (portName == "output_1")
-        {
-            memPoint = "port_output_0";
-        }
-        else
-        {
-            memPoint = "port_";
-            memPoint = memPoint + portName;
-        }
-
-        if (MemoryPointExists(memPoint))
-        {
-            return ModelToWorld(GetMemoryPointPos(memPoint));
-        }
-
-        vector offset = "0 0.02 0";
-        if (portName == "input_1")
-        {
-            offset = "0 0.02 -0.25";
-        }
-        else if (portName == "output_1")
-        {
-            offset = "0 0.02 0.25";
-        }
-
-        return ModelToWorld(offset);
+        return LFPG_GetMappedPortWorldPos(portName, 0.02, 0.25, 0.02, true);
     }
 
     // ============================================
