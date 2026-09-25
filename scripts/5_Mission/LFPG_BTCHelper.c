@@ -1,3 +1,44 @@
+// One ephemeral request per mutation; no transaction state lives here.
+class LFPG_BTCMutationRequest
+{
+    int m_NetLow;
+    int m_NetHigh;
+    int m_Amount;
+    bool m_AccountMode;
+    int m_ServerSessionLow;
+    int m_ServerSessionHigh;
+    int m_Sequence;
+
+    bool ReadPayload(ParamsReadContext ctx, bool hasAccountMode, bool defaultAccountMode)
+    {
+        m_NetLow = 0;
+        m_NetHigh = 0;
+        m_Amount = 0;
+        m_AccountMode = defaultAccountMode;
+        m_ServerSessionLow = 0;
+        m_ServerSessionHigh = 0;
+        m_Sequence = 0;
+        bool payloadOk = true;
+        if (!ctx.Read(m_NetLow))
+            payloadOk = false;
+        if (!ctx.Read(m_NetHigh))
+            payloadOk = false;
+        if (!ctx.Read(m_Amount))
+            payloadOk = false;
+        if (hasAccountMode)
+        {
+            if (!ctx.Read(m_AccountMode))
+                payloadOk = false;
+        }
+        if (!ctx.Read(m_ServerSessionLow))
+            payloadOk = false;
+        if (!ctx.Read(m_ServerSessionHigh))
+            payloadOk = false;
+        if (!ctx.Read(m_Sequence))
+            payloadOk = false;
+        return payloadOk;
+    }
+};
 class LFPG_BTCInventoryInput
 {
     EntityAI m_Entity;
@@ -995,54 +1036,50 @@ class LFPG_BTCHelper
         logOpen = logOpen + balance.ToString();
         LFPG_Util.Info(logOpen);
     }
-    static void HandleBTCBuy(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+    // Reads every field even after failure; CheckRequest keeps its original position.
+    static bool ReadNewBTCRequest(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx, int requestSubId, int txType, bool hasAccountMode, bool defaultAccountMode, LFPG_BTCMutationRequest request, out LFPG_BTCSessionRegistry btcSessions)
     {
-        int netLow = 0;
-        int netHigh = 0;
-        int btcAmount = 0;
-        bool useAccount = true;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(btcAmount))
-            payloadOk = false;
-        if (!ctx.Read(useAccount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
+        btcSessions = null;
+        bool payloadOk = request.ReadPayload(ctx, hasAccountMode, defaultAccountMode);
         if (!sender)
-            return;
+            return false;
         if (!payloadOk)
         {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
-            return;
+            SendBTCNonceRejection(player, sender, txType, request.m_ServerSessionLow, request.m_ServerSessionHigh, request.m_Sequence);
+            return false;
         }
-        int requestSubId = (int)LFPG_RPC_SubId.BTC_BUY;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
+        btcSessions = LFPG_BTCSessionRegistry.Get();
         LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount, cachedResponse);
+        int nonceState = btcSessions.CheckRequest(sender, request.m_ServerSessionLow, request.m_ServerSessionHigh, request.m_Sequence, requestSubId, request.m_NetLow, request.m_NetHigh, request.m_Amount, request.m_AccountMode, cachedResponse);
         if (nonceState == LFPG_BTC_NONCE_REPLAY)
         {
             if (btcSessions.AllowReplayResponse(sender))
                 SendBTCReplayResult(player, sender, cachedResponse);
-            return;
+            return false;
         }
         if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
+            return false;
         if (nonceState != LFPG_BTC_NONCE_NEW)
         {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
-            return;
+            SendBTCNonceRejection(player, sender, txType, request.m_ServerSessionLow, request.m_ServerSessionHigh, request.m_Sequence);
+            return false;
         }
+        return true;
+    }
+    static void HandleBTCBuy(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
+    {
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
+        int requestSubId = (int)LFPG_RPC_SubId.BTC_BUY;
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_BUY, true, true, request, btcSessions))
+            return;
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int btcAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
+        bool useAccount = request.m_AccountMode;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
@@ -1416,53 +1453,19 @@ class LFPG_BTCHelper
     }
     static void HandleBTCSell(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
-        int netLow = 0;
-        int netHigh = 0;
-        int btcAmount = 0;
-        bool toAccount = false;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(btcAmount))
-            payloadOk = false;
-        if (!ctx.Read(toAccount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
-        if (!sender)
-            return;
-        if (!payloadOk)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
-        bool requestedToAccount = toAccount;
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_SELL;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
-        LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, requestedToAccount, cachedResponse);
-        if (nonceState == LFPG_BTC_NONCE_REPLAY)
-        {
-            if (btcSessions.AllowReplayResponse(sender))
-                SendBTCReplayResult(player, sender, cachedResponse);
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_SELL, true, false, request, btcSessions))
             return;
-        }
-        if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
-        if (nonceState != LFPG_BTC_NONCE_NEW)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int btcAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
+        bool toAccount = request.m_AccountMode;
+        bool requestedToAccount = toAccount;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_SELL, serverSessionLow, serverSessionHigh, sequence);
@@ -1859,49 +1862,17 @@ class LFPG_BTCHelper
     }
     static void HandleBTCWithdraw(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
-        int netLow = 0;
-        int netHigh = 0;
-        int btcAmount = 0;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(btcAmount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
-        if (!sender)
-            return;
-        if (!payloadOk)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_WITHDRAW;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
-        LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, false, cachedResponse);
-        if (nonceState == LFPG_BTC_NONCE_REPLAY)
-        {
-            if (btcSessions.AllowReplayResponse(sender))
-                SendBTCReplayResult(player, sender, cachedResponse);
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_WITHDRAW, false, false, request, btcSessions))
             return;
-        }
-        if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
-        if (nonceState != LFPG_BTC_NONCE_NEW)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int btcAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW, serverSessionLow, serverSessionHigh, sequence);
@@ -2019,49 +1990,17 @@ class LFPG_BTCHelper
     }
     static void HandleBTCDeposit(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
-        int netLow = 0;
-        int netHigh = 0;
-        int btcAmount = 0;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(btcAmount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
-        if (!sender)
-            return;
-        if (!payloadOk)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_DEPOSIT;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
-        LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, false, cachedResponse);
-        if (nonceState == LFPG_BTC_NONCE_REPLAY)
-        {
-            if (btcSessions.AllowReplayResponse(sender))
-                SendBTCReplayResult(player, sender, cachedResponse);
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_DEPOSIT, false, false, request, btcSessions))
             return;
-        }
-        if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
-        if (nonceState != LFPG_BTC_NONCE_NEW)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int btcAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT, serverSessionLow, serverSessionHigh, sequence);
@@ -2200,49 +2139,17 @@ class LFPG_BTCHelper
     static void HandleBTCWithdrawCash(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         #ifdef SERVER
-        int netLow = 0;
-        int netHigh = 0;
-        int eurAmount = 0;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(eurAmount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
-        if (!sender)
-            return;
-        if (!payloadOk)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_WITHDRAW_CASH;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
-        LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, eurAmount, false, cachedResponse);
-        if (nonceState == LFPG_BTC_NONCE_REPLAY)
-        {
-            if (btcSessions.AllowReplayResponse(sender))
-                SendBTCReplayResult(player, sender, cachedResponse);
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_WITHDRAW_CASH, false, false, request, btcSessions))
             return;
-        }
-        if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
-        if (nonceState != LFPG_BTC_NONCE_NEW)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int eurAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_WITHDRAW_CASH, serverSessionLow, serverSessionHigh, sequence);
@@ -2375,49 +2282,17 @@ class LFPG_BTCHelper
     static void HandleBTCDepositCash(PlayerBase player, PlayerIdentity sender, ParamsReadContext ctx)
     {
         #ifdef SERVER
-        int netLow = 0;
-        int netHigh = 0;
-        int eurAmount = 0;
-        int serverSessionLow = 0;
-        int serverSessionHigh = 0;
-        int sequence = 0;
-        bool payloadOk = true;
-        if (!ctx.Read(netLow))
-            payloadOk = false;
-        if (!ctx.Read(netHigh))
-            payloadOk = false;
-        if (!ctx.Read(eurAmount))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionLow))
-            payloadOk = false;
-        if (!ctx.Read(serverSessionHigh))
-            payloadOk = false;
-        if (!ctx.Read(sequence))
-            payloadOk = false;
-        if (!sender)
-            return;
-        if (!payloadOk)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        LFPG_BTCMutationRequest request = new LFPG_BTCMutationRequest();
+        LFPG_BTCSessionRegistry btcSessions;
         int requestSubId = (int)LFPG_RPC_SubId.BTC_DEPOSIT_CASH;
-        LFPG_BTCSessionRegistry btcSessions = LFPG_BTCSessionRegistry.Get();
-        LFPG_BTCSessionResponse cachedResponse = null;
-        int nonceState = btcSessions.CheckRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, eurAmount, false, cachedResponse);
-        if (nonceState == LFPG_BTC_NONCE_REPLAY)
-        {
-            if (btcSessions.AllowReplayResponse(sender))
-                SendBTCReplayResult(player, sender, cachedResponse);
+        if (!ReadNewBTCRequest(player, sender, ctx, requestSubId, LFPG_BTC_TX_DEPOSIT_CASH, false, false, request, btcSessions))
             return;
-        }
-        if (nonceState == LFPG_BTC_NONCE_IN_FLIGHT)
-            return;
-        if (nonceState != LFPG_BTC_NONCE_NEW)
-        {
-            SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
-            return;
-        }
+        int netLow = request.m_NetLow;
+        int netHigh = request.m_NetHigh;
+        int eurAmount = request.m_Amount;
+        int serverSessionLow = request.m_ServerSessionLow;
+        int serverSessionHigh = request.m_ServerSessionHigh;
+        int sequence = request.m_Sequence;
         if (!LFPG_BTCConfig.IsEnabled())
         {
             SendBTCNonceRejection(player, sender, LFPG_BTC_TX_DEPOSIT_CASH, serverSessionLow, serverSessionHigh, sequence);
