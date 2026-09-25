@@ -353,9 +353,9 @@ class LFPG_BTCHelper
     }
     static void SendBTCTxResult(PlayerBase player, PlayerIdentity sender, int txType, int errCode, int newStock, int newBalance, int btcMoved, float eurAmount, int serverSessionLow, int serverSessionHigh, int sequence)
     {
-        int cashOnInv = CountPlayerCash(player);
-        string btcCls = LFPG_BTCConfig.GetBtcItemClassname();
-        int btcOnInv = CountPlayerItems(player, btcCls);
+        int cashOnInv = 0;
+        int btcOnInv = 0;
+        CountPlayerBalances(player, cashOnInv, btcOnInv);
         LFPG_BTCSessionRegistry.Get().CompleteRequest(sender, serverSessionLow, serverSessionHigh, sequence, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv);
         LFPG_FaultInject.ObserveTx(txType, errCode, newStock, newBalance, btcMoved, cashOnInv, btcOnInv);
         SendBTCTxResultPayload(player, sender, txType, errCode, newStock, newBalance, btcMoved, eurAmount, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence);
@@ -371,9 +371,9 @@ class LFPG_BTCHelper
         LFPG_BTCSessionRegistry registry = LFPG_BTCSessionRegistry.Get();
         if (!registry.AllowReplayResponse(sender))
             return;
-        int cashOnInv = CountPlayerCash(player);
-        string btcCls = LFPG_BTCConfig.GetBtcItemClassname();
-        int btcOnInv = CountPlayerItems(player, btcCls);
+        int cashOnInv = 0;
+        int btcOnInv = 0;
+        CountPlayerBalances(player, cashOnInv, btcOnInv);
         int errInvalid = LFPG_BTC_ERR_INVALID;
         SendBTCTxResultPayload(player, sender, txType, errInvalid, 0, 0, 0, 0.0, cashOnInv, btcOnInv, serverSessionLow, serverSessionHigh, sequence);
     }
@@ -824,7 +824,66 @@ class LFPG_BTCHelper
         }
         return atm;
     }
+    // Only response counts use this census; consumption keeps its stack order.
+    static void CountPlayerBalances(PlayerBase player, out int cashOnInv, out int btcOnInv)
+    {
+        map<string, int> quantities = new map<string, int>;
+        string btcClassname = LFPG_BTCConfig.GetBtcItemClassname();
+        quantities.Set(btcClassname, 0);
+        if (LFPG_BTCConfig.IsCurrencyCatalogValid())
+        {
+            array<ref LFPG_BTCCurrency> currencies = LFPG_BTCConfig.GetCurrencies();
+            if (currencies)
+            {
+                for (int ci = 0; ci < currencies.Count(); ci = ci + 1)
+                {
+                    LFPG_BTCCurrency currency = currencies[ci];
+                    if (currency && currency.classname != "")
+                        quantities.Set(currency.classname, 0);
+                }
+            }
+        }
+        if (player)
+        {
+            HumanInventory humanInventory = player.GetHumanInventory();
+            if (humanInventory)
+                CountInventoryQuantities(humanInventory.GetEntityInHands(), quantities);
+            CountInventoryQuantities(player, quantities);
+        }
+        cashOnInv = CountCashFromInventory(player, quantities);
+        btcOnInv = 0;
+        quantities.Find(btcClassname, btcOnInv);
+    }
+
+    static void CountInventoryQuantities(EntityAI root, map<string, int> quantities)
+    {
+        if (!root)
+            return;
+        string classname = root.GetType();
+        int count = 0;
+        if (quantities.Find(classname, count))
+            quantities.Set(classname, count + LFPG_GetEffectiveQty(root));
+        GameInventory inventory = root.GetInventory();
+        if (!inventory)
+            return;
+        int i = 0;
+        int n = inventory.AttachmentCount();
+        for (i = 0; i < n; i = i + 1)
+            CountInventoryQuantities(inventory.GetAttachmentFromIndex(i), quantities);
+        CargoBase cargo = inventory.GetCargo();
+        if (cargo)
+        {
+            n = cargo.GetItemCount();
+            for (i = 0; i < n; i = i + 1)
+                CountInventoryQuantities(cargo.GetItem(i), quantities);
+        }
+    }
+
     static int CountPlayerCash(PlayerBase player)
+    {
+        return CountCashFromInventory(player, null);
+    }
+    static int CountCashFromInventory(PlayerBase player, map<string, int> quantities)
     {
         int total = 0;
         if (!LFPG_BTCConfig.IsCurrencyCatalogValid())
@@ -846,7 +905,11 @@ class LFPG_BTCHelper
             if (seenClassnames.Find(cn) >= 0)
                 continue;
             seenClassnames.Insert(cn);
-            int itemCount = CountPlayerItems(player, cn);
+            int itemCount = 0;
+            if (quantities)
+                quantities.Find(cn, itemCount);
+            else
+                itemCount = CountPlayerItems(player, cn);
             int curValue = cur.value;
             int subtotal = itemCount * curValue;
             total = total + subtotal;
@@ -963,9 +1026,9 @@ class LFPG_BTCHelper
         }
         int stock = atm.LFPG_GetBtcStock();
         bool withdrawOnly = atm.LFPG_IsWithdrawOnly();
-        int cashOnInv = CountPlayerCash(player);
-        string btcClsOpen = LFPG_BTCConfig.GetBtcItemClassname();
-        int btcOnInv = CountPlayerItems(player, btcClsOpen);
+        int cashOnInv = 0;
+        int btcOnInv = 0;
+        CountPlayerBalances(player, cashOnInv, btcOnInv);
         float priceChange24h = LFPG_NetworkManager.Get().LFPG_GetBTC24hChange();
         int serverSessionLow = 0;
         int serverSessionHigh = 0;
