@@ -157,6 +157,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     protected ref array<int> m_PlayerCellWrite;
     protected ref array<Man> m_PlayerCellOrdered;
     protected ref array<Man> m_PlayerCandidates;
+    protected ref array<int> m_PlayerQueryCells;
     protected int m_LaserDetectCursor;
     protected int m_PadDetectCursor;
     protected int m_SensorDetectCursor;
@@ -322,6 +323,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         m_PlayerCellWrite = new array<int>;
         m_PlayerCellOrdered = new array<Man>;
         m_PlayerCandidates = new array<Man>;
+        m_PlayerQueryCells = new array<int>;
         m_SprinklerWetPlayers = new array<Man>;
         LFPG_SorterLogic.InitCaches();
         MissionBaseWorld mw = MissionBaseWorld.Cast(g_Game.GetMission());
@@ -5478,23 +5480,67 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     }
     protected int LFPG_CollectPlayerCandidates(vector center, float radius)
     {
+        return LFPG_QueryPlayerCells(center, radius, false);
+    }
+    protected int LFPG_QueryPlayerCells(vector center, float radius, bool stopAtFirst)
+    {
         int minCellX;
         int maxCellX;
         int minCellZ;
         int maxCellZ;
         int cellIndex;
+        int selectedIndex;
+        int width = 0;
+        int height = 0;
+        int dx;
+        int dz;
+        int queryX;
+        int queryZ;
+        string cellKey;
         int cellTotal;
         int memberIndex;
         int memberEnd;
         Man candidate;
         m_PlayerCandidates.Clear();
+        m_PlayerQueryCells.Clear();
         minCellX = Math.Floor((center[0] - radius) / LFPG_PLAYER_CELL_SIZE_M);
         maxCellX = Math.Floor((center[0] + radius) / LFPG_PLAYER_CELL_SIZE_M);
         minCellZ = Math.Floor((center[2] - radius) / LFPG_PLAYER_CELL_SIZE_M);
         maxCellZ = Math.Floor((center[2] + radius) / LFPG_PLAYER_CELL_SIZE_M);
         cellTotal = m_PlayerCellX.Count();
-        for (cellIndex = 0; cellIndex < cellTotal; cellIndex = cellIndex + 1)
+        // Half-range guards keep subtraction and coordinate addition in int range.
+        // Outside this range the original linear query remains authoritative.
+        if (minCellX <= maxCellX && minCellZ <= maxCellZ && minCellX > -1073741824 && maxCellX < 1073741823 && minCellZ > -1073741824 && maxCellZ < 1073741823)
         {
+            width = maxCellX - minCellX + 1;
+            height = maxCellZ - minCellZ + 1;
+        }
+        // Division avoids overflowing width * height; only index smaller windows.
+        bool useIndex = width > 0 && height > 0 && cellTotal > 0;
+        if (useIndex)
+            useIndex = width <= (cellTotal - 1) / height;
+        if (useIndex)
+        {
+            for (dx = 0; dx < width; dx = dx + 1)
+            {
+                queryX = minCellX + dx;
+                for (dz = 0; dz < height; dz = dz + 1)
+                {
+                    queryZ = minCellZ + dz;
+                    cellKey = queryX.ToString() + "|" + queryZ.ToString();
+                    if (m_PlayerCellIndex.Find(cellKey, cellIndex))
+                        m_PlayerQueryCells.Insert(cellIndex);
+                }
+            }
+            // Cell indices preserve original insertion order, including player order.
+            m_PlayerQueryCells.Sort();
+            cellTotal = m_PlayerQueryCells.Count();
+        }
+        for (selectedIndex = 0; selectedIndex < cellTotal; selectedIndex = selectedIndex + 1)
+        {
+            cellIndex = selectedIndex;
+            if (useIndex)
+                cellIndex = m_PlayerQueryCells[selectedIndex];
             if (m_PlayerCellX[cellIndex] < minCellX)
                 continue;
             if (m_PlayerCellX[cellIndex] > maxCellX)
@@ -5509,7 +5555,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 candidate = m_PlayerCellOrdered[memberIndex];
                 if (candidate)
+                {
                     m_PlayerCandidates.Insert(candidate);
+                    if (stopAtFirst)
+                        return 1;
+                }
                 memberIndex = memberIndex + 1;
             }
         }
@@ -5517,7 +5567,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     }
     protected bool LFPG_HasPlayerCellNear(vector center, float radius)
     {
-        if (LFPG_CollectPlayerCandidates(center, radius) > 0)
+        if (LFPG_QueryPlayerCells(center, radius, true) > 0)
             return true;
         return false;
     }
