@@ -1630,22 +1630,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             string bcastWarn = "[BroadcastOwnerWires] LARGE BLOB owner=" + ownerId + " jsonLen=" + json.Length().ToString() + " — approaching RPC limit";
             LFPG_Util.Warn(bcastWarn);
         }
+        // Send retains the buffer; serialize once for this broadcast.
+        ScriptRPC rpc = null;
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
-            ScriptRPC rpc = new ScriptRPC();
-            rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
-            rpc.Write(ownerId);
-            rpc.Write(low);
-            rpc.Write(high);
-            rpc.Write(json);
-            rpc.Write(snapshotGeneration);
-            bool bRpcGuaranteed = true;
 			PlayerIdentity recipient = pb.GetIdentity();
 			if (!recipient)
 				continue;
+            if (!rpc)
+            {
+                rpc = new ScriptRPC();
+                rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
+                rpc.Write(ownerId);
+                rpc.Write(low);
+                rpc.Write(high);
+                rpc.Write(json);
+                rpc.Write(snapshotGeneration);
+            }
+            bool bRpcGuaranteed = true;
 			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
@@ -1746,7 +1751,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         PlayerBase player;
         vector playerPosition;
         bool inRange;
-        ScriptRPC rpc;
+        ScriptRPC rpc = null;
         bool guaranteed = true;
         for (playerIndex = 0; playerIndex < m_ReusableBroadcastPlayers.Count(); playerIndex = playerIndex + 1)
         {
@@ -1770,16 +1775,19 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             if (!inRange)
                 continue;
-            rpc = new ScriptRPC();
-            rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
-            rpc.Write(snapshot.m_OwnerDeviceId);
-            rpc.Write(snapshot.m_OwnerLow);
-            rpc.Write(snapshot.m_OwnerHigh);
-            rpc.Write(snapshot.m_JSON);
-            rpc.Write(snapshot.m_Generation);
 			PlayerIdentity recipient = player.GetIdentity();
 			if (!recipient)
 				continue;
+            if (!rpc)
+            {
+                rpc = new ScriptRPC();
+                rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
+                rpc.Write(snapshot.m_OwnerDeviceId);
+                rpc.Write(snapshot.m_OwnerLow);
+                rpc.Write(snapshot.m_OwnerHigh);
+                rpc.Write(snapshot.m_JSON);
+                rpc.Write(snapshot.m_Generation);
+            }
 			rpc.Send(player, LFPG_RPC_CHANNEL, guaranteed, recipient);
         }
     }
@@ -1864,27 +1872,32 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		int high = 0;
 		owner.GetNetworkID(low, high);
 		int generation = wireOwner.LFPG_GetWireGeneration();
+        // Send retains the buffer; serialize once for this broadcast.
+        ScriptRPC rpc = null;
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb)
                 continue;
-            ScriptRPC rpc = new ScriptRPC();
-            rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_DELTA);
-            rpc.Write(ownerId);
-            rpc.Write(low);
-            rpc.Write(high);
-            rpc.Write(generation);
-            rpc.Write(entryCount);
-            for (e = 0; e < entryCount; e = e + 1)
-            {
-                rpc.Write(operations[e]);
-                rpc.Write(entryJsons[e]);
-            }
 			PlayerIdentity recipient = pb.GetIdentity();
 			if (!recipient)
 				continue;
+            if (!rpc)
+            {
+                rpc = new ScriptRPC();
+                rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_DELTA);
+                rpc.Write(ownerId);
+                rpc.Write(low);
+                rpc.Write(high);
+                rpc.Write(generation);
+                rpc.Write(entryCount);
+                for (e = 0; e < entryCount; e = e + 1)
+                {
+                    rpc.Write(operations[e]);
+                    rpc.Write(entryJsons[e]);
+                }
+            }
 			rpc.Send(pb, LFPG_RPC_CHANNEL, true, recipient);
             #ifndef SERVER
             if (LFPG_PERFDIAG_ENABLED)
@@ -1960,22 +1973,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 		int low = 0;
 		int high = 0;
 		ownerObj.GetNetworkID(low, high);
+        // Send retains the buffer; serialize once for this broadcast.
+        ScriptRPC rpc = null;
         int i;
         for (i = 0; i < m_ReusableBroadcastPlayers.Count(); i = i + 1)
         {
             PlayerBase pb = PlayerBase.Cast(m_ReusableBroadcastPlayers[i]);
             if (!pb) continue;
-            ScriptRPC rpc = new ScriptRPC();
-            rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
-            rpc.Write(ownerDeviceId);
-            rpc.Write(low);
-            rpc.Write(high);
-            rpc.Write(json);
-            rpc.Write(vanillaSnapshotGeneration);
-            bool bRpcGuaranteed = true;
 			PlayerIdentity recipient = pb.GetIdentity();
 			if (!recipient)
 				continue;
+            if (!rpc)
+            {
+                rpc = new ScriptRPC();
+                rpc.Write((int)LFPG_RPC_SubId.SYNC_OWNER_WIRES_V2);
+                rpc.Write(ownerDeviceId);
+                rpc.Write(low);
+                rpc.Write(high);
+                rpc.Write(json);
+                rpc.Write(vanillaSnapshotGeneration);
+            }
+            bool bRpcGuaranteed = true;
 			rpc.Send(pb, LFPG_RPC_CHANNEL, bRpcGuaranteed, recipient);
         }
     }
