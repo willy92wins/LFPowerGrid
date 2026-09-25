@@ -13,88 +13,21 @@
 //   via actions.Insert(LFPG_ActionToggleSwitchV2Remote).
 // =========================================================
 
-class LFPG_ActionToggleSwitchV2Remote : ActionInteractBase
+class LFPG_ActionToggleSwitchV2Remote : LFPG_ActionToggleSwitchBase
 {
     void LFPG_ActionToggleSwitchV2Remote()
     {
-        m_CommandUID = DayZPlayerConstants.CMD_ACTIONMOD_INTERACTONCE;
-        m_StanceMask = DayZPlayerConstants.STANCEMASK_ALL;
-        m_Text = "#STR_LFPG_ACTION_TOGGLE_SWITCH";
+        m_LFPG_MessageOn = "[LFPG] Switch V2 Remote ON";
+        m_LFPG_MessageOff = "[LFPG] Switch V2 Remote OFF";
     }
-
-    override void CreateConditionComponents()
+    override protected LFPG_SwitchDeviceBase LFPG_SelectSwitch(Object targetObj)
     {
-        m_ConditionItem   = new CCINone;
-        m_ConditionTarget = new CCTCursor(LFPG_INTERACT_DIST_M);
+        return LFPG_SwitchV2Remote.Cast(targetObj);
     }
-
-    override bool ActionCondition(PlayerBase player, ActionTarget target, ItemBase item)
+    override protected void LFPG_ToggleTarget(LFPG_SwitchDeviceBase device)
     {
-        if (!player)
-            return false;
-
-        if (!target)
-            return false;
-
-        Object targetObj = target.GetObject();
-        if (!targetObj)
-            return false;
-
-        LFPG_SwitchV2Remote sw = LFPG_SwitchV2Remote.Cast(targetObj);
-        if (!sw)
-            return false;
-
-        float distSq = LFPG_WorldUtil.DistSq(player.GetPosition(), sw.GetPosition());
-        float maxDistSq = LFPG_INTERACT_DIST_M * LFPG_INTERACT_DIST_M;
-        if (distSq > maxDistSq)
-            return false;
-
-        // Dynamic text: show current -> target state
-        if (sw.LFPG_GetSwitchOn())
-        {
-            m_Text = "#STR_LFPG_ACTION_SWITCH_OFF";
-        }
-        else
-        {
-            m_Text = "#STR_LFPG_ACTION_SWITCH_ON";
-        }
-
-        return true;
-    }
-
-    override void OnExecuteServer(ActionData action_data)
-    {
-        super.OnExecuteServer(action_data);
-
-        if (!action_data)
-            return;
-
-        if (!action_data.m_Target)
-            return;
-
-        Object targetObj = action_data.m_Target.GetObject();
-        if (!targetObj)
-            return;
-
-        LFPG_SwitchV2Remote sw = LFPG_SwitchV2Remote.Cast(targetObj);
-        if (!sw)
-            return;
-
-        sw.LFPG_ToggleSwitch();
-
-        PlayerBase pb = PlayerBase.Cast(action_data.m_Player);
-        if (pb)
-        {
-            if (sw.LFPG_GetSwitchOn())
-            {
-                string msgOn = "[LFPG] Switch V2 Remote ON";
-                pb.MessageStatus(msgOn);
-            }
-            else
-            {
-                string msgOff = "[LFPG] Switch V2 Remote OFF";
-                pb.MessageStatus(msgOff);
-            }
-        }
+        LFPG_SwitchV2Remote sw = LFPG_SwitchV2Remote.Cast(device);
+        if (sw)
+            sw.LFPG_ToggleSwitch();
     }
 };
