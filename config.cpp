@@ -377,15 +377,11 @@ class CfgVehicles
     // v0.8.1: SOLAR PANEL
     // =========================================================
 
-    // ---- Solar Panel Kit ----
-    class LFPG_SolarPanel_Kit : Inventory_Base
+    // Shared config only; existing script kit classes and public leaves remain.
+    class LFPG_BoxKitConfigBase : Inventory_Base
     {
-        scope = 2;
-        displayName = "$STR_LFPG_SOLAR_KIT";
-        descriptionShort = "$STR_LFPG_SOLAR_KIT_DESC";
+        scope = 0;
         model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
-        weight = 2000;
-        itemSize[] = {5, 3};
         rotationFlags = 2;
         itemBehaviour = 2;
         canBeDigged = 0;
@@ -393,6 +389,16 @@ class CfgVehicles
         physLayer = "item_small";
         SingleUseActions[] = {527};
         ContinuousActions[] = {231};
+    };
+
+    // ---- Solar Panel Kit ----
+    class LFPG_SolarPanel_Kit : LFPG_BoxKitConfigBase
+    {
+        scope = 2;
+        displayName = "$STR_LFPG_SOLAR_KIT";
+        descriptionShort = "$STR_LFPG_SOLAR_KIT_DESC";
+        weight = 2000;
+        itemSize[] = {5, 3};
     };
 
     // ---- Solar Panel T1 (placed device, SOURCE 20 u/s) ----
@@ -437,21 +443,13 @@ class CfgVehicles
     };
 
     // ---- Solar Panel T2 Kit (screwdriver dismantle of a deployed T2) ----
-    class LFPG_SolarPanel_T2_Kit : Inventory_Base
+    class LFPG_SolarPanel_T2_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_SOLAR_T2_KIT";
         descriptionShort = "$STR_LFPG_SOLAR_T2_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 2000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // =========================================================
@@ -931,21 +929,13 @@ class CfgVehicles
     // =========================================================
 
     // ---- Water Pump Kit (holdable, different-model deploy like Solar Panel) ----
-    class LFPG_WaterPump_Kit : Inventory_Base
+    class LFPG_WaterPump_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_KIT";
         descriptionShort = "$STR_LFPG_PUMP_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 5000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- Water Pump T1 (placed device, PASSTHROUGH 50 u/s, cap 100 u/s) ----
@@ -1014,21 +1004,13 @@ class CfgVehicles
     };
 
     // ---- Water Pump T2 Kit (screwdriver dismantle of a deployed T2) ----
-    class LFPG_WaterPump_T2_Kit : Inventory_Base
+    class LFPG_WaterPump_T2_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_PUMP_T2_KIT";
         descriptionShort = "$STR_LFPG_PUMP_T2_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 5000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // =========================================================
@@ -1036,21 +1018,13 @@ class CfgVehicles
     // =========================================================
 
     // ---- Furnace Kit (holdable, different-model deploy) ----
-    class LFPG_Furnace_Kit : Inventory_Base
+    class LFPG_Furnace_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_FURNACE_KIT";
         descriptionShort = "$STR_LFPG_FURNACE_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- Furnace (placed device, SOURCE 50 u/s) ----
@@ -1698,21 +1672,13 @@ class CfgVehicles
     // =========================================================
 
     // ---- BatteryLarge Kit (box, different-model hologram) ----
-    class LFPG_BatteryLarge_Kit : Inventory_Base
+    class LFPG_BatteryLarge_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_BatteryLargeKit";
         descriptionShort = "$STR_LFPG_BatteryLargeKit_Desc";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 15000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- BatteryLarge (placed device, PASSTHROUGH 1 IN + 1 OUT) ----
@@ -2022,21 +1988,13 @@ class CfgVehicles
     // =========================================================
 
     // ---- Fridge Kit (holdable box, hologram shows fridge) ----
-    class LFPG_Fridge_Kit : Inventory_Base
+    class LFPG_Fridge_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_FridgeKit";
         descriptionShort = "$STR_LFPG_FridgeKit_Desc";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {5, 3};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- Fridge (placed device, CONSUMER 1 IN, 20 u/s) ----
@@ -2320,21 +2278,13 @@ class CfgVehicles
     // =========================================================
 
     // ---- BTC ATM Player Kit (deployable, different-model) ----
-    class LFPG_BTCAtm_Kit : Inventory_Base
+    class LFPG_BTCAtm_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_KIT";
         descriptionShort = "$STR_LFPG_BTC_ATM_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {4, 4};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- BTC ATM Player (placed device, CONSUMER 1 IN) ----
@@ -2378,21 +2328,13 @@ class CfgVehicles
     };
 
     // ---- BTC ATM Admin Kit (deployable, different-model) ----
-    class LFPG_BTCAtmAdmin_Kit : Inventory_Base
+    class LFPG_BTCAtmAdmin_Kit : LFPG_BoxKitConfigBase
     {
         scope = 2;
         displayName = "$STR_LFPG_BTC_ATM_ADMIN_KIT";
         descriptionShort = "$STR_LFPG_BTC_ATM_ADMIN_KIT_DESC";
-        model = "\LFPowerGrid\data\kits\lf_kit_box.p3d";
         weight = 8000;
         itemSize[] = {4, 4};
-        rotationFlags = 2;
-        itemBehaviour = 2;
-        canBeDigged = 0;
-        carveNavmesh = 1;
-        physLayer = "item_small";
-        SingleUseActions[] = {527};
-        ContinuousActions[] = {231};
     };
 
     // ---- BTC ATM Admin (placed device, NO power) ----
