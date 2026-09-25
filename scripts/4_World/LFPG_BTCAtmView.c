@@ -16,17 +16,13 @@
 //   - Consistent naming: layout names = view field names
 // =========================================================
 
-class LFPG_BTCAtmView extends ScriptView
+class LFPG_BTCAtmView extends LFPG_FloatingViewBase
 {
     protected static ref LFPG_BTCAtmView s_Instance;
-    protected bool m_IsOpen;
     protected bool m_FocusLocked;
     protected bool m_ControlsLocked;
 
     // ── Drag state ──
-    protected bool m_Dragging;
-    protected float m_DragOffX;
-    protected float m_DragOffY;
 
     // ── Fade-in ──
     protected float m_FadeAlpha;
@@ -34,7 +30,6 @@ class LFPG_BTCAtmView extends ScriptView
 
     // ── Hover ──
     protected ref array<ref LFPG_ColorData> m_ColorDataRefs;
-    protected ImageWidget m_HoveredBg;
 
     // ── Widget refs (manual binding) ──
     Widget BTCAtmPanel;
@@ -620,7 +615,7 @@ class LFPG_BTCAtmView extends ScriptView
         m_ColorDataRefs.Insert(data);
     }
 
-    protected int FindCachedColor(Widget w)
+    override protected int FindCachedColor(Widget w)
     {
         if (!w)
             return 0;
@@ -704,229 +699,18 @@ class LFPG_BTCAtmView extends ScriptView
     // =========================================================
     // Drag: MouseDown on header
     // =========================================================
-    override bool OnMouseButtonDown(Widget w, int x, int y, int button)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        if (button == 0)
-        {
-            if (IsHeaderWidget(w))
-            {
-                m_Dragging = true;
-                if (m_HoveredBg)
-                {
-                    int restoreCol = FindCachedColor(m_HoveredBg);
-                    if (restoreCol != 0)
-                        m_HoveredBg.SetColor(restoreCol);
-                    m_HoveredBg = null;
-                }
-                float px = 0.0;
-                float py = 0.0;
-                if (BTCAtmPanel)
-                    BTCAtmPanel.GetPos(px, py);
-                m_DragOffX = x - px;
-                m_DragOffY = y - py;
-            }
-        }
-
-        if (IsInteractiveWidget(w))
-            return false;
-        return true;
-    }
-
-    override bool OnMouseButtonUp(Widget w, int x, int y, int button)
-    {
-        if (button == 0)
-            m_Dragging = false;
-        if (!m_IsOpen)
-            return false;
-
-        if (IsInteractiveWidget(w))
-            return false;
-        return true;
-    }
 
     // =========================================================
     // Hover feedback (buttons + tabs)
     // =========================================================
-    override bool OnMouseEnter(Widget w, int x, int y)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        ImageWidget bg = FindButtonBg(w);
-        int baseColor = 0;
-        int hoverColor = 0;
-        if (bg)
-        {
-            if (m_HoveredBg && m_HoveredBg != bg)
-            {
-                baseColor = FindCachedColor(m_HoveredBg);
-                if (baseColor != 0)
-                    m_HoveredBg.SetColor(baseColor);
-                m_HoveredBg = null;
-                baseColor = 0;
-            }
-            baseColor = FindCachedColor(bg);
-            if (baseColor != 0)
-            {
-                m_HoveredBg = bg;
-                hoverColor = LightenARGB(baseColor, 20);
-                bg.SetColor(hoverColor);
-            }
-        }
-        return false;
-    }
-
-    override bool OnMouseLeave(Widget w, Widget enterW, int x, int y)
-    {
-        if (!m_IsOpen)
-            return false;
-
-        int baseColor = 0;
-        if (m_HoveredBg)
-        {
-            baseColor = FindCachedColor(m_HoveredBg);
-            if (baseColor != 0)
-                m_HoveredBg.SetColor(baseColor);
-            m_HoveredBg = null;
-        }
-        return false;
-    }
 
     // =========================================================
     // Helpers
     // =========================================================
-    protected bool IsHeaderWidget(Widget w)
-    {
-        if (!w)
-            return false;
-        if (!HeaderFrame)
-            return false;
-
-        Widget check = w;
-        ButtonWidget btnCheck = null;
-        while (check)
-        {
-            btnCheck = ButtonWidget.Cast(check);
-            if (btnCheck)
-                return false;
-            if (check == HeaderFrame)
-                return true;
-            check = check.GetParent();
-        }
-        return false;
-    }
-
-    protected bool IsInteractiveWidget(Widget w)
-    {
-        if (!w)
-            return false;
-
-        Widget check = w;
-        ButtonWidget btnCast = null;
-        EditBoxWidget editCast = null;
-        while (check)
-        {
-            btnCast = ButtonWidget.Cast(check);
-            if (btnCast)
-                return true;
-            editCast = EditBoxWidget.Cast(check);
-            if (editCast)
-                return true;
-            check = check.GetParent();
-        }
-        return false;
-    }
-
-    protected ImageWidget FindButtonBg(Widget w)
-    {
-        if (!w)
-            return null;
-
-        Widget check = w;
-        ButtonWidget btn = null;
-        while (check)
-        {
-            btn = ButtonWidget.Cast(check);
-            if (btn)
-                break;
-            check = check.GetParent();
-        }
-        if (!btn)
-            return null;
-
-        Widget child = btn.GetChildren();
-        if (!child)
-            return null;
-
-        return ImageWidget.Cast(child);
-    }
-
-    protected void ClampPanelPos(float inX, float inY, float minY, out float outX, out float outY)
-    {
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float panW = 0.0;
-        float panH = 0.0;
-        if (BTCAtmPanel)
-            BTCAtmPanel.GetSize(panW, panH);
-
-        float maxX = scrW - panW;
-        float maxY = scrH - panH;
-        float dpiCapX = panW;
-        float dpiCapY = panH * 0.5;
-        if (maxX > dpiCapX) { maxX = dpiCapX; }
-        if (maxY > dpiCapY) { maxY = dpiCapY; }
-        if (maxX < 0.0) { maxX = 0.0; }
-        if (maxY < minY) { maxY = minY; }
-
-        outX = inX;
-        outY = inY;
-        if (outX < 0.0) { outX = 0.0; }
-        if (outY < minY) { outY = minY; }
-        if (outX > maxX) { outX = maxX; }
-        if (outY > maxY) { outY = maxY; }
-    }
-
-    protected void CenterPanel()
-    {
-        if (!BTCAtmPanel)
-            return;
-        int scrW = 0;
-        int scrH = 0;
-        GetScreenSize(scrW, scrH);
-        float panW = 0.0;
-        float panH = 0.0;
-        BTCAtmPanel.GetSize(panW, panH);
-
-        float cx = (scrW - panW) * 0.5;
-        float cy = (scrH - panH) * 0.5;
-        float clampedX = 0.0;
-        float clampedY = 0.0;
-        float minY = 0.0;
-        ClampPanelPos(cx, cy, minY, clampedX, clampedY);
-        BTCAtmPanel.SetPos(clampedX, clampedY);
-    }
 
     static int LightenARGB(int color, int amount)
     {
-        int a = (color >> 24) & 0xFF;
-        int r = (color >> 16) & 0xFF;
-        int g = (color >> 8) & 0xFF;
-        int b = color & 0xFF;
-
-        r = r + amount;
-        g = g + amount;
-        b = b + amount;
-
-        if (r > 255) { r = 255; }
-        if (g > 255) { g = 255; }
-        if (b > 255) { b = 255; }
-
-        return (a << 24) | (r << 16) | (g << 8) | b;
+        return LFPG_FloatingViewBase.LFPG_SharedLightenARGB(color, amount);
     }
 
     // =========================================================
@@ -1039,15 +823,7 @@ class LFPG_BTCAtmView extends ScriptView
 
     static bool IsEscCooldown()
     {
-        if (s_EscCloseTime <= 0.0)
-            return false;
-        if (!g_Game)
-            return false;
-        float now = g_Game.GetTickTime();
-        float elapsed = now - s_EscCloseTime;
-        if (elapsed < 0.2)
-            return true;
-        return false;
+        return LFPG_FloatingViewBase.LFPG_SharedEscCooldown(s_EscCloseTime);
     }
 
     static void Cleanup()
@@ -1160,6 +936,14 @@ class LFPG_BTCAtmView extends ScriptView
 
         HideCursor();
         LFPG_Util.Info("[BTCAtmView] Closed");
+    }
+    override protected Widget LFPG_ViewPanel()
+    {
+        return BTCAtmPanel;
+    }
+    override protected Widget LFPG_ViewHeader()
+    {
+        return HeaderFrame;
     }
 };
 #endif
