@@ -22,6 +22,12 @@ Checks
                    #define and #undef are not modelled, so a nested #ifndef X
                    inside #ifdef X is still compared and can report a duplicate
                    that never compiles (dead code; fails closed).
+  PREPROC-BALANCE  #else/#elif/#endif with no open #if* before it, or an #if*
+                   still open at end of file. A stray #endif after an edit
+                   silently reshapes which code each side compiles; the brace
+                   BALANCE check does not see it.
+  PREPROC-CONTRA   (warning) #ifndef X nested inside #ifdef X: dead code,
+                   never compiled. Skipped when the file #defines or #undefs X.
   FILEHANDLE_INIT  FileHandle initialized to a numeric literal; diag rejects it.
   CHAINED_REPLACE  Replace is not chainable in Enforce.
 
@@ -60,6 +66,7 @@ BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 LINE_COMMENT = re.compile(r"//.*$", re.M)
 CLASS_DECL = re.compile(r"^\s*(modded\s+)?class\s+([A-Za-z0-9_]+)", re.M)
 PREPROC = re.compile(r"^\s*#\s*(ifdef|ifndef|else|elif|endif)\b\s*(\w*)", re.M)
+PREPROC_ANY = re.compile(r"^\s*#\s*(if|ifdef|ifndef|else|elif|endif|define|undef)\b\s*(\w*)")
 FILEHANDLE_NUM_INIT = re.compile(r"^\s*FileHandle\s+\w+\s*=\s*\d", re.M)
 CHAINED_REPLACE = re.compile(r"\.Replace\([^)]*\)\s*\.\s*Replace\(")
 
@@ -159,6 +166,51 @@ def branch_at_line(code):
     return out
 
 
+def preproc_balance(code):
+    """Return (errors, contradictions) as lists of (lineno, detail).
+
+    errors: orphan #else/#elif/#endif, and #if* left open at end of file.
+    contradictions: #ifndef X opened while an enclosing #ifdef X is still in
+    its true branch, unless the file #defines or #undefs X anywhere.
+    """
+    errors = []
+    contra = []
+    stack = []
+    redefined = set()
+    lines = code.split("\n")
+    for line in lines:
+        m = PREPROC_ANY.match(line)
+        if m and m.group(1) in ("define", "undef"):
+            redefined.add(m.group(2))
+    for lineno, line in enumerate(lines, 1):
+        m = PREPROC_ANY.match(line)
+        if not m:
+            continue
+        kind, sym = m.group(1), m.group(2)
+        if kind in ("if", "ifdef", "ifndef"):
+            if kind == "ifndef" and sym not in redefined:
+                for entry in stack:
+                    if entry[0] == "ifdef" and entry[1] == sym and not entry[3]:
+                        contra.append((lineno, "#ifndef %s inside #ifdef %s at line %d"
+                                       % (sym, sym, entry[2])))
+                        break
+            stack.append([kind, sym, lineno, False])
+        elif kind in ("else", "elif"):
+            if not stack:
+                errors.append((lineno, "#%s with no open #if*" % kind))
+            else:
+                stack[-1][3] = True
+        elif kind == "endif":
+            if not stack:
+                errors.append((lineno, "#endif with no open #if*"))
+            else:
+                stack.pop()
+    for entry in stack:
+        errors.append((entry[2], "#%s %s not closed before end of file"
+                       % (entry[0], entry[1])))
+    return errors, contra
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.dirname(os.path.dirname(
@@ -205,6 +257,12 @@ def main():
                 if n_open != n_close:
                     rep.fail("BALANCE", rel, "%s=%d %s=%d (truncated or unclosed)"
                              % (opener, n_open, closer, n_close))
+
+            pp_errors, pp_contra = preproc_balance(code)
+            for lineno, detail in pp_errors:
+                rep.fail("PREPROC-BALANCE", "%s:%d" % (rel, lineno), detail)
+            for lineno, detail in pp_contra:
+                rep.warn("PREPROC-CONTRA", "%s:%d" % (rel, lineno), detail)
 
             branches = branch_at_line(code)
             for m in CLASS_DECL.finditer(code):
