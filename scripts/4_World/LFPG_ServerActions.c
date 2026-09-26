@@ -31,8 +31,8 @@ class LFPG_ServerActions
         return s_Fallback;
     }
 
-    // Solo los metodos del calefactor. El resto de la fachada llega con el
-    // carril de recorte de huella, que todavia no esta en main.
+    // Heater methods only. The rest of the facade arrives with the compile
+    // footprint lane, which is not in main yet.
     void Heater_EEInit(LFPG_Heater dev) { }
     void Heater_LFPG_SetPowered(LFPG_Heater dev, bool powered) { }
     void Heater_LFPG_SetHeatActive(LFPG_Heater dev, bool active) { }
