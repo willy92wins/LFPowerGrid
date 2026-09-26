@@ -5,6 +5,10 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
     // The World side is a shell by the 2026-09-21 owner decision; the work
     // lives here. Heat rides the same UniversalTemperatureSource path as the
     // furnace, gated by powered AND switched on.
+    //
+    // Device state arrives through the `dev` parameter and this class does not
+    // extend LFPG_DeviceBase, so only public members are reachable. Anything
+    // the base keeps protected goes through its accessor.
 
     override void Heater_EEInit(LFPG_Heater dev)
     {
@@ -75,7 +79,7 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
             string msg = "[LFPG_Heater] SetPowered(";
             msg = msg + powered.ToString();
             msg = msg + ") id=";
-            msg = msg + dev.m_DeviceId;
+            msg = msg + dev.LFPG_GetDeviceId();
             LFPG_Util.Debug(msg);
         }
         #endif
@@ -133,7 +137,7 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
         string toggleMsg = "[LFPG_Heater] Toggle: on=";
         toggleMsg = toggleMsg + dev.m_HeaterOn.ToString();
         toggleMsg = toggleMsg + " id=";
-        toggleMsg = toggleMsg + dev.m_DeviceId;
+        toggleMsg = toggleMsg + dev.LFPG_GetDeviceId();
         LFPG_Util.Debug(toggleMsg);
         #endif
     }
