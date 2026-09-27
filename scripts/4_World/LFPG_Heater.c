@@ -80,6 +80,13 @@ class LFPG_Heater : LFPG_DeviceBase
 
     override float LFPG_GetConsumption()
     {
+        // Drain power only while switched on. An off heater must not
+        // demand from the grid (player report: "drains power even when
+        // shut off"). Same dynamic-consumption pattern as the electric
+        // stove's per-burner consumption.
+        if (!m_HeaterOn)
+            return 0.0;
+
         return LFPG_HEATER_CONSUMPTION;
     }
 

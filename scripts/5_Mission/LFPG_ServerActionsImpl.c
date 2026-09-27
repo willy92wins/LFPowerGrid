@@ -134,6 +134,16 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
         dev.SetSynchDirty();
         Heater_RefreshHeat(dev);
 
+        // Re-propagate so the graph sees the new consumption (0.0 while
+        // off). Without this the node keeps its stale m_Consumption and
+        // the grid keeps reserving power for a switched-off heater.
+        string devId = dev.LFPG_GetDeviceId();
+        if (devId != "")
+        {
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(devId);
+        }
+
         string toggleMsg = "[LFPG_Heater] Toggle: on=";
         toggleMsg = toggleMsg + dev.m_HeaterOn.ToString();
         toggleMsg = toggleMsg + " id=";
