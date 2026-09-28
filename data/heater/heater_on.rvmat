@@ -1,11 +1,11 @@
-// LF_PowerGrid - Heater elements material (ON / heating)
-// heater.rvmat plus emission: same Super shader and stages, a red-hot orange
-// emmisive[] and a Stage8 emissive map, as in the vanilla sea_chest / sea_chest_e pair.
-// Applied to the "light_coils" selection while powered and switched on.
+// LF_PowerGrid - Heater elements and power button material (ON / heating)
+// heater.rvmat plus emission: same Super shader and stages, a red-hot emmisive[]
+// and a Stage8 emissive map, as in the vanilla sea_chest / sea_chest_e pair.
+// Applied to "light_coils" and "light_button" while powered and switched on.
 ambient[]={1,1,1,1};
 diffuse[]={1,1,1,1};
 forcedDiffuse[]={0,0,0,0};
-emmisive[]={50,16,3,1};
+emmisive[]={50,6,1.5,1};
 specular[]={0.5,0.5,0.5,1};
 specularPower=180;
 PixelShaderID="Super";

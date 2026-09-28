@@ -2310,11 +2310,13 @@ class CfgVehicles
         physLayer = "item_small";
         isDeployable = 0;
 
-        // hiddenSelections[0] = "light_coils" -> emissive rvmat while heating.
-        // Without the matching model.cfg section the swap silently no-ops.
-        hiddenSelections[] = {"light_coils"};
-        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\heater\heater_co.paa"};
-        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\heater\heater.rvmat"};
+        // hiddenSelections[0] = "light_coils" (element bars), [1] = "light_button"
+        // (power switch): both turn red-hot and emissive while heating. The order
+        // matches LFPG_HEATER_HS_* in LFPG_Heater.c. Without the matching model.cfg
+        // sections the swap silently no-ops.
+        hiddenSelections[] = {"light_coils", "light_button"};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\heater\heater_co.paa", "\LFPowerGrid\data\heater\heater_co.paa"};
+        hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\heater\heater.rvmat", "\LFPowerGrid\data\heater\heater.rvmat"};
 
         class DamageSystem
         {
