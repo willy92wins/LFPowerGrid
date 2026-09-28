@@ -52,6 +52,10 @@ class LFPG_DeviceInspector
     static const float INSPECT_TEXT_PAD_R = 10.0;
     static const float INSPECT_PANEL_PAD_B = 8.0;
     static const float INSPECT_MIN_PANEL_W = 140.0;
+    static const float INSPECT_MAX_W_FACTOR = 1.6;
+    static const float INSPECT_TEXT_BOX_W = 274.0;
+    static const float INSPECT_BATTERY_BOX_W = 360.0;
+    static const float INSPECT_TEXT_BOX_SLACK = 2.0;
     static const float INSPECT_SEP_INSET = 12.0;
     static const float INSPECT_UNIT_TOLERANCE = 0.1;
     static const int INSPECT_LAYOUT_MAX_TRIES = 10;
@@ -257,33 +261,33 @@ class LFPG_DeviceInspector
         if (m_wDeviceName)
         {
             m_wDeviceName.SetPos(14, 7);
-            m_wDeviceName.SetSize(274, 22);
+            SetSizeDirty(m_wDeviceName, INSPECT_TEXT_BOX_W, 22);
             m_wDeviceName.SetColor(COL_TEXT_WHITE);
             m_wTextLines.Insert(m_wDeviceName);
         }
         if (m_wDeviceType)
         {
             m_wDeviceType.SetPos(14, 30);
-            m_wDeviceType.SetSize(274, 16);
+            SetSizeDirty(m_wDeviceType, INSPECT_TEXT_BOX_W, 16);
             m_wTextLines.Insert(m_wDeviceType);
         }
         if (m_wStatusLine)
         {
             m_wStatusLine.SetPos(14, INSPECT_Y_STATUS);
-            m_wStatusLine.SetSize(274, 16);
+            SetSizeDirty(m_wStatusLine, INSPECT_TEXT_BOX_W, 16);
             m_wTextLines.Insert(m_wStatusLine);
         }
         if (m_wCapLine)
         {
             m_wCapLine.SetPos(14, INSPECT_Y_CAP);
-            m_wCapLine.SetSize(274, 16);
+            SetSizeDirty(m_wCapLine, INSPECT_TEXT_BOX_W, 16);
             m_wCapLine.SetColor(COL_GRAY);
             m_wTextLines.Insert(m_wCapLine);
         }
         if (m_wTankLine)
         {
             m_wTankLine.SetPos(14, INSPECT_Y_EXTRA);
-            m_wTankLine.SetSize(274, 16);
+            SetSizeDirty(m_wTankLine, INSPECT_TEXT_BOX_W, 16);
             m_wTankLine.SetColor(COL_BLUE_BRIGHT);
             m_wTankLine.Show(false);
             m_wTextLines.Insert(m_wTankLine);
@@ -292,7 +296,7 @@ class LFPG_DeviceInspector
         if (m_wFuelLine)
         {
             m_wFuelLine.SetPos(14, INSPECT_Y_EXTRA);
-            m_wFuelLine.SetSize(274, 16);
+            SetSizeDirty(m_wFuelLine, INSPECT_TEXT_BOX_W, 16);
             m_wFuelLine.SetColor(COL_ORANGE);
             m_wFuelLine.Show(false);
             m_wTextLines.Insert(m_wFuelLine);
@@ -302,7 +306,7 @@ class LFPG_DeviceInspector
         {
             float reserveY = INSPECT_Y_EXTRA + INSPECT_LINE_STEP;
             m_wReserveLine.SetPos(14, reserveY);
-            m_wReserveLine.SetSize(274, 16);
+            SetSizeDirty(m_wReserveLine, INSPECT_TEXT_BOX_W, 16);
             m_wReserveLine.SetColor(COL_ORANGE);
             m_wReserveLine.Show(false);
             m_wTextLines.Insert(m_wReserveLine);
@@ -311,7 +315,7 @@ class LFPG_DeviceInspector
         if (m_wLinkLine)
         {
             m_wLinkLine.SetPos(14, INSPECT_Y_EXTRA);
-            m_wLinkLine.SetSize(274, 16);
+            SetSizeDirty(m_wLinkLine, INSPECT_TEXT_BOX_W, 16);
             m_wLinkLine.SetColor(COL_EMERALD);
             m_wLinkLine.Show(false);
             m_wTextLines.Insert(m_wLinkLine);
@@ -320,7 +324,7 @@ class LFPG_DeviceInspector
         if (m_wBatteryLine)
         {
             m_wBatteryLine.SetPos(14, INSPECT_Y_EXTRA);
-            m_wBatteryLine.SetSize(360, 18);
+            SetSizeDirty(m_wBatteryLine, INSPECT_BATTERY_BOX_W, 18);
             m_wBatteryLine.SetColor(COL_YELLOW);
             m_wBatteryLine.Show(false);
             m_wTextLines.Insert(m_wBatteryLine);
@@ -329,7 +333,7 @@ class LFPG_DeviceInspector
         if (m_wWiresHeader)
         {
             m_wWiresHeader.SetPos(14, INSPECT_Y_HEADER);
-            m_wWiresHeader.SetSize(274, 16);
+            SetSizeDirty(m_wWiresHeader, INSPECT_TEXT_BOX_W, 16);
             m_wWiresHeader.SetColor(COL_TEXT_LIGHT);
             m_wTextLines.Insert(m_wWiresHeader);
         }
@@ -344,7 +348,7 @@ class LFPG_DeviceInspector
             {
                 float wireY = INSPECT_Y_ROWS + (wi * LFPG_INSPECT_WIRE_ROW_H);
                 tw.SetPos(14, wireY);
-                tw.SetSize(274, 14);
+                SetSizeDirty(tw, INSPECT_TEXT_BOX_W, 14);
                 m_wWireSlots.Insert(tw);
                 m_wTextLines.Insert(tw);
             }
@@ -1366,20 +1370,26 @@ class LFPG_DeviceInspector
         float unitX = 0.0;
         float unitY = 0.0;
         float unitDiff = 0.0;
+        float childUnit = 0.0;
+        float textLeft = 0.0;
         float lineX = 0.0;
         float lineY = 0.0;
         float lineW = 0.0;
         float lineH = 0.0;
-        float usedW = 0.0;
+        float fTextW = 0.0;
+        float fTextH = 0.0;
         float lineRight = 0.0;
         float lineBottom = 0.0;
         float needW = 0.0;
         float needH = 0.0;
         float fitW = 0.0;
         float fitH = 0.0;
+        float maxW = LFPG_INSPECT_PANEL_W * INSPECT_MAX_W_FACTOR;
         float maxH = 0.0;
+        float boxW = 0.0;
         TextWidget lineWidget;
         string lineText;
+        vector boxSet;
         sizeRef.Update();
         sizeRef.GetScreenPos(originX, originY);
         sizeRef.GetScreenSize(refW, refH);
@@ -1415,35 +1425,48 @@ class LFPG_DeviceInspector
                     continue;
                 if (lineText == "")
                     continue;
+                if (!m_LastWidgetSize.Find(lineWidget, boxSet))
+                    continue;
                 lineWidget.Update();
                 lineWidget.GetScreenPos(lineX, lineY);
                 lineWidget.GetScreenSize(lineW, lineH);
                 textW = 0;
                 textH = 0;
                 lineWidget.GetTextSize(textW, textH);
-                if (lineW <= 0.0 || lineH <= 0.0 || textW <= 0)
+                if (lineW <= 0.0 || lineH <= 0.0 || textW <= 0 || boxSet[1] <= 0.0)
                 {
                     measured = false;
                     break;
                 }
-                usedW = textW;
-                if (usedW > lineW)
+                if (childUnit <= 0.0)
                 {
-                    usedW = lineW;
+                    childUnit = lineH / boxSet[1];
+                    textLeft = lineX - originX;
                 }
+                fTextW = textW;
+                fTextH = textH;
                 lineRight = lineX - originX;
-                lineRight = lineRight + usedW;
+                lineRight = lineRight + fTextW;
                 if (lineRight > needW)
                 {
                     needW = lineRight;
                 }
-                lineBottom = lineY - originY;
-                lineBottom = lineBottom + lineH;
+                lineBottom = lineH;
+                if (fTextH > lineBottom)
+                {
+                    lineBottom = fTextH;
+                }
+                lineBottom = lineBottom + lineY;
+                lineBottom = lineBottom - originY;
                 if (lineBottom > needH)
                 {
                     needH = lineBottom;
                 }
             }
+        }
+        if (measured && childUnit <= 0.0)
+        {
+            measured = false;
         }
         maxH = ComputePanelHeight(LFPG_INSPECT_MAX_WIRES);
         maxH = maxH + GetExtraLineOffset();
@@ -1458,6 +1481,7 @@ class LFPG_DeviceInspector
             fitH = ComputePanelHeight(m_VisibleWireCount);
             fitH = fitH + GetExtraLineOffset();
             ApplyPanelSize(LFPG_INSPECT_PANEL_W, fitH);
+            ApplyTextBoxWidth(0.0);
             return;
         }
         m_LayoutTries = 0;
@@ -1470,9 +1494,9 @@ class LFPG_DeviceInspector
         {
             fitW = INSPECT_MIN_PANEL_W;
         }
-        if (fitW > LFPG_INSPECT_PANEL_W)
+        if (fitW > maxW)
         {
-            fitW = LFPG_INSPECT_PANEL_W;
+            fitW = maxW;
         }
         if (fitH < LFPG_INSPECT_HEADER_H)
         {
@@ -1482,7 +1506,41 @@ class LFPG_DeviceInspector
         {
             fitH = maxH;
         }
+        // Text boxes end at the inner right edge of the panel, in the children's own units.
+        boxW = fitW - INSPECT_TEXT_PAD_R;
+        boxW = boxW * unitX;
+        boxW = boxW - textLeft;
+        boxW = boxW + INSPECT_TEXT_BOX_SLACK;
+        boxW = boxW / childUnit;
         ApplyPanelSize(fitW, fitH);
+        ApplyTextBoxWidth(boxW);
+    }
+    // Sets every content line to one box width, keeping each line's height.
+    // A width <= 0 restores the layout defaults.
+    protected void ApplyTextBoxWidth(float boxW)
+    {
+        int bi;
+        float lineBoxW = 0.0;
+        TextWidget boxLine;
+        vector boxSize;
+        for (bi = 0; bi < m_wTextLines.Count(); bi = bi + 1)
+        {
+            boxLine = m_wTextLines[bi];
+            if (!boxLine)
+                continue;
+            if (!m_LastWidgetSize.Find(boxLine, boxSize))
+                continue;
+            lineBoxW = boxW;
+            if (lineBoxW <= 0.0)
+            {
+                lineBoxW = INSPECT_TEXT_BOX_W;
+                if (boxLine == m_wBatteryLine)
+                {
+                    lineBoxW = INSPECT_BATTERY_BOX_W;
+                }
+            }
+            SetSizeDirty(boxLine, lineBoxW, boxSize[1]);
+        }
     }
     protected void ApplyPanelSize(float w, float h)
     {
