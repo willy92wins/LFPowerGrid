@@ -42,6 +42,7 @@ class LFPG_Heater : LFPG_DeviceBase
     // Client-side light effect (NOT ref -- engine object)
     protected ScriptedLightBase m_LFPG_Light;
     protected int m_PrevGlowState = -1;
+    protected int m_PrevSyncState = -1;
 #endif
 
     void LFPG_Heater()
@@ -189,21 +190,52 @@ class LFPG_Heater : LFPG_DeviceBase
             glowTarget = 1;
         }
 
-        if (glowTarget == m_PrevGlowState)
+        int syncState = 0;
+        if (m_PoweredNet)
+            syncState = syncState + 2;
+        if (m_HeaterOn)
+            syncState = syncState + 1;
+
+        bool stateChanged = false;
+        if (syncState != m_PrevSyncState)
+            stateChanged = true;
+        m_PrevSyncState = syncState;
+
+        if (glowTarget != m_PrevGlowState)
+        {
+            m_PrevGlowState = glowTarget;
+
+            if (glowTarget == 1)
+            {
+                SetObjectMaterial(0, LFPG_HEATER_RVMAT_ON);
+                LFPG_CreateLight();
+            }
+            else
+            {
+                SetObjectMaterial(0, LFPG_HEATER_RVMAT_OFF);
+                LFPG_DestroyLight();
+            }
+        }
+
+        if (!stateChanged)
             return;
 
-        m_PrevGlowState = glowTarget;
+        // One line per power or switch change: what arrived and what was applied.
+        bool hasLight = false;
+        if (m_LFPG_Light)
+            hasLight = true;
 
-        if (glowTarget == 1)
-        {
-            SetObjectMaterial(0, LFPG_HEATER_RVMAT_ON);
-            LFPG_CreateLight();
-        }
-        else
-        {
-            SetObjectMaterial(0, LFPG_HEATER_RVMAT_OFF);
-            LFPG_DestroyLight();
-        }
+        string visMsg = "[LFPG_Heater] Visuals: powered=";
+        visMsg = visMsg + m_PoweredNet.ToString();
+        visMsg = visMsg + " on=";
+        visMsg = visMsg + m_HeaterOn.ToString();
+        visMsg = visMsg + " glow=";
+        visMsg = visMsg + m_PrevGlowState.ToString();
+        visMsg = visMsg + " light=";
+        visMsg = visMsg + hasLight.ToString();
+        visMsg = visMsg + " id=";
+        visMsg = visMsg + m_DeviceId;
+        LFPG_Util.Info(visMsg);
     }
 #endif
 

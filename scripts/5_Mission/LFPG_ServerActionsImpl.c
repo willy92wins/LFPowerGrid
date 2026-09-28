@@ -57,9 +57,27 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
     override void Heater_LFPG_SetHeatActive(LFPG_Heater dev, bool active)
     {
         #ifdef SERVER
-        if (dev.m_UTSource)
+        if (!dev.m_UTSource)
         {
-            dev.m_UTSource.SetActive(active);
+            if (active && LFPG_Settings.Get().HeaterHeatEnabled)
+            {
+                string noSrcMsg = "[LFPG_Heater] Heat source missing, nothing to warm. id=";
+                noSrcMsg = noSrcMsg + dev.LFPG_GetDeviceId();
+                LFPG_Util.Warn(noSrcMsg);
+            }
+            return;
+        }
+
+        bool wasActive = dev.m_UTSource.IsActive();
+        dev.m_UTSource.SetActive(active);
+        bool nowActive = dev.m_UTSource.IsActive();
+        if (wasActive != nowActive)
+        {
+            string heatMsg = "[LFPG_Heater] Heat source active=";
+            heatMsg = heatMsg + nowActive.ToString();
+            heatMsg = heatMsg + " id=";
+            heatMsg = heatMsg + dev.LFPG_GetDeviceId();
+            LFPG_Util.Info(heatMsg);
         }
         #endif
     }
@@ -146,9 +164,11 @@ class LFPG_ServerActionsImpl : LFPG_ServerActions
 
         string toggleMsg = "[LFPG_Heater] Toggle: on=";
         toggleMsg = toggleMsg + dev.m_HeaterOn.ToString();
+        toggleMsg = toggleMsg + " powered=";
+        toggleMsg = toggleMsg + dev.m_PoweredNet.ToString();
         toggleMsg = toggleMsg + " id=";
         toggleMsg = toggleMsg + dev.LFPG_GetDeviceId();
-        LFPG_Util.Debug(toggleMsg);
+        LFPG_Util.Info(toggleMsg);
         #endif
     }
 
