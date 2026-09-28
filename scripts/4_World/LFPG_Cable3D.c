@@ -143,7 +143,7 @@ class LFPG_Cable3D
 			s_Settings.Mode = LFPG_C3D_MODE_3D;
 		}
 		SaveSettings();
-		s_Queue.Clear();
+		ClearQueue();
 
 		string toggleMsg = "[Cable3D] mode toggled to ";
 		toggleMsg = toggleMsg + ModeName(s_Settings.Mode);
@@ -175,6 +175,8 @@ class LFPG_Cable3D
 	}
 
 	// Called by LFPG_CableRenderer.Refresh3DLook for every live sub-segment.
+	// A particle holds at most one queue entry (m_Cable3DQueued); a new wanted
+	// look for a particle already queued only updates what that entry applies.
 	static void Want(LFPG_CableParticle p, int look)
 	{
 		if (!p)
@@ -185,8 +187,27 @@ class LFPG_Cable3D
 			return;
 		p.m_Cable3DWant = look;
 		p.m_Cable3DTries = 0;
+		if (p.m_Cable3DQueued)
+			return;
 		EnsureInit();
+		p.m_Cable3DQueued = true;
 		s_Queue.Insert(p);
+	}
+
+	// Empties the queue and clears the pending flag of every particle in it,
+	// so a particle that outlives the clear can be queued again.
+	protected static void ClearQueue()
+	{
+		if (!s_Queue)
+			return;
+		int i;
+		for (i = 0; i < s_Queue.Count(); i = i + 1)
+		{
+			LFPG_CableParticle q = s_Queue[i];
+			if (q)
+				q.m_Cable3DQueued = false;
+		}
+		s_Queue.Clear();
 	}
 
 	// Called once per frame from LFPG_CableRenderer.MaintenanceTick.
@@ -216,33 +237,39 @@ class LFPG_Cable3D
 			renderer.Refresh3DLook(s_ToolHeld);
 		}
 
-		// Pops from the back. A failed entry is re-inserted at the front BEFORE
-		// the examined entry is removed, so the queue never drops its last
-		// strong reference to a particle that is still being retried.
+		// FIFO from the front, one entry per particle. Every examined entry
+		// costs one unit of the frame budget, discarded ones included. The try
+		// cap is checked before Apply. A failed creation is re-queued at the
+		// back BEFORE its front entry is removed, so the queue never drops its
+		// last strong reference to a particle that is still being retried.
 		int budget = LFPG_C3D_WORK_PER_FRAME;
 		int examined = 0;
 		int queued = s_Queue.Count();
 		while (budget > 0 && examined < queued && s_Queue.Count() > 0)
 		{
 			examined = examined + 1;
-			int last = s_Queue.Count() - 1;
-			LFPG_CableParticle p = s_Queue[last];
-			bool retry = false;
+			budget = budget - 1;
+			LFPG_CableParticle p = s_Queue[0];
+			bool requeue = false;
 			if (p && p.IsValid() && p.m_Cable3DLook != p.m_Cable3DWant)
 			{
-				budget = budget - 1;
-				if (!Apply(p))
+				if (p.m_Cable3DTries < LFPG_C3D_MAX_TRIES)
 				{
-					p.m_Cable3DTries = p.m_Cable3DTries + 1;
-					if (p.m_Cable3DTries < LFPG_C3D_MAX_TRIES)
-						retry = true;
-					else
-						s_GaveUp = s_GaveUp + 1;
+					if (!Apply(p))
+					{
+						p.m_Cable3DTries = p.m_Cable3DTries + 1;
+						if (p.m_Cable3DTries < LFPG_C3D_MAX_TRIES)
+							requeue = true;
+						else
+							s_GaveUp = s_GaveUp + 1;
+					}
 				}
 			}
-			if (retry)
-				s_Queue.InsertAt(p, 0);
-			s_Queue.Remove(s_Queue.Count() - 1);
+			if (requeue)
+				s_Queue.Insert(p);
+			else if (p)
+				p.m_Cable3DQueued = false;
+			s_Queue.RemoveOrdered(0);
 		}
 
 		if (s_Settings.DebugLog)
@@ -276,8 +303,7 @@ class LFPG_Cable3D
 	// Called from LFPG_CableRenderer.CleanupInstance after its DestroyAll().
 	static void Reset()
 	{
-		if (s_Queue)
-			s_Queue.Clear();
+		ClearQueue();
 		s_Live = 0;
 		s_Created = 0;
 		s_Released = 0;

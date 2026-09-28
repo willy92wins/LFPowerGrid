@@ -20,12 +20,14 @@ class LFPG_CableParticle
     protected bool m_Valid;
 
     // 3D backend (LFPG_Cable3D): client-local object of this sub-segment,
-    // its applied and wanted look (LFPG_C3D_LOOK_*, -1 = none) and the
-    // failed creation attempts for the current wanted look.
+    // its applied and wanted look (LFPG_C3D_LOOK_*, -1 = none), the failed
+    // creation attempts for the current wanted look, and whether the work
+    // queue holds an entry for it (at most one; cleared when it is dropped).
     Object m_Cable3DObj;
     int m_Cable3DLook = -1;
     int m_Cable3DWant = -1;
     int m_Cable3DTries;
+    bool m_Cable3DQueued;
 
     void LFPG_CableParticle()
     {
