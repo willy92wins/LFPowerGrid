@@ -4,7 +4,7 @@
 // LF_PowerGrid - 3D cable backend (client only)
 //
 // One client-local LFPG_CableSegment (HouseNoDestruct, model
-// lfpg_cable_segment.p3d: 1 m open tube on +Z, centred, radius 0.01,
+// lfpg_cable_segment.p3d: 1 m tube with flat end caps on +Z, centred, radius 0.01,
 // no geometry LOD) per post-sag sub-segment built by LFPG_CableRenderer
 // (LFPG_CableParticle). Placed with SetTransform: basis =
 // (aside * thickness, up * thickness, dir * length), origin = midpoint.
@@ -31,7 +31,7 @@ static const int    LFPG_C3D_LOOK_CRITICAL    = 4;
 static const int    LFPG_C3D_WORK_PER_FRAME   = 48;    // object creations / recolours per frame
 static const int    LFPG_C3D_MAX_LIVE         = 600;   // one per sub-segment, renderer cap is 512
 static const int    LFPG_C3D_MAX_TRIES        = 3;
-static const float  LFPG_C3D_THICKNESS        = 1.5;   // model radius 0.01 m -> 1.5 cm
+static const float  LFPG_C3D_THICKNESS        = 1.0;   // model radius 0.01 m -> 1.0 cm
 static const float  LFPG_C3D_OVERLAP_M        = 0.01;  // added at each end, hides joints
 static const float  LFPG_C3D_DEBUG_PERIOD_S   = 10.0;
 static const string LFPG_C3D_CLASS            = "LFPG_CableSegment";

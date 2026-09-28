@@ -2621,7 +2621,7 @@ class CfgVehicles
     // =========================================================
     // 3D cable segment (client-local only, created by LFPG_Cable3D.c
     // with ECE_LOCAL). One per post-sag cable sub-segment. Model: 1 m
-    // open tube on +Z, centred, radius 0.01, no geometry LOD; all faces
+    // tube with flat end caps on +Z, centred, radius 0.01, no geometry LOD; all faces
     // in "camo" (needs model.cfg sections[]). Not in CfgPatches units[].
     // =========================================================
     class HouseNoDestruct;
