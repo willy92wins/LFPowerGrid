@@ -210,6 +210,27 @@ modded class MissionGameplay
             return;
         }
 
+        // 3D cables: F9 with a cable reel or pliers in hands toggles 2D / 3D.
+        if (key == KeyCode.KC_F9)
+        {
+            PlayerBase c3dPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+            bool c3dTool = false;
+            if (c3dPlayer)
+            {
+                if (LFPG_WorldUtil.PlayerHasCableReelInHands(c3dPlayer))
+                    c3dTool = true;
+                else if (LFPG_WorldUtil.PlayerHasPliersInHands(c3dPlayer))
+                    c3dTool = true;
+            }
+            if (c3dTool)
+            {
+                int c3dMode = LFPG_Cable3D.ToggleMode();
+                string c3dMsg = "Cables: ";
+                c3dMsg = c3dMsg + LFPG_Cable3D.ModeName(c3dMode);
+                LFPG_ShowMsg(c3dMsg);
+            }
+        }
+
         super.OnKeyPress(key);
     }
 

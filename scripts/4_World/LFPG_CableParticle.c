@@ -6,7 +6,8 @@
 // Pure geometry class: stores endpoints (from/to) for one
 // visual sub-segment of a cable wire (after catenaria sag).
 //
-// Rendering: CableRenderer.DrawFrame() via CableHUD Canvas 2D.
+// Rendering: CableRenderer.DrawFrame() via CableHUD Canvas 2D,
+//   or one client-local 3D object per sub-segment (LFPG_Cable3D.c).
 // Occlusion: handled at wire level in LFPG_WireSegmentInfo,
 //   NOT per sub-segment (audit: "occlusion samples = few").
 // =========================================================
@@ -17,6 +18,14 @@ class LFPG_CableParticle
     vector m_From;
     vector m_To;
     protected bool m_Valid;
+
+    // 3D backend (LFPG_Cable3D): client-local object of this sub-segment,
+    // its applied and wanted look (LFPG_C3D_LOOK_*, -1 = none) and the
+    // failed creation attempts for the current wanted look.
+    Object m_Cable3DObj;
+    int m_Cable3DLook = -1;
+    int m_Cable3DWant = -1;
+    int m_Cable3DTries;
 
     void LFPG_CableParticle()
     {
@@ -41,6 +50,8 @@ class LFPG_CableParticle
         }
 
         m_Valid = true;
+        // Next LFPG_Cable3D.Tick recomputes the wanted looks (3D mode only).
+        LFPG_Cable3D.MarkLookDirty();
         return true;
     }
 
@@ -52,6 +63,13 @@ class LFPG_CableParticle
     void Destroy()
     {
         m_Valid = false;
+        if (m_Cable3DObj)
+        {
+            LFPG_Cable3D.DeleteObject(m_Cable3DObj);
+            m_Cable3DObj = null;
+        }
+        m_Cable3DLook = -1;
+        m_Cable3DWant = -1;
     }
 
     void ~LFPG_CableParticle()

@@ -2617,6 +2617,22 @@ class CfgVehicles
 		itemBehaviour = 0;
 		carveNavmesh = 0;
 	};
+
+    // =========================================================
+    // 3D cable segment (client-local only, created by LFPG_Cable3D.c
+    // with ECE_LOCAL). One per post-sag cable sub-segment. Model: 1 m
+    // open tube on +Z, centred, radius 0.01, no geometry LOD; all faces
+    // in "camo" (needs model.cfg sections[]). Not in CfgPatches units[].
+    // =========================================================
+    class HouseNoDestruct;
+    class LFPG_CableSegment : HouseNoDestruct
+    {
+        scope = 1;
+        displayName = "";
+        model = "\LFPowerGrid\data\cable3d\lfpg_cable_segment.p3d";
+        hiddenSelections[] = {"camo"};
+        hiddenSelectionsTextures[] = {"#(argb,8,8,3)color(0.05,0.05,0.05,1.0,CO)"};
+    };
 };
 
 // =========================================================
