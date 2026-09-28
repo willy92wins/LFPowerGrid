@@ -42,10 +42,12 @@ static const string LFPG_C3D_TEX_CRITICAL     = "#(argb,8,8,3)color(0.90,0.49,0.
 static const string LFPG_C3D_SETTINGS_DIR     = "$profile:LF_PowerGrid";
 static const string LFPG_C3D_SETTINGS_FILE    = "$profile:LF_PowerGrid/LF_Cables3D.json";
 
+// JSON keys: "Mode" (1 = 3D, 0 = 2D) and "DebugLog" (counters every 10 s).
+// A field may not be named after a type (vanilla class Debug exists).
 class LFPG_Cable3DSettings
 {
 	int Mode = 1;
-	bool Debug = false;
+	bool DebugLog = false;
 };
 
 class LFPG_Cable3D
@@ -243,7 +245,7 @@ class LFPG_Cable3D
 			s_Queue.Remove(s_Queue.Count() - 1);
 		}
 
-		if (s_Settings.Debug)
+		if (s_Settings.DebugLog)
 		{
 			s_DebugAccS = s_DebugAccS + timeslice;
 			if (s_DebugAccS >= LFPG_C3D_DEBUG_PERIOD_S)
