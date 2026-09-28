@@ -2313,7 +2313,7 @@ class CfgVehicles
         // hiddenSelections[0] = "light_coils" -> emissive rvmat while heating.
         // Without the matching model.cfg section the swap silently no-ops.
         hiddenSelections[] = {"light_coils"};
-        hiddenSelectionsTextures[] = {""};
+        hiddenSelectionsTextures[] = {"\LFPowerGrid\data\heater\heater_co.paa"};
         hiddenSelectionsMaterials[] = {"\LFPowerGrid\data\heater\heater.rvmat"};
 
         class DamageSystem
