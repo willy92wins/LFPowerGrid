@@ -2952,6 +2952,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         LFPG_DeviceRegistry.Get().PruneNullEntries();
         LFPG_DeviceRegistry.Get().GetAll(m_ValidationDevices);
+        // Reset BEFORE the ambiguous injection: this map feeds the startup
+        // LFPG prune (LFPG_ValidationPruneLFPGOwners) and BuildValidIds only
+        // repopulates registered entities ADDITIVELY, so clearing after the
+        // injection would silently drop quarantined ids and delete their
+        // wires before the fallback path ever runs (review round 5).
+        m_ValidationValidIds.Clear();
         // Ambiguous ids are quarantined, not accredited: they must still read
         // as valid targets, or the LFPG prune would delete their wires
         // without the quarantine policy ever applying (review round 4).
@@ -2962,7 +2968,6 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_ValidationValidIds[ambiguousIds[ami]] = true;
         }
-        m_ValidationValidIds.Clear();
         m_CachedValidIds = m_ValidationValidIds;
         m_ValidationCursor = 0;
         m_ValidationPhase = LFPG_VALIDATE_BUILD_VALID;
