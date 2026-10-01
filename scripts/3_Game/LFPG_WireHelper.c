@@ -319,15 +319,21 @@ class LFPG_WireHelper
     // v0.7.15: Exhaustive per-wire validation.
     // v0.7.16: H1 fix migration log, H3 map-based O(N) dedup.
     // v0.7.34: Removed migrator chain (no production saves exist pre-v3).
-    static void DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
+    // Returns false when the store is FROZEN (blob written by a future
+    // schema version): the caller must keep and re-save the ORIGINAL JSON
+    // untouched instead of regenerating an empty store (review blocker B2,
+    // same conservative policy as the vanilla store read-only gate).
+    // true otherwise (including legacy ver < LFPG_PERSIST_VER, which loads
+    // best-effort: the repo declares no production saves pre-v3).
+    static bool DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
     {
         if (!wires)
-            return;
+            return true;
 
         wires.Clear();
 
         if (jsonIn == "")
-            return;
+            return true;
 
         LFPG_PersistBlob blob = new LFPG_PersistBlob();
         string err;
@@ -337,14 +343,22 @@ class LFPG_WireHelper
             return;
         }
 
-        // Reject blobs written by a different schema version instead of
-        // silently deserializing them (audit A-20). Empty blob is allowed:
-        // SerializeJSON always stamps LFPG_PERSIST_VER, but a hand-edited or
-        // truncated store may miss it.
-        if (blob.ver != LFPG_PERSIST_VER)
+        // Version check (audit A-20, review blocker B2 policy):
+        //  - ver < LFPG_PERSIST_VER: legacy store, load best-effort with a
+        //    warning (the repo declares no production saves pre-v3 and v3
+        //    was a WIPE boundary).
+        //  - ver > LFPG_PERSIST_VER: FUTURE store (e.g. rollback after a
+        //    deploy): load best-effort, but report frozen so the owner keeps
+        //    re-saving the original JSON instead of wiping it with an empty
+        //    regenerate. Mirrors the vanilla store read-only gate.
+        if (blob.ver < LFPG_PERSIST_VER)
         {
-            LFPG_Util.Warn("[" + debugLabel + "] Wire blob version mismatch: expected " + LFPG_PERSIST_VER.ToString() + " got " + blob.ver.ToString() + "; ignoring store");
-            return;
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob legacy version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); best-effort load");
+        }
+        else if (blob.ver > LFPG_PERSIST_VER)
+        {
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob future version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); loading best-effort, store frozen");
+            return false;
         }
 
         if (!blob.wires)

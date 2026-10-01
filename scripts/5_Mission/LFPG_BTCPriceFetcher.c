@@ -87,9 +87,9 @@ class LFPG_BTCPriceFetcher
     // Cached price state
     protected float m_CachedPrice;          // Price per BTC in fiat (or LFPG_BTC_PRICE_UNAVAILABLE)
     protected float m_Cached24hChange;      // 24h change percent (e.g. 2.34 or -1.5, 0.0 if unavailable)
-    protected float m_LastFetchTimeMs;       // g_Game.GetTickTime() of last successful fetch
+    protected float m_LastFetchTimeMs;       // g_Game.GetTime() (ms) of last successful fetch
     protected int m_ConsecutiveErrors;       // Error counter for backoff
-    protected int m_NextFetchMs = 0;         // Earliest g_Game.GetTickTime() the next fetch may start (backoff)
+    protected int m_NextFetchMs = 0;         // Earliest g_Game.GetTime() (ms) the next fetch may start (backoff)
     protected bool m_FetchInProgress;        // Guard against overlapping requests
 
     // ---- Constructor ----
@@ -214,7 +214,7 @@ class LFPG_BTCPriceFetcher
             }
             if (backoffMs > LFPG_BTC_BACKOFF_MAX_MS)
                 backoffMs = LFPG_BTC_BACKOFF_MAX_MS;
-            if (g_Game.GetTickTime() < m_NextFetchMs)
+            if (g_Game.GetTime() < m_NextFetchMs)
             {
                 if (LFPG_LOG_LEVEL >= 2)
                 {
@@ -223,7 +223,7 @@ class LFPG_BTCPriceFetcher
                 }
                 return;
             }
-            m_NextFetchMs = g_Game.GetTickTime() + backoffMs;
+            m_NextFetchMs = g_Game.GetTime() + backoffMs;
         }
 
         FetchPrice();
@@ -333,7 +333,7 @@ class LFPG_BTCPriceFetcher
         // Update last fetch time
         if (g_Game)
         {
-            m_LastFetchTimeMs = g_Game.GetTickTime();
+            m_LastFetchTimeMs = g_Game.GetTime();
         }
         #endif
     }

@@ -38,6 +38,13 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     // ---- Sync Hardening A: wire generation counter ----
     // Incremented server-side on every wire mutation.
     // Client compares against CableRenderer cache for auto-resync.
+
+    // Frozen store: the wire JSON on disk was written by a FUTURE schema
+    // version (e.g. rollback after a deploy). While set, saves re-emit the
+    // original JSON untouched instead of regenerating from the (empty)
+    // in-memory wires, so a future build recovers the real data.
+    protected bool m_WireStoreFrozen = false;
+    protected string m_FrozenWireJSON = "";
     // NOT persisted — session-only, starts at 0 each restart.
     protected int m_WireGeneration = 0;
 
@@ -100,7 +107,18 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     // ---- Persistence: save wireJSON + device extras ----
     override void LFPG_OnStoreSaveExtra(ParamsWriteContext ctx)
     {
-        string json = LFPG_GetWiresJSON();
+        string json;
+        if (m_WireStoreFrozen)
+        {
+            // Store frozen (future schema on disk): re-emit the ORIGINAL
+            // JSON byte-for-byte so the newer build still reads its data
+            // (review blocker B2).
+            json = m_FrozenWireJSON;
+        }
+        else
+        {
+            json = LFPG_GetWiresJSON();
+        }
         ctx.Write(json);
 
         LFPG_OnStoreSaveDevice(ctx);
@@ -129,7 +147,9 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
         }
 
         string debugLabel = GetType();
-        LFPG_WireHelper.DeserializeJSON(m_Wires, json, debugLabel);
+        bool storeLoaded = LFPG_WireHelper.DeserializeJSON(m_Wires, json, debugLabel);
+        m_WireStoreFrozen = (storeLoaded == false);
+        m_FrozenWireJSON = json;
         m_WireJSONCacheGeneration = -1;
 
         return LFPG_OnStoreLoadDevice(ctx, ver);
