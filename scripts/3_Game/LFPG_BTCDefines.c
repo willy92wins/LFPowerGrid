@@ -23,6 +23,7 @@
 
 // ---- BTC ATM: Timer ----
 static const int LFPG_BTC_PRICE_CHECK_MS = 60000;  // 60s between price fetches
+static const int LFPG_BTC_BACKOFF_MAX_MS = 1800000;  // 30 min cap for consecutive-error backoff
 
 // ---- BTC ATM: Price sentinel ----
 // When m_CachedPrice is this value, no price has been fetched yet.

@@ -337,6 +337,16 @@ class LFPG_WireHelper
             return;
         }
 
+        // Reject blobs written by a different schema version instead of
+        // silently deserializing them (audit A-20). Empty blob is allowed:
+        // SerializeJSON always stamps LFPG_PERSIST_VER, but a hand-edited or
+        // truncated store may miss it.
+        if (blob.ver != LFPG_PERSIST_VER)
+        {
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob version mismatch: expected " + LFPG_PERSIST_VER.ToString() + " got " + blob.ver.ToString() + "; ignoring store");
+            return;
+        }
+
         if (!blob.wires)
             return;
 
