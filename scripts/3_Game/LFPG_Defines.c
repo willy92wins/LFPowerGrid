@@ -262,6 +262,7 @@ static const int   LFPG_VANILLA_PERSIST_VER = 2;
 // the v0.7.44 precedent: old readers ignore the extra field, new readers
 // default a missing field to 0, so both directions stay tolerant.
 static const int   LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES = 3;
+static const float LFPG_VANILLA_RELINK_RADIUS = 0.40;  // conservative relink scan for shifted vanilla targets (superset of the 0.25 m resolve radius, unique-candidate-only)
 static const float LFPG_VANILLA_FLUSH_S = 5.0;
 static const int   LFPG_FULLSYNC_SENDS_PER_TICK = 4;
 static const int   LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK = 16;
