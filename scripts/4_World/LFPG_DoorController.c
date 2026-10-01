@@ -96,7 +96,8 @@ class LFPG_DoorController : LFPG_DeviceBase
     protected int    m_DoorType     = 0;
     protected int    m_DoorIndex    = -1;
 
-    // ---- Persistence hints (loaded before EEInit, used by OnInit) ----
+    // ---- Persistence hints (loaded by OnStoreLoad; applied post-load from
+    // LFPG_ResumeFromPersistence, since EEInit/OnInit run before the load) ----
     protected int m_SavedDoorType  = 0;
     protected int m_SavedDoorIndex = -1;
 
@@ -514,6 +515,11 @@ class LFPG_DoorController : LFPG_DeviceBase
     protected void LFPG_SearchAndPairDoorWithHint(int hintType, int hintIndex)
     {
         #ifdef SERVER
+        // Kill any pending provisional-search tick first (review blocker
+        // B2): a surviving CallLater chain would later re-enter the search
+        // with default hints and re-pair by distance, discarding the
+        // persisted hint in dense bases.
+        g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_SearchAndPairDoor);
         LFPG_UnpairDoor();
         if (!m_SearchObjects)
             return;

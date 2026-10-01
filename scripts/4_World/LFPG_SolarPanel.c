@@ -38,11 +38,15 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
 {
     // F6 B1: idempotent re-registration point for the OnInit sweep
     // (devices restored during super.OnInit() registered against the
-    // inert fallback). RegisterX dedups; this replicates only the
-    // registration condition, never init side effects.
+    // inert fallback). RegisterX dedups. Runs after persistence is
+    // applied, so restore side effects are safe here.
     override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
     {
         if (nm) nm.RegisterSolar(this);
+        // F6 B1 sweep entry point: runs after persistence is applied, so the
+        // restored ON state is readable here (review blocker B1: without
+        // this call the solar resume never runs).
+        LFPG_ResumeFromPersistence();
     }
 
     // Post-load resume, called by the F6 registration sweep once persistence

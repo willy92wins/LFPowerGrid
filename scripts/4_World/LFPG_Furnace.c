@@ -54,8 +54,11 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 {
     // F6 B1: idempotent re-registration point for the OnInit sweep
     // (devices restored during super.OnInit() registered against the
-    // inert fallback). RegisterX dedups; this replicates only the
-    // registration condition, never init side effects.
+    // inert fallback). RegisterX dedups; this replicates the registration
+    // condition. The sweep runs once per mission start, so the resume side
+    // effects here execute once per session; BurnTick updates
+    // m_BurnRemainingMs on each tick, so a repeated sweep would re-arm from
+    // the real remaining value, not the stored one.
     override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
     {
         // F6 B1 sweep entry point: runs after persistence is applied, so it
@@ -74,6 +77,7 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 	// The duration pauses while off; NM polls the running deadline every 5s.
 	protected int m_BurnNextMs = 0;
 	protected int m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+	protected bool m_ResumeDone = false;
 
     // ---- Client: sound + particle ----
 #ifndef SERVER
@@ -279,6 +283,13 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     void LFPG_ResumeFromPersistence()
     {
         #ifdef SERVER
+        // One-shot guard: the resume reads the loaded m_BurnRemainingMs, so
+        // it must not re-arm from a stale value if the sweep ever runs twice
+        // (review optional hardening).
+        if (m_ResumeDone)
+            return;
+        m_ResumeDone = true;
+
         if (!m_SourceOn)
             return;
 
