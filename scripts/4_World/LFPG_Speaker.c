@@ -134,6 +134,12 @@ class LFPG_Speaker : LFPG_DeviceBase
 
     override float LFPG_GetConsumption()
     {
+        // Drain power only while switched on. An off speaker must not
+        // demand from the grid (audit A-01, same dynamic-consumption
+        // pattern as the heater fix in PR #57).
+        if (!m_SpeakerOn)
+            return 0.0;
+
         return LFPG_SPEAKER_CONSUMPTION;
     }
 
@@ -193,6 +199,15 @@ class LFPG_Speaker : LFPG_DeviceBase
         SetSynchDirty();
 
         LFPG_UpdateGhostPAS();
+
+        // The graph holds a per-consumer demand reservation: re-read the
+        // consumption so toggling does not leave a stale 5 u/s reservation
+        // behind (audit A-01).
+        if (m_DeviceId != "")
+        {
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(m_DeviceId);
+        }
 
         string togMsg = "[LFPG_Speaker] Toggle ";
         if (m_SpeakerOn)
