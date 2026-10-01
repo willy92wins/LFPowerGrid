@@ -3310,11 +3310,21 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     // BOTH wire endpoints go through the same tri-state pipeline.
     // Returns 1 = alive (outEnt set), 2 = ambiguous (quarantine: outEnt
     // null, identity cannot be proven), 0 = gone (caller strikes).
-    // A relink candidate is registered in the DeviceRegistry under the
-    // persisted id, exactly like ResolveVanillaDevice auto-registers its
-    // match (LFPG_IDevice.c:212-215): without registration the rebuild
-    // flow would still resolve nothing and the wire would survive on disk
-    // without reconnecting (review round 2, blocker 2).
+    // Resolution policy (review round 3, blocker 2):
+    //  - a latched ambiguous id is QUARANTINE, never absence or confirmed
+    //    identity: FindById refuses it, Register refuses to overwrite it,
+    //    and ResolveVanillaDevice would ignore the latch entirely, so it
+    //    is checked here first;
+    //  - a registry-accredited id is authoritative (O(1));
+    //  - any UNaccredited spatial resolution must prove uniqueness over
+    //    the superset radius BEFORE being accepted: a bare 0.25 m match
+    //    can pick the wrong one of two same-type devices near the id
+    //    position (the 0.40 m single-candidate scan subsumes it);
+    //  - the winning candidate is registered under the persisted id
+    //    (like ResolveVanillaDevice auto-registers, LFPG_IDevice.c:212-215)
+    //    and the registration outcome is verified: Register can refuse or
+    //    latch ambiguity, and only a verified registration credits a
+    //    usable relink.
     protected int LFPG_ResolveVanillaEndpoint(string deviceId, out EntityAI outEnt, out bool wasRelinked)
     {
         outEnt = null;
@@ -3326,11 +3336,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         if (deviceId == "")
             return 0;
 
-        outEnt = LFPG_DeviceRegistry.Get().FindById(deviceId);
-        if (outEnt)
-            return 1;
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return 2;
 
-        outEnt = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
+        outEnt = LFPG_DeviceRegistry.Get().FindById(deviceId);
         if (outEnt)
             return 1;
 
@@ -3338,14 +3347,17 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         EntityAI cand = LFPG_FindRelinkCandidate(deviceId, ambiguous);
         if (ambiguous)
             return 2;
-        if (cand)
-        {
-            LFPG_DeviceRegistry.Get().Register(cand, deviceId);
-            outEnt = cand;
-            wasRelinked = true;
-            return 1;
-        }
-        return 0;
+        if (!cand)
+            return 0;
+
+        LFPG_DeviceRegistry.Get().Register(cand, deviceId);
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return 2;
+        if (LFPG_DeviceRegistry.Get().FindById(deviceId) != cand)
+            return 2;
+        outEnt = cand;
+        wasRelinked = true;
+        return 1;
     }
 
     // Safe pruning of the vanilla wire store (audit A-08 + A-10).
@@ -3491,7 +3503,12 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_VanillaWires.Remove(emptyOwners[eo]);
         }
-        if (totalPruned > 0 || totalMarked > 0 || totalRecovered > 0)
+        // totalRelinked gates dirty too (review round 3, blocker 1): a relink
+        // registers the endpoint under the persisted id, but the graph edges
+        // only come back when the deferred rebuild runs. The dirty flag
+        // propagates to needsDeferredRebuild (vanillaDirtyBeforeFlush) with
+        // no dependency on a previous strike or another network event.
+        if (totalPruned > 0 || totalMarked > 0 || totalRecovered > 0 || totalRelinked > 0)
         {
             string shPruneMsg = "[SelfHeal] Safe prune summary: deleted=" + totalPruned.ToString() + " marked=" + totalMarked.ToString() + " recovered=" + totalRecovered.ToString() + " relinked=" + totalRelinked.ToString() + " quarantined=" + totalQuarantined.ToString() + " empty_owners=" + emptyOwners.Count().ToString();
             LFPG_Util.Info(shPruneMsg);
