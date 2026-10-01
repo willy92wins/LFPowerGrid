@@ -875,6 +875,15 @@ class LFPG_Intercom : LFPG_DeviceBase
         LFPG_UpdateGhostRadio();
         LFPG_UpdateGhostPAS();
 
+        // T1 to T2 raises this consumer's demand (10 to 20 u/s): ask the
+        // graph to re-read the node so the reservation does not lag behind
+        // until some other event refreshes it (audit A-02).
+        if (m_DeviceId != "")
+        {
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(m_DeviceId);
+        }
+
         string installMsg = "[LFPG_Intercom] Radio installed, id=";
         installMsg = installMsg + m_DeviceId;
         LFPG_Util.Info(installMsg);
