@@ -872,7 +872,7 @@ class LFPG_RPCServerHandlerImpl
         EntityAI obj = EntityAI.Cast(g_Game.GetObjectByNetworkId(low, high));
         if (!obj) return;
 
-        if (vector.Distance(player.GetPosition(), obj.GetPosition()) > 4.0)
+        if (vector.Distance(player.GetPosition(), obj.GetPosition()) > LFPG_INTERACT_DIST_M)
         {
             PlayerBase.LFPG_SendClientMsg(player, "Too far from device.");
             return;
@@ -1867,7 +1867,7 @@ class LFPG_RPCServerHandlerImpl
         EntityAI obj = EntityAI.Cast(g_Game.GetObjectByNetworkId(low, high));
         if (!obj) return;
 
-        if (vector.Distance(player.GetPosition(), obj.GetPosition()) > 4.0)
+        if (vector.Distance(player.GetPosition(), obj.GetPosition()) > LFPG_INTERACT_DIST_M)
         {
             PlayerBase.LFPG_SendClientMsg(player, "Too far from device.");
             return;
@@ -2464,6 +2464,14 @@ class LFPG_RPCServerHandlerImpl
         if (clientDeviceId == "")
             return;
 
+        // Same 64-char cap the sync handler applies to client-supplied ids;
+        // this value lands in server logs and the reply payload (audit A-12).
+        if (clientDeviceId.Length() > 64)
+        {
+            LFPG_Util.Warn("[SERVER] InspectDevice: clientDeviceId too long (" + clientDeviceId.Length().ToString() + ")");
+            return;
+        }
+
         EntityAI resolvedTarget;
         string serverDeviceId;
         if (!LFPG_RPCGuard.Authorize(policyId, player, sender, netLow, netHigh, resolvedTarget, serverDeviceId))
@@ -2806,6 +2814,12 @@ class LFPG_RPCServerHandlerImpl
 		if (dist > LFPG_INTERACT_DIST_M)
 		{
 			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] player too far");
+			return false;
+		}
+		// Ruined check, same policy as HandleSorterConfigRequest/Resync.
+		if (sorter.IsRuined())
+		{
+			LFPG_Util.RateLimitedWarn(sender, "sorter_save", "[SorterConfigSave] sorter is ruined");
 			return false;
 		}
 		if (!sorter.LFPG_IsPowered())

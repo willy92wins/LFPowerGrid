@@ -87,8 +87,9 @@ class LFPG_BTCPriceFetcher
     // Cached price state
     protected float m_CachedPrice;          // Price per BTC in fiat (or LFPG_BTC_PRICE_UNAVAILABLE)
     protected float m_Cached24hChange;      // 24h change percent (e.g. 2.34 or -1.5, 0.0 if unavailable)
-    protected float m_LastFetchTimeMs;       // g_Game.GetTickTime() of last successful fetch
+    protected float m_LastFetchTimeMs;       // g_Game.GetTime() (ms) of last successful fetch
     protected int m_ConsecutiveErrors;       // Error counter for backoff
+    protected int m_NextFetchMs = 0;         // Earliest g_Game.GetTime() (ms) the next fetch may start (backoff)
     protected bool m_FetchInProgress;        // Guard against overlapping requests
 
     // ---- Constructor ----
@@ -200,6 +201,31 @@ class LFPG_BTCPriceFetcher
             return;
         }
 
+        // Exponential backoff after consecutive errors: the counter is now
+        // wired to behavior (audit A-19: it was declared but modulated
+        // nothing). Doubles per error up to 30 min; resets on success.
+        if (m_ConsecutiveErrors > 0)
+        {
+            int backoffMs = LFPG_BTC_PRICE_CHECK_MS;
+            int b;
+            for (b = 1; b < m_ConsecutiveErrors && backoffMs < LFPG_BTC_BACKOFF_MAX_MS; b = b + 1)
+            {
+                backoffMs = backoffMs * 2;
+            }
+            if (backoffMs > LFPG_BTC_BACKOFF_MAX_MS)
+                backoffMs = LFPG_BTC_BACKOFF_MAX_MS;
+            if (g_Game.GetTime() < m_NextFetchMs)
+            {
+                if (LFPG_LOG_LEVEL >= 2)
+                {
+                    string backMsg = "[LFPG_BTCPrice] Skipping tick (backoff, errors=" + m_ConsecutiveErrors.ToString() + ")";
+                    LFPG_Util.Debug(backMsg);
+                }
+                return;
+            }
+            m_NextFetchMs = g_Game.GetTime() + backoffMs;
+        }
+
         FetchPrice();
         #endif
     }
@@ -307,7 +333,7 @@ class LFPG_BTCPriceFetcher
         // Update last fetch time
         if (g_Game)
         {
-            m_LastFetchTimeMs = g_Game.GetTickTime();
+            m_LastFetchTimeMs = g_Game.GetTime();
         }
         #endif
     }

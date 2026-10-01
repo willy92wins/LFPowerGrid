@@ -319,26 +319,53 @@ class LFPG_WireHelper
     // v0.7.15: Exhaustive per-wire validation.
     // v0.7.16: H1 fix migration log, H3 map-based O(N) dedup.
     // v0.7.34: Removed migrator chain (no production saves exist pre-v3).
-    static void DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
+    // Returns false when the store is FROZEN (blob written by a future
+    // schema version): the caller must keep and re-save the ORIGINAL JSON
+    // untouched instead of regenerating an empty store (review blocker B2,
+    // same conservative policy as the vanilla store read-only gate).
+    // true otherwise (including legacy ver < LFPG_PERSIST_VER, which loads
+    // best-effort: the repo declares no production saves pre-v3).
+    static bool DeserializeJSON(array<ref LFPG_WireData> wires, string jsonIn, string debugLabel)
     {
         if (!wires)
-            return;
+            return true;
 
         wires.Clear();
 
         if (jsonIn == "")
-            return;
+            return true;
 
         LFPG_PersistBlob blob = new LFPG_PersistBlob();
         string err;
         if (!JsonFileLoader<LFPG_PersistBlob>.LoadData(jsonIn, blob, err))
         {
             LFPG_Util.Info("[" + debugLabel + "] Deserialize wires failed: " + err);
-            return;
+            // Unreadable JSON: freeze the store (conservative policy, like
+            // a future-version blob) so the save re-emits the original bytes
+            // instead of an empty regenerate (review blocker B3).
+            return false;
+        }
+
+        // Version check (audit A-20, review blocker B2 policy):
+        //  - ver < LFPG_PERSIST_VER: legacy store, load best-effort with a
+        //    warning (the repo declares no production saves pre-v3 and v3
+        //    was a WIPE boundary).
+        //  - ver > LFPG_PERSIST_VER: FUTURE store (e.g. rollback after a
+        //    deploy): store frozen, wires NOT loaded (memory stays empty);
+        //    the owner keeps re-saving the original JSON instead of wiping
+        //    it with an empty regenerate. Mirrors the vanilla read-only gate.
+        if (blob.ver < LFPG_PERSIST_VER)
+        {
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob legacy version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); best-effort load");
+        }
+        else if (blob.ver > LFPG_PERSIST_VER)
+        {
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob future version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); store frozen, wires not loaded");
+            return false;
         }
 
         if (!blob.wires)
-            return;
+            return true; // empty store: nothing to load, save regenerates
 
         LFPG_ServerSettings st = LFPG_Settings.Get();
         int maxWires = LFPG_MAX_WIRES_PER_DEVICE;
@@ -395,6 +422,8 @@ class LFPG_WireHelper
         {
             LFPG_Util.Warn("[" + debugLabel + "] Removed " + duplicates.ToString() + " duplicate wires during load");
         }
+
+        return true;
     }
 
     // Convenience: serialize and return JSON string.
