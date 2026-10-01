@@ -65,7 +65,27 @@ class LFPG_DoorController : LFPG_DeviceBase
     // registration condition, never init side effects.
     override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
     {
+        // F6 B1 sweep entry point: runs after persistence is applied, so the
+        // saved door hint is readable here (unlike LFPG_OnInit).
         if (nm) nm.RegisterDoorController(this);
+        LFPG_ResumeFromPersistence();
+    }
+
+    // Post-load resume, called by the F6 registration sweep
+    // (LFPG_RegisterWithNetworkManager) once persistence has been applied:
+    // the pre-load LFPG_OnInit ran with default m_SavedDoorType/Index, so
+    // the persisted hint was unreadable there. WithHint unpairs the
+    // provisional distance-based pairing first and re-pairs with the
+    // saved hint, which makes the persisted hint (format v4.8) live again.
+    void LFPG_ResumeFromPersistence()
+    {
+        #ifdef SERVER
+        if (m_SavedDoorType > 0 && m_SavedDoorIndex >= 0)
+        {
+            // WithHint unpairs the provisional distance pairing first.
+            LFPG_SearchAndPairDoorWithHint(m_SavedDoorType, m_SavedDoorIndex);
+        }
+        #endif
     }
 
     // ---- Device-specific SyncVars ----
@@ -209,15 +229,12 @@ class LFPG_DoorController : LFPG_DeviceBase
 
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm) nm.RegisterDoorController(this);
-
-        if (m_SavedDoorType > 0 && m_SavedDoorIndex >= 0)
-        {
-            LFPG_SearchAndPairDoorWithHint(m_SavedDoorType, m_SavedDoorIndex);
-        }
-        else
-        {
-            LFPG_SearchAndPairDoor();
-        }
+        // Distance-based search starts here for freshly placed controllers.
+        // For restored devices this runs BEFORE OnStoreLoad with default
+        // m_SavedDoorType/m_SavedDoorIndex, so the persisted hint cannot be
+        // read yet and this pairing is provisional; the F6 registration
+        // sweep corrects it via LFPG_ResumeFromPersistence.
+        LFPG_SearchAndPairDoor();
         #endif
     }
 

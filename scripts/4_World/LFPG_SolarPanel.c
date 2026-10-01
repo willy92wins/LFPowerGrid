@@ -45,6 +45,20 @@ class LFPG_SolarPanel : LFPG_WireOwnerBase
         if (nm) nm.RegisterSolar(this);
     }
 
+    // Post-load resume, called by the F6 registration sweep once persistence
+    // has been applied: LFPG_OnInitDevice runs before OnStoreLoad, so a solar
+    // restored ON (with sun) must request its startup propagate from here.
+    void LFPG_ResumeFromPersistence()
+    {
+        #ifdef SERVER
+        if (m_SourceOn && m_DeviceId != "")
+        {
+            LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+            if (nm) nm.RequestPropagate(m_DeviceId);
+        }
+        #endif
+    }
+
     // ---- Device-specific SyncVars ----
     protected bool  m_SourceOn   = false;
     protected float m_LoadRatio  = 0.0;

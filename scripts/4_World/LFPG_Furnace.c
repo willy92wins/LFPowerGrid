@@ -58,7 +58,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // registration condition, never init side effects.
     override void LFPG_RegisterWithNetworkManager(LFPG_NetworkManager nm)
     {
-        if (nm && m_SourceOn && m_FuelCurrent > 0) nm.RegisterFurnace(this);
+        // F6 B1 sweep entry point: runs after persistence is applied, so it
+        // is safe to resume from persisted state here (unlike EEInit).
+        LFPG_ResumeFromPersistence();
     }
 
     // ---- Device-specific SyncVars ----
@@ -153,8 +155,9 @@ class LFPG_Furnace : LFPG_WireOwnerBase
 
             UniversalTemperatureSourceLambdaConstant utsLambda = new UniversalTemperatureSourceLambdaConstant();
             m_UTSource = new UniversalTemperatureSource(this, m_UTSSettings, utsLambda);
-			// Device init ran through super before this source existed.
-			LFPG_SetHeatActive(m_SourceOn);
+			// No resume call here, like the heater: EEInit runs before
+			// OnStoreLoad, so m_SourceOn still holds its default. A furnace
+			// restored ON resumes heat in LFPG_ResumeFromPersistence.
         }
         #endif
     }
@@ -264,29 +267,44 @@ class LFPG_Furnace : LFPG_WireOwnerBase
     // ============================================
     // Lifecycle hooks
     // ============================================
-    override void LFPG_OnInitDevice()
+
+    // Post-load resume, called by the F6 registration sweep
+    // (LFPG_RegisterWithNetworkManager) once persistence has been applied:
+    // EEInit and LFPG_OnInitDevice run BEFORE OnStoreLoad (the base hook is
+    // empty now, the old pre-load restore block was dead code), so a restore
+    // attempted there reads defaults (heater lesson, ServerActionsImpl order
+    // comment). Arms the persisted remaining burn duration instead of letting
+    // the first BurnTick reset it, re-registers the furnace and resumes heat
+    // for a furnace that was saved ON.
+    void LFPG_ResumeFromPersistence()
     {
         #ifdef SERVER
-        // Post-load restore: if furnace was on with fuel, register with NM
-        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
-        if (m_SourceOn && m_FuelCurrent > 0)
-        {
-            int now = g_Game.GetTime();
-			m_BurnNextMs = now + m_BurnRemainingMs;
-			LFPG_BurnTick();
-			if (m_SourceOn && nm) nm.RegisterFurnace(this);
-        }
+        if (!m_SourceOn)
+            return;
 
-        // Safety: source on but no fuel → try auto-consume
-        if (m_SourceOn && m_FuelCurrent <= 0)
+        LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
+        int now = g_Game.GetTime();
+
+        if (m_FuelCurrent > 0)
         {
+            // Honor the persisted remaining burn duration (schema v3).
+            if (m_BurnRemainingMs <= 0)
+                m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+            m_BurnNextMs = now + m_BurnRemainingMs;
+            if (nm) nm.RegisterFurnace(this);
+            LFPG_SetHeatActive(true);
+        }
+        else
+        {
+            // Safety: source on but no fuel: try auto-consume before
+            // giving up (same policy the old init block documented).
             bool restoreConsumed = LFPG_AutoConsumeLargestItem();
             if (restoreConsumed)
             {
-                int now2 = g_Game.GetTime();
-				m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
-				m_BurnNextMs = now2 + m_BurnRemainingMs;
+                m_BurnRemainingMs = LFPG_FURNACE_BURN_INTERVAL_MS;
+                m_BurnNextMs = now + m_BurnRemainingMs;
                 if (nm) nm.RegisterFurnace(this);
+                LFPG_SetHeatActive(true);
             }
             else
             {
@@ -296,12 +314,10 @@ class LFPG_Furnace : LFPG_WireOwnerBase
             }
         }
 
-        // Propagate on init to rebuild graph edge allocations
-        if (m_SourceOn && m_DeviceId != "")
+        if (m_SourceOn && m_DeviceId != "" && nm)
         {
-            if (nm) nm.RequestPropagate(m_DeviceId);
+            nm.RequestPropagate(m_DeviceId);
         }
-
         #endif
     }
 
