@@ -2952,6 +2952,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         LFPG_DeviceRegistry.Get().PruneNullEntries();
         LFPG_DeviceRegistry.Get().GetAll(m_ValidationDevices);
+        // Ambiguous ids are quarantined, not accredited: they must still read
+        // as valid targets, or the LFPG prune would delete their wires
+        // without the quarantine policy ever applying (review round 4).
+        array<string> ambiguousIds;
+        LFPG_DeviceRegistry.Get().GetAllAmbiguousIds(ambiguousIds);
+        int ami;
+        for (ami = 0; ami < ambiguousIds.Count(); ami = ami + 1)
+        {
+            m_ValidationValidIds[ambiguousIds[ami]] = true;
+        }
         m_ValidationValidIds.Clear();
         m_CachedValidIds = m_ValidationValidIds;
         m_ValidationCursor = 0;
@@ -3308,6 +3318,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
 
     // Endpoint resolution for the vanilla prune (review round 2, blocker 1):
     // BOTH wire endpoints go through the same tri-state pipeline.
+    // Round 4 (integration blocker): the shared resolver now enforces the
+    // uniqueness gate on EVERY accreditation path, so an id that this helper
+    // would judge ambiguous is already latched/null here. The latch below
+    // covers the inverse order: this scan being the FIRST to see the pair.
     // Returns 1 = alive (outEnt set), 2 = ambiguous (quarantine: outEnt
     // null, identity cannot be proven), 0 = gone (caller strikes).
     // Resolution policy (review round 3, blocker 2):
@@ -3346,7 +3360,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool ambiguous = false;
         EntityAI cand = LFPG_FindRelinkCandidate(deviceId, ambiguous);
         if (ambiguous)
+        {
+            LFPG_DeviceRegistry.Get().LatchAmbiguous(deviceId);
             return 2;
+        }
         if (!cand)
             return 0;
 
@@ -3631,6 +3648,16 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             {
                 m_CachedValidIds[did] = true;
             }
+        }
+        // Quarantined ids count as valid targets for the LFPG prune below:
+        // absence here would delete their wires without the quarantine
+        // policy applying (review round 4).
+        array<string> deferredAmbIds;
+        LFPG_DeviceRegistry.Get().GetAllAmbiguousIds(deferredAmbIds);
+        int dai;
+        for (dai = 0; dai < deferredAmbIds.Count(); dai = dai + 1)
+        {
+            m_CachedValidIds[deferredAmbIds[dai]] = true;
         }
         int pruneCount = 0;
         int pi;
