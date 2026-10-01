@@ -340,7 +340,10 @@ class LFPG_WireHelper
         if (!JsonFileLoader<LFPG_PersistBlob>.LoadData(jsonIn, blob, err))
         {
             LFPG_Util.Info("[" + debugLabel + "] Deserialize wires failed: " + err);
-            return;
+            // Unreadable JSON: freeze the store (conservative policy, like
+            // a future-version blob) so the save re-emits the original bytes
+            // instead of an empty regenerate (review blocker B3).
+            return false;
         }
 
         // Version check (audit A-20, review blocker B2 policy):
@@ -348,21 +351,21 @@ class LFPG_WireHelper
         //    warning (the repo declares no production saves pre-v3 and v3
         //    was a WIPE boundary).
         //  - ver > LFPG_PERSIST_VER: FUTURE store (e.g. rollback after a
-        //    deploy): load best-effort, but report frozen so the owner keeps
-        //    re-saving the original JSON instead of wiping it with an empty
-        //    regenerate. Mirrors the vanilla store read-only gate.
+        //    deploy): store frozen, wires NOT loaded (memory stays empty);
+        //    the owner keeps re-saving the original JSON instead of wiping
+        //    it with an empty regenerate. Mirrors the vanilla read-only gate.
         if (blob.ver < LFPG_PERSIST_VER)
         {
             LFPG_Util.Warn("[" + debugLabel + "] Wire blob legacy version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); best-effort load");
         }
         else if (blob.ver > LFPG_PERSIST_VER)
         {
-            LFPG_Util.Warn("[" + debugLabel + "] Wire blob future version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); loading best-effort, store frozen");
+            LFPG_Util.Warn("[" + debugLabel + "] Wire blob future version " + blob.ver.ToString() + " (current " + LFPG_PERSIST_VER.ToString() + "); store frozen, wires not loaded");
             return false;
         }
 
         if (!blob.wires)
-            return;
+            return true; // empty store: nothing to load, save regenerates
 
         LFPG_ServerSettings st = LFPG_Settings.Get();
         int maxWires = LFPG_MAX_WIRES_PER_DEVICE;
@@ -419,6 +422,8 @@ class LFPG_WireHelper
         {
             LFPG_Util.Warn("[" + debugLabel + "] Removed " + duplicates.ToString() + " duplicate wires during load");
         }
+
+        return true;
     }
 
     // Convenience: serialize and return JSON string.
