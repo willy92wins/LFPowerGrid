@@ -3258,15 +3258,15 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         return ownerId + "|" + targetId + "|" + srcPort + "|" + dstPort;
     }
 
-    // Conservative relink for a shifted vanilla target (review blocker #3):
-    // scan a radius that is a strict superset of ResolveVanillaDevice's
-    // 0.25 m, but ONLY accept exactly ONE same-type entity inside it.
-    // Zero candidates: truly gone. Two or more: identity is ambiguous, the
-    // wire stays unresolved and goes through the strike path instead of
-    // guessing. Distance is checked in 3D against the position encoded in
-    // the vp: id (1 cm quantization), same frame as the resolve radius.
-    protected EntityAI LFPG_FindRelinkCandidate(string targetId)
+    // Conservative relink scan for a shifted vanilla endpoint (review
+    // blocker #3, round 1): scan a radius that is a strict superset of
+    // ResolveVanillaDevice's 0.25 m, but ONLY accept exactly ONE same-type
+    // entity inside it. Sets 'ambiguous' when two or more candidates exist:
+    // identity cannot be proven spatially, the caller QUARANTINES instead
+    // of striking (the original device may still be alive).
+    protected EntityAI LFPG_FindRelinkCandidate(string targetId, out bool ambiguous)
     {
+        ambiguous = false;
         #ifndef SERVER
         return null;
         #endif
@@ -3297,28 +3297,74 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             if (vector.Distance(idPos, ent.GetPosition()) > LFPG_VANILLA_RELINK_RADIUS)
                 continue;
             if (found)
-                return null; // ambiguous: more than one same-type candidate
+            {
+                ambiguous = true;
+                return null;
+            }
             found = ent;
         }
         return found;
     }
+
+    // Endpoint resolution for the vanilla prune (review round 2, blocker 1):
+    // BOTH wire endpoints go through the same tri-state pipeline.
+    // Returns 1 = alive (outEnt set), 2 = ambiguous (quarantine: outEnt
+    // null, identity cannot be proven), 0 = gone (caller strikes).
+    // A relink candidate is registered in the DeviceRegistry under the
+    // persisted id, exactly like ResolveVanillaDevice auto-registers its
+    // match (LFPG_IDevice.c:212-215): without registration the rebuild
+    // flow would still resolve nothing and the wire would survive on disk
+    // without reconnecting (review round 2, blocker 2).
+    protected int LFPG_ResolveVanillaEndpoint(string deviceId, out EntityAI outEnt, out bool wasRelinked)
+    {
+        outEnt = null;
+        wasRelinked = false;
+        #ifndef SERVER
+        return 0;
+        #endif
+
+        if (deviceId == "")
+            return 0;
+
+        outEnt = LFPG_DeviceRegistry.Get().FindById(deviceId);
+        if (outEnt)
+            return 1;
+
+        outEnt = LFPG_DeviceAPI.ResolveVanillaDevice(deviceId);
+        if (outEnt)
+            return 1;
+
+        bool ambiguous = false;
+        EntityAI cand = LFPG_FindRelinkCandidate(deviceId, ambiguous);
+        if (ambiguous)
+            return 2;
+        if (cand)
+        {
+            LFPG_DeviceRegistry.Get().Register(cand, deviceId);
+            outEnt = cand;
+            wasRelinked = true;
+            return 1;
+        }
+        return 0;
+    }
+
     // Safe pruning of the vanilla wire store (audit A-08 + A-10).
-    // UNIFORM PER-WIRE FLOW, no special owner-gone branch (review blockers
-    // #1/#2 on the first design): every wire slot runs the same pipeline,
+    // UNIFORM PER-WIRE FLOW over a tri-state endpoint resolution (review
+    // round 2): BOTH endpoints are evaluated per wire, no owner special
+    // case. Per wire slot:
     //  1. empty/corrupt slot: deleted immediately (no persisted payload);
-    //  2. target resolves:
-    //     - straight resolve or CONSERVATIVE RELINK: unique same-type entity
-    //       near the position encoded in the vp: id (relink radius is a
-    //       superset of the resolve radius and demands exactly one candidate,
-    //       so a device shifted a few centimetres re-links instead of dying,
-    //       blocker #3, while an ambiguous or far-away move stays unresolved);
-    //     the wire keeps its stored id (no id rewrite: the id encodes where
-    //       the device WAS and identity stays stable for admins),
-    //  3. target unresolved: the wire accumulates ONE strike per pass (one
-    //     pass per server session) and is deleted only after
-    //     LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES consecutive unresolved
-    //     passes. Strikes are counted once per key per pass, never per slot,
-    //     and live per full wire identity (ports included).
+    //  2. owner gone (state 0): the wire is orphaned, it strikes per pass;
+    //  3. target alive (straight resolve or registered relink): strike
+    //     cleared, and the cleared count is MARKED DIRTY so the zero
+    //     reaches disk (review round 2, blocker 3: without it a stored
+    //     non-zero strike would survive a recovering session and delete
+    //     the wire in the next one, breaking consecutiveness);
+    //  4. target ambiguous (state 2): QUARANTINE, no strike, no delete;
+    //     the original device may still be alive and spatial uniqueness
+    //     does not prove historical identity (review round 2, blocker 2
+    //     acceptance). The wire waits until the situation is unambiguous;
+    //  5. target gone: one strike per full wire identity per pass, deleted
+    //     after LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES consecutive passes.
     // Strike state rides the vanilla JSON store as an additive field
     // (LFPG_VanillaWireEntry.m_UnresolvedStrikes, no schema bump: a v0.7.44-style
     // additive field that old readers ignore and new readers default to 0).
@@ -3328,6 +3374,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         int totalPruned = 0;
         int totalMarked = 0;
         int totalRelinked = 0;
+        int totalRecovered = 0;
+        int totalQuarantined = 0;
         ref array<string> emptyOwners = new array<string>;
         ref map<string, bool> struckThisPass = new map<string, bool>;
         int vk;
@@ -3337,6 +3385,27 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             ref array<ref LFPG_WireData> wires = m_VanillaWires.GetElement(vk);
             if (!wires)
                 continue;
+
+            // Owner endpoint resolved ONCE per bucket (same tri-state as the
+            // target): gone strikes every wire of the bucket, ambiguous
+            // quarantines it, alive falls through to per-wire evaluation.
+            EntityAI ownerObj;
+            bool ownerRelinked = false;
+            int ownerState = LFPG_ResolveVanillaEndpoint(ownerId, ownerObj, ownerRelinked);
+            if (ownerState == 2)
+            {
+                totalQuarantined = totalQuarantined + wires.Count();
+                string ownerQMsg = "[VanillaPrune] Owner ambiguous, bucket quarantined: " + ownerId + " (wires=" + wires.Count().ToString() + ")";
+                LFPG_Util.Debug(ownerQMsg);
+                continue;
+            }
+            if (ownerRelinked)
+            {
+                string ownerRMsg = "[VanillaPrune] Owner relinked: " + ownerId + " to live entity at " + ownerObj.GetPosition().ToString();
+                LFPG_Util.Info(ownerRMsg);
+                totalRelinked = totalRelinked + 1;
+            }
+
             int w = wires.Count() - 1;
             while (w >= 0)
             {
@@ -3350,60 +3419,65 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                     w = w - 1;
                     continue;
                 }
-                EntityAI tObj = LFPG_DeviceRegistry.Get().FindById(wd.m_TargetDeviceId);
-                if (!tObj)
+
+                string strikeKey = LFPG_StrikeKey(ownerId, wd.m_TargetDeviceId, wd.m_SourcePort, wd.m_TargetPort);
+
+                if (ownerState == 0)
                 {
-                    tObj = LFPG_DeviceAPI.ResolveVanillaDevice(wd.m_TargetDeviceId);
-                }
-                bool relinked = false;
-                if (!tObj)
-                {
-                    // No direct resolve: try the conservative relink before
-                    // counting a strike (blocker #3: a device displaced just
-                    // outside the 0.25 m resolve radius is ALIVE and must not
-                    // be treated as dead).
-                    tObj = LFPG_FindRelinkCandidate(wd.m_TargetDeviceId);
-                    relinked = (tObj != null);
-                }
-                if (tObj)
-                {
-                    if (relinked)
+                    // Owner gone: orphaned wire, same strike path as a dead
+                    // target (blocker 1 fix: the common flow now evaluates
+                    // both endpoints with the same threshold).
+                    if (LFPG_StrikeWire(ownerId, wd, strikeKey, struckThisPass, wires, w, totalPruned, totalMarked))
                     {
-                        // Shifted entity recovered through the conservative
-                        // relink (unique same-type candidate near the id pos).
+                        w = w - 1;
+                        continue;
+                    }
+                    w = w - 1;
+                    continue;
+                }
+
+                bool targetRelinked = false;
+                EntityAI tObj;
+                int targetState = LFPG_ResolveVanillaEndpoint(wd.m_TargetDeviceId, tObj, targetRelinked);
+                if (targetState == 2)
+                {
+                    // Quarantine: zero strikes, zero deletes. Spatial
+                    // uniqueness is not identity; a wire whose target sits
+                    // between same-type candidates waits instead of dying.
+                    totalQuarantined = totalQuarantined + 1;
+                    string qMsg = "[VanillaPrune] Target ambiguous, quarantined: " + ownerId + " -> " + wd.m_TargetDeviceId;
+                    LFPG_Util.Debug(qMsg);
+                    w = w - 1;
+                    continue;
+                }
+                if (targetState == 1)
+                {
+                    if (targetRelinked)
+                    {
                         string relinkMsg = "[VanillaPrune] Relinked wire " + ownerId + " -> " + wd.m_TargetDeviceId + " to live entity at " + tObj.GetPosition().ToString();
                         LFPG_Util.Info(relinkMsg);
                         totalRelinked = totalRelinked + 1;
                     }
-                    string clearKey = LFPG_StrikeKey(ownerId, wd.m_TargetDeviceId, wd.m_SourcePort, wd.m_TargetPort);
-                    m_VanillaWireStrikes.Remove(clearKey);
-                }
-                else
-                {
-                    string strikeKey = LFPG_StrikeKey(ownerId, wd.m_TargetDeviceId, wd.m_SourcePort, wd.m_TargetPort);
-                    if (!struckThisPass.Contains(strikeKey))
+                    // Clearing a previously non-zero strike count must reach
+                    // disk (blocker 3 fix): recovered sessions must not leave
+                    // a stale count that deletes the wire next session.
+                    int prevStrikes = 0;
+                    m_VanillaWireStrikes.Find(strikeKey, prevStrikes);
+                    if (prevStrikes != 0)
                     {
-                        // One strike per wire identity per pass, even if
-                        // duplicate slots share it (blocker #1).
-                        struckThisPass.Set(strikeKey, true);
-                        int strikes = 0;
-                        m_VanillaWireStrikes.Find(strikeKey, strikes);
-                        strikes = strikes + 1;
-                        m_VanillaWireStrikes.Set(strikeKey, strikes);
-                        if (strikes >= LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES)
-                        {
-                            string vpMsg = "[VanillaPrune] Removed wire " + ownerId + " -> " + wd.m_TargetDeviceId + " (dead after " + strikes.ToString() + " sessions)";
-                            LFPG_Util.Info(vpMsg);
-                            wires.Remove(w);
-                            totalPruned = totalPruned + 1;
-                        }
-                        else
-                        {
-                            string strikeMsg = "[VanillaPrune] Strike " + strikes.ToString() + "/" + LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES.ToString() + " kept: " + ownerId + " -> " + wd.m_TargetDeviceId;
-                            LFPG_Util.Debug(strikeMsg);
-                            totalMarked = totalMarked + 1;
-                        }
+                        m_VanillaWireStrikes.Remove(strikeKey);
+                        totalRecovered = totalRecovered + 1;
                     }
+                    w = w - 1;
+                    continue;
+                }
+
+                // Target gone: strike (once per wire identity per pass) and
+                // delete at the threshold.
+                if (LFPG_StrikeWire(ownerId, wd, strikeKey, struckThisPass, wires, w, totalPruned, totalMarked))
+                {
+                    w = w - 1;
+                    continue;
                 }
                 w = w - 1;
             }
@@ -3417,15 +3491,49 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_VanillaWires.Remove(emptyOwners[eo]);
         }
-        if (totalPruned > 0 || totalMarked > 0 || totalRelinked > 0)
+        if (totalPruned > 0 || totalMarked > 0 || totalRecovered > 0)
         {
-            string shPruneMsg = "[SelfHeal] Safe prune summary: deleted=" + totalPruned.ToString() + " marked=" + totalMarked.ToString() + " relinked=" + totalRelinked.ToString() + " empty_owners=" + emptyOwners.Count().ToString();
+            string shPruneMsg = "[SelfHeal] Safe prune summary: deleted=" + totalPruned.ToString() + " marked=" + totalMarked.ToString() + " recovered=" + totalRecovered.ToString() + " relinked=" + totalRelinked.ToString() + " quarantined=" + totalQuarantined.ToString() + " empty_owners=" + emptyOwners.Count().ToString();
             LFPG_Util.Info(shPruneMsg);
             MarkVanillaDirty();
         }
         return totalPruned;
         #else
         return 0;
+        #endif
+    }
+
+    // Shared strike step for the uniform flow: one strike per full wire
+    // identity per pass (struckThisPass), deletion at the threshold.
+    // Returns true when the wire slot was removed (caller already adjusted
+    // the cursor either way).
+    protected bool LFPG_StrikeWire(string ownerId, LFPG_WireData wd, string strikeKey, ref map<string, bool> struckThisPass, ref array<ref LFPG_WireData> wires, int slotIndex, out int totalPruned, out int totalMarked)
+    {
+        #ifndef SERVER
+        return false;
+        #endif
+
+        #ifdef SERVER
+        if (!struckThisPass.Contains(strikeKey))
+        {
+            struckThisPass.Set(strikeKey, true);
+            int strikes = 0;
+            m_VanillaWireStrikes.Find(strikeKey, strikes);
+            strikes = strikes + 1;
+            m_VanillaWireStrikes.Set(strikeKey, strikes);
+            if (strikes >= LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES)
+            {
+                string vpMsg = "[VanillaPrune] Removed wire " + ownerId + " -> " + wd.m_TargetDeviceId + " (dead after " + strikes.ToString() + " sessions)";
+                LFPG_Util.Info(vpMsg);
+                wires.Remove(slotIndex);
+                totalPruned = totalPruned + 1;
+                return true;
+            }
+            string strikeMsg = "[VanillaPrune] Strike " + strikes.ToString() + "/" + LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES.ToString() + " kept: " + ownerId + " -> " + wd.m_TargetDeviceId;
+            LFPG_Util.Debug(strikeMsg);
+            totalMarked = totalMarked + 1;
+        }
+        return false;
         #endif
     }
     protected void DeferredVanillaPruneAndRebuild()
