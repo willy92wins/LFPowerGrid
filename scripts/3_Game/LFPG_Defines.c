@@ -253,6 +253,15 @@ static const float LFPG_OCC_FORCED_RECHECK_MS = 300.0;  // v0.7.38: 800→300 (l
 // See LFPG_Migrators.c for migration chain and compatibility strategy.
 static const int   LFPG_PERSIST_VER = 3;  // v4.0: DeviceBase refactor, per-device version — WIPE REQUIRED
 static const int   LFPG_VANILLA_PERSIST_VER = 2;
+// Safe pruning (A-08/A-10): a persisted vanilla wire entry is only removed
+// from the store after this many consecutive deferred passes with a dead
+// target. Each deferred pass runs once per server session, so N = 3 demands
+// three restarts with the target unresolvable before deletion.
+// The strikes ride along as an additive JSON field
+// (LFPG_VanillaWireEntry.m_UnresolvedStrikes) with no schema bump, following
+// the v0.7.44 precedent: old readers ignore the extra field, new readers
+// default a missing field to 0, so both directions stay tolerant.
+static const int   LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES = 3;
 static const float LFPG_VANILLA_FLUSH_S = 5.0;
 static const int   LFPG_FULLSYNC_SENDS_PER_TICK = 4;
 static const int   LFPG_STARTUP_VALIDATE_OWNERS_PER_TICK = 16;
