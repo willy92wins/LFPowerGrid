@@ -3546,7 +3546,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     // identity per pass (struckThisPass), deletion at the threshold.
     // Returns true when the wire slot was removed (caller already adjusted
     // the cursor either way).
-    protected bool LFPG_StrikeWire(string ownerId, LFPG_WireData wd, string strikeKey, ref map<string, bool> struckThisPass, ref array<ref LFPG_WireData> wires, int slotIndex, out int totalPruned, out int totalMarked)
+    protected bool LFPG_StrikeWire(string ownerId, LFPG_WireData wd, string strikeKey, map<string, bool> struckThisPass, array<ref LFPG_WireData> wires, int slotIndex, out int totalPruned, out int totalMarked)
     {
         #ifndef SERVER
         return false;
