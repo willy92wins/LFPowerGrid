@@ -268,6 +268,16 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
                     validIds[did] = true;
                 }
             }
+            // Quarantined ids count as valid targets: absence here would
+            // prune their wires without the quarantine policy applying
+            // (review round 4).
+            array<string> fbAmbIds;
+            LFPG_DeviceRegistry.Get().GetAllAmbiguousIds(fbAmbIds);
+            int aIdx;
+            for (aIdx = 0; aIdx < fbAmbIds.Count(); aIdx = aIdx + 1)
+            {
+                validIds[fbAmbIds[aIdx]] = true;
+            }
         }
 
         bool result = LFPG_WireHelper.PruneMissingTargets(m_Wires, validIds);

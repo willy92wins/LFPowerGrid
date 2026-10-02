@@ -192,6 +192,34 @@ class LFPG_DeviceRegistry
 		return m_AmbiguousIds.Contains(deviceId);
 	}
 
+	// Latch ambiguity detected BEFORE any registration: two or more same-type
+	// candidates at a persisted id position make identity unprovable, so the
+	// id must not be accredited by any path. Register already refuses ambiguous
+	// ids and FindById returns null for them; same lifetime as a collision
+	// latch (until restart).
+	void LatchAmbiguous(string deviceId)
+	{
+		if (deviceId == "")
+			return;
+		if (m_AmbiguousIds.Contains(deviceId))
+			return;
+		m_AmbiguousIds.Set(deviceId, true);
+		LFPG_Util.Error("[DeviceRegistry] Ambiguous deviceId latched before accreditation: " + deviceId);
+	}
+
+	// Ambiguous ids are NOT accredited: any path building a valid-ids set by
+	// enumerating the registry (prune paths) must treat them as PRESENT, or a
+	// quarantined id would read as absent and its wires would be pruned
+	// without the quarantine policy ever applying.
+	void GetAllAmbiguousIds(out array<string> outIds)
+	{
+		outIds = new array<string>;
+		for (int i = 0; i < m_AmbiguousIds.Count(); i = i + 1)
+		{
+			outIds.Insert(m_AmbiguousIds.GetKey(i));
+		}
+	}
+
     // v0.7.44 (Level 4, hallazgo 1a): Filter null refs in GetAll.
     // v0.9.3: Deduplicate by entity pointer — same entity can be registered
     // under multiple keys if TryRegister misses cleanup of old key.

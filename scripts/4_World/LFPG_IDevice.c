@@ -171,6 +171,16 @@ class LFPG_DeviceAPI
     // Uses GetObjectsAtPosition for spatial search, then filters by type.
     // Returns null if no match found within searchRadius.
     // v0.7.3: reduced default radius from 0.5m to 0.25m (25x the 1cm precision).
+    // v0.9.x (review round 4, integration blocker): uniqueness gate before any
+    // accreditation. Same-type candidates are counted over the quarantine
+    // radius LFPG_VANILLA_RELINK_RADIUS (superset of searchRadius); TWO or more
+    // of them make identity unprovable, so the id is latched ambiguous in the
+    // registry and the function returns null WITHOUT registering. Every
+    // accreditation path for persisted vanilla ids funnels through here, so
+    // none of them (validation sweeps, graph, RPC, prune) can register one
+    // arbitrary candidate of an ambiguous pair ahead of the conservative
+    // relink scan.
+    // A unique candidate resolves exactly as before (nearest within searchRadius).
     static EntityAI ResolveVanillaDevice(string deviceId, float searchRadius = 0.25)
     {
         string typeName;
@@ -178,12 +188,25 @@ class LFPG_DeviceAPI
         if (!ParseVanillaId(deviceId, typeName, targetPos))
             return null;
 
+        // Already latched: identity was proven unprovable earlier, so do not
+        // re-scan and never re-credit (the latch lives until restart, the
+        // same lifetime as a collision latch).
+        if (LFPG_DeviceRegistry.Get().IsAmbiguous(deviceId))
+            return null;
+
 		// Spatial candidates are checked against the full 3D radius below.
+        // Quarantine gate: same-type candidate uniqueness is evaluated over
+        // the superset radius so no acceptance radius can dodge it.
+        float gateRadius = searchRadius;
+        if (gateRadius < LFPG_VANILLA_RELINK_RADIUS)
+            gateRadius = LFPG_VANILLA_RELINK_RADIUS;
+
         array<Object> objects = new array<Object>;
-        g_Game.GetObjectsAtPosition(targetPos, searchRadius, objects, null);
+        g_Game.GetObjectsAtPosition(targetPos, gateRadius, objects, null);
 
         EntityAI bestMatch = null;
 		float bestDist = searchRadius;
+        int sameTypeCount = 0;
 
         int i;
         for (i = 0; i < objects.Count(); i = i + 1)
@@ -202,11 +225,24 @@ class LFPG_DeviceAPI
 
             // Full 3D distance check (handles multi-floor buildings)
             float dist = vector.Distance(ent.GetPosition(), targetPos);
+            if (dist <= gateRadius)
+                sameTypeCount = sameTypeCount + 1;
             if (dist < bestDist)
             {
                 bestDist = dist;
                 bestMatch = ent;
             }
+        }
+
+        // Uniqueness gate: two or more same-type candidates inside the
+        // quarantine radius make the persisted id unattributable to any
+        // single one of them. Latch the ambiguity and credit NONE of them
+        // (review round 4: accreditation paths running BEFORE the prune must
+        // not pick a member of an ambiguous pair).
+        if (sameTypeCount > 1)
+        {
+            LFPG_DeviceRegistry.Get().LatchAmbiguous(deviceId);
+            return null;
         }
 
         // Auto-register in DeviceRegistry for future O(1) lookups

@@ -91,6 +91,13 @@ class LFPG_VanillaWireEntry
     string m_CreatorId;
     ref array<vector> m_Waypoints;
 
+    // Safe pruning (A-08/A-10): consecutive validation passes with an
+    // unresolvable target. A persisted wire is only deleted after N
+    // dead-target passes; see LFPG_VANILLA_UNRESOLVED_DELETE_STRIKES.
+    // Additive field with no schema bump (v0.7.44 precedent): old readers
+    // ignore it, new readers default a missing field to 0.
+    int m_UnresolvedStrikes;
+
     void LFPG_VanillaWireEntry()
     {
         m_OwnerDeviceId = "";
@@ -99,6 +106,7 @@ class LFPG_VanillaWireEntry
         m_TargetPort = "";
         m_CreatorId = "";
         m_Waypoints = new array<vector>;
+        m_UnresolvedStrikes = 0;
     }
 };
 
