@@ -19,7 +19,6 @@
 class LFPG_BTCAtmView extends LFPG_FloatingViewBase
 {
     protected static ref LFPG_BTCAtmView s_Instance;
-    protected bool m_FocusLocked;
     protected bool m_ControlsLocked;
 
     // ── Drag state ──
@@ -711,45 +710,6 @@ class LFPG_BTCAtmView extends LFPG_FloatingViewBase
     static int LightenARGB(int color, int amount)
     {
         return LFPG_FloatingViewBase.LFPG_SharedLightenARGB(color, amount);
-    }
-
-    // =========================================================
-    // Input lock
-    // =========================================================
-    protected void ShowCursor()
-    {
-        #ifndef SERVER
-        if (!g_Game)
-            return;
-        UIManager uiMgr = g_Game.GetUIManager();
-        if (uiMgr)
-            uiMgr.ShowUICursor(true);
-        if (!m_FocusLocked)
-        {
-            Input inp = g_Game.GetInput();
-            if (inp)
-                inp.ChangeGameFocus(1);
-            m_FocusLocked = true;
-        }
-        #endif
-    }
-
-    protected void HideCursor()
-    {
-        #ifndef SERVER
-        if (!g_Game)
-            return;
-        UIManager uiMgr = g_Game.GetUIManager();
-        if (uiMgr)
-            uiMgr.ShowUICursor(false);
-        if (m_FocusLocked)
-        {
-            Input inp = g_Game.GetInput();
-            if (inp)
-                inp.ChangeGameFocus(-1);
-            m_FocusLocked = false;
-        }
-        #endif
     }
 
     // =========================================================
