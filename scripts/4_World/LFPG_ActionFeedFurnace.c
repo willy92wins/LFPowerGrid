@@ -81,7 +81,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
 
         // Filter: LFPG kit items (Splitter_Kit, SolarPanel_Kit, etc.)
         string itemType = handItem.GetType();
-        if (LFPG_IsLFPGKit(itemType))
+        if (LFPG_IsLFPGKit(handItem))
             return false;
 
         // Filter: items with zero-size in either dimension (system items)
@@ -195,8 +195,7 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
 
         if (feedItem.IsKindOf("LFPG_CableReel"))
             return;
-        string revalType = feedItem.GetType();
-        if (LFPG_IsLFPGKit(revalType))
+        if (LFPG_IsLFPGKit(feedItem))
             return;
 
         // v4.7: Calculate fuel based on mode
@@ -256,54 +255,15 @@ class LFPG_ActionFeedFurnace : ActionInteractBase
     }
 
     // ---- Helper: check if item type is an LFPG kit ----
-    protected bool LFPG_IsLFPGKit(string typeName)
+    protected bool LFPG_IsLFPGKit(ItemBase item)
     {
-        // Check ALL known LFPG kit types (must match config.cpp units[])
-        if (typeName == "LFPG_Splitter_Kit")
+        if (!item)
+            return false;
+
+        if (item.IsInherited(LFPG_KitBase))
             return true;
-        if (typeName == "LFPG_CeilingLight_Kit")
-            return true;
-        if (typeName == "LFPG_WallLamp_Kit")
-            return true;
-        if (typeName == "LFPG_SolarPanel_Kit")
-            return true;
-        if (typeName == "LFPG_SolarPanel_T2_Kit")
-            return true;
-        if (typeName == "LFPG_Combiner_Kit")
-            return true;
-        if (typeName == "LFPG_Camera_Kit")
-            return true;
-        if (typeName == "LFPG_Monitor_Kit")
-            return true;
-        if (typeName == "LFPG_WaterPump_Kit")
-            return true;
-        if (typeName == "LFPG_WaterPump_T2_Kit")
-            return true;
-        if (typeName == "LFPG_Furnace_Kit")
-            return true;
-        if (typeName == "LFPG_PushButton_Kit")
-            return true;
-        if (typeName == "LFPG_Sorter_Kit")
-            return true;
-        if (typeName == "LFPG_Searchlight_Kit")
-            return true;
-        if (typeName == "LFPG_SwitchV2_Kit")
-            return true;
-        if (typeName == "LFPG_MotionSensor_Kit")
-            return true;
-        if (typeName == "LFPG_PressurePad_Kit")
-            return true;
-        if (typeName == "LFPG_AND_Gate_Kit")
-            return true;
-        if (typeName == "LFPG_OR_Gate_Kit")
-            return true;
-        if (typeName == "LFPG_XOR_Gate_Kit")
-            return true;
-        if (typeName == "LFPG_LaserDetector_Kit")
-            return true;
-        if (typeName == "LFPG_ElectronicCounter_Kit")
-            return true;
-        if (typeName == "LFPG_BatteryMedium_Kit")
+
+        if (item.IsInherited(LFPG_KitBaseDeployable))
             return true;
 
         return false;
