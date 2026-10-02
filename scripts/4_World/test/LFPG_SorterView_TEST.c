@@ -143,7 +143,6 @@ class LFPG_SorterView_TEST extends LFPG_FloatingViewBase
     protected static int s_PerfDiagConstructionCount;
     // A7: ESC timestamp guard (prevents engine pause menu on release)
     protected static float s_EscCloseTime = 0.0;
-    protected bool m_FocusLocked;
 
     // ── Drag state ──
 
@@ -1585,55 +1584,6 @@ class LFPG_SorterView_TEST extends LFPG_FloatingViewBase
         LFPG_Util.Info(closeMsg);
     }
 
-    // =========================================================
-    // Input lock: ChangeGameFocus(1) suppresses continuous input (WASD/look).
-    // OnMouseButtonDown returning true suppresses click-through to game.
-    // =========================================================
-    protected void ShowCursor()
-    {
-        #ifndef SERVER
-        if (!g_Game)
-            return;
-        UIManager uiMgr = g_Game.GetUIManager();
-        if (uiMgr)
-        {
-            uiMgr.ShowUICursor(true);
-        }
-        if (!m_FocusLocked)
-        {
-            Input inp = g_Game.GetInput();
-            if (inp)
-            {
-                inp.ChangeGameFocus(1);
-            }
-            m_FocusLocked = true;
-        }
-        #endif
-    }
-
-    protected void HideCursor()
-    {
-        #ifndef SERVER
-        if (!g_Game)
-            return;
-        UIManager uiMgr = g_Game.GetUIManager();
-        if (uiMgr)
-        {
-            uiMgr.ShowUICursor(false);
-        }
-        if (m_FocusLocked)
-        {
-            Input inp = g_Game.GetInput();
-            if (inp)
-            {
-                inp.ChangeGameFocus(-1);
-            }
-            m_FocusLocked = false;
-        }
-        #endif
-    }
-
-    // =========================================================
     // Hover feedback (v2.2) — lighten button bg on mouse enter
     // =========================================================
 

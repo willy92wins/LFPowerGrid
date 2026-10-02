@@ -3,6 +3,7 @@
 class LFPG_FloatingViewBase extends ScriptView
 {
     protected bool m_IsOpen;
+    protected bool m_FocusLocked;
     protected bool m_Dragging;
     protected float m_DragOffX;
     protected float m_DragOffY;
@@ -242,6 +243,51 @@ class LFPG_FloatingViewBase extends ScriptView
         float minY = 0.0;
         ClampPanelPos(cx, cy, minY, clampedX, clampedY);
         panel.SetPos(clampedX, clampedY);
+    }
+
+    // Shared focus and cursor ownership for floating client views.
+    protected void ShowCursor()
+    {
+        #ifndef SERVER
+        if (!g_Game)
+            return;
+        UIManager uiMgr = g_Game.GetUIManager();
+        if (uiMgr)
+        {
+            uiMgr.ShowUICursor(true);
+        }
+        if (!m_FocusLocked)
+        {
+            Input inp = g_Game.GetInput();
+            if (inp)
+            {
+                inp.ChangeGameFocus(1);
+            }
+            m_FocusLocked = true;
+        }
+        #endif
+    }
+
+    protected void HideCursor()
+    {
+        #ifndef SERVER
+        if (!g_Game)
+            return;
+        UIManager uiMgr = g_Game.GetUIManager();
+        if (uiMgr)
+        {
+            uiMgr.ShowUICursor(false);
+        }
+        if (m_FocusLocked)
+        {
+            Input inp = g_Game.GetInput();
+            if (inp)
+            {
+                inp.ChangeGameFocus(-1);
+            }
+            m_FocusLocked = false;
+        }
+        #endif
     }
 
     static int LFPG_SharedLightenARGB(int color, int amount)
