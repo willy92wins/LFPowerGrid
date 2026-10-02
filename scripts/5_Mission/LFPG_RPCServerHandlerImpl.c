@@ -2027,6 +2027,8 @@ class LFPG_RPCServerHandlerImpl
         int rescued = 0;
         array<EntityAI> allDevs = new array<EntityAI>;
         LFPG_DeviceRegistry.Get().GetAll(allDevs);
+        array<int> fallbackDeltaOps = new array<int>;
+        array<ref LFPG_WireData> fallbackDeltaWires = new array<ref LFPG_WireData>;
         int di;
         for (di = 0; di < allDevs.Count(); di = di + 1)
         {
@@ -2040,8 +2042,8 @@ class LFPG_RPCServerHandlerImpl
             if (!srcWires) continue;
 
             bool srcChanged = false;
-            ref array<int> fallbackDeltaOps = new array<int>;
-            ref array<ref LFPG_WireData> fallbackDeltaWires = new array<ref LFPG_WireData>;
+            fallbackDeltaOps.Clear();
+            fallbackDeltaWires.Clear();
             int sw = srcWires.Count() - 1;
             while (sw >= 0)
             {
