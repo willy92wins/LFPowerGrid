@@ -10,8 +10,8 @@
 //        persist DoorType + DoorIndex (ver 2, no save wipe).
 // =========================================================
 
-static const string LFPG_DC_RVMAT_OFF = "\LFPowerGrid\data\door_controller\data\door_controller_red.rvmat";
-static const string LFPG_DC_RVMAT_ON  = "\LFPowerGrid\data\door_controller\data\door_controller_green.rvmat";
+static const string LFPG_DC_RVMAT_OFF = "LFPowerGrid\\data\\door_controller\\data\\door_controller_red.rvmat";
+static const string LFPG_DC_RVMAT_ON  = "LFPowerGrid\\data\\door_controller\\data\\door_controller_green.rvmat";
 
 static const int LFPG_DOORTYPE_NONE     = 0;
 static const int LFPG_DOORTYPE_FENCE    = 1;

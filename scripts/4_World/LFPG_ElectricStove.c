@@ -60,10 +60,10 @@ class LFPG_ElectricStove : LFPG_DeviceBase
 
     // ---- Rvmat paths (assigned to local vars before use) ----
     #ifndef SERVER
-    static const string RVMAT_BURNER_ON  = "\LFPowerGrid\data\electric_stove\electric_stove_burner_on.rvmat";
+    static const string RVMAT_BURNER_ON  = "LFPowerGrid\\data\\electric_stove\\electric_stove_burner_on.rvmat";
     #endif
     #ifndef SERVER
-    static const string RVMAT_BURNER_OFF = "\LFPowerGrid\data\electric_stove\electric_stove.rvmat";
+    static const string RVMAT_BURNER_OFF = "LFPowerGrid\\data\\electric_stove\\electric_stove.rvmat";
     #endif
 
     // ---- SyncVars ----

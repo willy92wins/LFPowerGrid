@@ -35,9 +35,9 @@
 // ---------------------------------------------------------
 // RVMAT paths for LED states
 // ---------------------------------------------------------
-static const string LFPG_SPEAKER_RVMAT_LED_OFF   = "\LFPowerGrid\data\speaker\data\speaker_led_off.rvmat";
-static const string LFPG_SPEAKER_RVMAT_LED_GREEN  = "\LFPowerGrid\data\speaker\data\speaker_green.rvmat";
-static const string LFPG_SPEAKER_RVMAT_LED_RED    = "\LFPowerGrid\data\speaker\data\speaker_red.rvmat";
+static const string LFPG_SPEAKER_RVMAT_LED_OFF   = "LFPowerGrid\\data\\speaker\\data\\speaker_led_off.rvmat";
+static const string LFPG_SPEAKER_RVMAT_LED_GREEN  = "LFPowerGrid\\data\\speaker\\data\\speaker_green.rvmat";
+static const string LFPG_SPEAKER_RVMAT_LED_RED    = "LFPowerGrid\\data\\speaker\\data\\speaker_red.rvmat";
 
 // ---------------------------------------------------------
 // Constants

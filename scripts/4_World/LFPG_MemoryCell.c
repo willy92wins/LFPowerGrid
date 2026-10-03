@@ -14,9 +14,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] + m_LatchState
 // =========================================================
 
-static const string LFPG_MCELL_RVMAT_OFF   = "\LFPowerGrid\data\button\materials\led_off.rvmat";
-static const string LFPG_MCELL_RVMAT_GREEN  = "\LFPowerGrid\data\button\materials\led_green.rvmat";
-static const string LFPG_MCELL_RVMAT_RED    = "\LFPowerGrid\data\button\materials\led_red.rvmat";
+static const string LFPG_MCELL_RVMAT_OFF   = "LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
+static const string LFPG_MCELL_RVMAT_GREEN  = "LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
+static const string LFPG_MCELL_RVMAT_RED    = "LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 static const float  LFPG_MCELL_CAPACITY     = 100.0;
 
 // ---------------------------------------------------------

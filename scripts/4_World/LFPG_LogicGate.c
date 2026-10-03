@@ -12,9 +12,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] — no extras
 // =========================================================
 
-static const string LFPG_GATE_RVMAT_OFF   = "\LFPowerGrid\data\button\materials\led_off.rvmat";
-static const string LFPG_GATE_RVMAT_GREEN  = "\LFPowerGrid\data\button\materials\led_green.rvmat";
-static const string LFPG_GATE_RVMAT_RED    = "\LFPowerGrid\data\button\materials\led_red.rvmat";
+static const string LFPG_GATE_RVMAT_OFF   = "LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
+static const string LFPG_GATE_RVMAT_GREEN  = "LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
+static const string LFPG_GATE_RVMAT_RED    = "LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 static const float  LFPG_GATE_CAPACITY     = 100.0;
 
 class LFPG_LogicGate_Kit : LFPG_KitBase
