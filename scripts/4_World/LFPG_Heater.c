@@ -13,8 +13,8 @@
 // they sit behind #ifndef SERVER and cost nothing in the server view.
 // =========================================================
 
-static const string LFPG_HEATER_RVMAT_OFF   = "\LFPowerGrid\data\heater\heater.rvmat";
-static const string LFPG_HEATER_RVMAT_ON    = "\LFPowerGrid\data\heater\heater_on.rvmat";
+static const string LFPG_HEATER_RVMAT_OFF   = "LFPowerGrid\\data\\heater\\heater.rvmat";
+static const string LFPG_HEATER_RVMAT_ON    = "LFPowerGrid\\data\\heater\\heater_on.rvmat";
 static const float  LFPG_HEATER_CONSUMPTION = 15.0;
 
 class LFPG_Heater_Kit : LFPG_KitBase

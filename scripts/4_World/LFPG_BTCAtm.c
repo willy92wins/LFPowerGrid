@@ -27,8 +27,8 @@
 // ---- BTC ATM rvmat paths (static const, no per-call alloc) ----
 // Screen uses the "HideScreen" animation (translation) to reveal/cover the
 // baked emission face underneath — NOT a material swap. See model.cfg.
-static const string LFPG_BTC_RVMAT_LED_ON     = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_green.rvmat";
-static const string LFPG_BTC_RVMAT_LED_OFF    = "\LFPowerGrid\data\btc_atm\data\bitcoin_atm_red.rvmat";
+static const string LFPG_BTC_RVMAT_LED_ON     = "LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_green.rvmat";
+static const string LFPG_BTC_RVMAT_LED_OFF    = "LFPowerGrid\\data\\btc_atm\\data\\bitcoin_atm_red.rvmat";
 
 
 // =========================================================

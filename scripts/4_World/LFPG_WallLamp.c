@@ -9,8 +9,8 @@
 // Lifecycle, ports and SyncVars live in LFPG_LampDeviceBase.
 // =========================================================
 
-static const string LFPG_WALLLAMP_RVMAT_OFF = "\LFPowerGrid\data\wall_lamp\lf_wall_lamp.rvmat";
-static const string LFPG_WALLLAMP_RVMAT_ON  = "\LFPowerGrid\data\wall_lamp\lf_wall_lamp_on.rvmat";
+static const string LFPG_WALLLAMP_RVMAT_OFF = "LFPowerGrid\\data\\wall_lamp\\lf_wall_lamp.rvmat";
+static const string LFPG_WALLLAMP_RVMAT_ON  = "LFPowerGrid\\data\\wall_lamp\\lf_wall_lamp_on.rvmat";
 
 class LFPG_WallLamp_Kit : LFPG_KitBase
 {

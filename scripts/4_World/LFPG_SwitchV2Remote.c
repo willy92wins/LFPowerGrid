@@ -10,9 +10,9 @@
 // Persistence: [base: DeviceId + ver + wireJSON] + m_SwitchOn
 // =========================================================
 
-static const string LFPG_SWV2R_RVMAT_OFF    = "\LFPowerGrid\data\switch_v2\data\led_off.rvmat";
-static const string LFPG_SWV2R_RVMAT_GREEN   = "\LFPowerGrid\data\switch_v2\data\led_green.rvmat";
-static const string LFPG_SWV2R_RVMAT_RED     = "\LFPowerGrid\data\switch_v2_remote\data\switch_v2_remote_red.rvmat";
+static const string LFPG_SWV2R_RVMAT_OFF    = "LFPowerGrid\\data\\switch_v2\\data\\led_off.rvmat";
+static const string LFPG_SWV2R_RVMAT_GREEN   = "LFPowerGrid\\data\\switch_v2\\data\\led_green.rvmat";
+static const string LFPG_SWV2R_RVMAT_RED     = "LFPowerGrid\\data\\switch_v2_remote\\data\\switch_v2_remote_red.rvmat";
 
 // Placement geometry is shared with the wired sibling: same skeleton, same
 // LeverToggle animation in model.cfg. Inheriting it keeps pitch/yaw/surface in one
