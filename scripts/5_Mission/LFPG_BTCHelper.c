@@ -1319,6 +1319,14 @@ class LFPG_BTCHelper
                 LFPG_Util.Error("[BTCBuy] cash rejected: currency catalog is invalid");
                 return;
             }
+            if (!LFPG_BTCConfig.IsBtcItemValid())
+            {
+                int errItemC = LFPG_BTC_ERR_INVALID;
+                SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errItemC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+                PlayerBase.LFPG_SendClientMsg(player, "Buying BTC with cash is disabled on this server: its BTC item is not configured. Nothing was charged.");
+                LFPG_Util.Warn("[BTCBuy] cash rejected before any charge: btcItemClassname is not a valid class");
+                return;
+            }
             if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount))
             {
                 SendBTCNonceRejection(player, sender, LFPG_BTC_TX_BUY, serverSessionLow, serverSessionHigh, sequence);
@@ -1982,6 +1990,16 @@ class LFPG_BTCHelper
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW,errPow, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            return;
+        }
+        // The stock is debited before the items are created, so an item class
+        // that does not exist would take the stock and deliver nothing.
+        if (!LFPG_BTCConfig.IsBtcItemValid())
+        {
+            int errItemW = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errItemW, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            PlayerBase.LFPG_SendClientMsg(player, "BTC withdrawal is disabled on this server: its BTC item is not configured. Nothing was debited.");
+            LFPG_Util.Warn("[BTCWithdraw] rejected before any debit: btcItemClassname is not a valid class");
             return;
         }
         int currentStock = atm.LFPG_GetBtcStock();
