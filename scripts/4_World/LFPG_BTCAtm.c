@@ -306,6 +306,11 @@ class LFPG_BTCAtmBase : LFPG_DeviceBase
             LFPG_Util.Error("[LFPG_BTCAtm] kill drop has empty BTC classname; stock retained=" + stockBefore.ToString() + " deviceId=" + deviceId);
             return;
         }
+        if (!LFPG_BTCConfig.IsBtcItemValid())
+        {
+            LFPG_Util.Error("[LFPG_BTCAtm] kill drop skipped: btcItemClassname is not a valid class; stock retained=" + stockBefore.ToString() + " deviceId=" + deviceId);
+            return;
+        }
 
         array<EntityAI> drops = new array<EntityAI>();
         vector basePos = GetPosition();

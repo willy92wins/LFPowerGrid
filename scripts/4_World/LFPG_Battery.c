@@ -269,10 +269,14 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
     // ============================================
     // Persistence: StoredEnergy + DischargeEnabled + OutputEnabled
     // (after wireJSON from WireOwnerBase)
-    // Battery schema v3: v2 energy is scaled by 36. v1 is rejected.
+    // Battery schema v3: v1 and v2 energy is scaled by 36. A v1 record may
+    // come from the 10.000/50.000 capacity era, where the exact factor is x72;
+    // x36 is the smaller factor, so a v1 load never credits more than the
+    // stored percentage, and the battery keeps its wires and switches.
     // ============================================
     static const int LFPG_BATTERY_PERSIST_VERSION = 3;
     static const int LFPG_BATTERY_PRE_X36_VERSION = 2;
+    static const int LFPG_BATTERY_LEGACY_V1_VERSION = 1;
     static const float LFPG_BATTERY_MIGRATION_FACTOR = 36.0;
 
     override int LFPG_GetDevicePersistVersion()
@@ -343,17 +347,7 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             return false;
         }
 
-        if (deviceVer == 1)
-        {
-            logMsg = "[LFPG_Battery] Rejecting ambiguous persist v1 type=";
-            logMsg = logMsg + className;
-            logMsg = logMsg + " id=";
-            logMsg = logMsg + deviceId;
-            LFPG_Util.Warn(logMsg);
-            return false;
-        }
-
-        if (deviceVer == LFPG_BATTERY_PRE_X36_VERSION)
+        if (deviceVer == LFPG_BATTERY_LEGACY_V1_VERSION || deviceVer == LFPG_BATTERY_PRE_X36_VERSION)
         {
             maxStored = LFPG_GetMaxStoredEnergy();
             legacyMax = maxStored / LFPG_BATTERY_MIGRATION_FACTOR;
@@ -369,19 +363,27 @@ class LFPG_BatteryBase : LFPG_WireOwnerBase
             }
             if (didCorrect)
             {
-                logMsg = "[LFPG_Battery] Clamped v2 energy to 0..legacyMax type=";
+                logMsg = "[LFPG_Battery] Clamped v";
+                logMsg = logMsg + deviceVer.ToString();
+                logMsg = logMsg + " energy to 0..legacyMax type=";
                 logMsg = logMsg + className;
                 logMsg = logMsg + " id=";
                 logMsg = logMsg + deviceId;
                 LFPG_Util.Warn(logMsg);
             }
             storedFromSave = storedFromSave * LFPG_BATTERY_MIGRATION_FACTOR;
-            logMsg = "[LFPG_Battery] battery_migration v2->v3 type=";
+            logMsg = "[LFPG_Battery] battery_migration v";
+            logMsg = logMsg + deviceVer.ToString();
+            logMsg = logMsg + "->v3 type=";
             logMsg = logMsg + className;
             logMsg = logMsg + " id=";
             logMsg = logMsg + deviceId;
             logMsg = logMsg + " energy=";
             logMsg = logMsg + storedFromSave.ToString();
+            if (deviceVer == LFPG_BATTERY_LEGACY_V1_VERSION)
+            {
+                logMsg = logMsg + " assumed_x36";
+            }
             LFPG_Util.Info(logMsg);
         }
         else if (deviceVer == LFPG_BATTERY_PERSIST_VERSION)

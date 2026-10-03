@@ -1204,6 +1204,17 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY,errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
+        // Both purchase modes end in BTC items: cash delivers them at once, and
+        // account mode adds ATM stock that only a withdrawal can take out. With
+        // no valid item class neither can be completed, so reject before any charge.
+        if (!LFPG_BTCConfig.IsBtcItemValid())
+        {
+            int errItemB = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errItemB, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            PlayerBase.LFPG_SendClientMsg(player, "Buying BTC is disabled on this server: its BTC item is not configured. Nothing was charged.");
+            LFPG_Util.Warn("[BTCBuy] rejected before any charge: btcItemClassname is not a valid class");
+            return;
+        }
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
         if (!priceOk)
         {
@@ -1982,6 +1993,16 @@ class LFPG_BTCHelper
         {
             int errPow = LFPG_BTC_ERR_NOT_POWERED;
             SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW,errPow, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            return;
+        }
+        // The stock is debited before the items are created, so an item class
+        // that does not exist would take the stock and deliver nothing.
+        if (!LFPG_BTCConfig.IsBtcItemValid())
+        {
+            int errItemW = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_WITHDRAW, errItemW, atm.LFPG_GetBtcStock(), earlyBalW, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            PlayerBase.LFPG_SendClientMsg(player, "BTC withdrawal is disabled on this server: its BTC item is not configured. Nothing was debited.");
+            LFPG_Util.Warn("[BTCWithdraw] rejected before any debit: btcItemClassname is not a valid class");
             return;
         }
         int currentStock = atm.LFPG_GetBtcStock();

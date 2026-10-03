@@ -92,6 +92,7 @@ class LFPG_BTCConfig
     protected static ref LFPG_BTCSettingsData s_Data;
     protected static bool s_Loaded = false;
     protected static bool s_CurrencyCatalogValid = false;
+    protected static bool s_BtcItemValid = false;
 
     static LFPG_BTCSettingsData Get()
     {
@@ -246,6 +247,20 @@ class LFPG_BTCConfig
             s_Data.btcItemClassname = "Ammo_9x19_25Rnd";
             string warnItem = "[LFPG_BTCConfig] btcItemClassname empty, reset to default";
             LFPG_Util.Warn(warnItem);
+        }
+
+        // btcItemClassname: must name a real item. Without one, a BTC
+        // withdrawal would debit the ATM stock and then create nothing, so
+        // withdrawals, purchases and the kill drop check IsBtcItemValid() first.
+        s_BtcItemValid = ConfigClassExists(s_Data.btcItemClassname);
+        if (!s_BtcItemValid)
+        {
+            string errItem = "[LFPG_BTCConfig] btcItemClassname is not a CfgVehicles/CfgMagazines/CfgWeapons class: ";
+            errItem = errItem + s_Data.btcItemClassname;
+            errItem = errItem + " - BTC withdrawals and purchases are disabled. Edit ";
+            errItem = errItem + LFPG_BTC_SETTINGS_FILE;
+            errItem = errItem + " and restart the server.";
+            LFPG_Util.Error(errItem);
         }
 
         // balanceMode: must be auto, native, or lbmaster
@@ -433,6 +448,8 @@ class LFPG_BTCConfig
         LFPG_Util.Error("[LFPG_BTCConfig] ============================================================");
     }
 
+    // Paths follow vanilla ("CfgVehicles <name>", no trailing space), as in
+    // AttachmentsOutOfReach.GetAttachmentPosition.
     protected static bool ConfigClassExists(string classname)
     {
         if (classname == "")
@@ -442,19 +459,16 @@ class LFPG_BTCConfig
 
         string vehiclesPath = "CfgVehicles ";
         vehiclesPath = vehiclesPath + classname;
-        vehiclesPath = vehiclesPath + " ";
         if (GetGame().ConfigIsExisting(vehiclesPath))
             return true;
 
         string magPath = "CfgMagazines ";
         magPath = magPath + classname;
-        magPath = magPath + " ";
         if (GetGame().ConfigIsExisting(magPath))
             return true;
 
         string weapPath = "CfgWeapons ";
         weapPath = weapPath + classname;
-        weapPath = weapPath + " ";
         if (GetGame().ConfigIsExisting(weapPath))
             return true;
 
@@ -527,6 +541,8 @@ class LFPG_BTCConfig
         msg = msg + s_Data.refreshSeconds.ToString();
         msg = msg + " btcItem=";
         msg = msg + s_Data.btcItemClassname;
+        msg = msg + " btcItemValid=";
+        msg = msg + s_BtcItemValid.ToString();
         msg = msg + " maxBtc=";
         msg = msg + s_Data.maxBtcPerMachine.ToString();
         msg = msg + " withdrawOnly=";
@@ -559,6 +575,12 @@ class LFPG_BTCConfig
     {
         Get();
         return s_CurrencyCatalogValid;
+    }
+
+    static bool IsBtcItemValid()
+    {
+        Get();
+        return s_BtcItemValid;
     }
 
     static float GetRefreshMs()
