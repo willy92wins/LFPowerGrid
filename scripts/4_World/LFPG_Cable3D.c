@@ -31,6 +31,7 @@ static const int    LFPG_C3D_LOOK_CRITICAL    = 4;
 static const int    LFPG_C3D_WORK_PER_FRAME   = 48;    // object creations / recolours per frame
 static const int    LFPG_C3D_MAX_LIVE         = 600;   // one per sub-segment, renderer cap is 512
 static const int    LFPG_C3D_MAX_TRIES        = 3;
+static const int    LFPG_C3D_QUEUE_PURGE_MIN  = 1200;  // twice LFPG_C3D_MAX_LIVE
 static const float  LFPG_C3D_THICKNESS        = 0.6;   // model radius 0.01 m -> 0.6 cm
 static const float  LFPG_C3D_OVERLAP_M        = 0.01;  // added at each end, hides joints
 static const float  LFPG_C3D_DEBUG_PERIOD_S   = 10.0;
@@ -61,6 +62,7 @@ class LFPG_Cable3D
 	protected static int s_Released;
 	protected static int s_Failed;
 	protected static int s_GaveUp;
+	protected static int s_PurgeAt;
 	protected static float s_DebugAccS;
 
 	protected static void EnsureInit()
@@ -70,6 +72,8 @@ class LFPG_Cable3D
 		LoadSettings();
 		if (!s_Queue)
 			s_Queue = new array<ref LFPG_CableParticle>;
+		if (s_PurgeAt < LFPG_C3D_QUEUE_PURGE_MIN)
+			s_PurgeAt = LFPG_C3D_QUEUE_PURGE_MIN;
 	}
 
 	protected static void LoadSettings()
@@ -177,6 +181,9 @@ class LFPG_Cable3D
 	// Called by LFPG_CableRenderer.Refresh3DLook for every live sub-segment.
 	// A particle holds at most one queue entry (m_Cable3DQueued); a new wanted
 	// look for a particle already queued only updates what that entry applies.
+	// A particle that gave up after LFPG_C3D_MAX_TRIES has no entry and an
+	// applied look that differs from the wanted one, so the next refresh queues
+	// it again with fresh tries: the refresh cadence is the retry backoff.
 	static void Want(LFPG_CableParticle p, int look)
 	{
 		if (!p)
@@ -184,7 +191,12 @@ class LFPG_Cable3D
 		if (!p.IsValid())
 			return;
 		if (p.m_Cable3DWant == look)
-			return;
+		{
+			if (p.m_Cable3DQueued)
+				return;
+			if (p.m_Cable3DLook == look)
+				return;
+		}
 		p.m_Cable3DWant = look;
 		p.m_Cable3DTries = 0;
 		if (p.m_Cable3DQueued)
@@ -208,6 +220,32 @@ class LFPG_Cable3D
 				q.m_Cable3DQueued = false;
 		}
 		s_Queue.Clear();
+	}
+
+	// Keeps the entries of valid particles and drops the rest, clearing their
+	// pending flag so a particle reused later can be queued again. The next
+	// compaction waits until the queue doubles what survived this one.
+	protected static void PurgeQueue()
+	{
+		array<ref LFPG_CableParticle> kept = new array<ref LFPG_CableParticle>;
+		int i;
+		for (i = 0; i < s_Queue.Count(); i = i + 1)
+		{
+			LFPG_CableParticle q = s_Queue[i];
+			if (!q)
+				continue;
+			if (q.IsValid())
+			{
+				kept.Insert(q);
+				continue;
+			}
+			q.m_Cable3DQueued = false;
+		}
+		s_Queue = kept;
+		int twice = kept.Count() * 2;
+		s_PurgeAt = LFPG_C3D_QUEUE_PURGE_MIN;
+		if (twice > s_PurgeAt)
+			s_PurgeAt = twice;
 	}
 
 	// Called once per frame from LFPG_CableRenderer.MaintenanceTick.
@@ -236,6 +274,12 @@ class LFPG_Cable3D
 			s_LookDirty = false;
 			renderer.Refresh3DLook(s_ToolHeld);
 		}
+
+		// Entries of particles destroyed while queued stay until the front
+		// reaches them. Under sustained churn that backlog could outgrow the
+		// frame budget, so it is compacted once it passes s_PurgeAt.
+		if (s_Queue.Count() > s_PurgeAt)
+			PurgeQueue();
 
 		// FIFO from the front, one entry per particle. Every examined entry
 		// costs one unit of the frame budget, discarded ones included. The try
@@ -309,6 +353,7 @@ class LFPG_Cable3D
 		s_Released = 0;
 		s_Failed = 0;
 		s_GaveUp = 0;
+		s_PurgeAt = LFPG_C3D_QUEUE_PURGE_MIN;
 		s_ToolHeld = false;
 		s_LookDirty = false;
 		s_DebugAccS = 0.0;
