@@ -251,13 +251,13 @@ class LFPG_BTCConfig
 
         // btcItemClassname: must name a real item. Without one, a BTC
         // withdrawal would debit the ATM stock and then create nothing, so
-        // every flow that delivers BTC items checks IsBtcItemValid() first.
+        // withdrawals, purchases and the kill drop check IsBtcItemValid() first.
         s_BtcItemValid = ConfigClassExists(s_Data.btcItemClassname);
         if (!s_BtcItemValid)
         {
             string errItem = "[LFPG_BTCConfig] btcItemClassname is not a CfgVehicles/CfgMagazines/CfgWeapons class: ";
             errItem = errItem + s_Data.btcItemClassname;
-            errItem = errItem + " - BTC withdrawals and cash purchases of BTC are disabled. Edit ";
+            errItem = errItem + " - BTC withdrawals and purchases are disabled. Edit ";
             errItem = errItem + LFPG_BTC_SETTINGS_FILE;
             errItem = errItem + " and restart the server.";
             LFPG_Util.Error(errItem);

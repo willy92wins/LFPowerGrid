@@ -1204,6 +1204,17 @@ class LFPG_BTCHelper
             SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY,errPow, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
             return;
         }
+        // Both purchase modes end in BTC items: cash delivers them at once, and
+        // account mode adds ATM stock that only a withdrawal can take out. With
+        // no valid item class neither can be completed, so reject before any charge.
+        if (!LFPG_BTCConfig.IsBtcItemValid())
+        {
+            int errItemB = LFPG_BTC_ERR_INVALID;
+            SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errItemB, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
+            PlayerBase.LFPG_SendClientMsg(player, "Buying BTC is disabled on this server: its BTC item is not configured. Nothing was charged.");
+            LFPG_Util.Warn("[BTCBuy] rejected before any charge: btcItemClassname is not a valid class");
+            return;
+        }
         bool priceOk = LFPG_NetworkManager.Get().LFPG_IsBTCPriceAvailable();
         if (!priceOk)
         {
@@ -1317,14 +1328,6 @@ class LFPG_BTCHelper
                 int errCatalogC = LFPG_BTC_ERR_INVALID;
                 SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errCatalogC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
                 LFPG_Util.Error("[BTCBuy] cash rejected: currency catalog is invalid");
-                return;
-            }
-            if (!LFPG_BTCConfig.IsBtcItemValid())
-            {
-                int errItemC = LFPG_BTC_ERR_INVALID;
-                SendBTCTxResult(player, sender, LFPG_BTC_TX_BUY, errItemC, atm.LFPG_GetBtcStock(), earlyBal, 0, 0.0, serverSessionLow, serverSessionHigh, sequence);
-                PlayerBase.LFPG_SendClientMsg(player, "Buying BTC with cash is disabled on this server: its BTC item is not configured. Nothing was charged.");
-                LFPG_Util.Warn("[BTCBuy] cash rejected before any charge: btcItemClassname is not a valid class");
                 return;
             }
             if (!btcSessions.ReserveRequest(sender, serverSessionLow, serverSessionHigh, sequence, requestSubId, netLow, netHigh, btcAmount, useAccount))
