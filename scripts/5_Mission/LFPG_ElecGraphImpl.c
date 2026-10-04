@@ -3632,7 +3632,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         if (!node)
             return;
 
-        if (node.m_DeviceType != LFPG_DeviceType.SOURCE && node.m_DeviceType != LFPG_DeviceType.CONSUMER && node.m_DeviceType != LFPG_DeviceType.CAMERA)
+        if (node.m_DeviceType != LFPG_DeviceType.SOURCE && node.m_DeviceType != LFPG_DeviceType.CONSUMER && node.m_DeviceType != LFPG_DeviceType.CAMERA && node.m_DeviceType != LFPG_DeviceType.PASSTHROUGH)
             return;
 
         EntityAI obj = LFPG_DeviceRegistry.Get().FindById(nodeId);
@@ -3650,6 +3650,28 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             MarkNodeDirty(nodeId, LFPG_DIRTY_INTERNAL);
             return;
         }
+
+		if (node.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+		{
+			// Attachment changes must refresh cached throughput before propagation.
+			// Preserve the same zero-capacity fallback as EnsureNode/Populate.
+			float capacity = LFPG_DeviceAPI.GetCapacity(obj);
+			if (capacity < LFPG_PROPAGATION_EPSILON)
+				capacity = LFPG_DEFAULT_PASSTHROUGH_CAPACITY;
+			float consumption = LFPG_DeviceAPI.GetConsumption(obj);
+			float capacityDelta = capacity - node.m_MaxOutput;
+			if (capacityDelta < 0.0)
+				capacityDelta = -capacityDelta;
+			float consumptionDelta = consumption - node.m_Consumption;
+			if (consumptionDelta < 0.0)
+				consumptionDelta = -consumptionDelta;
+			node.m_MaxOutput = capacity;
+			node.m_Consumption = consumption;
+			MarkNodeDirty(nodeId, LFPG_DIRTY_INTERNAL);
+			if (capacityDelta > LFPG_PROPAGATION_EPSILON || consumptionDelta > LFPG_PROPAGATION_EPSILON)
+				MarkUpstreamNodesDirty(nodeId);
+			return;
+		}
 
         node.m_Consumption = LFPG_DeviceAPI.GetConsumption(obj);
         MarkNodeDirty(nodeId, LFPG_DIRTY_INTERNAL);
