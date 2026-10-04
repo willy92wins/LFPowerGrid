@@ -273,6 +273,14 @@ class LFPG_ElecGraph
     }
 
 
+	void TickVanillaChargers()
+	{
+	}
+
+	void UpdateVanillaChargerPower(string nodeId, bool powered)
+	{
+	}
+
     void PopulateAllNodeElecStates()
     {
         #ifdef SERVER

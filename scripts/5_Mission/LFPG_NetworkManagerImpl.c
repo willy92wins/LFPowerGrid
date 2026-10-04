@@ -494,6 +494,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_SchedSimpleMs = 0;
             LFPG_TickSimpleDevices();
+			if (m_Graph)
+				m_Graph.TickVanillaChargers();
         }
         if (m_SchedBtcIntervalMs > 0)
         {
@@ -828,7 +830,11 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 if (!pendingPowerDevice)
                     pendingPowerDevice = LFPG_DeviceAPI.ResolveVanillaDevice(pendingPowerId);
                 if (pendingPowerDevice)
+                {
+					if (m_Graph)
+						m_Graph.UpdateVanillaChargerPower(pendingPowerId, false);
                     LFPG_DeviceAPI.SetPowered(pendingPowerDevice, false);
+                }
             }
             m_CutPendingPowerOff.Clear();
         }
@@ -2708,6 +2714,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
             if (neighborDev)
             {
+				if (m_Graph)
+					m_Graph.UpdateVanillaChargerPower(neighborIds[ni], false);
                 LFPG_DeviceAPI.SetPowered(neighborDev, false);
             }
         }

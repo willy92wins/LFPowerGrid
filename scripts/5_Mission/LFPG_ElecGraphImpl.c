@@ -107,9 +107,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected int m_ValidateNodeIdx;
     protected int m_ValidateFixCount;
 
-    // v5.0: BatteryCharger delta-time charging — tracks last charge timestamp
-    // per node so charge rate is consistent regardless of visit frequency.
+    // Charger interval ledger and bounded round-robin registry.
+    // Graph power transitions close the previous battery's interval.
     protected ref map<string, float> m_ChargerLastChargeSec;
+	protected ref array<string> m_ChargerIds;
+	protected ref map<string, Managed> m_ChargerEntities;
+	protected ref map<string, Managed> m_ChargerBatteries;
+	protected ref map<string, bool> m_ChargerCharging;
+	protected int m_ChargerCursor;
 
     // --- v0.7.34 (Bloque E): Atomic Graph Mutations ---
     // When m_MutationActive is true, CleanupOrphanNode is deferred to
@@ -186,6 +191,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_ValidateNodeIdx = 0;
         m_ValidateFixCount = 0;
         m_ChargerLastChargeSec = new map<string, float>;
+		m_ChargerIds = new array<string>;
+		m_ChargerEntities = new map<string, Managed>;
+		m_ChargerBatteries = new map<string, Managed>;
+		m_ChargerCharging = new map<string, bool>;
+		m_ChargerCursor = 0;
 
         // v0.7.34 (Bloque E): Atomic Graph Mutations
         m_MutationActive = false;
@@ -266,6 +276,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         int startMs = g_Game.GetTime();
 
+		// Close powered intervals before discarding the authoritative nodes.
+		ClearVanillaChargers();
         // Clear everything
         m_Nodes.Clear();
         m_Outgoing.Clear();
@@ -311,7 +323,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 			if (!wiredNodeIds.Contains(devId))
 			{
 				// This isolated node is no longer constructed and pruned below.
-				m_ChargerLastChargeSec.Remove(devId);
+				UntrackVanillaCharger(devId);
 				continue;
 			}
 
@@ -403,7 +415,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             m_NodeNetLow.Remove(emptyNodes[ei]);
             m_NodeNetHigh.Remove(emptyNodes[ei]);
             // v5.1: Clean up charger delta-time timestamp for removed node
-            m_ChargerLastChargeSec.Remove(emptyNodes[ei]);
+            UntrackVanillaCharger(emptyNodes[ei]);
         }
         m_NodeCount = m_Nodes.Count();
 
@@ -922,6 +934,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             }
             if (tgtObj)
             {
+				UpdateVanillaChargerPower(targetId, false);
                 LFPG_DeviceAPI.SetPowered(tgtObj, false);
             }
             CleanupOrphanNode(sourceId);
@@ -998,7 +1011,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         m_LastSyncPowered.Remove(deviceId);
         m_LastSyncOverloaded.Remove(deviceId);
         m_LastSyncEntity.Remove(deviceId);
-        m_ChargerLastChargeSec.Remove(deviceId);
+        UntrackVanillaCharger(deviceId);
         m_NodeCount = m_Nodes.Count();
     }
 #endif
@@ -1346,7 +1359,10 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         ref LFPG_ElecNode existing;
         if (m_Nodes.Find(deviceId, existing))
+        {
+			TrackVanillaCharger(deviceId, obj);
             return;
+        }
 
         ref LFPG_ElecNode node = new LFPG_ElecNode();
         node.m_DeviceId = deviceId;
@@ -1410,6 +1426,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 
         m_Nodes.Set(deviceId, node);
         m_NodeCount = m_Nodes.Count();
+		TrackVanillaCharger(deviceId, obj);
         #endif
     }
 
@@ -1704,6 +1721,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         }
         else if (deviceType == LFPG_DeviceType.CONSUMER || deviceType == LFPG_DeviceType.CAMERA)
         {
+			UpdateVanillaChargerPower(deviceId, false);
             LFPG_DeviceAPI.SetPowered(orphanObj, false);
         }
         else if (deviceType == LFPG_DeviceType.PASSTHROUGH)
@@ -3090,6 +3108,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return;
         }
 
+		TrackVanillaCharger(nodeId, entObj);
         if (NodeEntitySyncUnchanged(nodeId, node, entObj, dirtyMask))
             return;
 
@@ -3171,9 +3190,146 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         }
 
         LFPG_DeviceAPI.SetPowered(entObj, node.m_Powered);
+		UpdateVanillaChargerPower(nodeId, node.m_Powered);
         RememberNodeEntitySync(nodeId, node, entObj);
         #endif
     }
+
+
+	// Registered graph chargers only; no scan of unrelated electrical nodes.
+	protected void TrackVanillaCharger(string nodeId, EntityAI charger)
+	{
+		#ifdef SERVER
+		if (!charger || nodeId.IndexOf("vp:") != 0 || !charger.IsKindOf("BatteryCharger"))
+			return;
+		Managed previous;
+		if (m_ChargerEntities.Find(nodeId, previous))
+		{
+			if (previous == charger)
+				return;
+			UntrackVanillaCharger(nodeId);
+		}
+		m_ChargerIds.Insert(nodeId);
+		m_ChargerEntities.Set(nodeId, charger);
+		m_ChargerLastChargeSec.Set(nodeId, g_Game.GetTime() * 0.001);
+		m_ChargerCharging.Set(nodeId, false);
+		#endif
+	}
+
+	// A closed interval belongs to the previous battery and powered state.
+	protected float ChargerChargeAmount(float nowSec, float lastSec, bool wasCharging, bool sameBattery)
+	{
+		if (!wasCharging || !sameBattery || nowSec <= lastSec)
+			return 0.0;
+		return (nowSec - lastSec) * LFPG_CHARGER_ENERGY_PER_SEC;
+	}
+
+	override void UpdateVanillaChargerPower(string nodeId, bool powered)
+	{
+		#ifdef SERVER
+		Managed chargerRaw;
+		if (!m_ChargerEntities.Find(nodeId, chargerRaw))
+			return;
+		EntityAI charger = EntityAI.Cast(chargerRaw);
+		float nowSec = g_Game.GetTime() * 0.001;
+		float lastSec = nowSec;
+		bool wasCharging = false;
+		Managed lastBattery;
+		m_ChargerLastChargeSec.Find(nodeId, lastSec);
+		m_ChargerCharging.Find(nodeId, wasCharging);
+		m_ChargerBatteries.Find(nodeId, lastBattery);
+		EntityAI battery;
+		ComponentEnergyManager chargerEm;
+		if (charger)
+		{
+			battery = charger.FindAttachmentBySlotName("LargeBattery");
+			chargerEm = charger.GetCompEM();
+		}
+		ComponentEnergyManager batteryEm;
+		if (battery)
+			batteryEm = battery.GetCompEM();
+		bool sameBattery = false;
+		if (battery && lastBattery == battery)
+			sameBattery = true;
+		float amount = ChargerChargeAmount(nowSec, lastSec, wasCharging, sameBattery);
+		bool charging = false;
+		if (powered && chargerEm && chargerEm.IsSwitchedOn() && batteryEm)
+		{
+			if (batteryEm.GetEnergy() < batteryEm.GetEnergyMax())
+				charging = true;
+		}
+		// Publish the clock before AddEnergy can fire native/mod callbacks.
+		m_ChargerLastChargeSec.Set(nodeId, nowSec);
+		m_ChargerBatteries.Set(nodeId, battery);
+		m_ChargerCharging.Set(nodeId, charging);
+		if (amount > 0.0 && batteryEm)
+		{
+			batteryEm.AddEnergy(amount);
+			ItemBase batteryItem = ItemBase.Cast(battery);
+			if (batteryItem)
+				batteryItem.SetQuantityNormalized(batteryEm.GetEnergy0To1());
+			if (batteryEm.GetEnergy() >= batteryEm.GetEnergyMax())
+				m_ChargerCharging.Set(nodeId, false);
+		}
+		#endif
+	}
+
+	protected void UntrackVanillaCharger(string nodeId)
+	{
+		#ifdef SERVER
+		UpdateVanillaChargerPower(nodeId, false);
+		int index = m_ChargerIds.Find(nodeId);
+		if (index >= 0)
+		{
+			m_ChargerIds.RemoveOrdered(index);
+			if (index < m_ChargerCursor)
+				m_ChargerCursor = m_ChargerCursor - 1;
+		}
+		if (m_ChargerCursor >= m_ChargerIds.Count())
+			m_ChargerCursor = 0;
+		m_ChargerEntities.Remove(nodeId);
+		m_ChargerBatteries.Remove(nodeId);
+		m_ChargerCharging.Remove(nodeId);
+		m_ChargerLastChargeSec.Remove(nodeId);
+		#endif
+	}
+
+	protected void ClearVanillaChargers()
+	{
+		#ifdef SERVER
+		for (int index = 0; index < m_ChargerIds.Count(); index = index + 1)
+			UpdateVanillaChargerPower(m_ChargerIds[index], false);
+		m_ChargerIds.Clear();
+		m_ChargerEntities.Clear();
+		m_ChargerBatteries.Clear();
+		m_ChargerCharging.Clear();
+		m_ChargerLastChargeSec.Clear();
+		m_ChargerCursor = 0;
+		#endif
+	}
+
+	override void TickVanillaChargers()
+	{
+		#ifdef SERVER
+		int visits = m_ChargerIds.Count();
+		if (visits > LFPG_VALIDATE_BATCH_SIZE)
+			visits = LFPG_VALIDATE_BATCH_SIZE;
+		for (int checked = 0; checked < visits && m_ChargerIds.Count() > 0; checked = checked + 1)
+		{
+			if (m_ChargerCursor >= m_ChargerIds.Count())
+				m_ChargerCursor = 0;
+			string nodeId = m_ChargerIds[m_ChargerCursor];
+			m_ChargerCursor = m_ChargerCursor + 1;
+			LFPG_ElecNode node = GetNode(nodeId);
+			if (!node)
+			{
+				UntrackVanillaCharger(nodeId);
+				continue;
+			}
+			UpdateVanillaChargerPower(nodeId, node.m_Powered);
+		}
+		#endif
+	}
 
     // ===========================
     // v0.7.32 (Bloque C): Consumer Zombie Validation
@@ -3207,10 +3363,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected int ValidateConsumerStates(int edgeBudget)
     {
         #ifdef SERVER
-        float afterEnergy;
-        string chgLog;
-        string skipLog;
-        bool hasBat;
         int nodeTotal = m_Nodes.Count();
         if (nodeTotal <= 0)
             return 0;
@@ -3420,122 +3572,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                             {
                                 vanEm.SetEnergy(LFPG_VANILLA_ENERGY_POOL);
                             }
-
-                            // v5.3: BatteryCharger direct charging with delta-time.
-                            // Vanilla charging requires HasElectricitySource()
-                            // (PlugThisInto crashes). LFPG bypasses vanilla and
-                            // charges the attached CarBattery/TruckBattery directly.
-                            // Slot is "LargeBattery" (both battery types register it).
-                            // Uses AddEnergy (not SetEnergy) so the full vanilla
-                            // event chain fires: OnEnergyAdded → ConvertEnergyToQuantity
-                            // → SetQuantityNormalized → SetVariableMask(VARIABLE_QUANTITY).
-                            // The inventory bar reads m_VarQuantity, not m_EM.m_Energy.
-                            // Delta-time via m_ChargerLastChargeSec for consistent rate.
-                            string battChargerCls = "BatteryCharger";
-                            if (vanEnt.IsKindOf(battChargerCls))
-                            {
-                                bool chargerOn = vanEm.IsSwitchedOn();
-                                EntityAI carBat = vanEnt.FindAttachmentBySlotName("LargeBattery");
-
-                                if (chargerOn && carBat)
-                                {
-                                    ComponentEnergyManager batEm = carBat.GetCompEM();
-                                    if (batEm)
-                                    {
-                                        float batEnergy = batEm.GetEnergy();
-                                        float batMax = batEm.GetEnergyMax();
-                                        if (batEnergy < batMax)
-                                        {
-                                            // Delta-time: seconds since last charge visit
-                                            float nowSec = g_Game.GetTime() * 0.001;
-                                            float lastSec = 0.0;
-                                            bool hasLast = m_ChargerLastChargeSec.Find(nodeId, lastSec);
-                                            float deltaSec = nowSec - lastSec;
-
-                                            // First visit or too soon: seed timestamp only
-                                            if (!hasLast || deltaSec < 0.1)
-                                            {
-                                                m_ChargerLastChargeSec.Set(nodeId, nowSec);
-                                            }
-                                            else
-                                            {
-                                                // Cap at 10s to prevent burst after server lag
-                                                if (deltaSec > 10.0)
-                                                    deltaSec = 10.0;
-
-                                                float chargeAmount = LFPG_CHARGER_ENERGY_PER_SEC * deltaSec;
-                                                // v5.3: Use AddEnergy instead of SetEnergy.
-                                                // SetEnergy() only writes m_Energy — it does
-                                                // NOT trigger OnEnergyAdded(), so vanilla's
-                                                // full sync chain never fires:
-                                                //   AddEnergy(delta)
-                                                //     → CompEM.OnEnergyAdded()
-                                                //     → VehicleBattery.OnEnergyAdded()
-                                                //       → super → ItemBase.OnEnergyAdded()
-                                                //         → ConvertEnergyToQuantity()
-                                                //           → SetQuantityNormalized()
-                                                //             → SetQuantity()
-                                                //               → SetVariableMask(VARIABLE_QUANTITY)
-                                                //       → SetSynchDirty()  [syncs m_EM.m_Energy]
-                                                //
-                                                // The inventory bar reads m_VarQuantity, which
-                                                // is a SEPARATE SyncVar from m_EM.m_Energy.
-                                                // Only ConvertEnergyToQuantity updates it.
-                                                // AddEnergy auto-clamps to [0, energyMax].
-                                                batEm.AddEnergy(chargeAmount);
-
-                                                // Safety net: force m_VarQuantity sync.
-                                                // ConvertEnergyToQuantity (inside AddEnergy
-                                                // chain) only fires if vanilla config has
-                                                // convertEnergyToQuantity=1. If that flag
-                                                // is absent, m_VarQuantity stays stale.
-                                                // Explicit SetQuantityNormalized guarantees
-                                                // the inventory bar updates in ALL cases.
-                                                ItemBase batItem = ItemBase.Cast(carBat);
-                                                if (batItem)
-                                                {
-                                                    float eNorm = batEm.GetEnergy0To1();
-                                                    batItem.SetQuantityNormalized(eNorm);
-                                                }
-
-                                                m_ChargerLastChargeSec.Set(nodeId, nowSec);
-
-                                                if (LFPG_LOG_LEVEL >= 2)
-                                                {
-                                                    afterEnergy = batEm.GetEnergy();
-                                                    chgLog = "[Charger] Charged ";
-                                                    chgLog = chgLog + nodeId;
-                                                    chgLog = chgLog + ": ";
-                                                    chgLog = chgLog + batEnergy.ToString();
-                                                    chgLog = chgLog + " -> ";
-                                                    chgLog = chgLog + afterEnergy.ToString();
-                                                    chgLog = chgLog + " / ";
-                                                    chgLog = chgLog + batMax.ToString();
-                                                    chgLog = chgLog + " dt=";
-                                                    chgLog = chgLog + deltaSec.ToString();
-                                                    LFPG_Util.Info(chgLog);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    // Clean up timestamp when charger is off or battery removed
-                                    m_ChargerLastChargeSec.Remove(nodeId);
-                                    if (LFPG_LOG_LEVEL >= 2)
-                                    {
-                                        skipLog = "[Charger] Skip ";
-                                        skipLog = skipLog + nodeId;
-                                        skipLog = skipLog + " switchedOn=";
-                                        skipLog = skipLog + chargerOn.ToString();
-                                        hasBat = carBat != null;
-                                        skipLog = skipLog + " hasBat=";
-                                        skipLog = skipLog + hasBat.ToString();
-                                        LFPG_Util.Info(skipLog);
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -3587,6 +3623,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             if (!obj)
                 continue;
 
+			TrackVanillaCharger(nid, obj);
             if (node.m_DeviceType == LFPG_DeviceType.SOURCE)
             {
                 node.m_MaxOutput = LFPG_DeviceAPI.GetCapacity(obj);

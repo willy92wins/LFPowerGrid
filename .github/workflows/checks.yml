@@ -39,3 +39,6 @@ jobs:
 
       - name: Sweep the addon
         run: python .github/tools/enforce_checks.py --root .
+
+      - name: Graph charger clock (offline source slice)
+        run: python .github/tools/test_graph_charger_energy.py
