@@ -202,8 +202,8 @@ class LFPG_BatteryAdapter : LFPG_WireOwnerBase
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm) nm.RegisterBattery(this);
 
-        // Check if a battery is already attached (e.g., after server restart).
-        // Vanilla persistence restores attachments before EEInit.
+        // Covers a battery that is already attached when the device initializes.
+        // Stored batteries attach after EEInit and arrive through EEItemAttached.
         LFPG_DetectExistingBattery();
         #endif
     }

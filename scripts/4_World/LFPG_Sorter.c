@@ -16,6 +16,8 @@
 // =========================================================
 
 static const float LFPG_SORTER_LINK_RADIUS = 3.0;
+// Device schema 3 appends the linked container's persistent id.
+static const int LFPG_SORTER_PERSIST_VERSION = 3;
 
 static const string LFPG_SORTER_RVMAT_OFF = "LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_off.rvmat";
 static const string LFPG_SORTER_RVMAT_ON  = "LFPowerGrid\\data\\sorter\\materials\\lf_sorter_led_on.rvmat";
@@ -55,6 +57,19 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 
     // ---- Container uniqueness (static, server-side) ----
     protected static ref TStringManagedMap s_ContainerMap;
+
+    // ---- Saved container link, resolved once in EEOnAfterLoad (server-side) ----
+    protected int m_PendingLinkPid1 = 0;
+    protected int m_PendingLinkPid2 = 0;
+    protected int m_PendingLinkPid3 = 0;
+    protected int m_PendingLinkPid4 = 0;
+
+    // ---- Persistent id of the linked container, captured when it is linked (server-side) ----
+    // The shutdown save can no longer resolve the session NetworkID, so the id is never resolved there.
+    protected int m_LinkPid1 = 0;
+    protected int m_LinkPid2 = 0;
+    protected int m_LinkPid3 = 0;
+    protected int m_LinkPid4 = 0;
 
     // ============================================
     // Constructor — ports + SyncVars
@@ -226,7 +241,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             m_PoweredNet = false;
             SetSynchDirty();
         }
-        UnregisterContainer();
+        // A ruined sorter drops its link entirely, so no restart can restore it.
+        LFPG_UnlinkContainer();
         #endif
     }
 
@@ -268,17 +284,33 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // Persistence: LinkedContainer + FilterJSON
+    // Persistence: legacy link slots + FilterJSON
+    // + container persistent id (schema 3)
     // (after wireJSON from WireOwnerBase)
     // ============================================
+    override int LFPG_GetDevicePersistVersion()
+    {
+        return LFPG_SORTER_PERSIST_VERSION;
+    }
+
     override void LFPG_OnStoreSaveDevice(ParamsWriteContext ctx)
     {
 		// Preserve the legacy int/int/string layout, including for old readers.
-		// NetworkIDs identify this session only; new saves must not re-link on restart.
-		int noPersistentLink = 0;
-		ctx.Write(noPersistentLink);
-		ctx.Write(noPersistentLink);
+		// Session NetworkIDs are never persisted: the link travels as a persistent id.
+		int noSessionLink = 0;
+		ctx.Write(noSessionLink);
+		ctx.Write(noSessionLink);
         ctx.Write(m_FilterJSON);
+
+		int pid1 = 0;
+		int pid2 = 0;
+		int pid3 = 0;
+		int pid4 = 0;
+		LFPG_GetSavedLinkId(pid1, pid2, pid3, pid4);
+		ctx.Write(pid1);
+		ctx.Write(pid2);
+		ctx.Write(pid3);
+		ctx.Write(pid4);
     }
 
     override bool LFPG_OnStoreLoadDevice(ParamsReadContext ctx, int deviceVer)
@@ -308,12 +340,35 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             return false;
         }
 
-		// All fields have been read. Never resolve or proximity-replace a saved ID.
+		int pid1 = 0;
+		int pid2 = 0;
+		int pid3 = 0;
+		int pid4 = 0;
+		if (deviceVer >= LFPG_SORTER_PERSIST_VERSION)
+		{
+			// The id is the last field: a short read only loses the saved link, never the rules or wires.
+			if (!LFPG_ReadSavedLinkId(ctx, pid1, pid2, pid3, pid4))
+			{
+				pid1 = 0;
+				pid2 = 0;
+				pid3 = 0;
+				pid4 = 0;
+				string warnPid = "[LFPG_Sorter] OnStoreLoad: linked container persistent id unreadable; explicit container resync required";
+				LFPG_Util.Warn(warnPid);
+			}
+		}
+
+		// All fields have been read. Never resolve or proximity-replace a saved session ID.
 		LFPG_UnlinkContainer();
 		if (legacyLow != 0 || legacyHigh != 0)
 		{
 			LFPG_Util.Warn("[LFPG_Sorter] Discarded saved session link; explicit container resync required");
 		}
+		// The persistent id resolves in EEOnAfterLoad, once every stored entity exists.
+		m_PendingLinkPid1 = pid1;
+		m_PendingLinkPid2 = pid2;
+		m_PendingLinkPid3 = pid3;
+		m_PendingLinkPid4 = pid4;
 		m_FilterJSON = loadedFilterJSON;
 
         if (m_FilterJSON != "")
@@ -322,6 +377,107 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         }
 
         return true;
+    }
+
+    // ============================================
+    // Restart: restore the saved container link
+    // GetEntityByPersitentID is only available in this event
+    // (see EntityAI.EEOnAfterLoad).
+    // ============================================
+    override void EEOnAfterLoad()
+    {
+        super.EEOnAfterLoad();
+
+        #ifdef SERVER
+        LFPG_RestoreSavedLink();
+        #endif
+    }
+
+    protected void LFPG_RestoreSavedLink()
+    {
+        #ifdef SERVER
+        int pid1 = m_PendingLinkPid1;
+        int pid2 = m_PendingLinkPid2;
+        int pid3 = m_PendingLinkPid3;
+        int pid4 = m_PendingLinkPid4;
+        LFPG_ClearPendingLink();
+
+        bool hasSavedLink = (pid1 != 0 || pid2 != 0);
+        if (!hasSavedLink)
+            hasSavedLink = (pid3 != 0 || pid4 != 0);
+        if (!hasSavedLink)
+            return;
+
+        if (IsRuined())
+            return;
+
+        // Same container rule as an explicit resync, plus the tick's link radius.
+        EntityAI container = g_Game.GetEntityByPersitentID(pid1, pid2, pid3, pid4);
+        bool restorable = LFPG_IsLinkCandidate(container);
+        if (restorable)
+        {
+            float linkDistSq = LFPG_WorldUtil.DistSq(GetPosition(), container.GetPosition());
+            float linkRadiusSq = LFPG_SORTER_LINK_RADIUS * LFPG_SORTER_LINK_RADIUS;
+            restorable = (linkDistSq <= linkRadiusSq);
+        }
+
+        if (restorable)
+        {
+            string restoreMsg = "[LFPG_Sorter] Restored saved container link: ";
+            restoreMsg = restoreMsg + container.GetType();
+            restoreMsg = restoreMsg + " id=";
+            restoreMsg = restoreMsg + m_DeviceId;
+            LFPG_Util.Info(restoreMsg);
+            LFPG_LinkContainer(container);
+            return;
+        }
+
+        string lostMsg = "[LFPG_Sorter] Saved container not restored (missing, out of range or claimed); explicit container resync required id=";
+        lostMsg = lostMsg + m_DeviceId;
+        LFPG_Util.Warn(lostMsg);
+        #endif
+    }
+
+    // Persistent id to save for the link: the one captured when the container was
+    // linked, otherwise a restore that has not run yet. Zeros mean no link.
+    protected void LFPG_GetSavedLinkId(out int pid1, out int pid2, out int pid3, out int pid4)
+    {
+        pid1 = m_PendingLinkPid1;
+        pid2 = m_PendingLinkPid2;
+        pid3 = m_PendingLinkPid3;
+        pid4 = m_PendingLinkPid4;
+
+        #ifdef SERVER
+        if (m_LinkedContainerLow == 0 && m_LinkedContainerHigh == 0)
+            return;
+
+        pid1 = m_LinkPid1;
+        pid2 = m_LinkPid2;
+        pid3 = m_LinkPid3;
+        pid4 = m_LinkPid4;
+        #endif
+    }
+
+    // Reads the four persistent id fields of schema 3; false on a short read.
+    protected bool LFPG_ReadSavedLinkId(ParamsReadContext ctx, out int pid1, out int pid2, out int pid3, out int pid4)
+    {
+        if (!ctx.Read(pid1))
+            return false;
+        if (!ctx.Read(pid2))
+            return false;
+        if (!ctx.Read(pid3))
+            return false;
+        if (!ctx.Read(pid4))
+            return false;
+        return true;
+    }
+
+    protected void LFPG_ClearPendingLink()
+    {
+        m_PendingLinkPid1 = 0;
+        m_PendingLinkPid2 = 0;
+        m_PendingLinkPid3 = 0;
+        m_PendingLinkPid4 = 0;
     }
 
     // ============================================
@@ -344,61 +500,9 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         int i;
         for (i = 0; i < nearObjects.Count(); i = i + 1)
         {
-            Object obj = nearObjects[i];
-            if (!obj)
+            EntityAI candidate = EntityAI.Cast(nearObjects[i]);
+            if (!LFPG_IsLinkCandidate(candidate))
                 continue;
-
-            if (obj == this)
-                continue;
-
-            EntityAI candidate = EntityAI.Cast(obj);
-            if (!candidate)
-                continue;
-
-            Man manCheck = Man.Cast(candidate);
-            if (manCheck)
-                continue;
-
-            if (LFPG_DeviceAPI.IsElectricDevice(candidate))
-                continue;
-
-            if (!candidate.GetInventory())
-                continue;
-
-            CargoBase candidateCargo = candidate.GetInventory().GetCargo();
-			// Tick, manual sort and preview consume cargo only.
-			if (!candidateCargo)
-                continue;
-
-            int candLow = 0;
-            int candHigh = 0;
-            candidate.GetNetworkID(candLow, candHigh);
-            string candKey = candLow.ToString();
-            candKey = candKey + ":";
-            candKey = candKey + candHigh.ToString();
-
-            if (s_ContainerMap.Contains(candKey))
-            {
-                EntityAI claimant = EntityAI.Cast(s_ContainerMap.Get(candKey));
-                bool claimantValid = false;
-                if (claimant)
-                {
-                    LFPG_Sorter claimSorter = LFPG_Sorter.Cast(claimant);
-                    if (claimSorter && !claimSorter.IsRuined())
-                    {
-                        claimantValid = true;
-                    }
-                }
-                if (claimantValid && claimant != this)
-                {
-                    continue;
-                }
-				// Keep the stale-claim cleanup shared with the explicit link search.
-				if (!claimantValid)
-				{
-					s_ContainerMap.Remove(candKey);
-				}
-            }
 
             float distSq = LFPG_WorldUtil.DistSq(searchPos, candidate.GetPosition());
             if (distSq < bestDistSq)
@@ -414,11 +518,79 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         #endif
     }
 
+	#ifdef SERVER
+	// Container rule shared by the explicit link search and the restart restore.
+	// Clears a stale claim left by a ruined or deleted sorter.
+	protected bool LFPG_IsLinkCandidate(EntityAI candidate)
+	{
+        if (!candidate)
+            return false;
+
+        if (candidate == this)
+            return false;
+
+        // Only a container standing in the world, never one carried, attached or stored in another entity.
+        if (candidate.GetHierarchyParent())
+            return false;
+
+        Man manCheck = Man.Cast(candidate);
+        if (manCheck)
+            return false;
+
+        if (LFPG_DeviceAPI.IsElectricDevice(candidate))
+            return false;
+
+        if (!candidate.GetInventory())
+            return false;
+
+        CargoBase candidateCargo = candidate.GetInventory().GetCargo();
+		// Tick, manual sort and preview consume cargo only.
+		if (!candidateCargo)
+            return false;
+
+        int candLow = 0;
+        int candHigh = 0;
+        candidate.GetNetworkID(candLow, candHigh);
+        string candKey = candLow.ToString();
+        candKey = candKey + ":";
+        candKey = candKey + candHigh.ToString();
+
+        if (s_ContainerMap.Contains(candKey))
+        {
+            EntityAI claimant = EntityAI.Cast(s_ContainerMap.Get(candKey));
+            bool claimantValid = false;
+            if (claimant)
+            {
+                LFPG_Sorter claimSorter = LFPG_Sorter.Cast(claimant);
+                if (claimSorter && !claimSorter.IsRuined())
+                {
+                    claimantValid = true;
+                }
+            }
+            if (claimantValid && claimant != this)
+            {
+                return false;
+            }
+			// Keep the stale-claim cleanup shared with the explicit link search.
+			if (!claimantValid)
+			{
+				s_ContainerMap.Remove(candKey);
+			}
+        }
+
+        return true;
+	}
+	#endif
+
     void LFPG_LinkContainer(EntityAI container)
     {
         #ifdef SERVER
         if (!container)
             return;
+
+        // An explicit link supersedes a saved link that has not been restored.
+        LFPG_ClearPendingLink();
+        container.GetPersistentID(m_LinkPid1, m_LinkPid2, m_LinkPid3, m_LinkPid4);
 
         int linkLow = 0;
         int linkHigh = 0;
@@ -480,6 +652,18 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             #endif
             return null;
         }
+
+        #ifdef SERVER
+        // A container picked up, attached or stored inside another entity stops being a sorter link.
+        if (resolved.GetHierarchyParent())
+        {
+            LFPG_UnlinkContainer();
+            string nestedMsg = "[LFPG_Sorter] Linked container is now inside another entity; link cleared id=";
+            nestedMsg = nestedMsg + m_DeviceId;
+            LFPG_Util.Warn(nestedMsg);
+            return null;
+        }
+        #endif
         return resolved;
     }
 
@@ -521,6 +705,11 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     void LFPG_UnlinkContainer()
     {
         #ifdef SERVER
+        LFPG_ClearPendingLink();
+        m_LinkPid1 = 0;
+        m_LinkPid2 = 0;
+        m_LinkPid3 = 0;
+        m_LinkPid4 = 0;
         UnregisterContainer();
         m_LinkedContainerLow = 0;
         m_LinkedContainerHigh = 0;

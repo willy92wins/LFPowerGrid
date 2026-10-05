@@ -395,7 +395,8 @@ class LFPG_DeviceBase : Inventory_Base
             return false;
         }
 
-        LFPG_UpdateDeviceIdString();
+        // Stored entities run EEInit before OnStoreLoad: swap the generated registry key for the persisted id.
+        LFPG_TryRegister();
 
         int deviceVer = 0;
         if (!ctx.Read(deviceVer))

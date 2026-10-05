@@ -623,14 +623,17 @@ class LFPG_SorterLogic
         k = "AK_PlasticHndgrd";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        // Bayonets
-        k = "Bayonet_Mosin";
+        // Bayonets (vanilla class names: weapons/attachments/muzzle/config.cpp)
+        k = "Mosin_Bayonet";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        k = "Bayonet_AK";
+        k = "AK_Bayonet";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
-        k = "Bayonet_SKS";
+        k = "SKS_Bayonet";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_ATTACHMENT;
+        k = "M9A1_Bayonet";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_ATTACHMENT;
 		// The ghillie suit is clothing; weapon lights remain attachments.
@@ -652,15 +655,9 @@ class LFPG_SorterLogic
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_CLOTHING;
 
-        k = "Edible_Base";
-        if (item.IsKindOf(k))
-            return LFPG_SORT_CAT_FOOD;
-
-        k = "Bottle_Base";
-        if (item.IsKindOf(k))
-            return LFPG_SORT_CAT_FOOD;
-
-        k = "Bandage_Base";
+        // Medical before food: tablets, disinfectants and iodine derive from
+        // Edible_Base (vanilla gear/medical/config.cpp).
+        k = "BandageDressing";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
@@ -672,11 +669,23 @@ class LFPG_SorterLogic
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        k = "Saline";
+        k = "SalineBag";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        k = "BloodBagBase";
+        k = "SalineBagIV";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        k = "BloodBagEmpty";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        k = "BloodBagFull";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_MEDICAL;
+
+        k = "BloodBagIV";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
@@ -684,7 +693,7 @@ class LFPG_SorterLogic
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
-        k = "Tetracycline";
+        k = "TetracyclineAntibiotics";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
 
@@ -707,6 +716,14 @@ class LFPG_SorterLogic
         k = "DisinfectantAlcohol";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_MEDICAL;
+
+        k = "Edible_Base";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_FOOD;
+
+        k = "Bottle_Base";
+        if (item.IsKindOf(k))
+            return LFPG_SORT_CAT_FOOD;
 
         // Tools
         k = "Toolbox";
@@ -769,7 +786,7 @@ class LFPG_SorterLogic
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
-        k = "Duct_Tape";
+        k = "DuctTape";
         if (item.IsKindOf(k))
             return LFPG_SORT_CAT_TOOL;
 
