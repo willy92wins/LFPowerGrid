@@ -438,14 +438,10 @@ class LFPG_RPCServerHandlerImpl
             return;
         }
 
-        // Quota check
+        // Quota check. Q-01: the denial waits for FinishWiringSamePair, because
+        // rerouting the sender's own row adds no wire.
         string quotaReason;
-        if (!LFPG_NetworkManager.Get().CanPlayerCreateAnotherWire(sender, quotaReason))
-        {
-            LFPG_Util.Warn("[FinishWiring-Server] denied (" + quotaReason + ")");
-            PlayerBase.LFPG_SendClientMsg(player, "Wire limit reached: " + quotaReason);
-            return;
-        }
+        bool quotaFree = LFPG_NetworkManager.Get().CanPlayerCreateAnotherWire(sender, quotaReason);
 
 		// SEC17: reuse the endpoints; keep ValidateWire's server rejection/kick policy.
 		vector startPos = preStartPos;
@@ -559,6 +555,13 @@ class LFPG_RPCServerHandlerImpl
 		// Same pair: change the route of the existing row. Admission before deletion
 		// would reject the new row as a duplicate of the row it replaces.
 		LFPG_WireData rerouteWire = FinishWiringSamePair(finish, srcPort, dstRealId, dstPort);
+		if (!quotaFree && FinishWiringNeedsQuotaSlot(rerouteWire, creatorId))
+		{
+			manager.UnlockPort(portLockKey);
+			LFPG_Util.Warn("[FinishWiring-Server] denied (" + quotaReason + ")");
+			PlayerBase.LFPG_SendClientMsg(player, "Wire limit reached: " + quotaReason);
+			return;
+		}
 		if (rerouteWire)
 		{
 			FinishWiringReroute(finish, rerouteWire, wd);
@@ -842,6 +845,17 @@ class LFPG_RPCServerHandlerImpl
 		if (IncomingPortIndexKey(row.m_TargetPort) != IncomingPortIndexKey(dstPort))
 			return null;
 		return row;
+	}
+
+	// Q-01: only a net-new wire, or a reroute that moves another creator's row to
+	// the sender (FinishWiringReroute adds one to the sender), takes a quota slot.
+	protected static bool FinishWiringNeedsQuotaSlot(LFPG_WireData rerouteWire, string creatorId)
+	{
+		if (!rerouteWire)
+			return true;
+		if (rerouteWire.m_CreatorId != creatorId)
+			return true;
+		return false;
 	}
 
 	// Applies the new route to the stored row in place and republishes the owner.
