@@ -919,7 +919,8 @@ class LFPG_Generator : PowerGenerator
             return false;
         }
 
-        LFPG_UpdateDeviceIdString();
+        // Stored entities run EEInit before OnStoreLoad: swap the generated registry key for the persisted id.
+        LFPG_TryRegister();
 
         if (!ctx.Read(m_SourceOn))
         {
@@ -1351,7 +1352,8 @@ class LF_TestLamp : Spotlight
             return false;
         }
 
-        LFPG_UpdateDeviceIdString();
+        // Stored entities run EEInit before OnStoreLoad: swap the generated registry key for the persisted id.
+        LFPG_TryRegister();
 
 
         return true;
