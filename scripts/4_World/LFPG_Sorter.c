@@ -64,6 +64,13 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     protected int m_PendingLinkPid3 = 0;
     protected int m_PendingLinkPid4 = 0;
 
+    // ---- Persistent id of the linked container, captured when it is linked (server-side) ----
+    // The shutdown save can no longer resolve the session NetworkID, so the id is never resolved there.
+    protected int m_LinkPid1 = 0;
+    protected int m_LinkPid2 = 0;
+    protected int m_LinkPid3 = 0;
+    protected int m_LinkPid4 = 0;
+
     // ============================================
     // Constructor — ports + SyncVars
     // ============================================
@@ -431,8 +438,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         #endif
     }
 
-    // Persistent id to save for the link: the live container while it still
-    // resolves, otherwise a restore that has not run yet. Zeros mean no link.
+    // Persistent id to save for the link: the one captured when the container was
+    // linked, otherwise a restore that has not run yet. Zeros mean no link.
     protected void LFPG_GetSavedLinkId(out int pid1, out int pid2, out int pid3, out int pid4)
     {
         pid1 = m_PendingLinkPid1;
@@ -444,11 +451,10 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         if (m_LinkedContainerLow == 0 && m_LinkedContainerHigh == 0)
             return;
 
-        EntityAI container = LFPG_DeviceAPI.ResolveByNetworkId(m_LinkedContainerLow, m_LinkedContainerHigh);
-        if (container)
-        {
-            container.GetPersistentID(pid1, pid2, pid3, pid4);
-        }
+        pid1 = m_LinkPid1;
+        pid2 = m_LinkPid2;
+        pid3 = m_LinkPid3;
+        pid4 = m_LinkPid4;
         #endif
     }
 
@@ -584,6 +590,7 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 
         // An explicit link supersedes a saved link that has not been restored.
         LFPG_ClearPendingLink();
+        container.GetPersistentID(m_LinkPid1, m_LinkPid2, m_LinkPid3, m_LinkPid4);
 
         int linkLow = 0;
         int linkHigh = 0;
@@ -699,6 +706,10 @@ class LFPG_Sorter : LFPG_WireOwnerBase
     {
         #ifdef SERVER
         LFPG_ClearPendingLink();
+        m_LinkPid1 = 0;
+        m_LinkPid2 = 0;
+        m_LinkPid3 = 0;
+        m_LinkPid4 = 0;
         UnregisterContainer();
         m_LinkedContainerLow = 0;
         m_LinkedContainerHigh = 0;
