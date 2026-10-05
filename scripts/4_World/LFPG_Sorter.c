@@ -645,6 +645,18 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             #endif
             return null;
         }
+
+        #ifdef SERVER
+        // A container picked up, attached or stored inside another entity stops being a sorter link.
+        if (resolved.GetHierarchyParent())
+        {
+            LFPG_UnlinkContainer();
+            string nestedMsg = "[LFPG_Sorter] Linked container is now inside another entity; link cleared id=";
+            nestedMsg = nestedMsg + m_DeviceId;
+            LFPG_Util.Warn(nestedMsg);
+            return null;
+        }
+        #endif
         return resolved;
     }
 
