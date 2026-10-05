@@ -42,3 +42,6 @@ jobs:
 
       - name: Graph charger clock (offline source slice)
         run: python .github/tools/test_graph_charger_energy.py
+
+      - name: FinishWiring quota admission (offline source slice)
+        run: python .github/tools/test_finish_wiring_quota.py
