@@ -234,7 +234,8 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             m_PoweredNet = false;
             SetSynchDirty();
         }
-        UnregisterContainer();
+        // A ruined sorter drops its link entirely, so no restart can restore it.
+        LFPG_UnlinkContainer();
         #endif
     }
 
@@ -338,26 +339,15 @@ class LFPG_Sorter : LFPG_WireOwnerBase
 		int pid4 = 0;
 		if (deviceVer >= LFPG_SORTER_PERSIST_VERSION)
 		{
-			string errPid = "[LFPG_Sorter] OnStoreLoad failed: linked container persistent id";
-			if (!ctx.Read(pid1))
+			// The id is the last field: a short read only loses the saved link, never the rules or wires.
+			if (!LFPG_ReadSavedLinkId(ctx, pid1, pid2, pid3, pid4))
 			{
-				LFPG_Util.Error(errPid);
-				return false;
-			}
-			if (!ctx.Read(pid2))
-			{
-				LFPG_Util.Error(errPid);
-				return false;
-			}
-			if (!ctx.Read(pid3))
-			{
-				LFPG_Util.Error(errPid);
-				return false;
-			}
-			if (!ctx.Read(pid4))
-			{
-				LFPG_Util.Error(errPid);
-				return false;
+				pid1 = 0;
+				pid2 = 0;
+				pid3 = 0;
+				pid4 = 0;
+				string warnPid = "[LFPG_Sorter] OnStoreLoad: linked container persistent id unreadable; explicit container resync required";
+				LFPG_Util.Warn(warnPid);
 			}
 		}
 
@@ -411,6 +401,9 @@ class LFPG_Sorter : LFPG_WireOwnerBase
         if (!hasSavedLink)
             return;
 
+        if (IsRuined())
+            return;
+
         // Same container rule as an explicit resync, plus the tick's link radius.
         EntityAI container = g_Game.GetEntityByPersitentID(pid1, pid2, pid3, pid4);
         bool restorable = LFPG_IsLinkCandidate(container);
@@ -457,6 +450,20 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             container.GetPersistentID(pid1, pid2, pid3, pid4);
         }
         #endif
+    }
+
+    // Reads the four persistent id fields of schema 3; false on a short read.
+    protected bool LFPG_ReadSavedLinkId(ParamsReadContext ctx, out int pid1, out int pid2, out int pid3, out int pid4)
+    {
+        if (!ctx.Read(pid1))
+            return false;
+        if (!ctx.Read(pid2))
+            return false;
+        if (!ctx.Read(pid3))
+            return false;
+        if (!ctx.Read(pid4))
+            return false;
+        return true;
     }
 
     protected void LFPG_ClearPendingLink()
@@ -514,6 +521,10 @@ class LFPG_Sorter : LFPG_WireOwnerBase
             return false;
 
         if (candidate == this)
+            return false;
+
+        // Only a container standing in the world, never one carried, attached or stored in another entity.
+        if (candidate.GetHierarchyParent())
             return false;
 
         Man manCheck = Man.Cast(candidate);
