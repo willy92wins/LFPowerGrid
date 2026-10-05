@@ -341,16 +341,19 @@ class LFPG_RPCServerHandlerImpl
 		bool dstIsLFPG = (LFPG_DeviceAPI.GetDeviceId(dstObj) != "");
 		if (!FinishWiringPortAllowed(srcObj, srcPort, LFPG_PortDir.OUT, srcIsLFPG))
 		{
+			LFPG_Util.RateLimitedWarn(sender, "finish_port", "[FinishWiring-Server] denied (invalid source port)");
 			PlayerBase.LFPG_SendClientMsg(player, "Invalid source port.");
 			return;
 		}
 		if (!FinishWiringPortAllowed(dstObj, dstPort, LFPG_PortDir.IN, dstIsLFPG))
 		{
+			LFPG_Util.RateLimitedWarn(sender, "finish_port", "[FinishWiring-Server] denied (invalid target port)");
 			PlayerBase.LFPG_SendClientMsg(player, "Invalid target port.");
 			return;
 		}
 		if (srcIsLFPG && !LFPG_DeviceAPI.CanConnectTo(srcObj, dstObj, srcPort, dstPort))
 		{
+			LFPG_Util.RateLimitedWarn(sender, "finish_connect", "[FinishWiring-Server] denied (devices cannot connect)");
 			PlayerBase.LFPG_SendClientMsg(player, "Cannot connect these devices.");
 			return;
 		}
@@ -534,6 +537,7 @@ class LFPG_RPCServerHandlerImpl
 		if (LFPG_DeviceRegistry.Get().IsAmbiguous(srcRealId) || LFPG_DeviceRegistry.Get().IsAmbiguous(dstRealId))
 		{
 			LFPG_NetworkManager.Get().UnlockPort(portLockKey);
+			LFPG_Util.RateLimitedWarn(sender, "finish_replace", "[FinishWiring-Server] denied (ambiguous device)");
 			PlayerBase.LFPG_SendClientMsg(player, "Cannot replace wires on ambiguous devices.");
 			return;
 		}
@@ -548,7 +552,21 @@ class LFPG_RPCServerHandlerImpl
 		if (!FinishWiringCollect(finish, srcObj, srcRealId, srcPort, dstRealId, dstPort, creatorId, allowOthers))
 		{
 			manager.UnlockPort(portLockKey);
+			LFPG_Util.RateLimitedWarn(sender, "finish_replace", "[FinishWiring-Server] denied (replacement not allowed)");
 			PlayerBase.LFPG_SendClientMsg(player, "Cannot replace these wires.");
+			return;
+		}
+		// Same pair: change the route of the existing row. Admission before deletion
+		// would reject the new row as a duplicate of the row it replaces.
+		LFPG_WireData rerouteWire = FinishWiringSamePair(finish, srcPort, dstRealId, dstPort);
+		if (rerouteWire)
+		{
+			FinishWiringReroute(finish, rerouteWire, wd);
+			manager.UnlockPort(portLockKey);
+			string rerouteLog = "[FinishWiring-Server] SUCCESS: " + srcRealId + ":" + srcPort;
+			rerouteLog = rerouteLog + " -> " + dstRealId + ":" + dstPort;
+			rerouteLog = rerouteLog + " wps=" + wpCount.ToString() + " reroute";
+			LFPG_Util.Info(rerouteLog);
 			return;
 		}
 
@@ -556,6 +574,7 @@ class LFPG_RPCServerHandlerImpl
 		if (!graph || !FinishWiringGraphAllows(finish, graph, srcRealId, dstRealId, srcPort, dstPort))
 		{
 			manager.UnlockPort(portLockKey);
+			LFPG_Util.RateLimitedWarn(sender, "finish_graph", "[FinishWiring-Server] denied (graph unavailable, full or duplicate edge)");
 			PlayerBase.LFPG_SendClientMsg(player, "Connection rejected: graph unavailable or full.");
 			return;
 		}
@@ -568,6 +587,7 @@ class LFPG_RPCServerHandlerImpl
 		{
 			manager.EndGraphMutation();
 			manager.UnlockPort(portLockKey);
+			LFPG_Util.RateLimitedWarn(sender, "finish_graph", "[FinishWiring-Server] denied (graph rejected the edge)");
 			PlayerBase.LFPG_SendClientMsg(player, "Connection rejected.");
 			return;
 		}
@@ -584,6 +604,7 @@ class LFPG_RPCServerHandlerImpl
 			graph.OnWireRemoved(srcRealId, dstRealId, srcPort, dstPort);
 			manager.EndGraphMutation();
 			manager.UnlockPort(portLockKey);
+			LFPG_Util.RateLimitedWarn(sender, "finish_store", "[FinishWiring-Server] denied (store rejected the wire)");
 			PlayerBase.LFPG_SendClientMsg(player, "Wire already exists or device is full.");
 			return;
 		}
@@ -799,6 +820,61 @@ class LFPG_RPCServerHandlerImpl
 			}
 		}
 		return true;
+	}
+
+	// Same-pair reroute: the only conflict found is the row that already joins
+	// the two requested ports. Returns that row, or null for the normal path.
+	protected static LFPG_WireData FinishWiringSamePair(LFPG_FinishWiringState finish, string srcPort, string dstId, string dstPort)
+	{
+		if (!finish || !finish.m_Source)
+			return null;
+		if (finish.m_Owners.Count() != 1)
+			return null;
+		if (finish.m_Source.m_RemovedWires.Count() != 1)
+			return null;
+		LFPG_WireData row = finish.m_Source.m_RemovedWires[0];
+		if (!row)
+			return null;
+		if (row.m_TargetDeviceId != dstId)
+			return null;
+		if (FinishWiringSourcePort(row, finish.m_Source.m_IsNative) != srcPort)
+			return null;
+		if (IncomingPortIndexKey(row.m_TargetPort) != IncomingPortIndexKey(dstPort))
+			return null;
+		return row;
+	}
+
+	// Applies the new route to the stored row in place and republishes the owner.
+	// The endpoints do not change, so the graph, the reverse index and the port
+	// locks are left alone.
+	protected static void FinishWiringReroute(LFPG_FinishWiringState finish, LFPG_WireData sameRow, LFPG_WireData fresh)
+	{
+		LFPG_NetworkManager manager = LFPG_NetworkManager.Get();
+		sameRow.m_Waypoints = fresh.m_Waypoints;
+		sameRow.m_TargetNetLow = fresh.m_TargetNetLow;
+		sameRow.m_TargetNetHigh = fresh.m_TargetNetHigh;
+		if (sameRow.m_CreatorId != fresh.m_CreatorId)
+		{
+			manager.PlayerWireCountAdd(sameRow.m_CreatorId, -1);
+			manager.PlayerWireCountAdd(fresh.m_CreatorId, 1);
+			sameRow.m_CreatorId = fresh.m_CreatorId;
+		}
+		if (finish.m_Source.m_IsNative)
+		{
+			LFPG_WireOwnerBase nativeOwner = LFPG_WireOwnerBase.Cast(finish.m_Source.m_Obj);
+			if (nativeOwner)
+				nativeOwner.LFPG_CommitWireMutation();
+			else
+				finish.m_Source.m_Obj.SetSynchDirty();
+			finish.m_Source.m_DeltaOps.Insert(LFPG_WireDeltaOp.ADD);
+			finish.m_Source.m_RemovedWires.Insert(sameRow);
+			manager.BroadcastOwnerWireDelta(finish.m_Source.m_Obj, finish.m_Source.m_DeltaOps, finish.m_Source.m_RemovedWires);
+		}
+		else
+		{
+			manager.MarkVanillaDirty();
+			FinishWiringPublishVanilla(finish.m_Source);
+		}
 	}
 
 	protected static void FinishWiringPublishVanilla(LFPG_FinishWiringOwner ownerState)
