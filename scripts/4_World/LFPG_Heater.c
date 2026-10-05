@@ -5,17 +5,30 @@
 // LFPG_Heater:      CONSUMER, 1 IN (input_1), 15 u/s, no wire store.
 //                   Warms nearby players while powered AND switched on,
 //                   through the same UniversalTemperatureSource path the
-//                   furnace uses. Coils glow and a warm point light
-//                   appears on the client while heating.
+//                   furnace uses. While heating, the element bars turn
+//                   red-hot, the power button lights up and a warm
+//                   point light appears on the client.
 //
 // Server-only bodies live in 5_Mission behind LFPG_ServerActions: World
 // keeps the shell, Mission does the work. Client visuals stay here -
 // they sit behind #ifndef SERVER and cost nothing in the server view.
 // =========================================================
 
-static const string LFPG_HEATER_RVMAT_OFF   = "LFPowerGrid\\data\\heater\\heater.rvmat";
-static const string LFPG_HEATER_RVMAT_ON    = "LFPowerGrid\\data\\heater\\heater_on.rvmat";
 static const float  LFPG_HEATER_CONSUMPTION = 15.0;
+
+#ifndef SERVER
+// Paths the engine resolves at runtime: vanilla form, no leading backslash
+// and every separator escaped. An unknown escape such as "\L" is dropped by
+// the compiler, and the engine then receives a path with no separators.
+static const string LFPG_HEATER_RVMAT_OFF = "LFPowerGrid\\data\\heater\\heater.rvmat";
+static const string LFPG_HEATER_RVMAT_ON  = "LFPowerGrid\\data\\heater\\heater_on.rvmat";
+static const string LFPG_HEATER_TEX_OFF   = "LFPowerGrid\\data\\heater\\heater_co.paa";
+// Red-hot procedural colour for the element bars and the power button.
+static const string LFPG_HEATER_TEX_ON    = "#(argb,8,8,3)color(1,0.12,0.03,1,CO)";
+// Indices into hiddenSelections[] of LFPG_Heater in config.cpp.
+static const int    LFPG_HEATER_HS_COILS  = 0;
+static const int    LFPG_HEATER_HS_BUTTON = 1;
+#endif
 
 class LFPG_Heater_Kit : LFPG_KitBase
 {
@@ -42,6 +55,7 @@ class LFPG_Heater : LFPG_DeviceBase
     // Client-side light effect (NOT ref -- engine object)
     protected ScriptedLightBase m_LFPG_Light;
     protected int m_PrevGlowState = -1;
+    protected int m_PrevSyncState = -1;
 #endif
 
     void LFPG_Heater()
@@ -189,21 +203,65 @@ class LFPG_Heater : LFPG_DeviceBase
             glowTarget = 1;
         }
 
-        if (glowTarget == m_PrevGlowState)
+        int syncState = 0;
+        if (m_PoweredNet)
+            syncState = syncState + 2;
+        if (m_HeaterOn)
+            syncState = syncState + 1;
+
+        bool stateChanged = false;
+        if (syncState != m_PrevSyncState)
+            stateChanged = true;
+        m_PrevSyncState = syncState;
+
+        if (glowTarget != m_PrevGlowState)
+        {
+            m_PrevGlowState = glowTarget;
+
+            if (glowTarget == 1)
+            {
+                SetObjectTexture(LFPG_HEATER_HS_COILS, LFPG_HEATER_TEX_ON);
+                SetObjectMaterial(LFPG_HEATER_HS_COILS, LFPG_HEATER_RVMAT_ON);
+                SetObjectTexture(LFPG_HEATER_HS_BUTTON, LFPG_HEATER_TEX_ON);
+                SetObjectMaterial(LFPG_HEATER_HS_BUTTON, LFPG_HEATER_RVMAT_ON);
+                LFPG_CreateLight();
+            }
+            else
+            {
+                SetObjectTexture(LFPG_HEATER_HS_COILS, LFPG_HEATER_TEX_OFF);
+                SetObjectMaterial(LFPG_HEATER_HS_COILS, LFPG_HEATER_RVMAT_OFF);
+                SetObjectTexture(LFPG_HEATER_HS_BUTTON, LFPG_HEATER_TEX_OFF);
+                SetObjectMaterial(LFPG_HEATER_HS_BUTTON, LFPG_HEATER_RVMAT_OFF);
+                LFPG_DestroyLight();
+            }
+        }
+
+        if (!stateChanged)
             return;
 
-        m_PrevGlowState = glowTarget;
+        // One line per power or switch change: what arrived and what was applied,
+        // with the material path exactly as the engine receives it.
+        bool hasLight = false;
+        if (m_LFPG_Light)
+            hasLight = true;
 
-        if (glowTarget == 1)
-        {
-            SetObjectMaterial(0, LFPG_HEATER_RVMAT_ON);
-            LFPG_CreateLight();
-        }
-        else
-        {
-            SetObjectMaterial(0, LFPG_HEATER_RVMAT_OFF);
-            LFPG_DestroyLight();
-        }
+        string visMat = LFPG_HEATER_RVMAT_OFF;
+        if (m_PrevGlowState == 1)
+            visMat = LFPG_HEATER_RVMAT_ON;
+
+        string visMsg = "[LFPG_Heater] Visuals: powered=";
+        visMsg = visMsg + m_PoweredNet.ToString();
+        visMsg = visMsg + " on=";
+        visMsg = visMsg + m_HeaterOn.ToString();
+        visMsg = visMsg + " glow=";
+        visMsg = visMsg + m_PrevGlowState.ToString();
+        visMsg = visMsg + " light=";
+        visMsg = visMsg + hasLight.ToString();
+        visMsg = visMsg + " id=";
+        visMsg = visMsg + m_DeviceId;
+        visMsg = visMsg + " mat=";
+        visMsg = visMsg + visMat;
+        LFPG_Util.Info(visMsg);
     }
 #endif
 

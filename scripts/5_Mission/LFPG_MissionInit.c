@@ -210,6 +210,28 @@ modded class MissionGameplay
             return;
         }
 
+        // 3D cables: F9 with a cable reel or pliers in hands toggles 2D / 3D,
+        // in plain gameplay only (LFPG_C3DCanToggle).
+        if (key == KeyCode.KC_F9 && LFPG_C3DCanToggle())
+        {
+            PlayerBase c3dPlayer = PlayerBase.Cast(g_Game.GetPlayer());
+            bool c3dTool = false;
+            if (c3dPlayer)
+            {
+                if (LFPG_WorldUtil.PlayerHasCableReelInHands(c3dPlayer))
+                    c3dTool = true;
+                else if (LFPG_WorldUtil.PlayerHasPliersInHands(c3dPlayer))
+                    c3dTool = true;
+            }
+            if (c3dTool)
+            {
+                int c3dMode = LFPG_Cable3D.ToggleMode();
+                string c3dMsg = "Cables: ";
+                c3dMsg = c3dMsg + LFPG_Cable3D.ModeName(c3dMode);
+                LFPG_ShowMsg(c3dMsg);
+            }
+        }
+
         super.OnKeyPress(key);
     }
 
@@ -240,6 +262,21 @@ modded class MissionGameplay
         }
 
         super.OnKeyRelease(key);
+    }
+
+    // F9 cable mode toggle only in plain gameplay: no scripted menu on top
+    // (inventory, pause and chat are UIScriptedMenus; vanilla
+    // MissionGameplay.OnItemUsed uses the same GetMenu() test) and game focus
+    // held (the mod panels take it with Input.ChangeGameFocus).
+    protected bool LFPG_C3DCanToggle()
+    {
+        UIManager uiMgr = g_Game.GetUIManager();
+        if (uiMgr && uiMgr.GetMenu())
+            return false;
+        Input inp = g_Game.GetInput();
+        if (inp && !inp.HasGameFocus())
+            return false;
+        return true;
     }
 
     // U6: los dos paneles cerraban con este mismo predicado, copiado dos veces.

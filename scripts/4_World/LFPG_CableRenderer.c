@@ -600,6 +600,7 @@ class LFPG_CableRenderer
     static void SetServerHideCablesNoReel(bool val)
     {
         s_ServerHideCablesNoReel = val;
+        LFPG_Cable3D.MarkLookDirty();
     }
 
     protected ref map<string, ref LFPG_OwnerWireState> m_ByOwnerId;
@@ -780,6 +781,9 @@ class LFPG_CableRenderer
     // una vez, evitando ráfagas.
     void MaintenanceTick(float timeslice)
     {
+        // 3D backend: per-frame object queue (no-op in 2D mode).
+        LFPG_Cable3D.Tick(this, timeslice);
+
         m_CullAccS      = m_CullAccS + timeslice;
         m_RetryAccS     = m_RetryAccS + timeslice;
         m_PurgeAccS     = m_PurgeAccS + timeslice;
@@ -831,6 +835,8 @@ class LFPG_CableRenderer
 
         if (m_TempKeys && m_WireSegments && m_RetryQueue)
             DestroyAll();
+        // 3D backend: queue and counters to zero, settings re-read next session.
+        LFPG_Cable3D.Reset();
         if (m_ByOwnerId)
             m_ByOwnerId.Clear();
         if (m_ConnCache)
@@ -907,6 +913,29 @@ class LFPG_CableRenderer
 
         string fgrMsg = "[CableRenderer] ForceGlobalRefresh: rebuilt " + ownerIds.Count().ToString() + " owners, totalSegs=" + m_TotalSegCount.ToString();
         LFPG_Util.Info(fgrMsg);
+    }
+
+    // 3D backend: recomputes the wanted look of every live sub-segment and
+    // lets LFPG_Cable3D queue the ones that changed. Called from LFPG_Cable3D.Tick.
+    void Refresh3DLook(bool toolHeld)
+    {
+        bool visible3d = true;
+        if (s_ServerHideCablesNoReel && !toolHeld)
+            visible3d = false;
+
+        int r3i;
+        int r3s;
+        for (r3i = 0; r3i < m_WireSegments.Count(); r3i = r3i + 1)
+        {
+            LFPG_WireSegmentInfo r3Info = m_WireSegments.GetElement(r3i);
+            if (!r3Info || !r3Info.segments)
+                continue;
+            int r3Look = LFPG_Cable3D.LookFor(r3Info.cableState, toolHeld, visible3d);
+            for (r3s = 0; r3s < r3Info.segments.Count(); r3s = r3s + 1)
+            {
+                LFPG_Cable3D.Want(r3Info.segments[r3s], r3Look);
+            }
+        }
     }
 
     // ===========================
@@ -1332,6 +1361,9 @@ class LFPG_CableRenderer
                 }
             }
         }
+
+        // 3D backend: recolour by the new cable states.
+        LFPG_Cable3D.MarkLookDirty();
 
         if (LFPG_LOG_LEVEL >= 2)
         {
@@ -2562,6 +2594,9 @@ class LFPG_CableRenderer
 
         // Distances were just recomputed → draw order must be re-sorted.
         m_DrawOrderDirty = true;
+
+        // 3D backend: cable states were just refreshed.
+        LFPG_Cable3D.MarkLookDirty();
     }
 
     // ===========================
@@ -2725,6 +2760,10 @@ class LFPG_CableRenderer
             return;
 
 		if (!HasRenderableWires())
+			return;
+
+		// 3D backend draws the cables as world objects; the canvas keeps laser and preview.
+		if (LFPG_Cable3D.Is3D())
 			return;
 
         // v0.7.13 (G5): Render telemetry — grab reference once per frame
