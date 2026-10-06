@@ -192,12 +192,13 @@ static const float LFPG_VANILLA_ENERGY_POOL = 1000.0;
 
 // v5.3: Charge rate (units/s) for car batteries inside a vanilla BatteryCharger.
 // Vanilla BatteryCharger requires HasElectricitySource() (PlugThisInto crashes),
-// so LFPG charges the battery directly via ValidateConsumerStates.
+// so LFPG charges the battery directly via TickVanillaChargers.
 // Uses AddEnergy (not SetEnergy) — this triggers the full vanilla event chain:
 //   AddEnergy → OnEnergyAdded → ConvertEnergyToQuantity → SetQuantityNormalized
 //   → SetVariableMask(VARIABLE_QUANTITY). The inventory bar reads m_VarQuantity,
 //   NOT m_EM.m_Energy. SetEnergy only writes m_Energy without any events.
-// Delta-time via m_ChargerLastChargeSec, capped at 10s.
+// Delta-time via m_ChargerLastChargeSec, uncapped; only intervals that were
+// powered with the same battery attached are credited.
 // Matches vanilla ChargeEnergyPerSecond = 1.0 (config.cpp BatteryCharger).
 // CarBattery energyMax = 500 → full charge ~500s (~8.3 min).
 // TruckBattery energyMax = 1500 → full charge ~1500s (~25 min).
