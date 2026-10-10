@@ -54,7 +54,7 @@ Contrato O(n): `P:\scripts\1_core\proto\enscript.c:861` y `:871`.
 - `test_finish_wiring_quota.py`: exit 0, 7 tests
 - `test_enforce_checks.py`: exit 0, 21 tests
 - `enforce_checks.py --root .`: FAIL=0 WARN=0
-- Tests de arreglo contra HEAD: `test_negative_head_base_lacks_probes` hace `git show HEAD:...` y comprueba que R01/R02/R04/R05 no estan en la base (el test pasa ahora porque la base NO tiene probes; los positivos fallarian si se corrieran sobre el arbol de HEAD sin este diff)
+- Tests de arreglo: mutacion de rutas y `LFPG_PERF_PROBE=true` (ya no se lee HEAD)
 
 ## HALLAZGOS-ADYACENTES
 
@@ -74,3 +74,12 @@ Contrato O(n): `P:\scripts\1_core\proto\enscript.c:861` y `:871`.
 ## QUE PUEDE ESTAR MAL EN LA PREMISA DE ESTE ENCARGO
 
 R-01 no es una violacion por si sola (el issue lo dice: T5-03). Medir PostBulkRebuild en CutAll puede mostrar un coste grande que es recuperacion correcta, no un bug. R-04 no puede omitir el scan por un hit: si la premisa de “el indice esta sano” no se puede probar con owners+contadores, el scan global es el comportamiento correcto y optimizarlo seria un riesgo de persistencia. R-05 mezcla hot path de cliente (CableRenderer, cada frame) con rebuilds de servidor infrecuentes; un solo umbral de refactor mezclaria ambos. El flag runtime (bool) no es coste cero absoluto: cada sitio paga un `if (LFPG_PERF_PROBE)` porque un `#define` en Defines.c no cruza ficheros.
+
+## Ronda 2
+
+- **M1:** se quito `#ifdef SERVER` de `LFPG_PerfProbe.c`. La clase existe en cliente y servidor. Test de preprocesador (`test_m1_class_visible_where_calls_compile`); negativo `test_m1_negative_server_wrapped_class`; `test_m1_b66dee8_fails_when_commit_present` carga `b66dee8` si existe.
+- **M2:** eliminado `test_negative_head_base_lacks_probes`. Ningun test lee HEAD.
+- **M3:** `GetGame().GetTime()` como `LFPG_BTCConfig.c:457`; el repo evita `g_Game` en 3_Game (`LFPG_Telemetry.c:128`).
+- **M4:** `Begin` anidado incrementa `s_NestDepth` y no reinicia el evento; `Phase`/`End` internos no cierran el exterior; visitas/requeues/allocs se suman; log `nested=N`. Cadena real: `RescueStaleIncomingWires` (`LFPG_RPCServerHandlerImpl.c:2188`) → `RequestPropagate` (`LFPG_NetworkManagerImpl.c:2416`) → `RefreshSourceState` → `MarkUpstreamNodesDirty`.
+- **M5:** inventario con `path:line`; `index_calls` documentado como cota estatica.
+- **M6:** `allocs` acotado; umbral R-01 sin `allocs`; activacion = build propio, mismo PBO cliente/servidor.

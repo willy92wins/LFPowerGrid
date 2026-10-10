@@ -3,10 +3,11 @@
 // Default OFF via LFPG_PERF_PROBE. No persistence, no RPC.
 // =========================================================
 
-#ifdef SERVER
 class LFPG_PerfProbe
 {
 	protected static bool s_Active;
+	protected static int s_NestDepth;
+	protected static int s_NestedEvents;
 	protected static string s_Route;
 	protected static int s_T0;
 	protected static int s_PhaseT0;
@@ -34,8 +35,16 @@ class LFPG_PerfProbe
 	{
 		if (!LFPG_PERF_PROBE)
 			return;
+		if (s_Active)
+		{
+			s_NestDepth = s_NestDepth + 1;
+			s_NestedEvents = s_NestedEvents + 1;
+			return;
+		}
 		s_Route = route;
-		s_T0 = g_Game.GetTime();
+		s_NestDepth = 0;
+		s_NestedEvents = 0;
+		s_T0 = GetGame().GetTime();
 		s_PhaseT0 = s_T0;
 		s_PhaseIndexMs = 0;
 		s_PhaseRescueMs = 0;
@@ -60,7 +69,9 @@ class LFPG_PerfProbe
 			return;
 		if (!s_Active)
 			return;
-		int now = g_Game.GetTime();
+		if (s_NestDepth > 0)
+			return;
+		int now = GetGame().GetTime();
 		int elapsed = now - s_PhaseT0;
 		s_PhaseT0 = now;
 		if (name == "index")
@@ -117,7 +128,12 @@ class LFPG_PerfProbe
 			return;
 		if (!s_Active)
 			return;
-		int totalMs = g_Game.GetTime() - s_T0;
+		if (s_NestDepth > 0)
+		{
+			s_NestDepth = s_NestDepth - 1;
+			return;
+		}
+		int totalMs = GetGame().GetTime() - s_T0;
 		string line = "LFPG_PERF event=1 route=" + s_Route;
 		line = line + " total_ms=" + totalMs.ToString();
 		line = line + " phase_index_ms=" + s_PhaseIndexMs.ToString();
@@ -131,6 +147,7 @@ class LFPG_PerfProbe
 		line = line + " map_index=" + s_MapIndexCalls.ToString();
 		line = line + " map_size=" + s_LastMapSize.ToString();
 		line = line + " map_sweeps=" + s_MapSweepCount.ToString();
+		line = line + " nested=" + s_NestedEvents.ToString();
 		LFPG_Util.Info(line);
 		s_Events = s_Events + 1;
 		s_SumMs = s_SumMs + totalMs;
@@ -171,7 +188,7 @@ class LFPG_PerfProbe
 	{
 		if (!LFPG_PERF_PROBE)
 			return;
-		int now = g_Game.GetTime();
+		int now = GetGame().GetTime();
 		if (s_SummaryT0 == 0)
 		{
 			s_SummaryT0 = now;
@@ -193,4 +210,3 @@ class LFPG_PerfProbe
 		s_SummaryT0 = now;
 	}
 }
-#endif
