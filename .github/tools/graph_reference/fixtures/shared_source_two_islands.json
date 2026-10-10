@@ -13,7 +13,8 @@
   "expected": {
     "hard_feasible": true,
     "max_hard_servable": 40,
+    "max_hard_flow_bound": 40,
     "total_hard_demand": 40,
-    "hand_calc": "fuente 40; islas 20+20=40; min(40,40)=40. Factible 20+20. Si una isla se lleva 40, la otra queda a 0."
+    "hand_calc": "fuente 40; islas 20+20=40; ambos binarios caben. Entero 40. Cota 40. Si una isla se lleva 40, la otra queda a 0."
   }
 }

@@ -2,10 +2,28 @@
 
 Paquete de librería estándar para validar **capacidad, conservación y
 prioridad hard** sin copiar `AllocateOutput` / `ProcessDirtyQueue`.
-El método es **flujo máximo (Edmonds–Karp)** con fases de prioridad hard:
-super-fuente → fuentes → nodos partidos por `pass_limit` → super-sumidero
-en la demanda hard. Un solver que hereda el split a partes iguales no
-puede usarse como referente de sí mismo.
+
+El método es **un único flujo máximo (Edmonds–Karp)** sobre un grafo residual
+con super-fuente, nodos partidos por `pass_limit` y super-sumidero en la
+demanda hard alcanzable. No hay fases de prioridad en el flujo: la prioridad
+hard/soft se comprueba en `verify`. Un solver que hereda el split a partes
+iguales no puede usarse como referente de sí mismo.
+
+## Semántica
+
+- **Alcanzabilidad.** La demanda hard exigible es la alcanzable desde alguna
+  SOURCE por edges `enabled` y PASSTHROUGH abiertos. Un gate cerrado
+  (`scripts/5_Mission/LFPG_ElecGraphImpl.c:3979-3994`) no deja pasar y solo
+  aporta `self_consumption` (autoconsumo o sondeo). Un edge deshabilitado
+  (`:3936`) no cuenta. `verify` no marca `hard_unmet` en demanda no alcanzable.
+- **Consumidores binarios.** En producción un CONSUMER/CAMERA está alimentado
+  iff entrada ≥ `m_Consumption` (`:2426-2433`). `max_hard_servable` es la
+  **medida entera**: búsqueda exhaustiva sobre subconjuntos (tope 12
+  consumidores alcanzables). `max_hard_flow_bound` es la cota continua.
+- **Soft.** Absorción de batería:
+  `inflow + virtual_generation − outflow − self_consumption`, recortada a
+  `[0, soft_demand]`. Batería llena = `soft_demand` 0.
+- **Conservación de dos lados** en PASSTHROUGH: in+virt = out+self+absorbido.
 
 ## Entrada
 
@@ -28,10 +46,9 @@ JSON o dict:
 }
 ```
 
-Tipos de nodo: `SOURCE`, `PASSTHROUGH`, `CONSUMER`, `CAMERA`.
+Tipos: `SOURCE`, `PASSTHROUGH`, `CONSUMER`, `CAMERA`.
 
-Campos opcionales: `soft_demand` (carga de batería; **batería llena = 0**),
-`soft_fraction`, `gate_closed` (passthrough no deja pasar),
+Opcionales: `soft_demand`, `soft_fraction`, `gate_closed`,
 `self_consumption`, `virtual_generation`, `capacity` por edge.
 
 ## Salida
@@ -41,27 +58,25 @@ from graph_reference import Oracle, load_graph
 
 g = load_graph("fixtures/combiner_20_50_hard50.json")
 o = Oracle()
-o.hard_feasible(g)          # True  — existe 20+30
-o.max_hard_servable(g)      # 50.0
+o.hard_feasible(g)           # True  — existe 20+30 (binario)
+o.max_hard_servable(g)       # 50.0  — medida entera
+o.max_hard_flow_bound(g)     # 50.0  — cota continua
 report = o.verify(g, {"e_s20": 0, "e_s50": 25, "e_out": 25})
-report.ok                   # False
+report.ok                    # False
 [v.rule for v in report.violations]
-# hard_unmet, feasible_but_underfed
+# hard_unmet, partial_allocation, feasible_but_underfed
 ```
 
-`VerifyReport.violations`: cada una tiene `rule`, `where` (node/edge id),
-`detail`. Reglas: `source_limit`, `edge_limit`, `edge_disabled`,
+Reglas de `verify`: `source_limit`, `edge_limit`, `edge_disabled`,
 `passthrough_limit`, `conservation`, `hard_unmet`, `hard_priority`,
-`feasible_but_underfed`, `non_negative`.
+`feasible_but_underfed`, `non_negative`, `over_allocation`,
+`partial_allocation`.
 
 ## Ejemplo numérico (cuenta a mano)
 
 Fuentes 20 y 50, combiner, hard 50.
 
-- Capacidad total = 20+50 = 70.
-- Demanda hard = 50.
-- `min(70, 50) = 50` → factible. Asignación 20+30.
-- Split a partes iguales 25+25: la fuente de 20 no puede dar 25; si el
-  solver la pone a 0 y deja 25 de la de 50, el consumidor recibe 25 < 50
-  aunque 20+30 era factible → el oráculo marca `hard_unmet` +
-  `feasible_but_underfed`.
+- Capacidad total = 20+50 = 70. Demanda hard alcanzable = 50.
+- Cota continua `min(70, 50) = 50`. Medida entera = 50 (el consumidor enciende).
+- Split 25+25: la fuente de 20 no puede; si queda 0+25, el consumidor recibe 25
+  y no enciende → `hard_unmet` + `partial_allocation` + `feasible_but_underfed`.

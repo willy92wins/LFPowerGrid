@@ -1,6 +1,6 @@
 {
   "id": "gates_hard_soft",
-  "description": "Gate cerrado (hard bloqueado) y gate abierto hacia bateria (soft). Hard del consumidor abierto debe cubrirse primero.",
+  "description": "Gate cerrado (hard bloqueado) y gate abierto hacia bateria (soft). Hard alcanzable primero.",
   "nodes": [
     {"id": "src", "type": "SOURCE", "available": 30},
     {"id": "gate_closed", "type": "PASSTHROUGH", "pass_limit": 100, "gate_closed": true, "self_consumption": 0},
@@ -17,9 +17,10 @@
     {"id": "e_bat_in", "src": "src", "dst": "battery", "enabled": true}
   ],
   "expected": {
-    "hard_feasible": false,
+    "hard_feasible": true,
     "max_hard_servable": 10,
-    "total_hard_demand": 30,
-    "hand_calc": "hard total=20 (blocked, gate cerrado)+10 (abierto)=30. Gate cerrado pass_limit=0 => blocked inalcanzable. max_hard_servable=10. 10<30 => no factible. Fuente 30 cubre el hard abierto 10; resto 20 puede ir a soft."
+    "max_hard_flow_bound": 10,
+    "total_hard_demand": 10,
+    "hand_calc": "blocked no alcanzable: gate cerrado no deja pasar (ElecGraphImpl.c:3979-3994) y solo demanda self/probe; aqui self=0. hard_load 10 alcanzable. Fuente 30. Medida entera min(10,30)=10. Cota continua 10. Soft 20 cabe en el resto 20. 10+20=30. Asignacion e_open=10, e_hard=10, e_bat_in=20."
   }
 }

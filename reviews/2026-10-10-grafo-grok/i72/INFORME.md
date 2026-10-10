@@ -71,4 +71,39 @@ Tabla de todas las exigencias del parrafo de cierre, G-04 SOURCE/CONSUMER/CAMERA
 
 ## QUE PUEDE ESTAR MAL EN LA PREMISA DE ESTE ENCARGO
 
-El issue trata #72 como cierre de capacidad/conservacion/settlement contra un referente, pero el dueno ya partio G-01 a #76 y dejo #72 como indice. El referente offline demuestra factibilidad de flujo, no que el solver del juego asiente. Si #76 no compara su asignacion con `Oracle.verify`, el paquete no cierra #72. Ademas `hard_feasible` aqui exige toda la demanda hard del JSON, incluida la detras de un gate cerrado; un solver que ignore islas aisladas por gate puede ser correcto en juego y `hard_feasible=false` en el fixture `gates_hard_soft`. Quien integre #76 debe comparar `max_hard_servable` (10), no el booleano global, en ese caso.
+El issue trata #72 como cierre de capacidad/conservacion/settlement contra un referente, pero el dueno ya partio G-01 a #76 y dejo #72 como indice. El referente offline demuestra factibilidad de flujo, no que el solver del juego asiente. Si #76 no compara su asignacion con `Oracle.verify`, el paquete no cierra #72.
+
+## Ronda 2
+
+H1: demanda exigible = alcanzable (`reachable_ids` `oracle.py:116-144`; gate cerrado no expande; edge disabled se salta). Produccion: edge off `LFPG_ElecGraphImpl.c:3936`; gate cerrado `c:3979-3994`. `verify` no marca `hard_unmet` en no alcanzable. Fixtures `gates_hard_soft` y `cut_edge` rehechos. Test `H1ReachableDemand.test_closed_gate_correct_assignment_is_ok`.
+
+H2: `absorbido = inflow + virt − outflow − self`, clip `[0, soft_demand]` (`_soft_absorbed` `oracle.py:178-186`). `hard_priority` solo con absorcion real. Test `H2SoftAbsorption`.
+
+H3: conservacion dos lados en PASSTHROUGH (`oracle.py` bloque `in+virt` vs `out+self+soft`). `over_allocation` si consumidor recibe mas que demanda. Tests `H3TwoSidedConservation`.
+
+H4: `max_hard_servable` entero por subconjuntos, tope 12 (`oracle.py:218-237`). Cota `max_hard_flow_bound`. `partial_allocation`. `heterogeneous_deficit` entero 0, cota 25. Consumidor binario `LFPG_ElecGraphImpl.c:2426-2433`.
+
+H5: fixture `shared_source_forced_split.json`; negativo split 25/25 en comb.
+
+H6: README y docstring: un unico max-flow, no fases.
+
+H7: CIERRE-72 — tiempo/visitas/requeues/allocations dueño i78; lifecycle e indices dueño del repo.
+
+Descartado: enumerar asignaciones de edges (explosion); el subconjunto es sobre consumidores.
+
+### GATES (ronda 2)
+
+Linter Enforce (sin tocar `.c`): `errors 0`, `warnings 48`, `status WARN`. La ronda 1 anoto 0/0; la base da 48 warnings.
+
+`test_graph_reference.py` ahora: exit 0, `Ran 18 tests in 0.007s OK`.
+
+Contra `51d0786` (paquete extraido con `git show`, mismos reproductores H1–H3): `FAILED (failures=4)`:
+
+```
+FAIL: test_h1 ... AssertionError: False is not true : [('hard_unmet', 'blocked'), ('hard_priority', '*')]
+FAIL: test_h2 ... AssertionError: 'hard_priority' unexpectedly found in ['hard_unmet', 'hard_priority']
+FAIL: test_h3a ... AssertionError: True is not false
+FAIL: test_h3b ... AssertionError: 'over_allocation' not found in []
+```
+
+Resto: `test_enforce_checks.py` 21 OK; `test_graph_capacity_refresh.py` 6 OK; `test_graph_charger_energy.py` 12 OK; `test_finish_wiring_quota.py` 7 OK; `test_broadcast_contract.py` 3 OK; `enforce_checks.py --root .` FAIL=0 WARN=0.

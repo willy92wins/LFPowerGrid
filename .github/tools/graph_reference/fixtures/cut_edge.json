@@ -1,6 +1,6 @@
 {
   "id": "cut_edge",
-  "description": "Edge cortado (enabled=false) entre fuente 50 y consumidor 40: hard servible 0.",
+  "description": "Edge cortado (enabled=false) entre fuente 50 y consumidor 40: no hay demanda alcanzable.",
   "nodes": [
     {"id": "src", "type": "SOURCE", "available": 50},
     {"id": "load", "type": "CONSUMER", "hard_demand": 40}
@@ -9,9 +9,10 @@
     {"id": "e_cut", "src": "src", "dst": "load", "enabled": false}
   ],
   "expected": {
-    "hard_feasible": false,
+    "hard_feasible": true,
     "max_hard_servable": 0,
-    "total_hard_demand": 40,
-    "hand_calc": "unico edge disabled; flujo permitido=0; min(50,40) no aplica porque no hay camino. max=0. Deficit=40."
+    "max_hard_flow_bound": 0,
+    "total_hard_demand": 0,
+    "hand_calc": "edge disabled (ElecGraphImpl.c:3936 continue) => demanda 0. load no alcanzable. Exigible=0. Vacuamente factible. Entero 0. Cota 0."
   }
 }

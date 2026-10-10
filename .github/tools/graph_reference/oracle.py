@@ -1,19 +1,24 @@
-"""Independent oracle: max-flow by hard-priority phases (Edmonds-Karp).
+"""Independent oracle: Edmonds-Karp max-flow on a split-node residual graph.
 
-This is not a port of AllocateOutput / ProcessDirtyQueue. Those split demand
-equally and zero an overloaded source. Here hard demand is a sink capacity and
-sources are edges from a super-source; feasibility is residual-graph search.
+Hard demand is a sink capacity; sources are edges from a super-source.
+Feasibility is residual-graph search. This is not a port of AllocateOutput
+or ProcessDirtyQueue (those split demand equally and zero an overloaded
+source). Consumers in production are binary (powered iff input >= demand);
+max_hard_servable is the integer measure over subsets. max_hard_flow_bound
+is the continuous flow cota.
 """
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from itertools import combinations
 
-from .model import Graph
+from .model import Graph, Node
 
 EPS = 1e-6
 SUPER_SRC = "__super_src__"
 SUPER_SNK = "__super_snk__"
+MAX_BINARY_CONSUMERS = 12
 
 
 def _in(nid: str) -> str:
@@ -105,26 +110,35 @@ class Residual:
         return total
 
 
-def _build_hard_residual(graph: Graph) -> Residual:
-    r = Residual()
+def reachable_ids(graph: Graph) -> set[str]:
+    """Nodes reachable from a SOURCE along enabled edges, not through a closed gate.
+
+    A closed PASSTHROUGH is itself reachable (self_consumption / probe). Its
+    downstream is not. Disabled edges are skipped.
+    """
+    seen: set[str] = set()
+    q = deque()
     for n in graph.nodes.values():
-        r.add_edge(_in(n.id), _out(n.id), _node_through_cap(n))
         if n.type == "SOURCE":
-            r.add_edge(SUPER_SRC, _out(n.id), n.available)
-        if n.type in ("CONSUMER", "CAMERA"):
-            r.add_edge(_in(n.id), SUPER_SNK, n.hard_demand)
-        if n.type == "PASSTHROUGH" and n.self_consumption > EPS:
-            r.add_edge(_in(n.id), SUPER_SNK, n.self_consumption)
-        if n.virtual_generation > EPS:
-            r.add_edge(SUPER_SRC, _out(n.id), n.virtual_generation)
-    for e in graph.edges.values():
-        if not e.enabled:
+            seen.add(n.id)
+            q.append(n.id)
+    while q:
+        uid = q.popleft()
+        node = graph.nodes[uid]
+        if node.type == "PASSTHROUGH" and node.gate_closed:
             continue
-        r.add_edge(_out(e.src), _in(e.dst), e.capacity)
-    return r
+        for e in graph.outgoing(uid):
+            if not e.enabled:
+                continue
+            if e.dst not in graph.nodes:
+                continue
+            if e.dst not in seen:
+                seen.add(e.dst)
+                q.append(e.dst)
+    return seen
 
 
-def _node_through_cap(n) -> float:
+def _node_through_cap(n: Node) -> float:
     if n.type == "SOURCE":
         return 1e12
     if n.type in ("CONSUMER", "CAMERA"):
@@ -136,17 +150,106 @@ def _node_through_cap(n) -> float:
     return 1e12
 
 
+def _build_hard_residual(graph: Graph, consumer_ids: set[str] | None) -> Residual:
+    reach = reachable_ids(graph)
+    r = Residual()
+    for n in graph.nodes.values():
+        r.add_edge(_in(n.id), _out(n.id), _node_through_cap(n))
+        if n.type == "SOURCE":
+            r.add_edge(SUPER_SRC, _out(n.id), n.available)
+        if n.virtual_generation > EPS:
+            r.add_edge(SUPER_SRC, _out(n.id), n.virtual_generation)
+        if n.id not in reach:
+            continue
+        if n.type in ("CONSUMER", "CAMERA"):
+            if consumer_ids is None or n.id in consumer_ids:
+                r.add_edge(_in(n.id), SUPER_SNK, n.hard_demand)
+        if n.type == "PASSTHROUGH" and n.self_consumption > EPS:
+            r.add_edge(_in(n.id), SUPER_SNK, n.self_consumption)
+    for e in graph.edges.values():
+        if not e.enabled:
+            continue
+        r.add_edge(_out(e.src), _in(e.dst), e.capacity)
+    return r
+
+
+def _soft_absorbed(n: Node, inn: float, out: float) -> float:
+    raw = inn + n.virtual_generation - out - n.self_consumption
+    if raw < 0.0:
+        raw = 0.0
+    if raw > n.soft_demand:
+        raw = n.soft_demand
+    return raw
+
+
 class Oracle:
+    def max_hard_flow_bound(self, graph: Graph) -> float:
+        return _build_hard_residual(graph, None).max_flow(SUPER_SRC, SUPER_SNK)
+
+    def reachable_consumers(self, graph: Graph) -> list[Node]:
+        reach = reachable_ids(graph)
+        out = []
+        for n in graph.nodes.values():
+            if n.type in ("CONSUMER", "CAMERA") and n.id in reach:
+                out.append(n)
+        return out
+
+    def reachable_hard_demand(self, graph: Graph) -> float:
+        reach = reachable_ids(graph)
+        total = 0.0
+        for n in graph.nodes.values():
+            if n.id not in reach:
+                continue
+            if n.type in ("CONSUMER", "CAMERA"):
+                total = total + n.hard_demand
+            if n.type == "PASSTHROUGH":
+                total = total + n.self_consumption
+        return total
+
+    def _reachable_self_need(self, graph: Graph) -> float:
+        reach = reachable_ids(graph)
+        total = 0.0
+        for n in graph.nodes.values():
+            if n.id in reach and n.type == "PASSTHROUGH":
+                total = total + n.self_consumption
+        return total
+
     def max_hard_servable(self, graph: Graph) -> float:
-        return _build_hard_residual(graph).max_flow(SUPER_SRC, SUPER_SNK)
+        consumers = self.reachable_consumers(graph)
+        if len(consumers) > MAX_BINARY_CONSUMERS:
+            raise ValueError(
+                "max_hard_servable exhaustive search capped at %s reachable consumers, got %s"
+                % (MAX_BINARY_CONSUMERS, len(consumers))
+            )
+        self_need = self._reachable_self_need(graph)
+        best = 0.0
+        n = len(consumers)
+        for k in range(0, n + 1):
+            for combo in combinations(consumers, k):
+                ids: set[str] = set()
+                consumer_need = 0.0
+                for c in combo:
+                    ids.add(c.id)
+                    consumer_need = consumer_need + c.hard_demand
+                flow = _build_hard_residual(graph, ids).max_flow(SUPER_SRC, SUPER_SNK)
+                if flow + EPS >= consumer_need + self_need and consumer_need > best:
+                    best = consumer_need
+        return best
 
     def hard_feasible(self, graph: Graph) -> bool:
-        need = graph.total_hard_demand()
+        need = self.reachable_hard_demand(graph)
         got = self.max_hard_servable(graph)
-        return got + EPS >= need
+        reach = reachable_ids(graph)
+        self_need = 0.0
+        for n in graph.nodes.values():
+            if n.id in reach and n.type == "PASSTHROUGH":
+                self_need = self_need + n.self_consumption
+        consumer_need = need - self_need
+        return got + EPS >= consumer_need
 
     def verify(self, graph: Graph, allocation: dict[str, float]) -> VerifyReport:
         report = VerifyReport(ok=True)
+        reach = reachable_ids(graph)
         flows = {eid: float(allocation.get(eid, 0.0)) for eid in graph.edges}
         for eid, e in graph.edges.items():
             f = flows[eid]
@@ -164,6 +267,7 @@ class Oracle:
             outflow[e.src] = outflow[e.src] + f
             inflow[e.dst] = inflow[e.dst] + f
 
+        absorbed = {}
         for nid, n in graph.nodes.items():
             inn = inflow[nid]
             out = outflow[nid]
@@ -177,13 +281,18 @@ class Oracle:
                 if inn > EPS:
                     report.add("conservation", nid, "SOURCE has inflow %s" % inn)
             elif n.type == "PASSTHROUGH":
-                created = out - (inn + n.virtual_generation)
-                if created > EPS:
+                soft = _soft_absorbed(n, inn, out)
+                absorbed[nid] = soft
+                lhs = inn + n.virtual_generation
+                rhs = out + n.self_consumption + soft
+                delta = lhs - rhs
+                if delta < 0.0:
+                    delta = -delta
+                if delta > EPS:
                     report.add(
                         "conservation",
                         nid,
-                        "outflow %s exceeds inflow %s + virt %s"
-                        % (out, inn, n.virtual_generation),
+                        "in+virt %s != out+self+soft %s" % (lhs, rhs),
                     )
                 limit = 0.0 if n.gate_closed else n.pass_limit
                 if n.pass_limit > EPS or n.gate_closed:
@@ -199,46 +308,58 @@ class Oracle:
 
         unmet_hard = 0.0
         for nid, n in graph.nodes.items():
-            if n.type in ("CONSUMER", "CAMERA"):
-                got = inflow[nid]
-                if got + EPS < n.hard_demand:
-                    deficit = n.hard_demand - got
-                    unmet_hard = unmet_hard + deficit
+            if n.type not in ("CONSUMER", "CAMERA"):
+                if n.type == "PASSTHROUGH" and n.id in reach and n.self_consumption > EPS:
+                    got = inflow[nid]
+                    if got + EPS < n.self_consumption:
+                        report.add(
+                            "hard_unmet",
+                            nid,
+                            "gate/self received %s of %s" % (got, n.self_consumption),
+                        )
+                        unmet_hard = unmet_hard + (n.self_consumption - got)
+                continue
+            got = inflow[nid]
+            if n.id not in reach:
+                continue
+            if got > n.hard_demand + EPS:
+                report.add(
+                    "over_allocation",
+                    nid,
+                    "received %s > demand %s" % (got, n.hard_demand),
+                )
+            elif got + EPS < n.hard_demand:
+                deficit = n.hard_demand - got
+                unmet_hard = unmet_hard + deficit
+                report.add(
+                    "hard_unmet",
+                    nid,
+                    "received %s of hard %s (deficit %s)" % (got, n.hard_demand, deficit),
+                )
+                if got > EPS:
                     report.add(
-                        "hard_unmet",
+                        "partial_allocation",
                         nid,
-                        "received %s of hard %s (deficit %s)" % (got, n.hard_demand, deficit),
-                    )
-            if n.type == "PASSTHROUGH" and n.self_consumption > EPS:
-                got = inflow[nid]
-                if got + EPS < n.self_consumption:
-                    report.add(
-                        "hard_unmet",
-                        nid,
-                        "gate/self received %s of %s" % (got, n.self_consumption),
+                        "received %s of binary demand %s" % (got, n.hard_demand),
                     )
 
         soft_flow = 0.0
         for nid, n in graph.nodes.items():
             if n.type == "PASSTHROUGH" and n.soft_demand > EPS:
-                extra = inflow[nid] - n.self_consumption
-                if extra > EPS:
-                    credited = extra
-                    if credited > n.soft_demand:
-                        credited = n.soft_demand
-                    soft_flow = soft_flow + credited
+                soft_flow = soft_flow + absorbed.get(nid, 0.0)
         if unmet_hard > EPS and soft_flow > EPS:
             report.add(
                 "hard_priority",
                 "*",
-                "soft %s allocated while hard deficit %s remains" % (soft_flow, unmet_hard),
+                "soft absorbed %s while reachable hard deficit %s remains"
+                % (soft_flow, unmet_hard),
             )
 
         if unmet_hard > EPS and self.hard_feasible(graph):
             report.add(
                 "feasible_but_underfed",
                 "*",
-                "hard demand is feasible (max-flow) but this assignment leaves deficit %s"
+                "reachable hard is integer-feasible but this assignment leaves deficit %s"
                 % unmet_hard,
             )
         return report

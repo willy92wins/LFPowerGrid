@@ -15,7 +15,8 @@
   "expected": {
     "hard_feasible": true,
     "max_hard_servable": 50,
+    "max_hard_flow_bound": 50,
     "total_hard_demand": 50,
-    "hand_calc": "fuentes 20+50=70; demanda hard=50; min(70,50)=50. Asignacion factible 20+30=50. Split 25+25 no es factible en la fuente de 20."
+    "hand_calc": "fuentes 20+50=70; demanda hard alcanzable=50; min(70,50)=50. Consumidor binario enciende con 50. Asignacion factible 20+30=50. Split 25+25 no es factible en la fuente de 20."
   }
 }

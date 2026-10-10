@@ -1,0 +1,26 @@
+{
+  "id": "shared_source_forced_split",
+  "description": "s50 via splitter a comb y l2(20); s20 a comb; comb a l1(50). Unica asignacion que alimenta todo: 20+30 al comb y 20 a l2.",
+  "nodes": [
+    {"id": "s50", "type": "SOURCE", "available": 50},
+    {"id": "s20", "type": "SOURCE", "available": 20},
+    {"id": "splitter", "type": "PASSTHROUGH", "pass_limit": 200},
+    {"id": "comb", "type": "PASSTHROUGH", "pass_limit": 500},
+    {"id": "l1", "type": "CONSUMER", "hard_demand": 50},
+    {"id": "l2", "type": "CONSUMER", "hard_demand": 20}
+  ],
+  "edges": [
+    {"id": "e_s50_split", "src": "s50", "dst": "splitter", "enabled": true},
+    {"id": "e_split_comb", "src": "splitter", "dst": "comb", "enabled": true},
+    {"id": "e_split_l2", "src": "splitter", "dst": "l2", "enabled": true},
+    {"id": "e_s20_comb", "src": "s20", "dst": "comb", "enabled": true},
+    {"id": "e_comb_l1", "src": "comb", "dst": "l1", "enabled": true}
+  ],
+  "expected": {
+    "hard_feasible": true,
+    "max_hard_servable": 70,
+    "max_hard_flow_bound": 70,
+    "total_hard_demand": 70,
+    "hand_calc": "l1 50 + l2 20 = 70. s20 solo llega a comb: debe dar 20. Faltan 30 para l1, salen de s50 via splitter. splitter tambien da 20 a l2. s50 = 30+20 = 50. Unica: e_s20_comb=20, e_split_comb=30, e_split_l2=20, e_s50_split=50, e_comb_l1=50. Split 25/25 en comb: s20 no puede 25; si s20=0 y split_comb=25, l1 recibe 25<50 y no enciende."
+  }
+}

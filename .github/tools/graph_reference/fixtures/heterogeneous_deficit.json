@@ -1,6 +1,6 @@
 {
   "id": "heterogeneous_deficit",
-  "description": "Fuentes heterogeneas 10+15 con demanda hard 50: deficit real 25.",
+  "description": "Fuentes heterogeneas 10+15 con demanda hard 50: deficit real; consumidor binario no enciende.",
   "nodes": [
     {"id": "s10", "type": "SOURCE", "available": 10},
     {"id": "s15", "type": "SOURCE", "available": 15},
@@ -14,8 +14,9 @@
   ],
   "expected": {
     "hard_feasible": false,
-    "max_hard_servable": 25,
+    "max_hard_servable": 0,
+    "max_hard_flow_bound": 25,
     "total_hard_demand": 50,
-    "hand_calc": "fuentes 10+15=25; demanda hard=50; min(25,50)=25. Deficit=50-25=25. No factible."
+    "hand_calc": "fuentes 10+15=25; demanda hard alcanzable=50. Cota continua min(25,50)=25. Consumidor binario (ElecGraphImpl.c:2426-2433) no enciende con 25<50 => medida entera 0. No factible."
   }
 }

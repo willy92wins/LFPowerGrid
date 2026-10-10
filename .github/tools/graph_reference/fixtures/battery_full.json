@@ -13,7 +13,8 @@
   "expected": {
     "hard_feasible": true,
     "max_hard_servable": 10,
+    "max_hard_flow_bound": 10,
     "total_hard_demand": 10,
-    "hand_calc": "hard=10; soft llena=0; fuente=50; min(50,10)=10. Flujo a bateria 0 no viola nada. 10+0=10."
+    "hand_calc": "hard=10; soft llena=0; fuente=50; entero 10. Cota 10. Flujo a bateria 0. Conservacion bateria: in 0 = out 0 + absorb 0."
   }
 }

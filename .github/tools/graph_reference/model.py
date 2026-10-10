@@ -72,6 +72,7 @@ class Graph:
         return [e for e in self.edges.values() if e.dst == nid]
 
     def total_hard_demand(self) -> float:
+        """All CONSUMER/CAMERA demand plus PASSTHROUGH self_consumption (not reachability-filtered)."""
         total = 0.0
         for n in self.nodes.values():
             if n.type in ("CONSUMER", "CAMERA"):

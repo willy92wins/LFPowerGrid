@@ -9,12 +9,27 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 from graph_reference import Oracle, load_graph
+from graph_reference.model import Edge, Graph, Node
 
 FIX = HERE / "graph_reference" / "fixtures"
 
 
 def _fixture(name):
     return load_graph(FIX / name)
+
+
+def _h2_graph():
+    g = Graph()
+    for n in [
+        Node("src", "SOURCE", available=30),
+        Node("bat", "PASSTHROUGH", pass_limit=100, soft_demand=20, soft_fraction=1.0),
+        Node("l1", "CONSUMER", hard_demand=10),
+        Node("l2", "CONSUMER", hard_demand=25),
+    ]:
+        g.nodes[n.id] = n
+    for e in [Edge("a", "src", "bat"), Edge("b", "bat", "l1"), Edge("c", "src", "l2")]:
+        g.edges[e.id] = e
+    return g
 
 
 class CombinerG01(unittest.TestCase):
@@ -31,6 +46,7 @@ class CombinerG01(unittest.TestCase):
         rules = [v.rule for v in report.violations]
         self.assertFalse(report.ok)
         self.assertIn("hard_unmet", rules)
+        self.assertIn("partial_allocation", rules)
         self.assertIn("feasible_but_underfed", rules)
 
     def test_accepts_20_plus_30(self):
@@ -58,11 +74,123 @@ class CombinerG01(unittest.TestCase):
         )
 
 
+class H1ReachableDemand(unittest.TestCase):
+    def test_closed_gate_correct_assignment_is_ok(self):
+        # Reproductor H1: serving reachable hard + soft, ignoring blocked.
+        g = _fixture("gates_hard_soft.json")
+        report = Oracle().verify(
+            g, {"e_open": 10.0, "e_hard": 10.0, "e_bat_in": 20.0}
+        )
+        rules = [v.rule for v in report.violations]
+        self.assertTrue(report.ok, [(v.rule, v.where, v.detail) for v in report.violations])
+        self.assertNotIn("hard_unmet", rules)
+        self.assertNotIn("hard_priority", rules)
+
+
+class H2SoftAbsorption(unittest.TestCase):
+    def test_passthrough_battery_does_not_absorb_when_in_equals_out(self):
+        # Reproductor H2: bat in 10 out 10; l2 underfed 20/25. No hard_priority.
+        report = Oracle().verify(_h2_graph(), {"a": 10.0, "b": 10.0, "c": 20.0})
+        rules = [v.rule for v in report.violations]
+        self.assertFalse(report.ok)
+        self.assertNotIn("hard_priority", rules)
+        self.assertIn("hard_unmet", rules)
+        self.assertIn("partial_allocation", rules)
+        self.assertEqual(
+            [v.where for v in report.violations if v.rule == "partial_allocation"],
+            ["l2"],
+        )
+
+
+class H3TwoSidedConservation(unittest.TestCase):
+    def test_combiner_waste_is_conservation(self):
+        g = _fixture("combiner_20_50_hard50.json")
+        report = Oracle().verify(g, {"e_s20": 20.0, "e_s50": 50.0, "e_out": 50.0})
+        self.assertFalse(report.ok)
+        self.assertIn("conservation", [v.rule for v in report.violations])
+        self.assertEqual(
+            [v.where for v in report.violations if v.rule == "conservation"],
+            ["comb"],
+        )
+
+    def test_consumer_over_allocation(self):
+        g = _fixture("combiner_20_50_hard50.json")
+        report = Oracle().verify(g, {"e_s20": 20.0, "e_s50": 50.0, "e_out": 70.0})
+        self.assertFalse(report.ok)
+        self.assertIn("over_allocation", [v.rule for v in report.violations])
+        self.assertEqual(
+            [v.where for v in report.violations if v.rule == "over_allocation"],
+            ["load"],
+        )
+
+
+class H4BinaryConsumers(unittest.TestCase):
+    def test_heterogeneous_integer_measure_is_zero(self):
+        g = _fixture("heterogeneous_deficit.json")
+        o = Oracle()
+        self.assertAlmostEqual(o.max_hard_servable(g), 0.0, places=6)
+        self.assertAlmostEqual(o.max_hard_flow_bound(g), 25.0, places=6)
+        self.assertFalse(o.hard_feasible(g))
+
+    def test_partial_allocation_negative(self):
+        g = _fixture("heterogeneous_deficit.json")
+        report = Oracle().verify(
+            g, {"e_s10": 10.0, "e_s15": 15.0, "e_out": 25.0}
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("partial_allocation", [v.rule for v in report.violations])
+        self.assertIn("hard_unmet", [v.rule for v in report.violations])
+
+    def test_full_feed_is_not_partial(self):
+        g = _fixture("combiner_20_50_hard50.json")
+        report = Oracle().verify(
+            g, {"e_s20": 20.0, "e_s50": 30.0, "e_out": 50.0}
+        )
+        self.assertTrue(report.ok, [v.detail for v in report.violations])
+        self.assertNotIn("partial_allocation", [v.rule for v in report.violations])
+
+
+class H5ForcedSharedSource(unittest.TestCase):
+    def test_unique_feasible_assignment(self):
+        g = _fixture("shared_source_forced_split.json")
+        report = Oracle().verify(
+            g,
+            {
+                "e_s50_split": 50.0,
+                "e_split_comb": 30.0,
+                "e_split_l2": 20.0,
+                "e_s20_comb": 20.0,
+                "e_comb_l1": 50.0,
+            },
+        )
+        self.assertTrue(report.ok, [(v.rule, v.detail) for v in report.violations])
+        self.assertAlmostEqual(Oracle().max_hard_servable(g), 70.0, places=6)
+
+    def test_equal_split_at_comb_leaves_l1_unfed(self):
+        g = _fixture("shared_source_forced_split.json")
+        report = Oracle().verify(
+            g,
+            {
+                "e_s50_split": 45.0,
+                "e_split_comb": 25.0,
+                "e_split_l2": 20.0,
+                "e_s20_comb": 0.0,
+                "e_comb_l1": 25.0,
+            },
+        )
+        rules = [v.rule for v in report.violations]
+        self.assertFalse(report.ok)
+        self.assertIn("hard_unmet", rules)
+        self.assertIn("partial_allocation", rules)
+        self.assertIn("feasible_but_underfed", rules)
+        self.assertIn("l1", [v.where for v in report.violations if v.rule == "hard_unmet"])
+
+
 class FixtureExpectations(unittest.TestCase):
     def test_every_fixture_matches_hand_calc_expected(self):
         oracle = Oracle()
         files = sorted(FIX.glob("*.json"))
-        self.assertGreaterEqual(len(files), 6)
+        self.assertGreaterEqual(len(files), 7)
         for path in files:
             with self.subTest(fixture=path.name):
                 payload = json.loads(path.read_text(encoding="utf-8"))
@@ -71,9 +199,10 @@ class FixtureExpectations(unittest.TestCase):
                 self.assertTrue(expected["hand_calc"].strip())
                 g = load_graph(payload)
                 max_hard = oracle.max_hard_servable(g)
+                bound = oracle.max_hard_flow_bound(g)
                 feasible = oracle.hard_feasible(g)
                 self.assertAlmostEqual(
-                    g.total_hard_demand(),
+                    oracle.reachable_hard_demand(g),
                     float(expected["total_hard_demand"]),
                     places=6,
                 )
@@ -81,6 +210,10 @@ class FixtureExpectations(unittest.TestCase):
                     max_hard, float(expected["max_hard_servable"]), places=6
                 )
                 self.assertEqual(feasible, bool(expected["hard_feasible"]))
+                if "max_hard_flow_bound" in expected:
+                    self.assertAlmostEqual(
+                        bound, float(expected["max_hard_flow_bound"]), places=6
+                    )
 
 
 class ExtraNegatives(unittest.TestCase):
@@ -92,7 +225,6 @@ class ExtraNegatives(unittest.TestCase):
 
     def test_hard_priority_soft_while_unmet(self):
         g = _fixture("gates_hard_soft.json")
-        # Feed the battery (soft) and starve the reachable hard load.
         report = Oracle().verify(
             g,
             {
@@ -106,6 +238,14 @@ class ExtraNegatives(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("hard_priority", [v.rule for v in report.violations])
         self.assertIn("hard_unmet", [v.rule for v in report.violations])
+        self.assertIn(
+            "hard_load",
+            [v.where for v in report.violations if v.rule == "hard_unmet"],
+        )
+        self.assertNotIn(
+            "blocked",
+            [v.where for v in report.violations if v.rule == "hard_unmet"],
+        )
 
     def test_battery_full_accepts_hard_only(self):
         g = _fixture("battery_full.json")
@@ -117,6 +257,7 @@ class ExtraNegatives(unittest.TestCase):
         report = Oracle().verify(g, {"e_a": 40.0, "e_b": 0.0})
         self.assertFalse(report.ok)
         self.assertIn("hard_unmet", [v.rule for v in report.violations])
+        self.assertIn("over_allocation", [v.rule for v in report.violations])
         self.assertIn("feasible_but_underfed", [v.rule for v in report.violations])
 
 
