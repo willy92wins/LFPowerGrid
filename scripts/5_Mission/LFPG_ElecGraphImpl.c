@@ -3274,7 +3274,20 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 		#endif
 	}
 
-	override void NotifyVanillaChargerAttachment(EntityAI charger)
+	protected void CloseVanillaChargerAttachment(string nodeId, bool detached)
+	{
+		#ifdef SERVER
+		bool powered = false;
+		LFPG_ElecNode node = GetNode(nodeId);
+		if (node)
+			powered = node.m_Powered;
+		UpdateVanillaChargerPower(nodeId, powered);
+		if (detached)
+			m_ChargerBatteries.Remove(nodeId);
+		#endif
+	}
+
+	override void NotifyVanillaChargerAttachment(EntityAI charger, bool detached)
 	{
 		#ifdef SERVER
 		if (!charger)
@@ -3288,11 +3301,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 				continue;
 			if (chargerRaw != charger)
 				continue;
-			bool powered = false;
-			LFPG_ElecNode node = GetNode(nodeId);
-			if (node)
-				powered = node.m_Powered;
-			UpdateVanillaChargerPower(nodeId, powered);
+			CloseVanillaChargerAttachment(nodeId, detached);
 			return;
 		}
 		#endif

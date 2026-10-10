@@ -15,7 +15,7 @@ modded class BatteryCharger
 			return;
 		LFPG_ElecGraph graph = nm.GetGraph();
 		if (graph)
-			graph.NotifyVanillaChargerAttachment(this);
+			graph.NotifyVanillaChargerAttachment(this, false);
 		#endif
 	}
 
@@ -30,7 +30,7 @@ modded class BatteryCharger
 			return;
 		LFPG_ElecGraph graph = nm.GetGraph();
 		if (graph)
-			graph.NotifyVanillaChargerAttachment(this);
+			graph.NotifyVanillaChargerAttachment(this, true);
 		#endif
 	}
 }

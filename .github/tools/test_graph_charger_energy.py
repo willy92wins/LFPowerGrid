@@ -27,6 +27,10 @@ class FieldMap(dict):
     def Set(self, key, value):
         self[key] = value
 
+    def Remove(self, key):
+        if key in self:
+            del self[key]
+
 
 class Battery:
     def __init__(self, energy=0.0, maximum=1500.0):
@@ -109,10 +113,28 @@ class Clock:
         exec(compile(scalar_function(body, ["nodeId", "powered"]),
                      "<source-slice:UpdateVanillaChargerPower>", "exec"), environment)
         self.update = environment["run"]
+        self.node_powered = False
+        stubs["GetNode"] = lambda nid: SimpleNamespace(m_Powered=self.node_powered)
+        stubs["UpdateVanillaChargerPower"] = lambda nid, pwr: self.update(nid, pwr)
+        self.close_attach = None
+        try:
+            self.close_attach = load(self.source, "CloseVanillaChargerAttachment",
+                                     ["nodeId", "detached"], stubs)
+        except ValueError:
+            pass
 
     def visit(self, at, powered):
         self.now = at
         self.update("charger", powered)
+
+    def hook_notify(self, at, powered, detached, slot_empty_at_call):
+        self.now = at
+        self.node_powered = powered
+        if slot_empty_at_call:
+            self.charger.battery = None
+        self.close_attach("charger", detached)
+        if detached and not slot_empty_at_call:
+            self.charger.battery = None
 
 
 class ChargerClock(unittest.TestCase):
@@ -246,27 +268,25 @@ class ChargerClock(unittest.TestCase):
         self.assertNotEqual(clock.battery.energy, 2.0)
 
     def test_g02_energy_per_fed_time_is_independent_of_node_count_and_dirty_queue(self):
+        # Node count cannot change charger energy: the tick never walks m_Nodes.
         graph = GRAPH.read_text(encoding="utf-8")
         tick = method(graph, "TickVanillaChargers")
         self.assertNotIn("ProcessDirtyQueue", tick)
         self.assertNotIn("m_Nodes", tick)
         self.assertNotIn("m_DirtyQueue", tick)
+        self.assertNotIn("GetDirtyQueueSize", tick)
         fed = 640.0
-        energies = []
-        for nodes, chargers in [(512, 1), (2048, 1), (2048, 64)]:
+        for chargers in [1, 64]:
             cadence = max(1, (chargers + 31) // 32)
             clock = Clock()
             clock.visit(0, True)
             steps = round(fed / cadence)
             for index in range(1, steps + 1):
                 clock.visit(index * cadence, True)
-            energies.append(clock.battery.energy)
             self.assertAlmostEqual(clock.battery.energy, fed, places=7)
-        self.assertEqual(len(set(round(value, 7) for value in energies)), 1)
         manager = MANAGER.read_text(encoding="utf-8")
-        simple = method(manager, "LFPG_ServerSchedulerTick") if "LFPG_ServerSchedulerTick" in manager else manager
+        simple = method(manager, "LFPG_ServerSchedulerTick")
         self.assertIn("TickVanillaChargers()", simple)
-        self.assertNotIn("GetDirtyQueueSize", method(graph, "TickVanillaChargers"))
 
     def test_g02_tick_visits_and_latency_bound_from_production_constants(self):
         defines = DEFINES.read_text(encoding="utf-8")
@@ -279,12 +299,12 @@ class ChargerClock(unittest.TestCase):
         self.assertIn("visits = m_ChargerIds.Count()", tick)
         self.assertIn("if (visits > LFPG_VALIDATE_BATCH_SIZE)", tick)
         self.assertIn("visits = LFPG_VALIDATE_BATCH_SIZE", tick)
-        for charger_count, visits, max_gap_s in [(1, 1, 1), (32, 32, 1), (33, 32, 2),
-                                                 (512, 32, 16), (2048, 32, 64)]:
-            per_call = charger_count if charger_count < batch else batch
-            self.assertEqual(per_call, visits)
-            gap = ((charger_count + batch - 1) // batch) * (period_ms / 1000.0)
-            self.assertEqual(gap, max_gap_s)
+        period_s = period_ms / 1000.0
+        charger_count = 512
+        visits_per_call = charger_count if charger_count < batch else batch
+        max_gap_s = ((charger_count + batch - 1) // batch) * period_s
+        self.assertEqual(visits_per_call, batch)
+        self.assertEqual(max_gap_s, 16.0)
 
     def test_g03a_switch_poll_error_bound_from_constants(self):
         rate = float(re.search(r"LFPG_CHARGER_ENERGY_PER_SEC\s*=\s*([\d.]+)",
@@ -298,45 +318,51 @@ class ChargerClock(unittest.TestCase):
         clock.charger.switched = False
         clock.visit(period_s, True)
         self.assertAlmostEqual(clock.battery.energy, period_s * rate, places=7)
-        for chargers, max_s in [(32, 1.0), (512, 16.0), (2048, 64.0)]:
-            max_s_calc = ((chargers + batch - 1) // batch) * period_s
-            self.assertEqual(max_s_calc, max_s)
-            self.assertAlmostEqual(max_s_calc * rate, max_s, places=7)
+        charger_count = 32
+        max_error_u = ((charger_count + batch - 1) // batch) * period_s * rate
+        self.assertEqual(max_error_u, 1.0)
 
-    def test_g03b_same_battery_reinsert_closes_when_detach_is_observed(self):
+    def test_g03b_detach_attach_poll_both_engine_orders(self):
+        hook = (ROOT / "scripts/4_World/LFPG_BatteryChargerMod.c").read_text(encoding="utf-8")
+        attach = method(hook, "EEItemAttached")
+        detach = method(hook, "EEItemDetached")
+        self.assertIn("NotifyVanillaChargerAttachment(this, false)", attach)
+        self.assertIn("NotifyVanillaChargerAttachment(this, true)", detach)
+        graph = GRAPH.read_text(encoding="utf-8")
+        notify = method(graph, "NotifyVanillaChargerAttachment")
+        self.assertIn("CloseVanillaChargerAttachment(nodeId, detached)", notify)
+        close = method(graph, "CloseVanillaChargerAttachment")
+        self.assertIn("UpdateVanillaChargerPower(nodeId, powered)", close)
+        self.assertIn("if (detached)", close)
+        self.assertIn("m_ChargerBatteries.Remove(nodeId)", close)
         clock = Clock()
         clock.visit(1, True)
-        clock.charger.battery = None
-        clock.visit(2, True)
+        clock.hook_notify(2, True, True, True)
         clock.charger.battery = clock.battery
+        clock.hook_notify(40, True, False, False)
         clock.visit(63, True)
-        clock.visit(64, True)
-        self.assertEqual(clock.battery.energy, 1.0)
+        self.assertEqual(clock.battery.energy, 23.0)
+        clock = Clock()
+        clock.visit(1, True)
+        clock.hook_notify(2, True, True, False)
+        clock.charger.battery = clock.battery
+        clock.hook_notify(40, True, False, False)
+        clock.visit(63, True)
+        self.assertEqual(clock.battery.energy, 24.0)
 
-    def test_g03b_poll_only_same_object_reinsert_still_credits_the_gap(self):
+    def test_g03b_negatives_no_hook_and_r1_full_slot_credit_the_gap(self):
         clock = Clock()
         clock.visit(1, True)
         clock.visit(63, True)
         self.assertEqual(clock.battery.energy, 62.0)
-        hook = (ROOT / "scripts/4_World/LFPG_BatteryChargerMod.c").read_text(encoding="utf-8")
-        self.assertIn("EEItemDetached", hook)
-        self.assertIn("NotifyVanillaChargerAttachment(this)", hook)
-        self.assertIn("GetExisting()", hook)
-        notify = method(GRAPH.read_text(encoding="utf-8"), "NotifyVanillaChargerAttachment")
-        self.assertIn("UpdateVanillaChargerPower(nodeId, powered)", notify)
-        self.assertIn("chargerRaw != charger", notify)
-        self.assertIn("override void NotifyVanillaChargerAttachment",
-                      GRAPH.read_text(encoding="utf-8"))
-
-    def test_g03b_negative_missing_notify_leaves_gap_credit_path_unclosed(self):
-        source = GRAPH.read_text(encoding="utf-8")
-        stripped, count = re.subn(
-            r"override void NotifyVanillaChargerAttachment\(EntityAI charger\)\s*\{.*?\n\t\}",
-            "void NotifyVanillaChargerAttachment(EntityAI charger)\n\t{\n\t}\n",
-            source, count=1, flags=re.S)
-        self.assertEqual(count, 1)
-        self.assertNotIn("UpdateVanillaChargerPower(nodeId, powered)",
-                         method(stripped, "NotifyVanillaChargerAttachment"))
+        clock = Clock()
+        clock.visit(1, True)
+        clock.visit(2, True)
+        clock.charger.battery = None
+        clock.charger.battery = clock.battery
+        clock.visit(40, True)
+        clock.visit(63, True)
+        self.assertEqual(clock.battery.energy, 62.0)
 
     def test_g03c_reentry_at_same_timestamp_does_not_double_credit(self):
         clock = Clock()

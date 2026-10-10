@@ -14,10 +14,13 @@ Dispositivo comun: `BatteryCharger` vanilla en el grafo, alimentado, switch ON, 
 
 ## G03-b — misma bateria fuera y de vuelta
 
-1. Corriente ON, 5 s. Esperado `+5` (±1).
-2. Extraer la misma bateria, dejarla 20 s en el suelo, volver a insertarla en el mismo cargador.
-3. Esperar 5 s con corriente. Esperado: la energia de la bateria **no** sube ~25 u; sube ~5 u desde la reinsercion (±1). El hueco de 20 s no se acredita.
-4. Control negativo: repetir sin extraer (25 s continuos) → `+25` (±1).
+1. Corriente ON, 5 s. Esperado `+5` (±1). Anotar `E1`.
+2. Extraer la misma bateria. **Leer la energia en la mano / suelo en el instante de sacarla (`E_out`)**. Esa lectura distingue el orden del motor:
+   - `E_out ≈ E1 + tiempo desde el ultimo tick` (±1): el slot seguia lleno en `EEItemDetached` (el intervalo abierto se acredito; offline 24 u en la secuencia 1→2→40→63).
+   - `E_out ≈ E1` (±1): el slot ya estaba vacio (se perdio el intervalo abierto; offline 23 u).
+3. Dejarla 20 s en el suelo, volver a insertarla en el mismo cargador.
+4. Esperar 5 s con corriente. Esperado: desde `E_out` sube ~5 u (±1), no ~25. El hueco de 20 s no se acredita.
+5. Control negativo: repetir sin extraer (25 s continuos) → `+25` (±1).
 
 ## G03-c — reentrada
 

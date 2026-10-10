@@ -281,7 +281,7 @@ class LFPG_ElecGraph
 	{
 	}
 
-	void NotifyVanillaChargerAttachment(EntityAI charger)
+	void NotifyVanillaChargerAttachment(EntityAI charger, bool detached)
 	{
 	}
 
