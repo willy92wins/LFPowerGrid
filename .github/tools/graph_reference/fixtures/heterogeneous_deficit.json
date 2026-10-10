@@ -1,0 +1,21 @@
+{
+  "id": "heterogeneous_deficit",
+  "description": "Fuentes heterogeneas 10+15 con demanda hard 50: deficit real 25.",
+  "nodes": [
+    {"id": "s10", "type": "SOURCE", "available": 10},
+    {"id": "s15", "type": "SOURCE", "available": 15},
+    {"id": "comb", "type": "PASSTHROUGH", "pass_limit": 500},
+    {"id": "load", "type": "CONSUMER", "hard_demand": 50}
+  ],
+  "edges": [
+    {"id": "e_s10", "src": "s10", "dst": "comb", "enabled": true},
+    {"id": "e_s15", "src": "s15", "dst": "comb", "enabled": true},
+    {"id": "e_out", "src": "comb", "dst": "load", "enabled": true}
+  ],
+  "expected": {
+    "hard_feasible": false,
+    "max_hard_servable": 25,
+    "total_hard_demand": 50,
+    "hand_calc": "fuentes 10+15=25; demanda hard=50; min(25,50)=25. Deficit=50-25=25. No factible."
+  }
+}

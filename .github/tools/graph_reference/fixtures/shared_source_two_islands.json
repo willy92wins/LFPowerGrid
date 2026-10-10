@@ -1,0 +1,19 @@
+{
+  "id": "shared_source_two_islands",
+  "description": "Una fuente 40 compartida entre dos islas (hard 20 y hard 20).",
+  "nodes": [
+    {"id": "src", "type": "SOURCE", "available": 40},
+    {"id": "a", "type": "CONSUMER", "hard_demand": 20},
+    {"id": "b", "type": "CONSUMER", "hard_demand": 20}
+  ],
+  "edges": [
+    {"id": "e_a", "src": "src", "dst": "a", "enabled": true},
+    {"id": "e_b", "src": "src", "dst": "b", "enabled": true}
+  ],
+  "expected": {
+    "hard_feasible": true,
+    "max_hard_servable": 40,
+    "total_hard_demand": 40,
+    "hand_calc": "fuente 40; islas 20+20=40; min(40,40)=40. Factible 20+20. Si una isla se lleva 40, la otra queda a 0."
+  }
+}

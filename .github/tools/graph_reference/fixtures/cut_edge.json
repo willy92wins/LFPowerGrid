@@ -1,0 +1,17 @@
+{
+  "id": "cut_edge",
+  "description": "Edge cortado (enabled=false) entre fuente 50 y consumidor 40: hard servible 0.",
+  "nodes": [
+    {"id": "src", "type": "SOURCE", "available": 50},
+    {"id": "load", "type": "CONSUMER", "hard_demand": 40}
+  ],
+  "edges": [
+    {"id": "e_cut", "src": "src", "dst": "load", "enabled": false}
+  ],
+  "expected": {
+    "hard_feasible": false,
+    "max_hard_servable": 0,
+    "total_hard_demand": 40,
+    "hand_calc": "unico edge disabled; flujo permitido=0; min(50,40) no aplica porque no hay camino. max=0. Deficit=40."
+  }
+}
