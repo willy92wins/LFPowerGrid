@@ -3274,6 +3274,30 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
 		#endif
 	}
 
+	override void NotifyVanillaChargerAttachment(EntityAI charger)
+	{
+		#ifdef SERVER
+		if (!charger)
+			return;
+		int count = m_ChargerIds.Count();
+		for (int index = 0; index < count; index = index + 1)
+		{
+			string nodeId = m_ChargerIds[index];
+			Managed chargerRaw;
+			if (!m_ChargerEntities.Find(nodeId, chargerRaw))
+				continue;
+			if (chargerRaw != charger)
+				continue;
+			bool powered = false;
+			LFPG_ElecNode node = GetNode(nodeId);
+			if (node)
+				powered = node.m_Powered;
+			UpdateVanillaChargerPower(nodeId, powered);
+			return;
+		}
+		#endif
+	}
+
 	protected void UntrackVanillaCharger(string nodeId)
 	{
 		#ifdef SERVER

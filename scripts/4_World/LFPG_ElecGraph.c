@@ -281,6 +281,10 @@ class LFPG_ElecGraph
 	{
 	}
 
+	void NotifyVanillaChargerAttachment(EntityAI charger)
+	{
+	}
+
     void PopulateAllNodeElecStates()
     {
         #ifdef SERVER
