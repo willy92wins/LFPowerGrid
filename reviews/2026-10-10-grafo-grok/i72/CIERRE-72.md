@@ -14,7 +14,7 @@ Indice: #72 se cierra cuando cierren #76 (G-01 solver), #77 (G-02/G-03) y #78 (R
 | Settlement contra referente | Offline no hay reloj de epochs. Comparar asignacion final con `Oracle.verify`: i76. Medir ticks/requeues: fila de tiempo (i78). | i76 / i78 |
 | Fuentes heterogeneas y deficit real | Fixture `heterogeneous_deficit.json` (10+15 vs hard 50; cota continua 25, medida entera 0). Cuenta en `expected.hand_calc`. | i72 |
 | Fuentes compartidas | Fixture `shared_source_forced_split.json` (reparto forzado 20+30 / 20) mas `shared_source_two_islands.json`. Negativo: `test_equal_split_at_comb_leaves_l1_unfed`. | i72 |
-| Gates hard/soft | Fixture `gates_hard_soft.json`. Negativo prioridad: `test_hard_priority_soft_while_unmet`. | i72 |
+| Gates hard/soft | Fixture `gates_hard_soft.json`. `hard_priority` solo si la batería comparte SOURCE con el déficit (`test_hard_priority_soft_while_unmet`, `P1HardPriorityIslands`). | i72 |
 | Adjuntos y energia del cargador | Offline ya cubierto en parte por `.github/tools/test_graph_charger_energy.py` (reloj del cargador). El referente i72 no modela el clock EM; i77/i78 si tocan adjuntos. Protocolo in-game: bateria en slot LargeBattery, energia vs `LFPG_CHARGER_ENERGY_PER_SEC`. | i77 / i78 / dueno |
 | Apagones/cortes | Fixture `cut_edge.json` (`enabled=false`). Negativo: `test_cut_edge_flow_is_violation`. Apagon de fuente (available=0) no tiene fixture extra; se cubre poniendo `available: 0` en el mismo modelo. Cortes in-game: desconectar cable y ver islas. | i72 (edge cortado) / i76 (apagones en solver) |
 | Bateria llena | Fixture `battery_full.json` (`soft_demand: 0`). Test: `test_battery_full_accepts_hard_only`. | i72 |

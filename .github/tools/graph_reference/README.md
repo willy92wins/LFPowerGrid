@@ -23,6 +23,14 @@ iguales no puede usarse como referente de sí mismo.
 - **Soft.** Absorción de batería:
   `inflow + virtual_generation − outflow − self_consumption`, recortada a
   `[0, soft_demand]`. Batería llena = `soft_demand` 0.
+- **hard_priority.** Solo si una batería que absorbe (`_soft_absorbed` > EPS)
+  comparte al menos una SOURCE con un nodo con déficit hard (consumidor o
+  PASSTHROUGH sin su autoconsumo). La alcanzabilidad es la de `reachable_ids`
+  desde cada SOURCE. `where` es el id de la batería; `detail` nombra el nodo
+  con déficit y la SOURCE compartida. Islas disjuntas no disparan la regla.
+- **Déficit real.** En un escenario infactible `verify` devuelve `ok=False`
+  con `hard_unmet` aunque la asignación sea la mejor posible. Quien compare
+  contra el oráculo compara el **conjunto de reglas**, no `ok`.
 - **Conservación de dos lados** en PASSTHROUGH: in+virt = out+self+absorbido.
 
 ## Entrada

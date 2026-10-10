@@ -110,18 +110,20 @@ class Residual:
         return total
 
 
-def reachable_ids(graph: Graph) -> set[str]:
-    """Nodes reachable from a SOURCE along enabled edges, not through a closed gate.
+def reachable_from(graph: Graph, start_ids: list[str]) -> set[str]:
+    """Nodes reachable from start_ids along enabled edges, not through a closed gate.
 
     A closed PASSTHROUGH is itself reachable (self_consumption / probe). Its
     downstream is not. Disabled edges are skipped.
     """
     seen: set[str] = set()
     q = deque()
-    for n in graph.nodes.values():
-        if n.type == "SOURCE":
-            seen.add(n.id)
-            q.append(n.id)
+    for sid in start_ids:
+        if sid not in graph.nodes:
+            continue
+        if sid not in seen:
+            seen.add(sid)
+            q.append(sid)
     while q:
         uid = q.popleft()
         node = graph.nodes[uid]
@@ -136,6 +138,21 @@ def reachable_ids(graph: Graph) -> set[str]:
                 seen.add(e.dst)
                 q.append(e.dst)
     return seen
+
+
+def reachable_ids(graph: Graph) -> set[str]:
+    starts = [n.id for n in graph.nodes.values() if n.type == "SOURCE"]
+    return reachable_from(graph, starts)
+
+
+def sources_reaching(graph: Graph, nid: str) -> list[str]:
+    out = []
+    for n in graph.nodes.values():
+        if n.type != "SOURCE":
+            continue
+        if nid in reachable_from(graph, [n.id]):
+            out.append(n.id)
+    return out
 
 
 def _node_through_cap(n: Node) -> float:
@@ -307,6 +324,7 @@ class Oracle:
                     report.add("conservation", nid, "consumer has outflow %s" % out)
 
         unmet_hard = 0.0
+        deficit_nodes: list[str] = []
         for nid, n in graph.nodes.items():
             if n.type not in ("CONSUMER", "CAMERA"):
                 if n.type == "PASSTHROUGH" and n.id in reach and n.self_consumption > EPS:
@@ -318,6 +336,7 @@ class Oracle:
                             "gate/self received %s of %s" % (got, n.self_consumption),
                         )
                         unmet_hard = unmet_hard + (n.self_consumption - got)
+                        deficit_nodes.append(nid)
                 continue
             got = inflow[nid]
             if n.id not in reach:
@@ -336,6 +355,7 @@ class Oracle:
                     nid,
                     "received %s of hard %s (deficit %s)" % (got, n.hard_demand, deficit),
                 )
+                deficit_nodes.append(nid)
                 if got > EPS:
                     report.add(
                         "partial_allocation",
@@ -343,16 +363,26 @@ class Oracle:
                         "received %s of binary demand %s" % (got, n.hard_demand),
                     )
 
-        soft_flow = 0.0
         for nid, n in graph.nodes.items():
-            if n.type == "PASSTHROUGH" and n.soft_demand > EPS:
-                soft_flow = soft_flow + absorbed.get(nid, 0.0)
-        if unmet_hard > EPS and soft_flow > EPS:
+            if n.type != "PASSTHROUGH":
+                continue
+            if absorbed.get(nid, 0.0) <= EPS:
+                continue
+            bat_sources = sources_reaching(graph, nid)
+            shared_hit = None
+            for deficit_id in deficit_nodes:
+                def_sources = sources_reaching(graph, deficit_id)
+                shared = [s for s in bat_sources if s in def_sources]
+                if shared:
+                    shared_hit = (deficit_id, shared[0])
+                    break
+            if shared_hit is None:
+                continue
             report.add(
                 "hard_priority",
-                "*",
-                "soft absorbed %s while reachable hard deficit %s remains"
-                % (soft_flow, unmet_hard),
+                nid,
+                "battery absorbed %s while %s has hard deficit sharing SOURCE %s"
+                % (absorbed[nid], shared_hit[0], shared_hit[1]),
             )
 
         if unmet_hard > EPS and self.hard_feasible(graph):
