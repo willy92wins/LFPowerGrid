@@ -45,3 +45,6 @@ jobs:
 
       - name: FinishWiring quota admission (offline source slice)
         run: python .github/tools/test_finish_wiring_quota.py
+
+      - name: Graph perf probe call sites (offline)
+        run: python .github/tools/test_graph_perf_probe.py
