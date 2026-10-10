@@ -978,6 +978,9 @@ class LFPG_RPCServerHandlerImpl
         if (st)
             allowOthers = st.AllowCutOthersWires;
 
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.Begin("R01");
+
         // Try LFPG wire-owning device first (Generator, Splitter, etc.)
         if (LFPG_DeviceAPI.HasWireStore(obj))
         {
@@ -986,6 +989,8 @@ class LFPG_RPCServerHandlerImpl
             ref array<ref LFPG_WireData> preWires = LFPG_DeviceAPI.GetDeviceWires(obj);
             ref array<int> cutDeltaOps = new array<int>;
             ref array<ref LFPG_WireData> cutDeltaWires = new array<ref LFPG_WireData>;
+            if (LFPG_PERF_PROBE)
+                LFPG_PerfProbe.AddAlloc(2);
             if (preWires)
             {
                 int pw;
@@ -1105,6 +1110,9 @@ class LFPG_RPCServerHandlerImpl
             }
         }
 
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.Phase("index");
+
         if (anyPortMissedIndex || (portCount > 0 && inPortCount == 0))
         {
             int rescued = RescueStaleIncomingWires(obj, deviceId, "", cutPid, allowOthers);
@@ -1119,6 +1127,9 @@ class LFPG_RPCServerHandlerImpl
             }
         }
 
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.Phase("rescue");
+
         if (changed)
         {
             // PostBulkRebuildAndPropagate: Rebuild â†’ PopulateStates â†’ MarkSourcesDirty
@@ -1129,6 +1140,12 @@ class LFPG_RPCServerHandlerImpl
         else
         {
             PlayerBase.LFPG_SendClientMsg(player, "No wires to cut.");
+        }
+
+        if (LFPG_PERF_PROBE)
+        {
+            LFPG_PerfProbe.Phase("rebuild");
+            LFPG_PerfProbe.End();
         }
     }
 
@@ -2063,8 +2080,14 @@ class LFPG_RPCServerHandlerImpl
         {
             // Remove all wires targeting this device+port from ANY source.
             // Always scan: an index hit on one owner must not leave the others.
+            if (LFPG_PERF_PROBE)
+                LFPG_PerfProbe.Begin("R04");
             int removed = LFPG_NetworkManager.Get().RemoveWiresTargeting(deviceId, portName, cutPid, allowOthers);
+            if (LFPG_PERF_PROBE)
+                LFPG_PerfProbe.Phase("index");
             int rescued = RescueStaleIncomingWires(obj, deviceId, portName, cutPid, allowOthers);
+            if (LFPG_PERF_PROBE)
+                LFPG_PerfProbe.Phase("rescue");
             int cutTotal = removed + rescued;
             if (cutTotal > 0)
             {
@@ -2093,6 +2116,12 @@ class LFPG_RPCServerHandlerImpl
         {
             PlayerBase.LFPG_SendClientMsg(player, "No wire on that port.");
         }
+
+        if (LFPG_PERF_PROBE && portDir == LFPG_PortDir.IN)
+        {
+            LFPG_PerfProbe.Phase("rebuild");
+            LFPG_PerfProbe.End();
+        }
     }
 
     // Same key rule as RemoveWiresTargeting / ReverseIdxAdd: empty incoming
@@ -2119,6 +2148,8 @@ class LFPG_RPCServerHandlerImpl
         LFPG_DeviceRegistry.Get().GetAll(allDevs);
         array<int> fallbackDeltaOps = new array<int>;
         array<ref LFPG_WireData> fallbackDeltaWires = new array<ref LFPG_WireData>;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.AddAlloc(3);
         int di;
         for (di = 0; di < allDevs.Count(); di = di + 1)
         {
