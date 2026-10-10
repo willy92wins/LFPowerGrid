@@ -230,8 +230,10 @@ saturado (residual 0); el soft sale de S50.
 **Hoy:** split hard 25+25, S20 overload 0, S50 da 25 hard; soft de S50
 Pass 3 con surplus 25. Bomba hambrienta.
 
-**Exigido:** hard 20+30 primero; soft solo con surplus; soft nunca dispara
-overload. Ratio se propaga por cadenas PASSTHROUGH como hoy (`:2539-2595`).
+**Exigido (M2):** water-fill de la misma `edgeDemand` que hoy parte el
+divisor (LastStable hard+soft). D=70 → asks 20+50. Hard
+`14.3+35.7=50`. Soft `5.7+14.3=20`. Bomba ON, batería 20. Pass 2/3
+iguales (`:4098`, `:4035`).
 
 ### 2.e Cold start (primer epoch, `!m_DemandKnown`, `m_LastStableOutput=0`)
 
@@ -271,13 +273,9 @@ C pide 50.
 las salidas a 0, incluida la rama del Combiner. C solo puede recibir S20,
 que pide 25 y overload 0. Red a 0.
 
-**Exigido (conservador, no se relaja el all-off de SOURCE):** S50 sigue
-all-off mientras *su* hard total (60 + pedido hacia C) > 50. El pedido
-hacia C debe ser `min(residual, …)` con residual = `available - otras
-asignaciones hard`. Residual de S50 hacia C = `50-60` clamp 0. C pide 0 a
-S50 y todo lo servible a S20: `min(50,20)=20`. S20 no overload. C entrega
-20. Isla de S50 (consumidor 60) sigue a 0 por all-off — es la politica
-vigente, no G-01.
+**Exigido:** oferta S50→C = max(0, 50-60) = 0. S20 pide 20, no overload.
+C recibe 20 con demanda 50 → overload all-off; bomba apagada. Si S50
+pide 60 en la otra rama, all-off de S50 apaga también esa rama.
 
 Si el consumidor 60 se apaga: residual S50→C vuelve a 50 y se reentra en
 (a) exigido 20+30 en ≤ 2 epochs.
@@ -312,51 +310,60 @@ Fan-in alcanzable **no** esta acotado a 2. No se demuestra el contrario:
 
 Por eso el split es **N-way** (§3.3), K ≤ 12, orden determinista.
 
-### 3.2 Oferta residual (snapshot), no `allocAvail`
+### 3.2 Oferta residual (ultima escrita)
 
-Tres campos **nuevos de runtime** en `LFPG_ElecEdge` (`LFPG_Data.c:295-321`,
-hoy `m_Demand` / `m_AllocatedPower` / flags; sin `OnStoreSave` en esa
-clase; el grafo se reconstruye de wires; ningun `RegisterNetSyncVariable`
-en `LFPG_Data.c`):
+Un campo runtime en `LFPG_ElecEdge`: `m_OfferedResidual` (`LFPG_Data.c`
+constructor `-1`). El grafo no se persiste; no hay SyncVar ni RPC de
+edges. `-1` = nunca escrita. Las escrituras se recortan a `>= 0`. Un
+`0` publicado es 0 (B2; mismo criterio F1 de demanda).
 
-| campo | papel |
-|---|---|
-| `m_OfferedResidual` | oferta escrita al **cerrar** `AllocateOutput` de este origen |
-| `m_OfferedResidualPrev` | copia de la oferta anterior al primer write de este epoch |
-| `m_OfferEpoch` | `m_CurrentEpoch` del ultimo write |
+**Lectura.** Cada llamada lee la **ultima oferta escrita** del hermano
+(`OfferCapFromWritten`). Solo el centinela `-1` usa fallback
+`m_MaxOutput`. El cap **propio** es fresco (`ProviderOfferBase` de esta
+llamada) y el ask propio nunca lo supera.
 
-Mismo contrato que `m_DemandKnown` (`LFPG_Data.c:237-241`): runtime, no
-persistido, no RPC, no SyncVar.
-
-**Lectura (snapshot del epoch previo).** En `AllocateOutput` de P, para
-un sibling edge E' hacia el mismo merger:
+**Escritura** al cerrar `AllocateOutput` (`PublishEdgeOffers`):
 
 ```
-if (E'.m_OfferEpoch == m_CurrentEpoch)
-	cap = E'.m_OfferedResidualPrev;
-else
-	cap = E'.m_OfferedResidual;
+offer(P->E) = max(0, base(P) - hard de las OTRAS salidas enabled de P)
+base(SOURCE) = availableOutput
+base(PASSTHROUGH) = 0 si gate cerrado; si no,
+  min(m_MaxOutput, suma ofertas incoming + virt - consumo)
 ```
 
-Si `cap < epsilon`, fallback:
+Formula unica; no hay caso “un outgoing”. El propio E no entra en
+`otherHard` (`SkipOtherIndex`).
 
-- origen SOURCE: `src.m_MaxOutput` (y `m_OutputPower` ya publicado si
-  SOURCE, `:2488-2498`);
-- origen PASSTHROUGH: formula de margen abajo con fallback de sus
-  incoming.
+**B1.3 dirty.** Si la oferta de un edge cambia mas que epsilon o pasa
+de nunca escrita a escrita (`ShouldNotifyOfferDirty`):
+- si el target es merger (`CountPoweredIncoming > 1`), dirty de los
+  otros proveedores;
+- si el target es PASSTHROUGH que usa esa oferta como `base` y tiene
+  una salida enabled a un nodo con 2+ incoming, dirty de ese PT.
 
-Asi **todas** las llamadas del epoch leen el mismo vector de caps
-(el publicado en el epoch anterior, o el fallback frio). Nadie lee el
-write in-flight del otro proveedor.
+Acotado por `LFPG_MAX_REQUEUE_PER_EPOCH`. Sin merger, no reencola (I4).
 
-**Escritura** al final de `AllocateOutput` de P, por cada salida E:
+**Limitacion (cadenas largas).** S → SpA → SpB → C, con S20 directo a
+C: SpA sale hacia SpB, que tiene **un** incoming. B1.3 no sucia SpB.
+SpB puede quedar con `base` viejo. Consecuencia: C puede quedarse
+corto hasta un dirty topológico. Fuera de cierre G-01.
 
-```
-if (E.m_OfferEpoch != m_CurrentEpoch)
-	E.m_OfferedResidualPrev = E.m_OfferedResidual;
-E.m_OfferedResidual = offerE;
-E.m_OfferEpoch = m_CurrentEpoch;
-```
+**S1.3 punto fijo.** Cuando la cola está vacía, nadie tiene dirty
+pendiente: todos leyeron las mismas últimas ofertas. Water-fill puro
+⇒ `sum ask = min(D, Σcap)`.
+
+**S1.4 transitorios.** El presupuesto parte la cola (`:2232-2235`);
+requeues same-epoch (`:2097-2101`, `:2797-2800`, `:2842-2846`); cap
+propio fresco vs oferta vieja de un hermano. Exceso en el merger ≤
+una oferta stale (el hermano aún no recortó). Defecto ≤ lo que ese
+hermano aún no ofrece. Se cierra cuando B1.3 (o `inputChanged`)
+reprocesa al hermano; si el tope de requeue aplaza, el epoch
+siguiente (`m_DeferredRequeue`).
+
+**M1.** El cap fresco de P se reparte entre salidas a mergers en
+orden (id target, puerto). Cada ask se recorta a `remaining`.
+Limitación: no siempre es el max-flow global (`feasible_but_underfed`);
+P nunca pide más que `base(P)`.
 
 Coste: O(salidas de P), el bucle que ya existe. Sin barrido global.
 
@@ -529,9 +536,11 @@ porque I2 no aplica en overload.
 `m_ComponentId` ni `m_OutputPower` / alloc de nodos cuyo
 `m_ComponentId` es distinto. 2.c isla Z.
 
-**I4 Regresion cero un proveedor.** Si `CountPoweredIncoming==1` (o 0),
-el texto ejecutado es el de hoy: sin cap-and-fill, mismo cold-start v2.4,
-mismo all-off. La mayoria de redes (Splitter 1 IN, `LFPG_Splitter.c:53-54`).
+**I4 Red sin merger.** `ApplyMergerWaterFill` no reescribe demandas si
+ningun target tiene `CountPoweredIncoming>1`. B1.3 no reencola.
+Pass 2/3, overload (`:4058-4110`) y el retorno son el texto de la
+base. Las asignaciones coinciden con HEAD. El texto de Pass 1 ya no es
+byte-idéntico (desaparece `/ ptPoweredIn`; se publican ofertas).
 
 **I5 No oscilacion.** En topologia fija y demandas fijas, a partir del
 epoch T0+3 (2.c; 2.a en T0+2) el vector de alloc no cambia mas de
@@ -695,6 +704,9 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
   puede filtrar potencia en el primer pass; fuera de G-01.
 - PASSTHROUGH all-off con deficit (2.b) tira 70 u/s ya asignadas. Fuera
   de G-01; ver propuesta al dueno.
+- Si Σcap queda entre hard y D, el hard de C depende del surplus de
+  Pass 3, que compite con otras salidas soft. Limitación del ratio
+  vigente (`:4035`, `:4098`), no G-01.
 
 ---
 
@@ -717,11 +729,13 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
 
 ## QUE PUEDE ESTAR MAL EN LA PREMISA DE ESTE ENCARGO
 
+- M1: con S40 en C1 y S20 en C2, el remaining 25/25 deja C2 en 45 y el
+  oraculo marca `feasible_but_underfed` aunque 40+10 / 20+30 servirian
+  ambas bombas. Seguridad (P ≤ 50) si; optimalidad global no. Fuera
+  del criterio de cierre.
 - El issue trata `20+30` como *la* asignacion factible; tambien lo es
-  `14.29+35.71` (proporcional a residual). Si el referente i72 maximiza
-  otra funcion (p. ej. proporcional estricto), el criterio de cierre
-  “comparacion contra referente” puede **chocar** con `20+30`. Esta spec
-  fija cap-and-fill igualitario y lo declara.
+  `14.29+35.71` (proporcional a residual). Esta spec fija water-fill
+  igualitario.
 - “Si el cambio es local, `componentId` y potencia de islas ajenas no se
   tocan”: AllocateOutput ya es local al nodo; un SOURCE compartido (2.c)
   **no** es isla ajena. La premisa mezcla localidad de componente con
@@ -774,3 +788,20 @@ consumidor apagado.
 - **S7** — §6.2 contra README/oracle.py de i72 mas gates,
   consumidores binarios, conservacion dos lados, `over_allocation` y
   `partial_allocation`.
+
+---
+
+## Ronda 3: cambios
+
+- **B1** — §3.2 lee la ultima oferta escrita; B1.3 dirty; S1.3 punto
+  fijo / S1.4 transitorios. Sin `Prev` ni `m_OfferEpoch`.
+- **B2** — centinela `-1`; un 0 escrito es 0.
+- **B3** — formula unica `base - otherHard`; el propio edge no resta.
+- **M1** — remaining entre mergers; limitacion max-flow en
+  `QUE PUEDE ESTAR MAL` y fuera del cierre.
+- **M2** — water-fill de LastStable completo; 2.d cifras 20+50 / 50+20.
+- **m1** — I4: valores de red sin merger, no “texto identico de Pass 1”.
+- **m2** — 2.g: C all-off, bomba apagada.
+- **m3** — traza 2.c: Sp puede overload hasta el requeue upstream
+  `:2821-2851` en el mismo epoch.
+- **m4** — vector = mismos incoming que `CountPoweredIncoming`.
