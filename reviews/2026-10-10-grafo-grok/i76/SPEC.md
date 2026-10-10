@@ -164,31 +164,25 @@ su residual. C transmite 50.
 
 ### 2.b Deficit real: 20 + 50 → Combiner → hard 80
 
-Suma de residuales = 70 < 80.
+Suma de ofertas = 70 < 80. Politica de overload **vigente** (all-off,
+`AllocateOutput:3903-3905` y `:4058-4110`): no se cambia en G-01.
 
-**Hoy:** split 40+40. S20 overload (0). S50 alloc 40. C ve 40. Ademas, si
-C ya publico 80 como `m_LastStableOutput`, **C** hace
-`totalHardDemand=80 > available(40)` → **all-off en C** y el consumidor
-ve 0. Peor que el deficit fisico.
+**Hoy:** split 40+40. S20 overload (0). S50 alloc 40. C ve 40. Si C publico
+80, `totalHardDemand=80 > available` → all-off en C. Consumidor 0. S20
+tambien a 0.
 
-**Politica SOURCE (no se cambia):** all-off si *su* hard pedido supera *su*
-`availableOutput`. Un SOURCE sola con demanda 80 y cap 50 sigue a 0.
+**Exigido (G-01):**
 
-**Politica PASSTHROUGH merger (cambio justificado):** un Combiner / splitter
-de fusion **no es generador**. All-off cuando el downstream pide mas que
-el input destruye la energia ya asignada por las fuentes. Exigido:
+- S20 entrega 20. S50 entrega 50. Ninguna fuente en overload (el pedido
+  a cada una es `<=` su oferta).
+- El Combiner recibe 70, `70 < 80` → overload **all-off**. Salida 0.
+- Consumidor apagado.
 
-- Pedido a cada SOURCE = `min(residual_e, restante)` tras cap-and-fill →
-  20 y 50. Ninguna SOURCE sobrecarga.
-- C asigna aguas abajo `min(demanda hard, availableOutput)` = 70, **sin**
-  poner sus edges a 0. `m_Overloaded` de C puede quedar true como
-  telemetria (load > 1) **o** calcularse como `totalAllocated/capacity`
-  sin all-off; la implementacion debe documentar el bit. Recomendacion:
-  `m_Overloaded=true` en C (deficit visible) y alloc = available, no 0.
-
-**Exigido numerico:** alloc S20=20, S50=50, C→load=70, consumidor unpowered
-(70 < 80). Motivo: maxima entrega factible; overload de SOURCE solo cuando
-ese SOURCE es el cuello.
+El oraculo i72 marca esto `hard_unmet` y, si `hard_feasible` es false
+(`max_hard_servable=70 < 80`), **no** `feasible_but_underfed`. G-01 no
+persigue servir 70 aguas abajo del Combiner. El shedding (entregar 70
+con C no all-off) esta fuera de alcance: ver
+`## Propuesta para el dueno (fuera de G-01)`.
 
 ### 2.c Fuente compartida (splitter + Combiner)
 
@@ -204,15 +198,19 @@ Topologia:
 - Isla Z (otro `m_ComponentId`): S_default 50 (`LFPG_DEFAULT_SOURCE_CAPACITY`,
   `Defines.c:183`) → otra bomba. No comparte edges.
 
-Residual de S50 hacia C: `50 - 10 = 40` (la otra rama de Sp se lleva 10
-hard). Residual S20: 20. Demanda C: 50. Cap-and-fill: min(25,20)+min(25,40)
-= 20+25, resto 5 → 20+30 hacia C. Sp pide 10+30=40 a S50 ≤ 50.
+Oferta de Sp hacia C **no** es `allocAvail` ni `50-10` medido en S50.
+Es el margen PASSTHROUGH de §3.2: `min(pass_limit - hard_otras,
+upstreamOffer - hard_otras) = min(200-10, 50-10) = 40`.
+Oferta S20 = 20. Demanda C = 50. Water-fill: share 25 → 20+25, leftover 5
+→ **20+30** hacia C. Sp pide 10 (l1) + 30 (C) = 40 a S50 ≤ 50.
 
-**Hoy:** C pide 25 a cada incoming. Sp pide 25 (hacia C) + 10 (lampara) = 35
-a S50. S20 pide 25 → overload 0. C recibe ~25 (si Sp entrega) + 0.
+**Hoy (trinquete):** C pide 25/25. S20 da 20 (o 0 si overload). Sp recibe
+~25+20 y, si el residual hacia C se toma de `allocAvail`, se clava en 25
+y nunca llega a 30. Ver traza §3.2.1.
 
-**Exigido:** S20=20, rama C de Sp=30, lampara=10, S50 no overload.
-Isla Z: mismo `componentId`, misma potencia. Localidad.
+**Exigido estable:** l1=10 ON, l2 (bomba)=50 ON, S20=20, Sp→C=30, S50=40
+sin overload. Isla Z intacta. Cota de epochs: §3.2.1 (≤ 3 desde cold start,
+≤ 2 desde el estado clavado 25/25).
 
 ### 2.d Hard + soft mezclados
 
@@ -291,150 +289,226 @@ Si el consumidor 60 se apaga: residual S50→C vuelve a 50 y se reentra en
 ### 3.1 Donde vive
 
 Solo cuando el **target** del edge es PASSTHROUGH y
-`CountPoweredIncoming(target) > 1` (hoy `:4023-4028`). El 99% de redes
-tienen 1 incoming: la rama no se toca (invariante I4).
+`CountPoweredIncoming(target) > 1` (hoy `:4023-4028`). Si el recuento es
+0 o 1, I4: texto actual (tope v2.4 incluido).
 
-Combiner de produccion: 2 IN (`LFPG_Combiner.c:53-56`). El nucleo
-comprobable es binario; N>2 (si un PASSTHROUGH tuviera mas IN) usa el
-mismo cap-and-fill en el bucle existente de Pass 1.
+Fan-in alcanzable **no** esta acotado a 2. No se demuestra el contrario:
 
-### 3.2 Capacidad residual por edge
+- Un puerto: `LFPG_MAX_FANOUT_PER_PORT = 1` (`Defines.c:521`). Ocupado
+  no bloquea (`LFPG_ConnectionRules.c:61-64`); el servidor **reemplaza**
+  el cable del mismo puerto (`FinishWiringCollectOwner` marca conflicto
+  si `wire.m_TargetDeviceId == dstId && IncomingPortIndexKey(...) ==
+  dstPort`, `LFPG_RPCServerHandlerImpl.c:722-724`). Un IN concreto
+  queda con 1 wire.
+- Varios IN en el mismo PASSTHROUGH: Combiner 2
+  (`LFPG_Combiner.c:53-56`), LogicGate 2 (`LFPG_LogicGate.c:103-104`),
+  ElectronicCounter 2 (`LFPG_ElectronicCounter.c:77-78`), Intercom 2
+  (`LFPG_Intercom.c:125-127`), **MemoryCell 4** (`LFPG_MemoryCell.c:60-75`).
+  Cada IN distinto admite un proveedor. `AddEdgeInternal` permite hasta
+  `LFPG_MAX_EDGES_PER_NODE = 12` incoming (`ElecGraphImpl.c:1476-1484`,
+  `Defines.c:522`).
+- Vanilla: un IN tipico; el recuento powered puede ser 1. G-01 no asume
+  que vanilla sea merger.
 
-Para el edge E de proveedor P hacia merger T, en el epoch actual, **antes**
-de escribir `E.m_AllocatedPower`:
+Por eso el split es **N-way** (§3.3), K ≤ 12, orden determinista.
+
+### 3.2 Oferta residual (snapshot), no `allocAvail`
+
+Tres campos **nuevos de runtime** en `LFPG_ElecEdge` (`LFPG_Data.c:295-321`,
+hoy `m_Demand` / `m_AllocatedPower` / flags; sin `OnStoreSave` en esa
+clase; el grafo se reconstruye de wires; ningun `RegisterNetSyncVariable`
+en `LFPG_Data.c`):
+
+| campo | papel |
+|---|---|
+| `m_OfferedResidual` | oferta escrita al **cerrar** `AllocateOutput` de este origen |
+| `m_OfferedResidualPrev` | copia de la oferta anterior al primer write de este epoch |
+| `m_OfferEpoch` | `m_CurrentEpoch` del ultimo write |
+
+Mismo contrato que `m_DemandKnown` (`LFPG_Data.c:237-241`): runtime, no
+persistido, no RPC, no SyncVar.
+
+**Lectura (snapshot del epoch previo).** En `AllocateOutput` de P, para
+un sibling edge E' hacia el mismo merger:
 
 ```
-residual(E) = availableOutput(P) - sum_{F salida enabled de P, F != E} hard(F)
+if (E'.m_OfferEpoch == m_CurrentEpoch)
+	cap = E'.m_OfferedResidualPrev;
+else
+	cap = E'.m_OfferedResidual;
 ```
 
-`hard(F)` = demanda hard ya anotada en Pass 1 para F si F ya se visito en
-este mismo `AllocateOutput`; si no, `F.m_AllocatedPower` del epoch previo
-capado a lo que F tendria de hard (`m_Demand * (1-ratio)`).
+Si `cap < epsilon`, fallback:
 
-Clamp: si `residual < 0` → 0.
+- origen SOURCE: `src.m_MaxOutput` (y `m_OutputPower` ya publicado si
+  SOURCE, `:2488-2498`);
+- origen PASSTHROUGH: formula de margen abajo con fallback de sus
+  incoming.
 
-SOURCE de un solo outgoing: `residual = availableOutput = m_MaxOutput`.
-PASSTHROUGH proveedor: `availableOutput` es el `allocAvail` que PDQ ya
-paso (throughput real).
+Asi **todas** las llamadas del epoch leen el mismo vector de caps
+(el publicado en el epoch anterior, o el fallback frio). Nadie lee el
+write in-flight del otro proveedor.
 
-**No** usar `m_MaxOutput` del Combiner (500) como residual de las fuentes.
-
-### 3.3 Regla de pedido (hard)
-
-Nucleo de 2 proveedores (el Combiner). Pseudocodigo estilo Enforce:
+**Escritura** al final de `AllocateOutput` de P, por cada salida E:
 
 ```
-protected float SplitTwoProviderHard(float demand, float residualA, float residualB)
+if (E.m_OfferEpoch != m_CurrentEpoch)
+	E.m_OfferedResidualPrev = E.m_OfferedResidual;
+E.m_OfferedResidual = offerE;
+E.m_OfferEpoch = m_CurrentEpoch;
+```
+
+Coste: O(salidas de P), el bucle que ya existe. Sin barrido global.
+
+**Oferta de un SOURCE** hacia E, tras la fase no-merger (§3.2.0):
+
+```
+offerE = availableOutput - committedHardNoMerger
+```
+
+Un outgoing unico: `offerE = m_MaxOutput`. Clamp ≥ 0.
+
+**Oferta de un PASSTHROUGH** hacia un edge de merger E (S2): **prohibido**
+usar `allocAvail` / `m_InputPower` como techo de oferta (trinquete).
+
+```
+upstreamOffer = suma snapshot de m_OfferedResidual (o fallback MaxOutput)
+                en incoming enabled de P
+committed = hard de salidas de P que NO van a este merger
+           (fase no-merger, p. ej. l1=10)
+headroomPass = m_MaxOutput - committed
+offerE = min(headroomPass, upstreamOffer - committed)
+```
+
+Clamp ≥ 0. En 2.c: `min(200-10, 50-10) = 40`. Independiente de si Sp
+recibio 25 o 45 este epoch. La SOURCE de arriba no se pide mas que
+`upstreamOffer` (50): Sp pedira `committed + ask_merger ≤ 50`.
+
+**Prueba de suma simetrica.** Water-fill (§3.3) es funcion pura de
+`(D, cap[0..K-1])` con `cap` el snapshot comun y orden de ids fijo.
+Las K llamadas (una por proveedor) calculan el **mismo** vector `ask[]`
+y cada una aplica `ask[self]`. Luego `sum ask = min(D, sum cap)`.
+Ninguna pide mas que su cap → ninguna SOURCE overload por el merger.
+
+**Si se leyeran valores distintos** (write in-flight, **prohibido**):
+el segundo veria capA ya bajada; `sum ask` podria quedar por debajo de
+`min(D,sum cap)` (defecto ≤ max cap_i) o, si el primero uso capB inflada,
+exceso ≤ una cap. Cierre: 1 epoch (el siguiente snapshot es comun).
+Con la regla Prev/Pub el exceso intra-epoch es **0**.
+
+#### 3.2.0 Independencia del orden de `m_Outgoing` (S3)
+
+`AllocateOutput` Pass 1 se parte en dos recorridos del array existente
+(no reordenar el array: R20 / no reformatear):
+
+1. **Fase no-merger.** Para cada salida enabled cuyo target tiene
+   `CountPoweredIncoming <= 1` (o no es PASSTHROUGH): anotar `m_Demand`
+   como hoy (consumo o LastStable, tope v2.4). Sumar hard en
+   `committedHardNoMerger`.
+2. **Fase merger.** `selfCap = availableOutput - committedHardNoMerger`
+   (SOURCE) o la formula PASSTHROUGH de arriba. Luego water-fill con
+   snapshot de hermanos. Escribir `m_Demand` del edge al merger =
+   `ask[self]`.
+
+`committedHardNoMerger` no mira “si F ya se visito”: mira el tipo del
+target. Dos ordenes de `m_Outgoing` (lampara antes o despues del
+Combiner) dan el mismo `committed` y el mismo `ask`.
+
+El tope v2.4 (`:4011-4014`) en multifuente se aplica **a `ask[self]`**
+(`min(ask, availableOutput)`), no a la demanda cruda del Combiner.
+
+#### 3.2.1 Traza 2.c (cold start → 20/30/10)
+
+Nodos: S50→Sp; Sp→l1 (10) y Sp→C; S20→C; C→l2 (50). Ofertas iniciales 0.
+
+| epoch | snapshot caps (S20, Sp→C) | D de C | ask | alloc estable al cierre | l1 | l2 |
+|---|---|---|---|---|---|---|
+| 0 | fallback 20 y 40 | bootstrap `min(500, 60)=60` | 20+40 | S20=20, Sp pide 10+40=50 a S50 | 10 ON | C recibe 60, l2 50 ON si C no overload (60>50? C demanda LastStable se publica 50+0) |
+| 1 | 20 y 40 (escritas) | LastStable 50 | 20+30 | S20=20, Sp 10+30=40 | ON | ON |
+| 2 | 20 y 40 | 50 | 20+30 | fijo | ON | ON |
+
+Ajuste epoch 0: C bootstrap 60 hace `totalHard=60` con `available=60` si
+Sp entrega 40+S20 20; C no overload. Publica 50. Epoch 1 ya es 20+30.
+**Cota: 2 epochs** desde cold; 3 si el orden PDQ publica C antes de que
+Sp haya escrito oferta 40 (entonces epoch 0 usa fallback 40 igual).
+
+Desde el estado **clavado hoy** (25/25, Sp allocAvail 45, oferta mal=25):
+primer epoch con la formula nueva escribe oferta Sp→C=40; segundo epoch
+lee 20 y 40 y asigna 20+30. **Cota: 2.** `MAX_REQUEUE=5` (`Defines.c:468`).
+
+### 3.3 Water-fill N-way (mismo resultado en cada llamador)
+
+Entrada: demanda hard `D` del merger, vector `cap[i]` snapshot, vector
+`id[i]` de `m_SourceNodeId`. Orden: ids **lexicograficos** (Enforce
+`string` compare), no el orden de `m_Incoming`.
+
+Cota de bucle: `K = incoming.Count()` ≤ `LFPG_MAX_EDGES_PER_NODE` (12).
+Dos pasadas: share y leftover. Total ≤ 24 iteraciones.
+
+Pseudocodigo (estilo Enforce, sin ternarios ni `+=`; el slice de tests
+puede especializar K=2 sin `for` — ver §6.1):
+
+```
+protected void WaterFillAsks(float D, array<float> cap, array<float> ask)
 {
+	int k = cap.Count();
 	float eps = LFPG_PROPAGATION_EPSILON;
-	if (demand < eps)
-		return 0.0;
-	float capA = residualA;
-	if (capA < 0.0)
-		capA = 0.0;
-	float capB = residualB;
-	if (capB < 0.0)
-		capB = 0.0;
-	float sumCap = capA + capB;
-	if (sumCap < eps)
-		return 0.0;
-
-	float share = demand / 2.0;
-	float askA = share;
-	if (askA > capA)
-		askA = capA;
-	float askB = share;
-	if (askB > capB)
-		askB = capB;
-
-	float leftover = demand - askA - askB;
+	if (k <= 0)
+		return;
+	float kf = k;
+	float share = D / kf;
+	float leftover = D;
+	int i;
+	for (i = 0; i < k; i = i + 1)
+	{
+		float a = share;
+		if (a > cap[i])
+			a = cap[i];
+		if (a < 0.0)
+			a = 0.0;
+		ask[i] = a;
+		leftover = leftover - a;
+	}
 	if (leftover < 0.0)
 		leftover = 0.0;
-
-	float roomA = capA - askA;
-	float roomB = capB - askB;
-	if (leftover > eps)
+	for (i = 0; i < k; i = i + 1)
 	{
-		if (roomA > eps)
-		{
-			float add = leftover;
-			if (add > roomA)
-				add = roomA;
-			askA = askA + add;
-			leftover = leftover - add;
-		}
+		if (leftover <= eps)
+			break;
+		float room = cap[i] - ask[i];
+		if (room <= eps)
+			continue;
+		float add = leftover;
+		if (add > room)
+			add = room;
+		ask[i] = ask[i] + add;
+		leftover = leftover - add;
 	}
-	if (leftover > eps)
-	{
-		if (roomB > eps)
-		{
-			float add2 = leftover;
-			if (add2 > roomB)
-				add2 = roomB;
-			askB = askB + add2;
-			leftover = leftover - add2;
-		}
-	}
-	return askA;
 }
 ```
 
-El llamador obtiene `askB = min(demand - askA, capB)` (o un segundo return
-via out-params en Enforce: dos llamadas simetricas `SplitTwoProviderHard`
-con A/B intercambiados deben cumplir `askA+askB = min(demand, capA+capB)`).
+K=2, cap 20 y 50, D=50: share 25 → 20+25, leftover 5 → **20+30**.
+K=2, cap 20 y 50, D=80: 20+50, leftover 10 sin room → 20+50.
 
-Para N incoming en Pass 1: misma idea en el bucle ya existente (share =
-`demand/N`, tope residual, segundo barrido de leftover). Coste O(K) con
-K = fan-in (ya se recorre incoming en `CountPoweredIncoming`).
-
-Cold start: `demand` sigue siendo la estima v2.4 **antes** del split;
-despues se aplica cap-and-fill. S20+S50 epoch 1: estima por fuente
-`min(500, avail)` no se usa como demanda del merger; la demanda del merger
-es unica (LastStable o estima del **target**). Correcto: calcular
-`edgeDemand` del target **una vez** (LastStable o cold-start **sin** tope
-al `availableOutput` del llamador, porque ese tope es asimetrico por
-fuente), luego split por residual.
-
-**Decision (cold-start multifuente):** el tope v2.4 `if (edgeDemand > availableOutput) edgeDemand = availableOutput` (`:4011-4014`) se aplica
-**despues** del split, por fuente (`ask = min(ask, availableOutput)`), no
-antes. Motivo: topar a 20 y luego dividir por 2 pide 10 a S20 y, en S50,
-topar a 50 y dividir pide 25: asimetrico. Demanda del target = LastStable
-o `m_MaxOutput` del Combiner (500) es inutilmente grande; para cold start
-multifuente usar `min(target.m_MaxOutput, suma de residuales conocidos)`
-si residuales > 0, si no `LFPG_DEFAULT_SOURCE_CAPACITY` (50) como cota
-de bootstrap. Conservador: **demanda bootstrap = min(target.m_MaxOutput,
-sumResidual)` si sumResidual>eps, else `availableOutput` del llamador
-(v2.4 clasico, un proveedor).**
+El proveedor i pone `edge.m_Demand = ask[i]`.
 
 ### 3.4 Prioridad hard sobre soft
 
 Sin cambio de Pass 2/3: overload mira solo hard; Pass 3 solo surplus.
-El split residual aplica a la **demanda hard del merger**
-(`LastStable * (1-ratio)` + consumo propio del merger). Soft del merger
-se senala como hoy en `m_SoftDemandRatio` y lo sirve el surplus de
-fuentes con residual tras hard.
+Water-fill usa la demanda **hard** del merger.
 
-### 3.5 Convergencia (cota de epochs)
+### 3.5 Convergencia
 
-Estado: vector de `m_AllocatedPower` en edges SOURCE→C.
+- Caps de snapshot son monotonas respecto a committed no-merger (sube
+  committed ⇒ baja oferta, nunca pide de mas a la SOURCE).
+- `ask[i] <= cap[i]` ⇒ el merger no mete a un SOURCE en overload.
+- Ofertas PASSTHROUGH pueden **crecer** cuando committed baja o cuando
+  el fallback MaxOutput se sustituye por la oferta real; no decrecen
+  por un `allocAvail` corto (rompe el trinquete).
+- Cota 2.a: 2 epochs. 2.c: 2–3 (§3.2.1). 2.f: 1. Requeue ≤ 5.
 
-- Residual de un SOURCE de un outgoing es constante (`m_MaxOutput`).
-- `ask_i = min(share, residual_i) + fill` es funcion **monotona no
-  creciente** del pedido respecto a pedir de mas: nunca `ask_i > residual_i`,
-  luego `totalHardDemand` del SOURCE hacia C es `<= available`, luego
-  **no entra en overload por este merger**.
-- All-off por otra rama (2.g) anula residual hacia C (0) y es estable
-  hasta que esa rama cambia.
-- Publicacion de demanda de C: 1 pass para `m_DemandKnown` / LastStable
-  (`:2699-2703`, `:2707-2771`). Fuentes reencoladas same-epoch
-  (`:2842-2846`).
-- Cota: **2 ciclos de requeue** para 2.a (C publica 50, fuentes asignan
-  20+30). Cold start: +1 (estima bootstrap → publish real). Recuperacion
-  2.f: 1. Por debajo de `MAX_REQUEUE=5`.
-- Oscilacion clasica (contar / no contar overload): **imposible** porque
-  la fuente chica ya no overload por el split.
-
-No hay barrido global nuevo: mismos bucles O(salidas) + O(incoming K≤2).
+Coste/epoch: +O(K) lecturas de incoming del merger (K≤12) y +O(salidas)
+al escribir ofertas. Sin barrido de `m_Nodes`.
 
 ---
 
@@ -444,10 +518,12 @@ No hay barrido global nuevo: mismos bucles O(salidas) + O(incoming K≤2).
 `sum_e m_AllocatedPower(e) <= availableOutput(P) + LFPG_PROPAGATION_EPSILON`
 en el epoch estable. Comprobable: suma de edges outgoing vs `allocAvail`.
 
-**I2 Conservacion de PASSTHROUGH merger (Combiner/Splitter fusion).**
+**I2 Conservacion de PASSTHROUGH merger.** Solo se exige cuando el merger
+**no** esta en overload. Entonces
 `|sum incoming alloc - sum outgoing alloc| <= epsilon + selfConsumption`
-salvo deficit (outgoing = min(demanda, incoming)). Nunca outgoing > incoming
-+ virtualGen. Combiner consumo 0.
+y outgoing ≤ incoming + virtualGen. Con overload vigente, outgoing = 0
+y incoming puede ser > 0 (2.b: entra 70, sale 0). Eso no viola I2
+porque I2 no aplica en overload.
 
 **I3 Localidad.** Un cambio de alloc en el componente de C no modifica
 `m_ComponentId` ni `m_OutputPower` / alloc de nodos cuyo
@@ -458,8 +534,8 @@ el texto ejecutado es el de hoy: sin cap-and-fill, mismo cold-start v2.4,
 mismo all-off. La mayoria de redes (Splitter 1 IN, `LFPG_Splitter.c:53-54`).
 
 **I5 No oscilacion.** En topologia fija y demandas fijas, a partir del
-epoch T0+2 el vector de alloc SOURCE→C no cambia mas de epsilon.
-Requeues por nodo ≤ 5.
+epoch T0+3 (2.c; 2.a en T0+2) el vector de alloc no cambia mas de
+epsilon. Requeues por nodo ≤ 5.
 
 **I6 Soft no sobrecarga.** `totalHardDemand` excluye soft (`:4049-4060`)
 se mantiene.
@@ -474,16 +550,17 @@ siguen a 0.
 
 **Si se toca (esperado):**
 
+- `scripts/3_Game/LFPG_Data.c` — tres campos runtime en `LFPG_ElecEdge`
+  (`m_OfferedResidual`, `m_OfferedResidualPrev`, `m_OfferEpoch`).
+  Constructor a 0 / -1. No persistencia.
 - `scripts/5_Mission/LFPG_ElecGraphImpl.c`
-  - `AllocateOutput` Pass 1 divisor `:4023-4028` (reemplazar `/ ptPoweredIn`
-    por cap-and-fill / `SplitTwoProviderHard`).
-  - Posible helper junto a `CountPoweredIncoming` (`:3845-3901`).
-  - Cold-start tope v2.4 `:4011-4014`: aplicar **post-split** (decision §3.3).
-  - Overload all-off de **PASSTHROUGH merger** cuando hard > available:
-    `:4058-4110` — excepcion documentada en 2.b (solo si fan-in>1 y
-    consumo propio 0, o flag “combiner”). **No** cambiar SOURCE.
-- Test nuevo: `.github/tools/test_graph_multifeed_split.py` (nombre
-  tentativo; ronda 2).
+  - `AllocateOutput` Pass 1 divisor `:4023-4028` → water-fill N-way.
+  - Dos fases no-merger / merger (§3.2.0).
+  - Escritura de ofertas al cierre de `AllocateOutput`.
+  - Helper `WaterFillAsks` junto a `CountPoweredIncoming` (`:3845-3901`).
+  - Tope v2.4 `:4011-4014` post-split en multifuente.
+- **No** se toca la decision de overload `:4058-4110` (all-off vigente).
+- Test: `.github/tools/test_graph_multifeed_split.py`.
 
 **No se toca:**
 
@@ -508,63 +585,72 @@ Patron: `.github/tools/enforce_scalar_slice.py` +
 `.github/tools/test_graph_capacity_refresh.py`.
 
 `scalar_function` **rechaza `for`/`while`** (`enforce_scalar_slice.py:26-27`).
-`AllocateOutput` entero no es sliceable. Por eso el nucleo
-`SplitTwoProviderHard` es scalar (solo if/assign/return).
+`AllocateOutput` entero no es sliceable. El nucleo K=2 (water-fill
+desenrollado) es scalar. N-way con `for` va en un test Python aparte
+(mismo numerico, sin slice).
 
-Sentencias de produccion a cargar:
+Sentencias de produccion: helper K=2 de `LFPG_ElecGraphImpl.c`; opcional
+`IsHardOverload` (`:4058-4061`).
 
-- El helper nuevo extraido de `LFPG_ElecGraphImpl.c` (mismo texto que
-  corre el grafo).
-- Opcional: el bloque de decision `totalHardDemand > available + eps`
-  si se extrae a `IsHardOverload(available, totalHard)` (hoy `:4058-4061`).
+Criterio de cierre del issue: **factibilidad y conservacion contra el
+oraculo**, no solo el par 20+30. 20+30 es regresion local de 2.a;
+`Oracle.verify` es el de cierre.
 
-Tests (positivos + negativos):
-
-| id | entrada | pasa si | la BASE (HEAD) falla |
+| id | entrada | pasa si | BASE (HEAD) |
 |---|---|---|---|
-| a | d=50, rA=20, rB=50 | askA=20, askB=30 | equal split 25+25 |
-| b | d=80, rA=20, rB=50 | 20+50, sum=70 | 40+40 |
-| c | d=50, rA=20, rB=40 (S50 ya dio 10) | 20+30 | 25+25 |
-| d | dHard=50, soft aparte | split hard 20+30; soft no entra al helper | n/a en helper |
-| e | d bootstrap min(500,70)=70 → fill 20+50 luego epoch2 d=50 | no ask>residual | tope asimetrico |
-| f | d: 50→0 | ask 0+0 | n/a |
-| g | rB=0 (otra rama all-off), d=50 | 20+0 | 25+25 y S20 overload |
+| a | D=50, cap 20/50 | 20+30; `hard_feasible`; verify ok | 25+25; oraculo `hard_unmet`+`feasible_but_underfed` |
+| b | D=80, cap 20/50 | asks 20+50; fuentes no overload; C all-off; `max_hard_servable=70`; `hard_feasible` false; consumidor 0 (no parcial) | 40+40, S20 overload |
+| c | cap 20/40, D=50 | 20+30 | 25+25 |
+| c-traza | tabla §3.2.1 | l1 ON, l2 ON, 20/30/40 en ≤3 epochs; oferta Sp no es allocAvail | trinquete 25 |
+| d | hard 50 + soft | water-fill solo hard | n/a |
+| e | bootstrap min(500,sumCap) | ask≤cap; epoch2 → 20+30 | tope asimetrico |
+| f | D 50→0 | 0+0 | n/a |
+| g | capB=0, D=50 | 20+0 | 25+25 |
+| S3 | outgoing [l1,C] vs [C,l1] | committed y asks iguales | n/a |
 
-**Negativos:** mutar `askA = share` sin tope residual (como
-`test_negative_control_missing_passthrough_assignment` en
-`test_graph_capacity_refresh.py:72-77`) y comprobar que (a) deja de
-cumplir 20.
+**Negativos:** quitar el tope `if (a > cap)` (patron
+`test_graph_capacity_refresh.py:72-77`).
 
-**Gate de esta spec:** contra el codigo de HEAD, un oraculo Python del
-split **igual** `d/2` (reimplementacion del `:4027`) produce 25+25 y
-**falla** el assert 20+30. Constancia: se razono con el codigo leido;
-esta ronda no ejecuta Python (brief: sin shell). La ronda 2 **debe**
-correr el test contra `git show HEAD:scripts/5_Mission/LFPG_ElecGraphImpl.c`
-(falla) y contra el arbol con helper (pasa).
+Gate HEAD: `D/2` falla (a) y `verify`. Esta ronda no ejecuta Python.
 
-### 6.2 Referente independiente (lane i72, no visible)
+### 6.2 Referente independiente (API i72)
 
-Interfaz minima que G-01 necesitara **despues**:
+Leido `C:\tmp\lfpg-grok\wt-i72\.github\tools\graph_reference\README.md`
+mas `oracle.py` y `model.py` como interfaz. El README en disco lista
+`hard_feasible`, `max_hard_servable`, `verify(g, allocation)` y reglas
+`source_limit`, `edge_limit`, `edge_disabled`, `passthrough_limit`,
+`conservation`, `hard_unmet`, `hard_priority`,
+`feasible_but_underfed`, `non_negative`. El revisor anuncia ampliacion;
+G-01 se ata a eso **y** a lo siguiente (el dueno integra el paquete
+antes de implementar):
 
-**Entrada (JSON o funciones Python):**
+**Entrada** (`model.Node` / `Edge`):
 
-- `nodes[]`: `id`, `type` (`SOURCE|PASSTHROUGH|CONSUMER`), `capacity`
-  (`m_MaxOutput`), `consumption`, `softDemand` (0 default),
-  `virtualGeneration` (0), `componentId`.
-- `edges[]`: `source`, `target`, `enabled` (bool).
-- `hardDemands` implicitos en consumption de CONSUMER; PASSTHROUGH
-  demand = f(downstream).
+- `SOURCE.available`; `PASSTHROUGH.pass_limit`, `self_consumption`,
+  `virtual_generation`, `gate_closed` (cerrado ⇒ `pass_limit=0` en
+  `model.py:38-39`: sin flujo aguas abajo; consumidores tras gate
+  cerrado inalcanzables, fixture `gates_hard_soft.json`).
+- `CONSUMER`/`CAMERA.hard_demand`. Consumidores **binarios**: o el hard
+  entero o no servidos; `max_hard_servable` encaja con enteros de las
+  fixtures (`combiner_20_50_hard50.json` pone 50).
+- Soft: `soft_demand` (bateria llena = 0), `soft_fraction`.
+- Edge: `id`, `src`, `dst`, `enabled`, `capacity`.
 
-**Salida:**
+**Salida:** `hard_feasible`, `max_hard_servable` (2.a=50, 2.b=70),
+`verify`. Conservacion a dos lados (`oracle.py:167-198`): SOURCE sin
+inflow y outflow ≤ available; PASSTHROUGH outflow ≤ inflow+virtual;
+CONSUMER sin outflow.
 
-- `allocation[edgeId] -> float` factible (I1, I2).
-- `maxHardServable` (float): max hard que la red puede servir en el
-  componente (para 2.b = 70).
-- `overloadedSources[]` de ids.
+**Reglas extra anunciadas:**
 
-G-01 compara alloc estable del grafo (tras N epochs simulados o el
-helper) con el oraculo en tolerancia `LFPG_PROPAGATION_EPSILON`. No se
-implementa el oraculo en esta lane.
+- `over_allocation`: flujo > min(cap edge, oferta origen, demanda
+  destino). El water-fill no la dispara.
+- `partial_allocation`: binario con `0 < received < hard_demand`.
+  2.a estable = 50. 2.b all-off = 0 (no parcial). 25 de 50 seria fallo.
+
+En 2.b el oraculo puede marcar `hard_unmet` con `hard_feasible=false`.
+El test de G-01 valida fuentes 20+50 (`source_limit` ok) y consumidor
+no parcial. No se implementa el oraculo en esta lane.
 
 ### 6.3 Protocolo in-game (PENDIENTE-INGAME)
 
@@ -589,8 +675,8 @@ Lecturas: inspector `m_LoadRatio` / `m_Overloaded` (SyncVars del panel
 `LFPG_IsPowered`. Esperado: paneles sin overload, bomba ON, load S20≈1.0,
 S50≈0.6.
 
-(b) anadir nevera+lampara: bomba puede quedar corta (70<80); ni panel
-en CRITICAL all-off.
+(b) nevera+lampara (hard 80): paneles **sin** overload (20+50);
+Combiner CRITICAL all-off; bomba apagada. No se espera servir 70.
 
 Localidad: segunda isla panel T2 + bomba, distinta base; tras (a) no
 cambia.
@@ -607,9 +693,8 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
   aislado: el cap-and-fill lo hace irrelevante para el pedido.
 - `GetEdgeAllocatedPower` fallback equal-split en SOURCE (`:4289-4298`)
   puede filtrar potencia en el primer pass; fuera de G-01.
-- PASSTHROUGH all-off con deficit (2.b) es un segundo bug acoplado;
-  esta spec lo incluye porque sin eso el criterio de deficit no se
-  puede cumplir.
+- PASSTHROUGH all-off con deficit (2.b) tira 70 u/s ya asignadas. Fuera
+  de G-01; ver propuesta al dueno.
 
 ---
 
@@ -621,15 +706,12 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
 - Lineas exactas en `b7b917e` (issue dice divisor `:4027`, overload
   `:4058`): en el arbol actual coinciden en contenido; no hice
   `git show b7b917e`.
-- Si algun PASSTHROUGH de produccion tiene fan-in > 2 (el Combiner
-  tiene 2). `LFPG_MAX_EDGES_PER_NODE=12` (`Defines.c:522`) lo permite
-  en el grafo.
-- Comportamiento diurno real de `LFPG_SolarPanel` (si de noche
-  `m_SourceOn` baja a 0): no leido el timer.
-- Oraculo i72: no existe en este worktree.
-- Que `m_AllocatedPower` de otras salidas en Pass 1 ya este actualizado
-  al calcular residual (orden del array `m_Outgoing`): no verificado
-  el orden de insercion.
+- Comportamiento diurno real de `LFPG_SolarPanel` (timer de `m_SourceOn`).
+- Paquete i72 integrado en **esta** rama (leido en `wt-i72`; reglas
+  `over_allocation` / `partial_allocation` anunciadas, no estaban en el
+  `oracle.py` leido: `grep` 0 hits ahi).
+- Que el orden lexicografico de `m_DeviceId` sea estable entre sesiones
+  (los ids son strings de dispositivo).
 
 ---
 
@@ -651,8 +733,44 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
   llamador). En multifuente esa premisa es falsa; hay que mover el tope
   post-split. Eso es un cambio del cold-start escrito para baterias, no
   pedido explicitamente por #76, pero (e) lo exige.
-- All-off en Combiner con deficit (2.b) puede ser intencional
-  (binario v1.0, comentario `:3903-3905`). Relajarlo solo en fan-in>1
-  es la decision de esta spec; si el dueno quiere all-off universal,
-  2.b **no** tiene asignacion factible no-cero y hay que reescribir el
-  criterio.
+- All-off en Combiner con deficit (2.b) es la politica v1.0
+  (`:3903-3905`). G-01 la deja. El oraculo de max-flow **si** serviria
+  70; verify de un alloc all-off no sale `ok`. El cierre “contra
+  referente” en 2.b se interpreta como: fuentes factibles + no
+  `feasible_but_underfed` (porque 80 no es factible). Si i72 exige
+  outflow=70 en el Combiner, choca con S4.
+
+---
+
+## Propuesta para el dueno (fuera de G-01)
+
+**Shedding en merger con deficit.** Hoy, Combiner con incoming 70 y
+hard 80 pone todas las salidas a 0 (`:4058-4110`). Tirar 70 u/s ya
+pagadas por las fuentes. Cambio posible, **no G-01**:
+
+- Si PASSTHROUGH, fan-in>1, consumo propio 0: asignar
+  `min(hard, availableOutput)` aguas abajo en vez de all-off.
+- `m_Overloaded=true` para telemetria.
+- I2 pasaria a exigir outgoing = incoming en deficit.
+
+Hasta que el dueno lo acepte, 2.b queda: fuentes 20+50, C all-off,
+consumidor apagado.
+
+---
+
+## Ronda 2: cambios
+
+- **S1** — §3.2: snapshot `m_OfferedResidual` / `Prev` / `m_OfferEpoch`
+  en `LFPG_ElecEdge`; lectura del epoch previo; prueba de suma
+  `min(D,sum cap)`; exceso intra-epoch 0 si se respeta el snapshot.
+- **S2** — oferta PASSTHROUGH por upstream+pass_limit, no `allocAvail`;
+  2.c usa 40; traza §3.2.1 (20/30/10) cota 2–3 epochs.
+- **S3** — §3.2.0 dos fases no-merger / merger; test S3 dos ordenes.
+- **S4** — 2.b exigido all-off en C; I2 solo sin overload; shedding en
+  propuesta al dueno; §5 sin excepcion de overload.
+- **S5** — no se demuestra fan-in≤2 (MemoryCell 4 IN, tope 12);
+  water-fill N-way §3.3, K≤12, orden por id.
+- **S6** — tabla §6.1: 2.b segun S4, traza S2, S3, cierre via oraculo.
+- **S7** — §6.2 contra README/oracle.py de i72 mas gates,
+  consumidores binarios, conservacion dos lados, `over_allocation` y
+  `partial_allocation`.
