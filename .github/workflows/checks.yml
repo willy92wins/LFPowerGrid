@@ -45,3 +45,6 @@ jobs:
 
       - name: FinishWiring quota admission (offline source slice)
         run: python .github/tools/test_finish_wiring_quota.py
+
+      - name: Independent graph reference oracle
+        run: python .github/tools/test_graph_reference.py
