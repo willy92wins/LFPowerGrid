@@ -1,61 +1,69 @@
-# INFORME — i76 G-01 ronda 3 (spec + implementacion)
+# INFORME — i76 G-01 ronda 4 (B4-1, M4-1, M4-2, SPEC)
 
 ## Hecho
 
-Reparto multifuente: water-fill sobre la demanda LastStable (hard+soft),
-oferta `m_OfferedResidual` (centinela -1), dirty B1.3, remaining M1.
-Politica de overload all-off **sin tocar**.
-
-## Slice vs bucle (criterio 3)
-
-Opcion **a** para el cuerpo: `OfferCapFromWritten`, `ComputeOfferTowardEdge`,
-`WaterFillShareAsk`, `WaterFillLeftoverAdd`, `EdgeHardPortion`,
-`SkipOtherIndex`, `ShouldNotifyOfferDirty`, `ComputeOfferBase*`.
-Opcion **b** para los `for` de `ApplyMergerWaterFill` / cola: el test
-repite el bucle llamando esos cuerpos. No hay oraculo Python del split
-comparado consigo mismo.
+Un PASSTHROUGH sin entrada sigue en el vector de merger (B4-1).
+`MergerSortLess` compara enteros `ToAscii`. Ofertas O(salidas): hard
+una vez + `ComputeOfferTowardEdge(baseP, totalHard, ownHard)`. Water-fill
+devuelve bool; totales solo si reescribio. Visitas de edge al presupuesto
+PDQ. SPEC §3 alineada con el codigo.
 
 ## Tests
 
 `C:\Python314\python.exe .github/tools/test_graph_multifeed_split.py`
-→ 23 OK (incluye 2.a–g, B1–B3, M1/M2, negativos, 463464e sin helpers).
+→ 29 OK (2.a–g, B1–B4-1, M1/M2, S3, 2.d cola, negativos).
 
-`enforce_checks.py --root .` FAIL=0. Resto de `test_*.py` OK
-(capacity, charger, reference, finish_wiring, enforce_checks).
+Resto:
+- `test_enforce_checks.py` 21 OK
+- `test_graph_capacity_refresh.py` 6 OK
+- `test_graph_charger_energy.py` 12 OK
+- `test_finish_wiring_quota.py` 7 OK
+- `test_broadcast_contract.py` 3 OK
+- `test_graph_reference.py` 18 OK
+- `enforce_checks.py --root .` FAIL=0 WARN=0 exit 0
 
 Base `463464e`: `WaterFillShareAsk` ausente;
-`edgeDemand = edgeDemand / ptPoweredIn` presente. El test
-`test_base_commit_lacks_helpers` lo comprueba. Equal-split 0+25+25
-falla `Oracle.verify` (`hard_unmet`, `partial_allocation`,
-`feasible_but_underfed`).
+`edgeDemand = edgeDemand / ptPoweredIn` presente.
 
 ## Linter
 
-`script_validator.py .` → `errors: []` (status WARN, exit 2). Delta de
-errores 0. Warnings preexistentes (ES-EMPTY-IFDEF, etc.).
+`script_validator.py .` → `errors: []` (status WARN, exit 2). `len(errors)=0`.
+Warnings preexistentes (ES-EMPTY-IFDEF, ES-GETTYPE). Delta de errores 0.
+
+## B4-1
+
+`IncludeInMergerVector(true, 0)` incluye el propio edge. Tras apagar y
+encender S50: l1 ON, S50 sin overload, bomba ON (tres hermanos, un
+hermano, edges paralelos). Sin la rama `fromSelfNode` el test 1 falla.
+
+## M4-1
+
+`MergerSortLess` recorre caracteres con `Substring` + `ToAscii` (mismo
+patron que `LFPG_RPCServerHandlerImpl.c:2520-2521`). Compara `codeA <
+codeB` y longitudes `int`. No hay `string < string` en el diff.
+
+## M4-2
+
+Borrados `OtherEnabledHard` y `SkipOtherIndex`. Recalc de totales
+condicionado a `ApplyMergerWaterFill`. Visitas en Publish, MergerVector
+y water-fill.
 
 ## I4
 
-`ApplyMergerWaterFill` sale al instante si no hay target con
-`CountPoweredIncoming>1`. Pass 2/3 y `overloaded = totalHardDemand >
-availableOutput + eps` son el texto de la base. Test
-`test_i4_single_provider_matches_divisor_absent`: SOURCE 50 → load 10
-asigna 10, no overload. B1.3 no sucia consumidores.
+Sin vector de tamaño ≥ 2 no se reescribe. Pass 2/3 y overload son los
+de la base.
 
 ## HALLAZGOS-ADYACENTES
 
-- Ratio hard/soft en Pass 1–3: si Σcap está entre hard y D, el surplus
-  de Pass 3 compite con otras salidas soft (ya existía).
-- `CountPoweredIncoming` sigue usando `m_OutputPower` del SOURCE.
-- All-off del Combiner en déficit (2.b) tira inflow; fuera de G-01.
+- Cadenas SpA→SpB→C: B1.3 no sucia SpB (limitacion previa).
+- All-off del Combiner en deficit (2.b) tira inflow; fuera de G-01.
 
 ## LO QUE NO PUDE VERIFICAR
 
 - Compilacion Enforce / arranque del mundo.
 - Linter en la base 463464e corrido en este worktree (solo `errors: []`
   del arbol actual).
-- Cadenas SpA→SpB→C in-game (limitacion B1.3).
-- `ca < cb` en Enforce para `MergerSortLess` (no hay compilador).
+- Cadenas SpA→SpB→C in-game.
 
 ## PENDIENTE-INGAME (§6.3 revisado)
 
@@ -71,6 +79,10 @@ bomba 50. l1 y bomba ON.
 
 2.g: T2 a bomba 60 **y** Combiner; C all-off; bomba del Combiner
 apagada.
+
+B4-1: T2 → Splitter (lámpara + Combiner); S20/S30 → Combiner; T2
+también a Splitter vía Sp. Apagar/encender el T2 de Sp: lámpara ON,
+T2 sin overload.
 
 Recuperación: cortar la bomba del Combiner; cables IDLE en ≤ 3 ticks
 (`LFPG_PROPAGATE_TICK_MS`). Isla ajena intacta.

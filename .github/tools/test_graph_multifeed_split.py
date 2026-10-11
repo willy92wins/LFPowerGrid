@@ -29,14 +29,14 @@ def helpers(src=None):
     stubs = {"LFPG_PROPAGATION_EPSILON": EPS}
     return {
         "offer_cap": load(source, "OfferCapFromWritten", ["offeredResidual", "fallbackMax"], stubs),
-        "offer_edge": load(source, "ComputeOfferTowardEdge", ["baseP", "otherHard"], stubs),
+        "offer_edge": load(source, "ComputeOfferTowardEdge", ["baseP", "totalHard", "ownHard"], stubs),
         "base_src": load(source, "ComputeOfferBaseSource", ["availableOutput"], stubs),
         "base_pt": load(source, "ComputeOfferBasePassthrough",
                         ["maxOutput", "incomingOfferSum", "virt", "cons", "gateClosed"], stubs),
         "share": load(source, "WaterFillShareAsk", ["demand", "k", "cap"], stubs),
         "leftover": load(source, "WaterFillLeftoverAdd", ["leftover", "cap", "already"], stubs),
         "hard": load(source, "EdgeHardPortion", ["demand", "softRatio"], stubs),
-        "skip": load(source, "SkipOtherIndex", ["oi", "skipIndex"], stubs),
+        "include": load(source, "IncludeInMergerVector", ["fromSelfNode", "supplierPower"], stubs),
         "notify": load(source, "ShouldNotifyOfferDirty", ["delta", "neverWritten"], stubs),
     }
 
@@ -86,9 +86,9 @@ class SliceHelpers(unittest.TestCase):
         self.assertEqual(self.h["offer_cap"](-1.0, 50.0), 50.0)
 
     def test_offer_excludes_self_hard(self):
-        self.assertEqual(self.h["offer_edge"](50.0, 20.0), 30.0)
-        self.assertTrue(self.h["skip"](1, 1))
-        self.assertFalse(self.h["skip"](0, 1))
+        self.assertEqual(self.h["offer_edge"](50.0, 50.0, 20.0), 20.0)
+        self.assertTrue(self.h["include"](True, 0.0))
+        self.assertFalse(self.h["include"](False, 0.0))
 
     def test_pt_base_not_alloc_avail(self):
         self.assertEqual(self.h["base_pt"](200.0, 50.0, 0.0, 0.0, False), 50.0)
@@ -108,7 +108,7 @@ class QueueModel:
         self.queue = []
         self.epoch = 1
         self.notify_enabled = "ShouldNotifyOfferDirty" in self.src
-        self.skip_self = "SkipOtherIndex" in self.src
+        self.include_self = True
 
     def add_node(self, nid, kind, max_out, cons=0.0, **kw):
         n = SimpleNamespace(
@@ -177,19 +177,25 @@ class QueueModel:
             incoming = incoming + self.h["offer_cap"](e.m_OfferedResidual, fb)
         return self.h["base_pt"](n.m_MaxOutput, incoming, n.m_VirtualGeneration, n.m_Consumption, n.m_GateClosed)
 
-    def other_hard(self, nid, skip):
-        outs = self.outgoing[nid]
-        s = 0.0
-        for oi, e in enumerate(outs):
-            if self.skip_self and self.h["skip"](oi, skip):
+    def supplier_power(self, src):
+        power = src.m_OutputPower
+        if src.kind == PASSTHROUGH:
+            power = src.m_InputPower + src.m_VirtualGeneration - src.m_Consumption
+            if src.m_GateClosed:
+                power = 0.0
+        return power
+
+    def merger_vector(self, provider_id, m_edge):
+        entries = []
+        for pe in self.incoming.get(m_edge.m_TargetNodeId, []):
+            if pe.m_Flags == 0:
                 continue
-            if not self.skip_self and oi == skip:
+            src = self.nodes[pe.m_SourceNodeId]
+            from_self = pe.m_SourceNodeId == provider_id
+            if not self.h["include"](from_self, self.supplier_power(src)):
                 continue
-            if e.m_Flags == 0:
-                continue
-            ratio = self.nodes[e.m_TargetNodeId].m_SoftDemandRatio
-            s = s + self.h["hard"](e.m_Demand, ratio)
-        return s
+            entries.append(pe)
+        return entries
 
     def raw_demand(self, edge, available):
         tgt = self.nodes[edge.m_TargetNodeId]
@@ -216,7 +222,7 @@ class QueueModel:
             if e.m_Flags == 0:
                 continue
             tgt = self.nodes[e.m_TargetNodeId]
-            if tgt.kind == PASSTHROUGH and len(self.powered_in(tgt.id)) > 1:
+            if tgt.kind == PASSTHROUGH and len(self.merger_vector(nid, e)) > 1:
                 mergers.append(i)
         mergers.sort(key=lambda i: (outs[i].m_TargetNodeId, outs[i].m_TargetPort))
         if not mergers:
@@ -233,9 +239,9 @@ class QueueModel:
             D = e.m_Demand
             caps = []
             self_index = -1
-            for pe in self.powered_in(e.m_TargetNodeId):
+            for pe in self.merger_vector(nid, e):
                 src = self.nodes[pe.m_SourceNodeId]
-                if pe.m_SourceNodeId == nid:
+                if pe is e:
                     self_index = len(caps)
                     caps.append(remaining)
                 else:
@@ -254,12 +260,18 @@ class QueueModel:
     def publish_offers(self, nid, available):
         outs = self.outgoing[nid]
         base = self.offer_base(nid, available)
-        dirtied = []
-        for i, e in enumerate(outs):
+        total_hard = 0.0
+        for e in outs:
             if e.m_Flags == 0:
                 continue
-            other = self.other_hard(nid, i)
-            new_offer = self.h["offer_edge"](base, other)
+            total_hard = total_hard + self.h["hard"](
+                e.m_Demand, self.nodes[e.m_TargetNodeId].m_SoftDemandRatio)
+        dirtied = []
+        for e in outs:
+            if e.m_Flags == 0:
+                continue
+            own = self.h["hard"](e.m_Demand, self.nodes[e.m_TargetNodeId].m_SoftDemandRatio)
+            new_offer = self.h["offer_edge"](base, total_hard, own)
             prev = e.m_OfferedResidual
             delta = new_offer - prev
             if delta < 0.0:
@@ -348,6 +360,7 @@ class QueueModel:
                     bonus = surplus * (e.m_Demand * r) / soft
                     e.m_AllocatedPower = e.m_AllocatedPower + bonus
         n.m_Overloaded = overloaded
+        self.last_alloc_soft = soft
         return total
 
     def edge_power(self, e):
@@ -388,12 +401,29 @@ class QueueModel:
                 available = n.m_MaxOutput
             if n.m_GateClosed:
                 available = 0.0
-            demand = self.allocate(nid, available)
+            prev_sig = n.m_LastStableOutput
+            downstream = self.allocate(nid, available)
             extra = self.publish_offers(nid, available)
-            n.m_LastStableOutput = demand
+            downstream_soft = getattr(self, "last_alloc_soft", 0.0)
+            total_soft = downstream_soft + n.m_SoftDemand
+            hard_base = downstream - downstream_soft + n.m_Consumption
+            if hard_base < 0.0:
+                hard_base = 0.0
+            virt = n.m_VirtualGeneration
+            if virt > hard_base:
+                virt = hard_base
+            demand_signal = hard_base - virt + total_soft
+            if demand_signal < 0.0:
+                demand_signal = 0.0
+            n.m_LastStableOutput = demand_signal
+            if demand_signal > EPS:
+                n.m_SoftDemandRatio = total_soft / demand_signal
+            else:
+                n.m_SoftDemandRatio = 0.0
             n.m_DemandKnown = True
             input_changed = abs(insum - n.m_PrevInputPower) > EPS
-            if input_changed:
+            sig_changed = abs(demand_signal - prev_sig) > EPS
+            if input_changed or sig_changed:
                 for e in self.incoming.get(nid, []):
                     extra.append(e.m_SourceNodeId)
             for e in self.outgoing[nid]:
@@ -580,7 +610,7 @@ class Scenarios(unittest.TestCase):
         self.assertAlmostEqual(asks[1], 0.0, places=3)
 
     def test_b3_offer_other_outs_only(self):
-        self.assertEqual(self.h["offer_edge"](50.0, 20.0), 30.0)
+        self.assertEqual(self.h["offer_edge"](50.0, 20.0, 0.0), 30.0)
 
     def test_m1_two_mergers_share_cap(self):
         q = QueueModel(self.h)
@@ -671,7 +701,20 @@ class Negatives(unittest.TestCase):
         )
         self.assertEqual(n, 1)
         h = helpers(src)
-        self.assertEqual(h["offer_cap"](50.0, 10.0), 10.0)
+        q = QueueModel(h, src)
+        q.add_node("s50", SOURCE, 50)
+        q.add_node("s40", SOURCE, 40)
+        q.add_node("sp", PASSTHROUGH, 200)
+        q.add_node("c", PASSTHROUGH, 500)
+        q.add_node("l1", CONSUMER, 0, 30)
+        q.add_node("pump", CONSUMER, 0, 50)
+        q.add_edge("e50", "s50", "sp")
+        q.add_edge("el1", "sp", "l1")
+        q.add_edge("esp", "sp", "c")
+        q.add_edge("e40", "s40", "c")
+        q.add_edge("eo", "c", "pump")
+        q.run(["s50", "s40", "sp", "c", "l1", "pump"])
+        self.assertLess(q.edges["eo"].m_AllocatedPower + EPS, 50.0)
 
     def test_zero_fallback_like_epsilon(self):
         src, n = re.subn(
@@ -686,12 +729,17 @@ class Negatives(unittest.TestCase):
 
     def test_include_own_edge_in_other_hard(self):
         src, n = re.subn(
-            r"if \(SkipOtherIndex\(oi, skipIndex\)\)\s*continue;",
-            "/* mutated include own */",
+            r"float otherHard = totalHard - ownHard;",
+            "float otherHard = totalHard;",
             self._src(),
         )
         self.assertGreaterEqual(n, 1)
-        self.assertNotIn("if (SkipOtherIndex(oi, skipIndex))", src)
+        h = helpers(src)
+        q = net_2a(h)
+        a = q.alloc_map()
+        self.assertFalse(
+            abs(a["e_s20"] - 20.0) < 0.2 and abs(a["e_s50"] - 30.0) < 0.2
+        )
 
     def test_no_b13_notify(self):
         src, n = re.subn(
@@ -702,6 +750,143 @@ class Negatives(unittest.TestCase):
         self.assertGreaterEqual(n, 1)
         h = helpers(src)
         self.assertFalse(h["notify"](10.0, True))
+
+    def test_b41_without_fromself_fails_recovery(self):
+        src, n = re.subn(
+            r"if \(fromSelfNode\)\s*\{\s*return true;\s*\}",
+            "if (fromSelfNode) { return false; }",
+            self._src(),
+        )
+        self.assertGreaterEqual(n, 1)
+        h = helpers(src)
+        q = _net_b41_three(h)
+        _toggle_s50(q)
+        self.assertTrue(
+            q.nodes["s50"].m_Overloaded or q.edges["el1"].m_AllocatedPower < 5.0
+        )
+
+
+def _net_b41_three(h, src=None):
+    q = QueueModel(h, src)
+    q.add_node("s20", SOURCE, 20)
+    q.add_node("s30", SOURCE, 30)
+    q.add_node("s50", SOURCE, 50)
+    q.add_node("sp", PASSTHROUGH, 200)
+    q.add_node("c", PASSTHROUGH, 500)
+    q.add_node("l1", CONSUMER, 0, 10)
+    q.add_node("pump", CONSUMER, 0, 50)
+    q.add_edge("e20", "s20", "c")
+    q.add_edge("e30", "s30", "c")
+    q.add_edge("e50", "s50", "sp")
+    q.add_edge("el1", "sp", "l1")
+    q.add_edge("esp", "sp", "c")
+    q.add_edge("eo", "c", "pump")
+    q.run(["s20", "s30", "s50", "sp", "c", "l1", "pump"])
+    return q
+
+
+def _toggle_s50(q):
+    q.nodes["s50"].m_Powered = False
+    q.run(["s50", "sp", "c", "s20", "s30", "l1", "pump"])
+    q.nodes["s50"].m_Powered = True
+    q.run(["s50", "sp", "c", "s20", "s30", "l1", "pump"])
+
+
+class Round4(unittest.TestCase):
+    def setUp(self):
+        self.h = helpers()
+
+    def test_b41_three_siblings_recover(self):
+        q = _net_b41_three(self.h)
+        _toggle_s50(q)
+        self.assertFalse(q.nodes["s50"].m_Overloaded)
+        self.assertAlmostEqual(q.edges["el1"].m_AllocatedPower, 10.0, places=1)
+        self.assertGreater(q.edges["eo"].m_AllocatedPower, 40.0)
+
+    def test_b41_one_sibling_recover(self):
+        q = QueueModel(self.h)
+        q.add_node("s20", SOURCE, 20)
+        q.add_node("s50", SOURCE, 50)
+        q.add_node("sp", PASSTHROUGH, 200)
+        q.add_node("c", PASSTHROUGH, 500)
+        q.add_node("l1", CONSUMER, 0, 10)
+        q.add_node("pump", CONSUMER, 0, 50)
+        q.add_edge("e20", "s20", "c")
+        q.add_edge("e50", "s50", "sp")
+        q.add_edge("el1", "sp", "l1")
+        q.add_edge("esp", "sp", "c")
+        q.add_edge("eo", "c", "pump")
+        q.run(["s20", "s50", "sp", "c", "l1", "pump"])
+        q.nodes["s50"].m_Powered = False
+        q.run(["s50", "sp", "c", "s20", "l1", "pump"])
+        q.nodes["s50"].m_Powered = True
+        q.run(["s50", "sp", "c", "s20", "l1", "pump"])
+        self.assertFalse(q.nodes["s50"].m_Overloaded)
+        self.assertAlmostEqual(q.edges["el1"].m_AllocatedPower, 10.0, places=1)
+        self.assertGreater(q.edges["eo"].m_AllocatedPower, 40.0)
+
+    def test_b41_parallel_edges_recover(self):
+        q = QueueModel(self.h)
+        q.add_node("s20", SOURCE, 20)
+        q.add_node("s50", SOURCE, 50)
+        q.add_node("sp", PASSTHROUGH, 200)
+        q.add_node("c", PASSTHROUGH, 500)
+        q.add_node("l1", CONSUMER, 0, 10)
+        q.add_node("pump", CONSUMER, 0, 50)
+        q.add_edge("e20", "s20", "c")
+        q.add_edge("e50", "s50", "sp")
+        q.add_edge("el1", "sp", "l1")
+        q.add_edge("esp1", "sp", "c", sport="o2", tport="i1")
+        q.add_edge("esp2", "sp", "c", sport="o3", tport="i2")
+        q.add_edge("eo", "c", "pump")
+        q.run(["s20", "s50", "sp", "c", "l1", "pump"])
+        q.nodes["s50"].m_Powered = False
+        q.run(["s50", "sp", "c", "s20", "l1", "pump"])
+        q.nodes["s50"].m_Powered = True
+        q.run(["s50", "sp", "c", "s20", "l1", "pump"])
+        self.assertFalse(q.nodes["s50"].m_Overloaded)
+        self.assertAlmostEqual(q.edges["el1"].m_AllocatedPower, 10.0, places=1)
+
+    def test_s3_outgoing_order(self):
+        def run_order(first_lamp):
+            q = QueueModel(self.h)
+            q.add_node("s50", SOURCE, 50)
+            q.add_node("s20", SOURCE, 20)
+            q.add_node("sp", PASSTHROUGH, 200)
+            q.add_node("c", PASSTHROUGH, 500)
+            q.add_node("l1", CONSUMER, 0, 10)
+            q.add_node("l2", CONSUMER, 0, 50)
+            q.add_edge("e_s50", "s50", "sp")
+            if first_lamp:
+                q.add_edge("e_l1", "sp", "l1")
+                q.add_edge("e_sp_c", "sp", "c")
+            else:
+                q.add_edge("e_sp_c", "sp", "c")
+                q.add_edge("e_l1", "sp", "l1")
+            q.add_edge("e_s20", "s20", "c")
+            q.add_edge("e_out", "c", "l2")
+            q.run(["s50", "s20", "sp", "c", "l1", "l2"])
+            return q.edges["e_sp_c"].m_Demand, q.edges["e_s20"].m_Demand
+        a = run_order(True)
+        b = run_order(False)
+        self.assertAlmostEqual(a[0], b[0], places=2)
+        self.assertAlmostEqual(a[1], b[1], places=2)
+
+    def test_2d_queue_battery_and_pump(self):
+        q = QueueModel(self.h)
+        q.add_node("s50", SOURCE, 50)
+        q.add_node("s20", SOURCE, 20)
+        q.add_node("bat", PASSTHROUGH, 120, soft=40.0)
+        q.add_node("c", PASSTHROUGH, 500)
+        q.add_node("pump", CONSUMER, 0, 50)
+        q.add_edge("ebat", "s50", "bat")
+        q.add_edge("e50c", "s50", "c")
+        q.add_edge("e20", "s20", "c")
+        q.add_edge("eo", "c", "pump")
+        q.run(["bat", "s50", "s20", "c", "pump"])
+        self.assertGreater(q.edges["eo"].m_AllocatedPower, 45.0)
+        self.assertAlmostEqual(q.edges["ebat"].m_AllocatedPower, 20.0, places=1)
+        self.assertFalse(q.nodes["s50"].m_Overloaded)
 
 
 if __name__ == "__main__":

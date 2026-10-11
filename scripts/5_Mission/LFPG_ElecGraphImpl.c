@@ -3910,15 +3910,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return offeredResidual;
     }
 
-    protected bool SkipOtherIndex(int oi, int skipIndex)
-    {
-        if (oi == skipIndex)
-        {
-            return true;
-        }
-        return false;
-    }
-
     protected bool ShouldNotifyOfferDirty(float delta, bool neverWritten)
     {
         if (neverWritten)
@@ -3932,14 +3923,50 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return false;
     }
 
-    protected float ComputeOfferTowardEdge(float baseP, float otherHard)
+    protected float ComputeOfferTowardEdge(float baseP, float totalHard, float ownHard)
     {
+        float otherHard = totalHard - ownHard;
         float offer = baseP - otherHard;
         if (offer < 0.0)
         {
             offer = 0.0;
         }
         return offer;
+    }
+
+    protected bool IncludeInMergerVector(bool fromSelfNode, float supplierPower)
+    {
+        if (fromSelfNode)
+        {
+            return true;
+        }
+        if (supplierPower > LFPG_PROPAGATION_EPSILON)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    protected float SupplierPowerForMerger(LFPG_ElecNode cpSrc)
+    {
+        if (!cpSrc)
+        {
+            return 0.0;
+        }
+        float supplierPower = cpSrc.m_OutputPower;
+        if (cpSrc.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+        {
+            supplierPower = cpSrc.m_InputPower + cpSrc.m_VirtualGeneration;
+            if (cpSrc.m_Consumption > LFPG_PROPAGATION_EPSILON)
+            {
+                supplierPower = supplierPower - cpSrc.m_Consumption;
+            }
+            if (cpSrc.m_GateClosed)
+            {
+                supplierPower = 0.0;
+            }
+        }
+        return supplierPower;
     }
 
     protected float ComputeOfferBaseSource(float availableOutput)
@@ -4041,9 +4068,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             {
                 string ca = idA.Substring(ia, 1);
                 string cb = idB.Substring(ia, 1);
-                if (ca != cb)
+                int codeA = ca.ToAscii();
+                int codeB = cb.ToAscii();
+                if (codeA != codeB)
                 {
-                    return ca < cb;
+                    return codeA < codeB;
                 }
             }
             return la < lb;
@@ -4060,9 +4089,11 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         {
             string cpa = portA.Substring(pa, 1);
             string cpb = portB.Substring(pa, 1);
-            if (cpa != cpb)
+            int codePa = cpa.ToAscii();
+            int codePb = cpb.ToAscii();
+            if (codePa != codePb)
             {
-                return cpa < cpb;
+                return codePa < codePb;
             }
         }
         return lpa < lpb;
@@ -4077,6 +4108,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         int ii;
         for (ii = 0; ii < inEdges.Count(); ii = ii + 1)
         {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
             LFPG_ElecEdge inE = inEdges[ii];
             if (!inE)
                 continue;
@@ -4107,33 +4139,6 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return ComputeOfferBasePassthrough(node.m_MaxOutput, IncomingOfferSumForBase(nodeId), node.m_VirtualGeneration, node.m_Consumption, node.m_GateClosed);
         }
         return 0.0;
-    }
-
-    protected float OtherEnabledHard(string nodeId, int skipIndex)
-    {
-        array<ref LFPG_ElecEdge> outEdges;
-        if (!m_Outgoing.Find(nodeId, outEdges) || !outEdges)
-            return 0.0;
-        float otherHard = 0.0;
-        int oi;
-        for (oi = 0; oi < outEdges.Count(); oi = oi + 1)
-        {
-            if (SkipOtherIndex(oi, skipIndex))
-                continue;
-            LFPG_ElecEdge oth = outEdges[oi];
-            if (!oth)
-                continue;
-            if ((oth.m_Flags & LFPG_EDGE_ENABLED) == 0)
-                continue;
-            float ratio = 0.0;
-            LFPG_ElecNode tgt;
-            if (m_Nodes.Find(oth.m_TargetNodeId, tgt) && tgt)
-            {
-                ratio = tgt.m_SoftDemandRatio;
-            }
-            otherHard = otherHard + EdgeHardPortion(oth.m_Demand, ratio);
-        }
-        return otherHard;
     }
 
     protected void NotifyOfferChanged(string providerId, LFPG_ElecEdge edge)
@@ -4192,16 +4197,41 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return;
         int edgeCount = outEdges.Count();
         float baseP = ProviderOfferBase(nodeId, availableOutput);
+        float totalHard = 0.0;
+        int hi;
+        for (hi = 0; hi < edgeCount; hi = hi + 1)
+        {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+            LFPG_ElecEdge hardE = outEdges[hi];
+            if (!hardE)
+                continue;
+            if ((hardE.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+            float ratio = 0.0;
+            LFPG_ElecNode ht;
+            if (m_Nodes.Find(hardE.m_TargetNodeId, ht) && ht)
+            {
+                ratio = ht.m_SoftDemandRatio;
+            }
+            totalHard = totalHard + EdgeHardPortion(hardE.m_Demand, ratio);
+        }
         int ei;
         for (ei = 0; ei < edgeCount; ei = ei + 1)
         {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
             LFPG_ElecEdge edge = outEdges[ei];
             if (!edge)
                 continue;
             if ((edge.m_Flags & LFPG_EDGE_ENABLED) == 0)
                 continue;
-            float otherHard = OtherEnabledHard(nodeId, ei);
-            float newOffer = ComputeOfferTowardEdge(baseP, otherHard);
+            float ownRatio = 0.0;
+            LFPG_ElecNode ot;
+            if (m_Nodes.Find(edge.m_TargetNodeId, ot) && ot)
+            {
+                ownRatio = ot.m_SoftDemandRatio;
+            }
+            float ownHard = EdgeHardPortion(edge.m_Demand, ownRatio);
+            float newOffer = ComputeOfferTowardEdge(baseP, totalHard, ownHard);
             float prevOffer = edge.m_OfferedResidual;
             float delta = newOffer - prevOffer;
             if (delta < 0.0)
@@ -4217,16 +4247,51 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         }
     }
 
-    protected void ApplyMergerWaterFill(string nodeId, float availableOutput)
+    protected int MergerVectorCount(string providerId, LFPG_ElecEdge mEdge)
+    {
+        if (!mEdge)
+            return 0;
+        array<ref LFPG_ElecEdge> inEdges;
+        if (!m_Incoming.Find(mEdge.m_TargetNodeId, inEdges) || !inEdges)
+            return 0;
+        int count = 0;
+        int cpi;
+        for (cpi = 0; cpi < inEdges.Count(); cpi = cpi + 1)
+        {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+            LFPG_ElecEdge cpEdge = inEdges[cpi];
+            if (!cpEdge)
+                continue;
+            if ((cpEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                continue;
+            LFPG_ElecNode cpSrc;
+            if (!m_Nodes.Find(cpEdge.m_SourceNodeId, cpSrc) || !cpSrc)
+                continue;
+            float supplierPower = SupplierPowerForMerger(cpSrc);
+            bool fromSelf = false;
+            if (cpEdge.m_SourceNodeId == providerId)
+            {
+                fromSelf = true;
+            }
+            if (IncludeInMergerVector(fromSelf, supplierPower))
+            {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    protected bool ApplyMergerWaterFill(string nodeId, float availableOutput)
     {
         array<ref LFPG_ElecEdge> outEdges;
         if (!m_Outgoing.Find(nodeId, outEdges) || !outEdges)
-            return;
+            return false;
         int edgeCount = outEdges.Count();
         array<int> mergerIdx = new array<int>;
         int ei;
         for (ei = 0; ei < edgeCount; ei = ei + 1)
         {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
             LFPG_ElecEdge edge = outEdges[ei];
             if (!edge)
                 continue;
@@ -4237,14 +4302,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 continue;
             if (tgt.m_DeviceType != LFPG_DeviceType.PASSTHROUGH)
                 continue;
-            if (CountPoweredIncoming(edge.m_TargetNodeId) > 1)
+            if (MergerVectorCount(nodeId, edge) > 1)
             {
                 mergerIdx.Insert(ei);
             }
         }
         int mCount = mergerIdx.Count();
         if (mCount <= 0)
-            return;
+            return false;
 
         int a;
         int b;
@@ -4270,6 +4335,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         int hi;
         for (hi = 0; hi < edgeCount; hi = hi + 1)
         {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
             bool isMerger = false;
             int mj;
             for (mj = 0; mj < mCount; mj = mj + 1)
@@ -4299,6 +4365,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             remaining = 0.0;
         }
 
+        bool rewrote = false;
         int mi;
         for (mi = 0; mi < mCount; mi = mi + 1)
         {
@@ -4315,6 +4382,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             int cpi;
             for (cpi = 0; cpi < inEdges.Count(); cpi = cpi + 1)
             {
+                m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
                 LFPG_ElecEdge cpEdge = inEdges[cpi];
                 if (!cpEdge)
                     continue;
@@ -4323,23 +4391,16 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 LFPG_ElecNode cpSrc;
                 if (!m_Nodes.Find(cpEdge.m_SourceNodeId, cpSrc) || !cpSrc)
                     continue;
-                float supplierPower = cpSrc.m_OutputPower;
-                if (cpSrc.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+                float supplierPower = SupplierPowerForMerger(cpSrc);
+                bool fromSelf = false;
+                if (cpEdge.m_SourceNodeId == nodeId)
                 {
-                    supplierPower = cpSrc.m_InputPower + cpSrc.m_VirtualGeneration;
-                    if (cpSrc.m_Consumption > LFPG_PROPAGATION_EPSILON)
-                    {
-                        supplierPower = supplierPower - cpSrc.m_Consumption;
-                    }
-                    if (cpSrc.m_GateClosed)
-                    {
-                        supplierPower = 0.0;
-                    }
+                    fromSelf = true;
                 }
-                if (supplierPower <= LFPG_PROPAGATION_EPSILON)
+                if (!IncludeInMergerVector(fromSelf, supplierPower))
                     continue;
                 float cap;
-                if (cpEdge.m_SourceNodeId == nodeId)
+                if (cpEdge == mEdge)
                 {
                     selfIndex = caps.Count();
                     cap = remaining;
@@ -4378,12 +4439,14 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 selfAsk = remaining;
             }
             mEdge.m_Demand = selfAsk;
+            rewrote = true;
             remaining = remaining - selfAsk;
             if (remaining < 0.0)
             {
                 remaining = 0.0;
             }
         }
+        return rewrote;
     }
 
     // v1.0: Binary power allocation (all-off policy).
@@ -4525,24 +4588,27 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             totalSoftDemand = totalSoftDemand + edgeSoftPortion;
         }
 
-        ApplyMergerWaterFill(nodeId, availableOutput);
-
-        totalDemand = 0.0;
-        totalSoftDemand = 0.0;
-        for (ei = 0; ei < edgeCount; ei = ei + 1)
+        bool mergerChanged = ApplyMergerWaterFill(nodeId, availableOutput);
+        if (mergerChanged)
         {
-            LFPG_ElecEdge sumEdge = outEdges[ei];
-            if (!sumEdge)
-                continue;
-            if ((sumEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
-                continue;
-            totalDemand = totalDemand + sumEdge.m_Demand;
-            LFPG_ElecNode sumTgt;
-            if (m_Nodes.Find(sumEdge.m_TargetNodeId, sumTgt) && sumTgt)
+            totalDemand = 0.0;
+            totalSoftDemand = 0.0;
+            for (ei = 0; ei < edgeCount; ei = ei + 1)
             {
-                if (sumTgt.m_SoftDemandRatio > LFPG_PROPAGATION_EPSILON)
+                m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+                LFPG_ElecEdge sumEdge = outEdges[ei];
+                if (!sumEdge)
+                    continue;
+                if ((sumEdge.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                    continue;
+                totalDemand = totalDemand + sumEdge.m_Demand;
+                LFPG_ElecNode sumTgt;
+                if (m_Nodes.Find(sumEdge.m_TargetNodeId, sumTgt) && sumTgt)
                 {
-                    totalSoftDemand = totalSoftDemand + (sumEdge.m_Demand * sumTgt.m_SoftDemandRatio);
+                    if (sumTgt.m_SoftDemandRatio > LFPG_PROPAGATION_EPSILON)
+                    {
+                        totalSoftDemand = totalSoftDemand + (sumEdge.m_Demand * sumTgt.m_SoftDemandRatio);
+                    }
                 }
             }
         }
