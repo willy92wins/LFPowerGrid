@@ -387,6 +387,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         // Step 4: Prune nodes with no edges
         ref array<string> emptyNodes = new array<string>;
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count());
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             string nid = m_Nodes.GetKey(ni);
@@ -968,6 +970,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     int removeSplitComponent = m_NextComponentId;
                     m_NextComponentId = m_NextComponentId + 1;
                     int removeVisitedIndex;
+                    if (LFPG_PERF_PROBE)
+                        LFPG_PerfProbe.CountMapSweep("m_WdgVisited", m_WdgVisited.Count(), m_WdgVisited.Count());
                     for (removeVisitedIndex = 0; removeVisitedIndex < m_WdgVisited.Count(); removeVisitedIndex = removeVisitedIndex + 1)
                     {
                         string removeVisitedId = m_WdgVisited.GetKey(removeVisitedIndex);
@@ -1241,6 +1245,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return;
 
         int ri;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count());
         for (ri = 0; ri < m_Nodes.Count(); ri = ri + 1)
         {
             ref LFPG_ElecNode rNode = m_Nodes.GetElement(ri);
@@ -1254,6 +1260,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         int nextId = 0;
 
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count() * 2);
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             ref LFPG_ElecNode startNode = m_Nodes.GetElement(ni);
@@ -1929,6 +1937,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         #ifdef SERVER
         int count = 0;
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count());
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
@@ -2012,6 +2022,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         ref array<string> oldNodeIds = new array<string>;
         ref array<int> oldNodeTypes = new array<int>;
         int sni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count() * 2);
         for (sni = 0; sni < m_Nodes.Count(); sni = sni + 1)
         {
             oldNodeIds.Insert(m_Nodes.GetKey(sni));
@@ -2120,6 +2132,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             RebuildComponents();
 
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count() * 2);
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
@@ -2135,6 +2149,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     {
         #ifdef SERVER
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count() * 2);
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             ref LFPG_ElecNode node = m_Nodes.GetElement(ni);
@@ -2215,6 +2231,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             ValidateConsumerStates(edgeBudget);
 
 			m_LastProcessMs = g_Game.GetTime() - startMs;
+            if (LFPG_PERF_PROBE)
+                LFPG_PerfProbe.OnProcessDirtyQueue(0, 0, 0, m_LastProcessMs);
             m_PropagationEdgeAccountingActive = false;
             return 0;
         }
@@ -2919,6 +2937,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         int elapsed = g_Game.GetTime() - startMs;
         m_LastProcessMs = elapsed;
 
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.OnProcessDirtyQueue(remaining, processed, m_EdgesVisitedThisEpoch, elapsed);
+
         if (processed > 0)
         {
             if (LFPG_LOG_LEVEL >= 2)
@@ -3594,6 +3615,9 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             LFPG_Util.Info(valMsg);
         }
 
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", nodeTotal, checked * 2);
+
         return fixed;
         #else
         return 0;
@@ -3608,6 +3632,8 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     {
         #ifdef SERVER
         int ni;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.CountMapSweep("m_Nodes", m_Nodes.Count(), m_Nodes.Count() * 2);
         for (ni = 0; ni < m_Nodes.Count(); ni = ni + 1)
         {
             string nid = m_Nodes.GetKey(ni);
@@ -3723,8 +3749,12 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
     protected void MarkUpstreamNodesDirty(string nodeId)
     {
         #ifdef SERVER
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.Begin("R02");
         array<string> upstreamQueue = new array<string>;
         map<string, bool> upstreamVisited = new map<string, bool>;
+        if (LFPG_PERF_PROBE)
+            LFPG_PerfProbe.AddAlloc(2);
         int queueHead = 0;
         string currentId;
         array<ref LFPG_ElecEdge> incomingEdges;
@@ -3763,9 +3793,18 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                     continue;
 
                 MarkNodeDirty(upstreamId, LFPG_DIRTY_INPUT);
+                if (LFPG_PERF_PROBE)
+                    LFPG_PerfProbe.AddRequeue(1);
                 if (upstreamNode.m_DeviceType != LFPG_DeviceType.SOURCE)
                     upstreamQueue.Insert(upstreamId);
+                if (LFPG_PERF_PROBE)
+                    LFPG_PerfProbe.AddVisit(1, 1);
             }
+        }
+        if (LFPG_PERF_PROBE)
+        {
+            LFPG_PerfProbe.Phase("walk");
+            LFPG_PerfProbe.End();
         }
         #endif
     }
