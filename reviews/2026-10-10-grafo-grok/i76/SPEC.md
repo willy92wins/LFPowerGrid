@@ -404,8 +404,9 @@ para todos los proveedores. No se ordena por id.
 Cota de bucle: `K = incoming.Count()` ≤ `LFPG_MAX_EDGES_PER_NODE` (12).
 Dos pasadas: share y leftover. Total ≤ 24 iteraciones.
 
-Pseudocodigo (estilo Enforce, sin ternarios ni `+=`; el slice de tests
-puede especializar K=2 sin `for` — ver §6.1):
+Pseudocodigo (estilo Enforce, sin ternarios ni `+=`). En el codigo, el
+cuerpo de cada pasada vive en `WaterFillShareAsk` y `WaterFillLeftoverAdd`,
+que carga el test (§6.1):
 
 ```
 protected void WaterFillAsks(float D, array<float> cap, array<float> ask)
@@ -688,9 +689,8 @@ Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
   conservacion+recuperacion; una de esas dos *casi* resuelve (a) y
   oscila. El brief asume que hay que spec antes de PR: de acuerdo.
 - Tope v2.4 (`:4011-4014`) asume un solo `availableOutput` (el del
-  llamador). En multifuente esa premisa es falsa; hay que mover el tope
-  post-split. Eso es un cambio del cold-start escrito para baterias, no
-  pedido explicitamente por #76, pero (e) lo exige.
+  llamador). Se deja en la D de Pass 1 de cada proveedor (§3.2.0): el
+  ask ya queda ≤ `remaining` y (e) arranca sin overload.
 - All-off en Combiner con deficit (2.b) es la politica v1.0
   (`:3903-3905`). G-01 la deja. El oraculo de max-flow **si** serviria
   70; verify de un alloc all-off no sale `ok`. El cierre “contra

@@ -4155,6 +4155,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
                 int ni;
                 for (ni = 0; ni < inEdges.Count(); ni = ni + 1)
                 {
+                    m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
                     LFPG_ElecEdge sib = inEdges[ni];
                     if (!sib)
                         continue;
@@ -4177,6 +4178,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         int ti;
         for (ti = 0; ti < tgtOut.Count(); ti = ti + 1)
         {
+            m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
             LFPG_ElecEdge te = tgtOut[ti];
             if (!te)
                 continue;
