@@ -4019,6 +4019,39 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         return false;
     }
 
+    protected float PassthroughSupplyAt(float inputPower, float virt, float cons, bool gateClosed)
+    {
+        if (gateClosed)
+        {
+            return 0.0;
+        }
+        float supplierPower = inputPower + virt;
+        if (cons > LFPG_PROPAGATION_EPSILON)
+        {
+            supplierPower = supplierPower - cons;
+        }
+        return supplierPower;
+    }
+
+    protected bool SupplierVisibilityFlipped(float prevSupplier, float curSupplier)
+    {
+        bool prevOn = false;
+        if (prevSupplier > LFPG_PROPAGATION_EPSILON)
+        {
+            prevOn = true;
+        }
+        bool curOn = false;
+        if (curSupplier > LFPG_PROPAGATION_EPSILON)
+        {
+            curOn = true;
+        }
+        if (prevOn != curOn)
+        {
+            return true;
+        }
+        return false;
+    }
+
     protected float SupplierPowerForMerger(LFPG_ElecNode cpSrc)
     {
         if (!cpSrc)
@@ -4028,15 +4061,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         float supplierPower = cpSrc.m_OutputPower;
         if (cpSrc.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
         {
-            supplierPower = cpSrc.m_InputPower + cpSrc.m_VirtualGeneration;
-            if (cpSrc.m_Consumption > LFPG_PROPAGATION_EPSILON)
-            {
-                supplierPower = supplierPower - cpSrc.m_Consumption;
-            }
-            if (cpSrc.m_GateClosed)
-            {
-                supplierPower = 0.0;
-            }
+            supplierPower = PassthroughSupplyAt(cpSrc.m_InputPower, cpSrc.m_VirtualGeneration, cpSrc.m_Consumption, cpSrc.m_GateClosed);
         }
         return supplierPower;
     }
@@ -4218,25 +4243,21 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
         if (!edge)
             return;
         string targetId = edge.m_TargetNodeId;
-        int poweredIn = CountPoweredIncoming(targetId);
-        if (poweredIn > 1)
+        array<ref LFPG_ElecEdge> inEdges;
+        if (m_Incoming.Find(targetId, inEdges) && inEdges)
         {
-            array<ref LFPG_ElecEdge> inEdges;
-            if (m_Incoming.Find(targetId, inEdges) && inEdges)
+            int ni;
+            for (ni = 0; ni < inEdges.Count(); ni = ni + 1)
             {
-                int ni;
-                for (ni = 0; ni < inEdges.Count(); ni = ni + 1)
-                {
-                    m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
-                    LFPG_ElecEdge sib = inEdges[ni];
-                    if (!sib)
-                        continue;
-                    if ((sib.m_Flags & LFPG_EDGE_ENABLED) == 0)
-                        continue;
-                    if (sib.m_SourceNodeId == providerId)
-                        continue;
-                    MarkNodeDirty(sib.m_SourceNodeId, LFPG_DIRTY_INPUT);
-                }
+                m_EdgesVisitedThisEpoch = m_EdgesVisitedThisEpoch + 1;
+                LFPG_ElecEdge sib = inEdges[ni];
+                if (!sib)
+                    continue;
+                if ((sib.m_Flags & LFPG_EDGE_ENABLED) == 0)
+                    continue;
+                if (sib.m_SourceNodeId == providerId)
+                    continue;
+                MarkNodeDirty(sib.m_SourceNodeId, LFPG_DIRTY_INPUT);
             }
         }
         LFPG_ElecNode tgtNode;
@@ -4271,6 +4292,17 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             return;
         int edgeCount = outEdges.Count();
         float baseP = ProviderOfferBase(nodeId, availableOutput);
+        bool visFlip = false;
+        LFPG_ElecNode pubNode;
+        if (m_Nodes.Find(nodeId, pubNode) && pubNode)
+        {
+            if (pubNode.m_DeviceType == LFPG_DeviceType.PASSTHROUGH)
+            {
+                float prevS = PassthroughSupplyAt(pubNode.m_PrevInputPower, pubNode.m_VirtualGeneration, pubNode.m_Consumption, pubNode.m_GateClosed);
+                float curS = PassthroughSupplyAt(pubNode.m_InputPower, pubNode.m_VirtualGeneration, pubNode.m_Consumption, pubNode.m_GateClosed);
+                visFlip = SupplierVisibilityFlipped(prevS, curS);
+            }
+        }
         float totalHard = 0.0;
         int hi;
         for (hi = 0; hi < edgeCount; hi = hi + 1)
@@ -4314,7 +4346,7 @@ class LFPG_ElecGraphImpl : LFPG_ElecGraph
             }
             bool neverWritten = prevOffer < 0.0;
             edge.m_OfferedResidual = newOffer;
-            if (ShouldNotifyOfferDirty(delta, neverWritten))
+            if (ShouldNotifyOfferDirty(delta, neverWritten) || visFlip)
             {
                 NotifyOfferChanged(nodeId, edge);
             }

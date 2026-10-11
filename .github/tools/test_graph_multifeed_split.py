@@ -1,6 +1,7 @@
 """G-01 multi-feed split: production offer/water-fill slices + queue model."""
 from pathlib import Path
 from types import SimpleNamespace
+import itertools
 import re
 import subprocess
 import sys
@@ -38,6 +39,8 @@ def helpers(src=None):
         "hard": load(source, "EdgeHardPortion", ["demand", "softRatio"], stubs),
         "include": load(source, "IncludeInMergerVector", ["fromSelfNode", "supplierPower"], stubs),
         "notify": load(source, "ShouldNotifyOfferDirty", ["delta", "neverWritten"], stubs),
+        "pt_supply": load(source, "PassthroughSupplyAt", ["inputPower", "virt", "cons", "gateClosed"], stubs),
+        "vis_flip": load(source, "SupplierVisibilityFlipped", ["prevSupplier", "curSupplier"], stubs),
     }
 
 
@@ -109,6 +112,8 @@ class QueueModel:
         self.epoch = 1
         self.notify_enabled = "ShouldNotifyOfferDirty" in self.src
         self.include_self = True
+        self.sibling_need_powered = False
+        self.supply_cross_notify = True
 
     def add_node(self, nid, kind, max_out, cons=0.0, **kw):
         n = SimpleNamespace(
@@ -139,6 +144,12 @@ class QueueModel:
         self.edges[eid] = e
         self.outgoing[src].append(e)
         self.incoming[dst].append(e)
+        return e
+
+    def remove_edge(self, eid):
+        e = self.edges.pop(eid)
+        self.outgoing[e.m_SourceNodeId].remove(e)
+        self.incoming[e.m_TargetNodeId].remove(e)
         return e
 
     def mark(self, nid):
@@ -180,9 +191,8 @@ class QueueModel:
     def supplier_power(self, src):
         power = src.m_OutputPower
         if src.kind == PASSTHROUGH:
-            power = src.m_InputPower + src.m_VirtualGeneration - src.m_Consumption
-            if src.m_GateClosed:
-                power = 0.0
+            power = self.h["pt_supply"](
+                src.m_InputPower, src.m_VirtualGeneration, src.m_Consumption, src.m_GateClosed)
         return power
 
     def merger_vector(self, provider_id, m_edge):
@@ -266,6 +276,14 @@ class QueueModel:
                 continue
             total_hard = total_hard + self.h["hard"](
                 e.m_Demand, self.nodes[e.m_TargetNodeId].m_SoftDemandRatio)
+        vis = False
+        n = self.nodes[nid]
+        if n.kind == PASSTHROUGH and self.supply_cross_notify:
+            prev_s = self.h["pt_supply"](
+                n.m_PrevInputPower, n.m_VirtualGeneration, n.m_Consumption, n.m_GateClosed)
+            cur_s = self.h["pt_supply"](
+                n.m_InputPower, n.m_VirtualGeneration, n.m_Consumption, n.m_GateClosed)
+            vis = self.h["vis_flip"](prev_s, cur_s)
         dirtied = []
         for e in outs:
             if e.m_Flags == 0:
@@ -283,7 +301,7 @@ class QueueModel:
                 fire = self.h["notify"](delta, never)
             else:
                 fire = never or delta > EPS
-            if fire:
+            if fire or vis:
                 dirtied.extend(self.notify_targets(nid, e))
         return dirtied
 
@@ -291,7 +309,10 @@ class QueueModel:
         out = []
         tgt = e.m_TargetNodeId
         pins = self.powered_in(tgt)
-        if len(self.incoming[tgt]) >= 1 and len(pins) > 1:
+        mark_sibs = True
+        if self.sibling_need_powered:
+            mark_sibs = len(pins) > 1
+        if mark_sibs:
             for pe in self.incoming[tgt]:
                 if pe.m_Flags and pe.m_SourceNodeId != provider:
                     out.append(pe.m_SourceNodeId)
@@ -889,5 +910,348 @@ class Round4(unittest.TestCase):
         self.assertFalse(q.nodes["s50"].m_Overloaded)
 
 
+def _has_supply(n):
+    if n.kind == SOURCE:
+        return n.m_Powered and n.m_MaxOutput > EPS
+    if n.kind == PASSTHROUGH:
+        avail = n.m_InputPower + n.m_VirtualGeneration - n.m_Consumption
+        if avail < 0.0:
+            avail = 0.0
+        if n.m_GateClosed:
+            avail = 0.0
+        if n.m_MaxOutput > EPS and avail > n.m_MaxOutput:
+            avail = n.m_MaxOutput
+        return avail > EPS
+    return True
+
+
+def _snap(q):
+    alloc = {eid: round(e.m_AllocatedPower, 3) for eid, e in q.edges.items()}
+    ov = set()
+    for n in q.nodes.values():
+        if n.m_Overloaded and _has_supply(n):
+            ov.add(n.id)
+    return alloc, frozenset(ov)
+
+
+def _fresh(h, flags=None):
+    q = QueueModel(h)
+    if flags:
+        q.sibling_need_powered = flags.get("sibling_need_powered", False)
+        q.supply_cross_notify = flags.get("supply_cross_notify", True)
+    return q
+
+
+def _fill_nodes(q, nodes):
+    for spec in nodes:
+        kw = dict(spec)
+        nid = kw.pop("id")
+        kind = kw.pop("kind")
+        mx = kw.pop("max")
+        cons = kw.pop("cons", 0.0)
+        q.add_node(nid, kind, mx, cons, **kw)
+
+
+def _recon(h, nodes, edges, flags=None):
+    q = _fresh(h, flags)
+    _fill_nodes(q, nodes)
+    for ed in edges:
+        q.add_edge(*ed)
+    q.run([n["id"] for n in nodes])
+    return q
+
+
+def spec_A():
+    nodes = [
+        {"id": "s20", "kind": SOURCE, "max": 20},
+        {"id": "s50", "kind": SOURCE, "max": 50},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "pump", "kind": CONSUMER, "max": 0, "cons": 50},
+    ]
+    edges = [("e20", "s20", "c"), ("e50", "s50", "c"), ("eo", "c", "pump")]
+    return nodes, edges
+
+
+def spec_B():
+    nodes = [
+        {"id": "s20", "kind": SOURCE, "max": 20},
+        {"id": "s50", "kind": SOURCE, "max": 50},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "load", "kind": CONSUMER, "max": 0, "cons": 80},
+    ]
+    edges = [("e20", "s20", "c"), ("e50", "s50", "c"), ("eo", "c", "load")]
+    return nodes, edges
+
+
+def spec_C():
+    nodes = [
+        {"id": "gen", "kind": SOURCE, "max": 50},
+        {"id": "s20", "kind": SOURCE, "max": 20},
+        {"id": "sp", "kind": PASSTHROUGH, "max": 200},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "lamp", "kind": PASSTHROUGH, "max": 50, "cons": 10},
+        {"id": "pump", "kind": PASSTHROUGH, "max": 100, "cons": 50},
+    ]
+    edges = [
+        ("egen", "gen", "sp"),
+        ("elamp", "sp", "lamp"),
+        ("esp", "sp", "c"),
+        ("e20", "s20", "c"),
+        ("eo", "c", "pump"),
+    ]
+    return nodes, edges
+
+
+def spec_F():
+    nodes = [
+        {"id": "gen", "kind": SOURCE, "max": 50},
+        {"id": "s20", "kind": SOURCE, "max": 20},
+        {"id": "sp", "kind": PASSTHROUGH, "max": 200},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "spump", "kind": PASSTHROUGH, "max": 100, "cons": 50},
+        {"id": "pump", "kind": PASSTHROUGH, "max": 100, "cons": 50},
+    ]
+    edges = [
+        ("egen", "gen", "sp"),
+        ("espump", "sp", "spump"),
+        ("esp", "sp", "c"),
+        ("e20", "s20", "c"),
+        ("eo", "c", "pump"),
+    ]
+    return nodes, edges
+
+
+def spec_b41():
+    nodes = [
+        {"id": "s20", "kind": SOURCE, "max": 20},
+        {"id": "s30", "kind": SOURCE, "max": 30},
+        {"id": "s50", "kind": SOURCE, "max": 50},
+        {"id": "sp", "kind": PASSTHROUGH, "max": 200},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "l1", "kind": CONSUMER, "max": 0, "cons": 10},
+        {"id": "pump", "kind": CONSUMER, "max": 0, "cons": 50},
+    ]
+    edges = [
+        ("e20", "s20", "c"),
+        ("e30", "s30", "c"),
+        ("e50", "s50", "sp"),
+        ("el1", "sp", "l1"),
+        ("esp", "sp", "c"),
+        ("eo", "c", "pump"),
+    ]
+    return nodes, edges
+
+
+def spec_t4b():
+    nodes = [
+        {"id": "s50", "kind": SOURCE, "max": 50},
+        {"id": "s40", "kind": SOURCE, "max": 40},
+        {"id": "sp", "kind": PASSTHROUGH, "max": 200},
+        {"id": "c", "kind": PASSTHROUGH, "max": 500},
+        {"id": "l1", "kind": CONSUMER, "max": 0, "cons": 30},
+        {"id": "pump", "kind": CONSUMER, "max": 0, "cons": 50},
+    ]
+    edges = [
+        ("e50", "s50", "sp"),
+        ("el1", "sp", "l1"),
+        ("esp", "sp", "c"),
+        ("e40", "s40", "c"),
+        ("eo", "c", "pump"),
+    ]
+    return nodes, edges
+
+
+GRAPHS = [
+    ("A", spec_A),
+    ("B", spec_B),
+    ("C", spec_C),
+    ("F", spec_F),
+    ("b41", spec_b41),
+    ("t4b", spec_t4b),
+]
+
+
+def _assert_match(test, q, recon, msg):
+    test.assertEqual(list(q.queue), [], msg + " queue")
+    sa, so = _snap(q)
+    ra, ro = _snap(recon)
+    test.assertEqual(sa, ra, msg + " alloc")
+    test.assertEqual(so, ro, msg + " overload")
+
+
+class Round5(unittest.TestCase):
+    def setUp(self):
+        self.h = helpers()
+
+    def test_c_panel_last(self):
+        nodes, edges = spec_C()
+        last = ("e20", "s20", "c")
+        rest = [e for e in edges if e[0] != "e20"]
+        q = _fresh(self.h)
+        _fill_nodes(q, nodes)
+        for ed in rest:
+            q.add_edge(*ed)
+        q.run([n["id"] for n in nodes])
+        q.add_edge(*last)
+        q.run(["s20", "c"])
+        self.assertAlmostEqual(q.edges["e20"].m_AllocatedPower, 20.0, places=3)
+        self.assertAlmostEqual(q.edges["esp"].m_AllocatedPower, 30.0, places=3)
+        self.assertAlmostEqual(q.edges["elamp"].m_AllocatedPower, 10.0, places=3)
+        self.assertAlmostEqual(q.edges["eo"].m_AllocatedPower, 50.0, places=3)
+        self.assertFalse(q.nodes["gen"].m_Overloaded)
+        self.assertFalse(q.nodes["s20"].m_Overloaded)
+
+    def test_c_panel_toggle(self):
+        q = _recon(self.h, *spec_C())
+        q.nodes["s20"].m_Powered = False
+        q.run(["s20"])
+        q.nodes["s20"].m_Powered = True
+        q.run(["s20"])
+        self.assertAlmostEqual(q.edges["e20"].m_AllocatedPower, 20.0, places=3)
+        self.assertAlmostEqual(q.edges["esp"].m_AllocatedPower, 30.0, places=3)
+        self.assertAlmostEqual(q.edges["elamp"].m_AllocatedPower, 10.0, places=3)
+        self.assertAlmostEqual(q.edges["eo"].m_AllocatedPower, 50.0, places=3)
+        self.assertFalse(q.nodes["s20"].m_Overloaded)
+        self.assertFalse(q.nodes["gen"].m_Overloaded)
+
+    def test_f_panel_last(self):
+        nodes, edges = spec_F()
+        last = ("e20", "s20", "c")
+        rest = [e for e in edges if e[0] != "e20"]
+        q = _fresh(self.h)
+        _fill_nodes(q, nodes)
+        for ed in rest:
+            q.add_edge(*ed)
+        q.run([n["id"] for n in nodes])
+        q.add_edge(*last)
+        q.run(["s20", "c"])
+        self.assertAlmostEqual(q.edges["espump"].m_AllocatedPower, 50.0, places=3)
+        self.assertAlmostEqual(q.edges["esp"].m_AllocatedPower, 0.0, places=3)
+        self.assertAlmostEqual(q.edges["e20"].m_AllocatedPower, 20.0, places=3)
+        self.assertTrue(q.nodes["c"].m_Overloaded)
+        self.assertFalse(q.nodes["gen"].m_Overloaded)
+        self.assertFalse(q.nodes["s20"].m_Overloaded)
+
+    def test_f_gen_last(self):
+        nodes, edges = spec_F()
+        last = ("egen", "gen", "sp")
+        rest = [e for e in edges if e[0] != "egen"]
+        q = _fresh(self.h)
+        _fill_nodes(q, nodes)
+        for ed in rest:
+            q.add_edge(*ed)
+        q.run([n["id"] for n in nodes])
+        q.add_edge(*last)
+        q.run(["gen", "sp"])
+        self.assertAlmostEqual(q.edges["espump"].m_AllocatedPower, 50.0, places=3)
+        self.assertAlmostEqual(q.edges["esp"].m_AllocatedPower, 0.0, places=3)
+        self.assertAlmostEqual(q.edges["e20"].m_AllocatedPower, 20.0, places=3)
+        self.assertTrue(q.nodes["c"].m_Overloaded)
+        self.assertFalse(q.nodes["gen"].m_Overloaded)
+        self.assertFalse(q.nodes["s20"].m_Overloaded)
+
+    def test_property_incremental_matches_recon(self):
+        ncases = 0
+        for name, fn in GRAPHS:
+            nodes, edges = fn()
+            recon = _recon(self.h, nodes, edges)
+            ids = [n["id"] for n in nodes]
+            sources = [n["id"] for n in nodes if n["kind"] == SOURCE]
+            for last in edges:
+                rest = [e for e in edges if e[0] != last[0]]
+                q = _fresh(self.h)
+                _fill_nodes(q, nodes)
+                for ed in rest:
+                    q.add_edge(*ed)
+                q.run(ids)
+                q.add_edge(*last)
+                q.run([last[1], last[2]])
+                _assert_match(self, q, recon, name + " last " + last[0])
+                ncases = ncases + 1
+            for cut in edges:
+                q = _recon(self.h, nodes, edges)
+                q.remove_edge(cut[0])
+                q.run([cut[1], cut[2]])
+                q.add_edge(*cut)
+                q.run([cut[1], cut[2]])
+                _assert_match(self, q, recon, name + " cut " + cut[0])
+                ncases = ncases + 1
+            for order in itertools.permutations(edges):
+                q = _fresh(self.h)
+                _fill_nodes(q, nodes)
+                for ed in order:
+                    q.add_edge(*ed)
+                    q.run([ed[1], ed[2]])
+                _assert_match(self, q, recon, name + " perm")
+                ncases = ncases + 1
+            for sid in sources:
+                q = _recon(self.h, nodes, edges)
+                q.nodes[sid].m_Powered = False
+                q.run([sid])
+                q.nodes[sid].m_Powered = True
+                q.run([sid])
+                _assert_match(self, q, recon, name + " toggle " + sid)
+                ncases = ncases + 1
+        self.assertGreater(ncases, 1000)
+
+    def test_negative_old_sibling_gate_fails(self):
+        flags = {"sibling_need_powered": True, "supply_cross_notify": True}
+        nodes, edges = spec_C()
+        last = ("e20", "s20", "c")
+        rest = [e for e in edges if e[0] != "e20"]
+        q = _fresh(self.h, flags)
+        _fill_nodes(q, nodes)
+        for ed in rest:
+            q.add_edge(*ed)
+        q.run([n["id"] for n in nodes])
+        q.add_edge(*last)
+        q.run(["s20", "c"])
+        recon = _recon(self.h, nodes, edges)
+        bad = _snap(q) != _snap(recon)
+        self.assertTrue(bad)
+
+    def test_negative_no_vis_flip_fails(self):
+        flags = {"sibling_need_powered": False, "supply_cross_notify": False}
+        nodes, edges = spec_F()
+        last = ("egen", "gen", "sp")
+        rest = [e for e in edges if e[0] != "egen"]
+        q = _fresh(self.h, flags)
+        _fill_nodes(q, nodes)
+        for ed in rest:
+            q.add_edge(*ed)
+        q.run([n["id"] for n in nodes])
+        q.add_edge(*last)
+        q.run(["gen", "sp"])
+        recon = _recon(self.h, nodes, edges)
+        bad = _snap(q) != _snap(recon)
+        self.assertTrue(bad)
+
+    def test_notify_body_no_powered_before_siblings(self):
+        src = GRAPH.read_text(encoding="utf-8")
+        i0 = src.index("protected void NotifyOfferChanged")
+        i1 = src.index("protected void PublishEdgeOffers")
+        body = src[i0:i1]
+        sib = body.index("sib.m_SourceNodeId == providerId")
+        self.assertNotIn("CountPoweredIncoming", body[:sib])
+        self.assertIn("CountPoweredIncoming", body[sib:])
+
+    def test_publish_calls_visibility_flipped(self):
+        src = GRAPH.read_text(encoding="utf-8")
+        i0 = src.index("protected void PublishEdgeOffers")
+        i1 = src.index("protected int MergerVectorCount")
+        body = src[i0:i1]
+        self.assertIn("SupplierVisibilityFlipped", body)
+        self.assertRegex(
+            body,
+            r"if \(ShouldNotifyOfferDirty\(delta, neverWritten\) \|\| visFlip\)\s*\{\s*NotifyOfferChanged\(nodeId, edge\);")
+
+    def test_pt_supply_gate_and_consumption(self):
+        f = self.h["pt_supply"]
+        self.assertAlmostEqual(f(30.0, 0.0, 10.0, False), 20.0, places=6)
+        self.assertAlmostEqual(f(30.0, 5.0, 0.0, False), 35.0, places=6)
+        self.assertAlmostEqual(f(30.0, 5.0, 10.0, True), 0.0, places=6)
+
+
 if __name__ == "__main__":
     unittest.main()
+
