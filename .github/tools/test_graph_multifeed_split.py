@@ -1239,7 +1239,17 @@ class Round5(unittest.TestCase):
         src = GRAPH.read_text(encoding="utf-8")
         i0 = src.index("protected void PublishEdgeOffers")
         i1 = src.index("protected int MergerVectorCount")
-        self.assertIn("SupplierVisibilityFlipped", src[i0:i1])
+        body = src[i0:i1]
+        self.assertIn("SupplierVisibilityFlipped", body)
+        self.assertRegex(
+            body,
+            r"if \(ShouldNotifyOfferDirty\(delta, neverWritten\) \|\| visFlip\)\s*\{\s*NotifyOfferChanged\(nodeId, edge\);")
+
+    def test_pt_supply_gate_and_consumption(self):
+        f = self.h["pt_supply"]
+        self.assertAlmostEqual(f(30.0, 0.0, 10.0, False), 20.0, places=6)
+        self.assertAlmostEqual(f(30.0, 5.0, 0.0, False), 35.0, places=6)
+        self.assertAlmostEqual(f(30.0, 5.0, 10.0, True), 0.0, places=6)
 
 
 if __name__ == "__main__":
