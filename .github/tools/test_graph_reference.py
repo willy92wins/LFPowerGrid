@@ -216,6 +216,49 @@ class FixtureExpectations(unittest.TestCase):
                     )
 
 
+class P1HardPriorityIslands(unittest.TestCase):
+    def test_disjoint_islands_do_not_raise_hard_priority(self):
+        g = Graph()
+        for n in [
+            Node("srcA", "SOURCE", available=30),
+            Node("bat", "PASSTHROUGH", pass_limit=100, soft_demand=20, soft_fraction=1.0),
+            Node("srcB", "SOURCE", available=10),
+            Node("l", "CONSUMER", hard_demand=25),
+        ]:
+            g.nodes[n.id] = n
+        for e in [Edge("a", "srcA", "bat"), Edge("b", "srcB", "l")]:
+            g.edges[e.id] = e
+        report = Oracle().verify(g, {"a": 20.0, "b": 0.0})
+        rules = [v.rule for v in report.violations]
+        self.assertEqual(set(rules), {"hard_unmet"})
+        self.assertEqual(
+            [v.where for v in report.violations],
+            ["l"],
+        )
+
+    def test_shared_source_raises_hard_priority_on_battery(self):
+        g = Graph()
+        for n in [
+            Node("src", "SOURCE", available=30),
+            Node("bat", "PASSTHROUGH", pass_limit=100, soft_demand=20, soft_fraction=1.0),
+            Node("l2", "CONSUMER", hard_demand=25),
+        ]:
+            g.nodes[n.id] = n
+        for e in [Edge("a", "src", "bat"), Edge("b", "src", "l2")]:
+            g.edges[e.id] = e
+        report = Oracle().verify(g, {"a": 20.0, "b": 0.0})
+        rules = [v.rule for v in report.violations]
+        self.assertFalse(report.ok)
+        self.assertIn("hard_unmet", rules)
+        self.assertIn("feasible_but_underfed", rules)
+        self.assertIn("hard_priority", rules)
+        pri = [v for v in report.violations if v.rule == "hard_priority"]
+        self.assertEqual(len(pri), 1)
+        self.assertEqual(pri[0].where, "bat")
+        self.assertIn("l2", pri[0].detail)
+        self.assertIn("src", pri[0].detail)
+
+
 class ExtraNegatives(unittest.TestCase):
     def test_cut_edge_flow_is_violation(self):
         g = _fixture("cut_edge.json")
@@ -237,6 +280,10 @@ class ExtraNegatives(unittest.TestCase):
         )
         self.assertFalse(report.ok)
         self.assertIn("hard_priority", [v.rule for v in report.violations])
+        self.assertEqual(
+            [v.where for v in report.violations if v.rule == "hard_priority"],
+            ["battery"],
+        )
         self.assertIn("hard_unmet", [v.rule for v in report.violations])
         self.assertIn(
             "hard_load",

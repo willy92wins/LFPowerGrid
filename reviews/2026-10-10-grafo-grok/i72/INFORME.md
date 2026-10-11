@@ -107,3 +107,25 @@ FAIL: test_h3b ... AssertionError: 'over_allocation' not found in []
 ```
 
 Resto: `test_enforce_checks.py` 21 OK; `test_graph_capacity_refresh.py` 6 OK; `test_graph_charger_energy.py` 12 OK; `test_finish_wiring_quota.py` 7 OK; `test_broadcast_contract.py` 3 OK; `enforce_checks.py --root .` FAIL=0 WARN=0.
+
+## Ronda 3
+
+P1: `hard_priority` ya no suma islas. `sources_reaching` (`oracle.py:148`) usa `reachable_from` por SOURCE. Una violacion por bateria que absorbe y comparte SOURCE con un nodo en `deficit_nodes` (`oracle.py:371-385`); `where` = id de la bateria. Descarte: min-cut entre bateria y deficit (mas aparato; compartir SOURCE basta). Tests `P1HardPriorityIslands`.
+
+P2: README — comparar el conjunto de reglas, no `ok`, en deficit real; documentada la regla de `hard_priority` por SOURCE compartida.
+
+CIERRE-72: fila gates actualizada.
+
+### GATES (ronda 3)
+
+`test_graph_reference.py`: exit 0, `Ran 20 tests in 0.041s OK`.
+
+Contra `63b35b5` (`git show` del paquete, reproductor de islas disjuntas):
+
+```
+FAIL: test_disjoint ... AssertionError: Items in the first set but not the second:
+'hard_priority'
+FAILED (failures=1)
+```
+
+Resto de `test_*.py`: enforce_checks 21, capacity 6, charger 12, wiring 7, broadcast 3, todos exit 0. Linter no relanzado (no se toco `.c`); ronda 2: errors 0 warnings 48.
