@@ -1,0 +1,20 @@
+{
+  "id": "battery_full",
+  "description": "Bateria llena: soft_demand=0. Solo hard 10 sobre fuente 50.",
+  "nodes": [
+    {"id": "src", "type": "SOURCE", "available": 50},
+    {"id": "load", "type": "CONSUMER", "hard_demand": 10},
+    {"id": "battery", "type": "PASSTHROUGH", "pass_limit": 120, "soft_demand": 0, "soft_fraction": 0}
+  ],
+  "edges": [
+    {"id": "e_load", "src": "src", "dst": "load", "enabled": true},
+    {"id": "e_bat", "src": "src", "dst": "battery", "enabled": true}
+  ],
+  "expected": {
+    "hard_feasible": true,
+    "max_hard_servable": 10,
+    "max_hard_flow_bound": 10,
+    "total_hard_demand": 10,
+    "hand_calc": "hard=10; soft llena=0; fuente=50; entero 10. Cota 10. Flujo a bateria 0. Conservacion bateria: in 0 = out 0 + absorb 0."
+  }
+}
