@@ -51,3 +51,6 @@ jobs:
 
       - name: Independent graph reference oracle
         run: python .github/tools/test_graph_reference.py
+
+      - name: Graph multi-feed split (offline source slice)
+        run: python .github/tools/test_graph_multifeed_split.py

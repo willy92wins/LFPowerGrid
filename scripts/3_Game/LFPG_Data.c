@@ -307,6 +307,10 @@ class LFPG_ElecEdge
     // --- Sprint 4.3 + v1.0: load allocation ---
     float           m_Demand;         // Downstream demand seen through this edge
     float           m_AllocatedPower; // Power actually allocated to this edge this epoch
+    // G-01: last residual offer written by AllocateOutput for this edge.
+    // -1 = never written (sentinel). Written values are clamped >= 0.
+    // Runtime only: graph is not persisted; not RPC / SyncVar.
+    float           m_OfferedResidual;
 
     void LFPG_ElecEdge()
     {
@@ -318,5 +322,6 @@ class LFPG_ElecEdge
         m_Flags = LFPG_EDGE_ENABLED;
         m_Demand = 0.0;
         m_AllocatedPower = 0.0;
+        m_OfferedResidual = -1.0;
     }
 };
