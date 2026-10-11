@@ -338,14 +338,22 @@ incoming enabled X de C tal que `IncludeInMergerVector(X sale de P,
 SupplierPowerForMerger(origen X))`. `selfIndex` es `cpEdge == mEdge`.
 Un PT sin entrada sigue en el vector y no pide D entero.
 
-**B1.3 dirty.** Si la oferta de un edge cambia mas que epsilon o pasa
-de nunca escrita a escrita (`ShouldNotifyOfferDirty`):
-- si el target es merger (`CountPoweredIncoming > 1`), dirty de los
-  otros proveedores;
-- si el target es PASSTHROUGH que usa esa oferta como `base` y tiene
-  una salida enabled a un nodo con 2+ incoming, dirty de ese PT.
+**B1.3 dirty.** Dos reglas:
 
-Acotado por `LFPG_MAX_REQUEUE_PER_EPOCH`. Sin merger, no reencola (I4).
+1. Si la oferta de un edge cambia mas que epsilon o pasa de nunca
+   escrita a escrita (`ShouldNotifyOfferDirty`), se marca todo incoming
+   enabled del target cuyo origen no sea el proveedor. Un target con
+   una sola entrada no tiene hermanos. El segundo bucle (target
+   PASSTHROUGH que alimenta un nodo con `CountPoweredIncoming > 1`) no
+   cambia.
+2. Si el proveedor es PASSTHROUGH y
+   `SupplierVisibilityFlipped(PassthroughSupplyAt(m_PrevInputPower, …),
+   PassthroughSupplyAt(m_InputPower, …))`, se llama `NotifyOfferChanged`
+   en cada salida enabled aunque la oferta no haya cambiado. Mismo
+   `m_GateClosed` en ambas pasadas.
+
+Acotado por `LFPG_MAX_REQUEUE_PER_EPOCH`. Sin merger (ningun PT con 2+
+incoming enabled), no se marca ni se reescribe (I4).
 
 **Limitacion (cadenas largas).** S → SpA → SpB → C, con S20 directo a
 C: SpA sale hacia SpB, que tiene **un** incoming. B1.3 no sucia SpB.
@@ -485,8 +493,10 @@ porque I2 no aplica en overload.
 `m_ComponentId` es distinto. 2.c isla Z.
 
 **I4 Red sin merger.** Si ningún PASSTHROUGH tiene 2 o más incoming
-enabled (vector B4-1 de tamaño < 2), `ApplyMergerWaterFill` no
-reescribe demandas. Pass 2/3, overload y retorno son los de la base.
+enabled, `ApplyMergerWaterFill` no reescribe demandas y
+`NotifyOfferChanged` no marca hermanos (no hay) ni el segundo bucle
+(`CountPoweredIncoming` del destino de las salidas queda ≤ 1). Pass
+2/3, overload y retorno son los de la base.
 
 **I5 No oscilacion.** En topologia fija y demandas fijas, a partir del
 epoch T0+3 (2.c; 2.a en T0+2) el vector de alloc no cambia mas de
@@ -509,7 +519,8 @@ siguen a 0.
   (centinela -1).
 - `scripts/5_Mission/LFPG_ElecGraphImpl.c`: `OfferCapFromWritten`,
   `ComputeOfferTowardEdge`, `IncludeInMergerVector`,
-  `SupplierPowerForMerger`, `WaterFillShareAsk`,
+  `SupplierPowerForMerger`, `PassthroughSupplyAt`,
+  `SupplierVisibilityFlipped`, `WaterFillShareAsk`,
   `WaterFillLeftoverAdd`, `ApplyMergerWaterFill`, `PublishEdgeOffers`,
   `NotifyOfferChanged`. Tope v2.4 sigue en Pass 1 sobre D.
 - **No** se toca overload `:4058-4110`.
@@ -637,6 +648,16 @@ cambia.
 
 Accion recuperacion: cortar cable de la bomba; ambos paneles IDLE en
 ≤ ~300 ms (3 ticks de 100 ms, `LFPG_PROPAGATE_TICK_MS`, `Defines.c:508`).
+
+Montaje C (incremental): generador 50 → Splitter → (lampara PT 10,
+Combiner); panel 20 → Combiner el ultimo; Combiner → bomba PT 50.
+Tras conectar el panel, y tras apagar/encender el panel: e20=20,
+esp=30, lampara 10, bomba 50, nadie en overload.
+
+Montaje F: igual con bomba PT 50 en el Splitter en vez de lampara.
+Panel → Combiner el ultimo, o generador → Splitter el ultimo: bomba
+del Splitter 50, esp=0, e20=20, Combiner in overload, generador y
+panel sin overload.
 
 ---
 
@@ -772,3 +793,15 @@ consumidor apagado.
 - **m4-1** — recuperacion S50 en tres montajes; negativo sin
   `fromSelfNode`; S3 dos ordenes; 2.d bateria+bomba; negativos de
   comportamiento en `ComputeOfferTowardEdge` y last-write.
+
+---
+
+## Ronda 5: cambios
+
+- **B5-1** — `NotifyOfferChanged` marca todos los hermanos enabled,
+  sin `CountPoweredIncoming > 1`. `PublishEdgeOffers` notifica si
+  `SupplierVisibilityFlipped` en un PASSTHROUGH (cruce de epsilon de
+  `PassthroughSupplyAt` con `m_PrevInputPower` vs `m_InputPower`).
+- **m5-1** — QueueModel con las dos reglas; C/F de partida; propiedad
+  last/cut/perm/toggle vs reconstruccion; negativos por flags;
+  estructurales sobre el cuerpo de Notify/Publish.

@@ -1,90 +1,56 @@
-# INFORME — i76 G-01 ronda 4 (B4-1, M4-1, M4-2, SPEC)
+# INFORME — i76 G-01 ronda 5 (B5-1 re-dirty incremental)
 
 ## Hecho
 
-Un PASSTHROUGH sin entrada sigue en el vector de merger (B4-1).
-`MergerSortLess` compara enteros `ToAscii`. Ofertas O(salidas): hard
-una vez + `ComputeOfferTowardEdge(baseP, totalHard, ownHard)`. Water-fill
-devuelve bool; totales solo si reescribio. Visitas de edge al presupuesto
-PDQ. SPEC §3 alineada con el codigo.
+Un hermano sin corriente se recalcula cuando entra otro proveedor.
+`NotifyOfferChanged` marca incoming enabled del target sin
+`CountPoweredIncoming > 1`. Un PASSTHROUGH que cruza epsilon de
+suministro notifica aunque la oferta no cambie
+(`PassthroughSupplyAt` + `SupplierVisibilityFlipped` sobre
+`m_PrevInputPower` / `m_InputPower`). Sin campos nuevos.
 
 ## Tests
 
 `C:\Python314\python.exe .github/tools/test_graph_multifeed_split.py`
-→ 29 OK (2.a–g, B1–B4-1, M1/M2, S3, 2.d cola, negativos).
+→ 38 OK (29 previos + C/F partida, propiedad last/cut/perm/toggle,
+negativos de flags, estructurales).
 
-Resto:
 - `test_enforce_checks.py` 21 OK
 - `test_graph_capacity_refresh.py` 6 OK
 - `test_graph_charger_energy.py` 12 OK
 - `test_finish_wiring_quota.py` 7 OK
 - `test_broadcast_contract.py` 3 OK
-- `test_graph_reference.py` 18 OK
+- `test_graph_reference.py` 20 OK
 - `enforce_checks.py --root .` FAIL=0 WARN=0 exit 0
+- `script_validator.py .` `len(errors)=0` status WARN exit 2
 
-Base `463464e`: `WaterFillShareAsk` ausente;
-`edgeDemand = edgeDemand / ptPoweredIn` presente.
+## B5-1
 
-## Linter
-
-`script_validator.py .` → `errors: []` (status WARN, exit 2). `len(errors)=0`.
-Warnings preexistentes (ES-EMPTY-IFDEF, ES-GETTYPE). Delta de errores 0.
-
-## B4-1
-
-`IncludeInMergerVector(true, 0)` incluye el propio edge. Tras apagar y
-encender S50: l1 ON, S50 sin overload, bomba ON (tres hermanos, un
-hermano, edges paralelos). Sin la rama `fromSelfNode` el test 1 falla.
-
-## M4-1
-
-`MergerSortLess` recorre caracteres con `Substring` + `ToAscii` (mismo
-patron que `LFPG_RPCServerHandlerImpl.c:2520-2521`). Compara `codeA <
-codeB` y longitudes `int`. No hay `string < string` en el diff.
-
-## M4-2
-
-Borrados `OtherEnabledHard` y `SkipOtherIndex`. Recalc de totales
-condicionado a `ApplyMergerWaterFill`. Visitas en Publish, MergerVector
-y water-fill.
-
-## I4
-
-Sin vector de tamaño ≥ 2 no se reescribe. Pass 2/3 y overload son los
-de la base.
+C con panel → C el último, y panel apagado/encendido: 20+30, lámpara
+10, bomba 50, nadie en overload. F con panel último y con generador →
+Sp último: bomba del Splitter 50, esp 0, e20 20, C overload, fuentes
+sin overload.
 
 ## HALLAZGOS-ADYACENTES
 
-- Cadenas SpA→SpB→C: B1.3 no sucia SpB (limitacion previa).
-- All-off del Combiner en deficit (2.b) tira inflow; fuera de G-01.
+- La oferta de un PT no depende de su entrada real (base = ofertas
+  incoming). Puede entrar al vector de un hermano con oferta 0→0.
+- Nodos sin suministro: el motor limpia overload (`:2510`); la
+  propiedad no los cuenta en el conjunto.
 
 ## LO QUE NO PUDE VERIFICAR
 
-- Compilacion Enforce / arranque del mundo.
-- Linter en la base 463464e corrido en este worktree (solo `errors: []`
-  del arbol actual).
+- Compilacion Enforce / mundo in-game en esta lane.
+- Linter contra 463464e en este worktree.
 - Cadenas SpA→SpB→C in-game.
 
-## PENDIENTE-INGAME (§6.3 revisado)
+## PENDIENTE-INGAME (§6.3)
 
-Montaje 2.a: `LFPG_SolarPanel` (20) + `LFPG_SolarPanel_T2` (50) →
-`LFPG_Combiner` → `LFPG_WaterPump` (50). De día, ambos paneles ON,
-bomba ON, ningún panel CRITICAL.
+Montaje C: generador 50 → Splitter → (lámpara PT 10 + Combiner);
+panel 20 al Combiner **el último**; Combiner → bomba PT 50. Tras el
+cable y tras noche/día del panel: lámpara y bomba ON, paneles sin
+CRITICAL.
 
-2.b: + nevera 20 + lámpara 10 (hard 80). Paneles sin overload;
-Combiner CRITICAL; bomba apagada.
-
-2.c: T2 → Splitter → (lámpara 10 + Combiner); panel 20 → Combiner;
-bomba 50. l1 y bomba ON.
-
-2.g: T2 a bomba 60 **y** Combiner; C all-off; bomba del Combiner
-apagada.
-
-B4-1: T2 → Splitter (lámpara + Combiner); S20/S30 → Combiner; T2
-también a Splitter vía Sp. Apagar/encender el T2 de Sp: lámpara ON,
-T2 sin overload.
-
-Recuperación: cortar la bomba del Combiner; cables IDLE en ≤ 3 ticks
-(`LFPG_PROPAGATE_TICK_MS`). Isla ajena intacta.
-
-Lecturas: SyncVars `m_Overloaded` / `m_LoadRatio` del panel y Combiner.
+Montaje F: bomba PT 50 en el Splitter. Panel último o generador →
+Splitter último: bomba del Splitter ON, Combiner CRITICAL, fuentes
+sin overload.
