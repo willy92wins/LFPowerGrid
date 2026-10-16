@@ -48,3 +48,6 @@ jobs:
 
       - name: Graph perf probe call sites (offline)
         run: python .github/tools/test_graph_perf_probe.py
+
+      - name: Independent graph reference oracle
+        run: python .github/tools/test_graph_reference.py
