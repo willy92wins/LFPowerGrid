@@ -10,5 +10,12 @@
 // Path = PBO-relative folder, name = filename without .ptc.
 // =========================================================
 
-// DIAG 1.30 (V1): no modded ParticleList at all.
+modded class ParticleList
+{
+    static const int LFPG_SPRINKLER_SPRAY = RegisterParticle(
+        "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
+
+    static const int LFPG_FURNACE_SMOKE = RegisterParticle(
+        "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
+};
 #endif
