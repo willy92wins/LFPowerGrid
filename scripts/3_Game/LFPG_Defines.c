@@ -405,6 +405,11 @@ static const int    LFPG_LOG_LEVEL    = 1;
 // Controlled at compile-time — no runtime branch cost when false.
 static const bool   LFPG_DIAG_ENABLED = false;
 static const bool   LFPG_PERFDIAG_ENABLED = false;
+// R-01..R-05 in-game measurement (issue #78). Default OFF: one boolean
+// per probe call site, no persistence/RPC/settings. Set true only on a
+// debug server, then read RPT lines prefixed LFPG_PERF.
+static const bool   LFPG_PERF_PROBE = false;
+static const int    LFPG_PERF_PROBE_SUMMARY_MS = 5000;
 
 // ---- Device types (Sprint 4.1) ----
 // Determines node behavior in the electrical graph and future propagation.
