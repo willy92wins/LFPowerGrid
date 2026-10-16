@@ -7,9 +7,8 @@ EffectDef {
    BirthRate 22
    BirthRateRND 3
    Angles 0 0 75
-   Offset 0 0 0
    Material "{008E25684854DAB8}Graphics/Particles/materials/smoke/steam_small_cook_01.emat"
-   SizeMultiplier 3.0
+   SizeMultiplier 3
    SizeRND 0.5
    RandomRotDir 1
    RotMultiplier 35
@@ -22,18 +21,17 @@ EffectDef {
    LifeTime 1.2
    LifeTimeRND 0.8
    Color {
-    0 0.15 0.14 0.13 0.5 0.10 0.09 0.08 1 0.04 0.03 0.03
+    0 0.15 0.14 0.13 1 0.04 0.03 0.03
    }
    Alpha {
-    0 0 0.08 0.25 0.7 0.15 1 0
+    0 0 0.08 0.25 1 0
    }
    RotationSpeed {
     0 0 1 1
    }
    Size {
-    0 0.15 0.4 0.5 1 1
+    0 0.15 1 1
    }
-   EffectTime 1
   }
  }
 }
