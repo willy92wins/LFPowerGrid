@@ -8,7 +8,7 @@ EffectDef {
    BirthRateRND 3
    Angles 0 0 75
    Offset 0 0 0
-   Material "Graphics/Particles/materials/smoke/steam_small_cook_01.emat"
+   Material "{008E25684854DAB8}Graphics/Particles/materials/smoke/steam_small_cook_01.emat"
    SizeMultiplier 3.0
    SizeRND 0.5
    RandomRotDir 1
