@@ -34,7 +34,6 @@ EffectDef {
     0 0.15 0.4 0.5 1 1
    }
    EffectTime 1
-   Repeat 1
   }
  }
 }

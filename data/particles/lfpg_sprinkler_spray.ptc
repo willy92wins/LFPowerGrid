@@ -1,7 +1,6 @@
 EffectDef {
  Emitors {
   EmitorDef spray_main {
-   ShapeType Point
    ConeAngle 360 55 0
    MaxNum 60
    BirthRate 30
@@ -18,7 +17,6 @@ EffectDef {
    AirResistance 1.2
    AirResistanceRND 0.3
    GravityMultiply 0.6
-   GravityMultiplyRND 0.2
    Wind 0.3
    LifeTime 1.2
    LifeTimeRND 0.4
@@ -32,10 +30,9 @@ EffectDef {
     0 0.4 0.3 1 1 0.6
    }
    EffectTime 1
-   Repeat 1
   }
   EmitorDef spray_drops {
-   ShapeType Ellipse
+   ShapeType Box
    ShapeSize 3.0 0 3.0
    ConeAngle 0 0 0
    MaxNum 25
@@ -50,7 +47,6 @@ EffectDef {
    VelocityRND 0.1
    AirResistance 0.5
    GravityMultiply 1.2
-   GravityMultiplyRND 0.3
    LifeTime 0.6
    LifeTimeRND 0.2
    Color {
@@ -63,7 +59,6 @@ EffectDef {
     0 1 1 0.3
    }
    EffectTime 1
-   Repeat 1
   }
  }
 }

@@ -12,29 +12,10 @@
 
 modded class ParticleList
 {
-    // DIAG 1.30 (E4): register on first use, not at script load, so the
-    // preload in DayZGame.OnInitialize never opens the two LFPG .ptc files.
-    static int m_LFPG_SprinklerSpray;
-    static int m_LFPG_FurnaceSmoke;
+    static const int LFPG_SPRINKLER_SPRAY = RegisterParticle(
+        "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
 
-    static int LFPG_SprinklerSpray()
-    {
-        if (m_LFPG_SprinklerSpray == NONE)
-        {
-            m_LFPG_SprinklerSpray = RegisterParticle(
-                "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
-        }
-        return m_LFPG_SprinklerSpray;
-    }
-
-    static int LFPG_FurnaceSmoke()
-    {
-        if (m_LFPG_FurnaceSmoke == NONE)
-        {
-            m_LFPG_FurnaceSmoke = RegisterParticle(
-                "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
-        }
-        return m_LFPG_FurnaceSmoke;
-    }
+    static const int LFPG_FURNACE_SMOKE = RegisterParticle(
+        "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
 };
 #endif
