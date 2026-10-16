@@ -12,10 +12,9 @@
 
 modded class ParticleList
 {
-    static const int LFPG_SPRINKLER_SPRAY = RegisterParticle(
-        "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
+    // DIAG 1.30 (V2): vanilla particle names, no LFPG .ptc registered.
+    static const int LFPG_SPRINKLER_SPRAY = RegisterParticle("smoke_small_generator_01");
 
-    static const int LFPG_FURNACE_SMOKE = RegisterParticle(
-        "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
+    static const int LFPG_FURNACE_SMOKE = RegisterParticle("smoke_small_generator_01");
 };
 #endif
