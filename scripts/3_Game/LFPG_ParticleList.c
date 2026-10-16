@@ -12,19 +12,29 @@
 
 modded class ParticleList
 {
-    static const int LFPG_SPRINKLER_SPRAY = LFPG_RegisterKeepCase(
-        "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
+    // DIAG 1.30 (E4): register on first use, not at script load, so the
+    // preload in DayZGame.OnInitialize never opens the two LFPG .ptc files.
+    static int m_LFPG_SprinklerSpray;
+    static int m_LFPG_FurnaceSmoke;
 
-    static const int LFPG_FURNACE_SMOKE = LFPG_RegisterKeepCase(
-        "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
-
-    // DIAG 1.30 (E3): RegisterParticle lowercases the path since 1.30; store
-    // it as written, like 1.29 did, to see whether the case is what hangs.
-    static int LFPG_RegisterKeepCase(string rootPath, string fileName)
+    static int LFPG_SprinklerSpray()
     {
-        int id = RegisterParticle(rootPath, fileName);
-        m_ParticlePaths.Set(id, rootPath + fileName);
-        return id;
+        if (m_LFPG_SprinklerSpray == NONE)
+        {
+            m_LFPG_SprinklerSpray = RegisterParticle(
+                "LFPowerGrid/data/particles/", "lfpg_sprinkler_spray");
+        }
+        return m_LFPG_SprinklerSpray;
+    }
+
+    static int LFPG_FurnaceSmoke()
+    {
+        if (m_LFPG_FurnaceSmoke == NONE)
+        {
+            m_LFPG_FurnaceSmoke = RegisterParticle(
+                "LFPowerGrid/data/particles/", "lfpg_furnace_smoke");
+        }
+        return m_LFPG_FurnaceSmoke;
     }
 };
 #endif

@@ -333,7 +333,7 @@ class LFPG_Sprinkler : LFPG_DeviceBase
         // ---- Particle toggle ----
         if (m_SprinklerActive && !m_SprayEffect)
         {
-            int sprayId = ParticleList.LFPG_SPRINKLER_SPRAY;
+            int sprayId = ParticleList.LFPG_SprinklerSpray();
             vector sprayPos = LFPG_GetSprayPosition();
             LFPG_PlayParticle(m_SprayEffect, sprayId, sprayPos);
         }
