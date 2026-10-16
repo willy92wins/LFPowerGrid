@@ -19,7 +19,7 @@ EffectDef {
    AirResistanceRND 0.3
    GravityMultiply 0.6
    GravityMultiplyRND 0.2
-   Wind 0.3
+   Wind 1
    LifeTime 1.2
    LifeTimeRND 0.4
    Color {

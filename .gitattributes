@@ -1,2 +1,4 @@
 # stringtable.csv ships with LF line endings, whatever core.autocrlf says.
 stringtable.csv text eol=lf
+# Particle files ship with LF like the game's own, whatever core.autocrlf says.
+*.ptc text eol=lf
