@@ -13,7 +13,6 @@ EffectDef {
    SizeRND 0.5
    RandomRotDir 1
    RotMultiplier 35
-   BillboardingType Full
    Velocity 2.2
    VelocityRND 0.4
    AirResistance 0.5

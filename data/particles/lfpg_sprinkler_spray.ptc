@@ -10,6 +10,7 @@ EffectDef {
    Material "{8FE2383D6913E098}Graphics/Particles/materials/enviroment/water_splash_01_NoEm.emat"
    SizeMultiplier 0.15
    SizeRND 0.05
+   BillboardingType Full
    RandomRotDir 1
    RotMultiplier 20
    Velocity 4.0
@@ -41,9 +42,10 @@ EffectDef {
    BirthRate 12
    BirthRateRND 3
    Offset 0 0.8 0
-   Material "{8FE2383D6913E098}Graphics/Particles/materials/enviroment/water_splash_01_NoEm.emat"
+   Material "{D29B53088A5A3911}Graphics/Particles/materials/smoke/smoke_dust_01_W.emat"
    SizeMultiplier 0.11
    SizeRND 0.03
+   BillboardingType Full
    Velocity 0.2
    VelocityRND 0.1
    AirResistance 0.5
