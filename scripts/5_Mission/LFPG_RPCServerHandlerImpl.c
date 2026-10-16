@@ -1118,9 +1118,9 @@ class LFPG_RPCServerHandlerImpl
             int rescued = RescueStaleIncomingWires(obj, deviceId, "", cutPid, allowOthers);
             if (rescued > 0)
                 changed = true;
-            // Frozen tree rebuilt when changed && no IN index hits, even if
-            // the scan found nothing (phantom reverse-index owners).
-            if (rescued > 0 || (changed && !anyInRemovedByIndex))
+            // Rebuild reverse index only when the scan found stale incoming
+            // wires (same gate as HandleCutPort IN).
+            if (rescued > 0)
             {
                 LFPG_Util.Warn("[CutWires-Fallback] Reverse index was stale â€” rebuilding");
                 LFPG_NetworkManager.Get().RebuildReverseIdx();
