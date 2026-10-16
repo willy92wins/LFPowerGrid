@@ -10,10 +10,10 @@
 | D4 | OK | `PostBulkRebuildAndPropagate` `:853-860`, `PostBulkRebuild` `LFPG_ElecGraphImpl.c:2009-2072`, `OnWireRemoved` `:897-1000` | lectura + T4 |
 | D5 | OK | vanilla `HandleCutWires` `:1027-1077` | lectura |
 | cambio | OK | `LFPG_RPCServerHandlerImpl.c:1121-1123` | diff |
-| T1 | OK | `.github/tools/test_cutwires_rebuild_gate.py` | 6 casos; positivos fallan en HEAD |
-| T2 | OK | mismo fichero | 1 RebuildReverseIdx, Rescue identico |
+| T1 | OK | `.github/tools/test_cutwires_rebuild_gate.py` | 6 casos; positivos fallan con la condicion de `4e897f2` (revision) |
+| T2 | OK | mismo fichero | 1 RebuildReverseIdx; Rescue y sondas fijados a `4e897f2` (revision) |
 | T3 | OK | mismo fichero | combinaciones D1 salvo pid vacio restringido |
-| T4 | OK | QueueModel importado de `test_graph_multifeed_split.py` | corte salidas + restore |
+| T4 | OK | QueueModel importado de `test_graph_multifeed_split.py` | montajes de i76 (`GRAPHS`), aparatos sin entradas: corte + reposicion (revision) |
 
 ### D1 — espejo del pre-scan
 
@@ -62,7 +62,7 @@ Contadores: cada `ReverseIdxRemove` resta 1 a la clave `target|port` (`:1147`) o
 
 `PostBulkRebuild` (`LFPG_ElecGraphImpl.c:2009-2072`): snapshot de nodos, `RebuildFromWires`, `PopulateAllNodeElecStates`, `MarkSourcesDirty`, `ResetOrphanSyncVars` en ids que ya no estan.
 
-Incremental (mismo que Splitter con IN): `OnWireRemoved` (`:897-1000`) quita arista, `SetPowered(false)` en destino (`:937-941`), `CleanupOrphanNode` (`:1626-1675`) llama `ResetOrphanSyncVars` (`:1658`). `MarkNodeDirty` TOPOLOGY en origen y destino (`:997-998`). `PostBulkRebuildAndPropagate` sin flag completo solo drena la cola (`:861-864`). Baterias: Capture/Restore solo en rebuild completo; el incremental conserva `m_VirtualGeneration` igual que el Splitter. `m_GraphRebuildGeneration` no sube en corte limpio; el Splitter tampoco. T4 compara alloc/powered tras quitar todas las salidas de un nodo y tras reponerlas.
+Incremental (mismo que Splitter con IN): `OnWireRemoved` (`:897-1000`) quita arista, `SetPowered(false)` en destino (`:937-941`), `CleanupOrphanNode` (`:1626-1675`) llama `ResetOrphanSyncVars` (`:1658`). `MarkNodeDirty` TOPOLOGY en origen y destino (`:997-998`). `PostBulkRebuildAndPropagate` sin flag completo solo drena la cola (`:861-864`). Baterias: Capture/Restore solo en rebuild completo; el incremental conserva `m_VirtualGeneration` igual que el Splitter. `m_GraphRebuildGeneration` no sube en corte limpio; el Splitter tampoco. T4 compara (criterio de la ronda 5 de i76, mas powered) tras quitar todas las salidas de un aparato sin entradas y tras reponerlas una a una.
 
 ### D5 — fuente vanilla
 
@@ -107,12 +107,7 @@ Tests (todos exit 0):
 - `test_broadcast_contract.py`: 3 OK
 - `test_cutwires_rebuild_gate.py`: 9 OK
 
-T1 contra HEAD (`git show HEAD:scripts/5_Mission/LFPG_RPCServerHandlerImpl.c`):
-```
-no_in rescued0 rebuilds= 1 FAIL_EXPECTED
-missed_in rescued0 rebuilds= 1 FAIL_EXPECTED
-```
-Con el cambio esos casos dan rebuilds=0. Negativos: rescued=1 → 1 llamada; changed=false rescued=0 → 0; IN acertado (no entra al bloque) → 0. Ambos arboles.
+T1 contra la base: la base es el bloque actual con la condicion de `4e897f2` repuesta (`old_gate_block`); es igual al bloque de `4e897f2` salvo comentarios y da la misma tabla de verdad. Con ella los dos positivos dan rebuilds=1; con el cambio, 0. Negativos: rescued=1 → 1 llamada; changed=false rescued=0 → 0; IN acertado (no entra al bloque) → 0. Ambos arboles.
 
 ## HALLAZGOS-ADYACENTES
 
@@ -120,6 +115,7 @@ Con el cambio esos casos dan rebuilds=0. Negativos: rescued=1 → 1 llamada; cha
 - Cables nulos en el array: pre-scan los ignora, `ClearForCreator` los borra. El indice no se toca para nulos.
 - Credito `m_ExplicitGraphRemovalCredit` residual podria saltar `OnWireRemoved` en el primer `ReverseIdxRemove` de un RPC posterior. No lo toca este brief.
 - `ReverseIdxRemove` no recorta un dueno concreto de `m_ReverseOwners` cuando el contador queda > 0 (fantasmas). Ya existia en el Splitter.
+- (revisor) En el modelo, quitar `esp` (lleva 0) del montaje F deja `e20`=20 y la sobrecarga en `c`; la reconstruccion sin `esp` da `e20`=0 y la sobrecarga en `s20`. Al reponer el cable converge. Es el camino incremental de siempre (cortar un cable, o CutAll de un Splitter con entrada, que nunca reconstruian): R-01 no lo toca. La propiedad de la ronda 5 de i76 no compara ese estado intermedio.
 
 ## LO QUE NO PUDE VERIFICAR
 
@@ -134,3 +130,9 @@ Con el cambio esos casos dan rebuilds=0. Negativos: rescued=1 → 1 llamada; cha
 La premisa asume que, con indice sano, el pre-scan mas `OnWireRemoved` cubre lo que hacia `PostBulkRebuild`. Eso es cierto para aristas unicas (`reverseMatchCount == 1`). Dos cables del mismo origen al mismo puerto destino marcan `m_GraphFullRebuildRequired` (`:1131-1132`) y el rebuild completo sigue ocurriendo **sin** pasar por `rescued > 0`. Si ese caso es frecuente, el ahorro de R-01 no llega a esas redes; no es un fallo del gate, es el gancho ya existente.
 
 Si el indice inverso esta podrido de un corte anterior (contadores != cables vivos) y el scan de rescate no encuentra huerfanos porque el aparato cortado no es el destino de esos huerfanos, este cambio **deja** de reconstruir el indice. La premisa dice que eso solo importaba por duenos fantasma, y D3 argumenta que los lectores los toleran. Si hay un lector no listado (mod externo, UI futura), el indice no se cura hasta el siguiente `rescued > 0` o un `RebuildReverseIdx` de otra ruta (`:3104`, `:3714`).
+
+## REVISION DEL REVISOR (ronda 1)
+
+- El test leia la base con `git show HEAD:`; tras el commit (y en CI) HEAD ya trae el cambio y los dos positivos de T1 fallaban. T1 usa ahora la condicion vieja repuesta en el bloque actual, y T2 fija como literales el hash de `RescueStaleIncomingWires` y la lista de sondas de `4e897f2`.
+- T4 usa los montajes de i76 (`GRAPHS`, `_recon`, `_assert_match`), repone los cables uno a uno sembrando solo sus extremos y se limita a aparatos sin entradas, que es el caso que cambia R-01. Un Splitter que conserva su entrada no tiene un CutAll real que quite solo las salidas, y ese camino ya era incremental antes del cambio.
+- T3 explica en un comentario por que salta el caso de pid vacio en modo restringido.

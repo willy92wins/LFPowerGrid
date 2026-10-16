@@ -1,9 +1,8 @@
 """CutWires rebuilds the reverse index only when rescue finds stale wires."""
 from pathlib import Path
 from types import SimpleNamespace
-import copy
+import hashlib
 import re
-import subprocess
 import sys
 import unittest
 
@@ -16,14 +15,25 @@ WIRE_HELPER = ROOT / "scripts/3_Game/LFPG_WireHelper.c"
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from test_graph_multifeed_split import (
-    CONSUMER,
-    PASSTHROUGH,
-    SOURCE,
-    QueueModel,
-    helpers,
-    net_2a,
-)
+from test_graph_multifeed_split import GRAPHS, _assert_match, _recon, helpers
+
+# Gate before the fix (4e897f2). T1 puts it back into the current block as the
+# base, so no test reads git history (CI checks out a single commit).
+OLD_GATE = "if (rescued > 0 || (changed && !anyInRemovedByIndex))"
+
+# HandleCutWires probes at 4e897f2; the R-01 in-game measurement reads them.
+PROBE_CALLS = [
+    'LFPG_PerfProbe.Begin("R01");',
+    'LFPG_PerfProbe.AddAlloc(2);',
+    'LFPG_PerfProbe.Phase("index");',
+    'LFPG_PerfProbe.Phase("rescue");',
+    'LFPG_PerfProbe.Phase("rebuild");',
+    'LFPG_PerfProbe.End();',
+]
+
+# RescueStaleIncomingWires at 4e897f2 (LF line endings). The gate trusts this
+# scan; if it changes on purpose, re-check #78 R-01 and update the hash.
+RESCUE_SHA256 = "e0aa43336e8196c2b41e1984065e506f8a087c2a058bb9c5b89b0302c004499e"
 
 
 def rpc_text(path=None):
@@ -45,9 +55,22 @@ def extract_block(src, start_token, closer="}"):
     return src[idx:pos]
 
 
-def gate_fn(src):
-    block = extract_block(
+def gate_block(src):
+    return extract_block(
         src, "if (anyPortMissedIndex || (portCount > 0 && inPortCount == 0))")
+
+
+def old_gate_block(src):
+    """Current block with the 4e897f2 rebuild condition put back."""
+    block, count = re.subn(
+        r"if \(rescued > 0\)(\s*\{)", lambda m: OLD_GATE + m.group(1),
+        gate_block(src))
+    if count != 1:
+        raise ValueError("rebuild gate missing")
+    return block
+
+
+def gate_fn(block):
     block = re.sub(r"LFPG_Util\.Warn\([^;]*\);", "WarnStub();", block)
     block = block.replace('""', "EMPTY")
     wrapped = (
@@ -87,13 +110,6 @@ def gate_fn(src):
     return call
 
 
-def base_rpc_text():
-    raw = subprocess.check_output(
-        ["git", "show", "HEAD:scripts/5_Mission/LFPG_RPCServerHandlerImpl.c"],
-        cwd=str(ROOT))
-    return raw.decode("utf-8")
-
-
 def skip_cond_fn(src):
     """Pre-scan skip at HandleCutWires: skip other players' wires."""
     token = (
@@ -130,8 +146,9 @@ def clear_for_creator_removes(creator_on_wire, cut_pid, allow_others, st_present
 
 class T1Decision(unittest.TestCase):
     def setUp(self):
-        self.work = gate_fn(rpc_text())
-        self.base = gate_fn(base_rpc_text())
+        src = rpc_text()
+        self.work = gate_fn(gate_block(src))
+        self.base = gate_fn(old_gate_block(src))
 
     def test_t1_no_in_ports_rescued_zero_no_rebuild(self):
         kwargs = dict(
@@ -187,15 +204,11 @@ class T2Static(unittest.TestCase):
         self.assertNotIn("changed && !anyInRemovedByIndex", handle)
         cut_port = extract_block(src, "static void HandleCutPort(")
         self.assertIn("if (rescued > 0)", cut_port)
-        rescue_work = extract_block(src, "protected static int RescueStaleIncomingWires(")
-        rescue_base = extract_block(
-            base_rpc_text(), "protected static int RescueStaleIncomingWires(")
-        self.assertEqual(rescue_work, rescue_base)
-        probe_calls = re.findall(r"LFPG_PerfProbe\.\w+", handle)
-        probe_base = re.findall(
-            r"LFPG_PerfProbe\.\w+",
-            extract_block(base_rpc_text(), "static void HandleCutWires("))
-        self.assertEqual(probe_calls, probe_base)
+        rescue = extract_block(src, "protected static int RescueStaleIncomingWires(")
+        self.assertEqual(
+            hashlib.sha256(rescue.encode("utf-8")).hexdigest(), RESCUE_SHA256)
+        self.assertEqual(
+            re.findall(r"LFPG_PerfProbe\.\w+\([^;]*\);", handle), PROBE_CALLS)
 
 
 class T3Mirror(unittest.TestCase):
@@ -221,6 +234,10 @@ class T3Mirror(unittest.TestCase):
                             creator, cut_pid, allow, st_present)
                         empty_pid_restricted = (
                             st_present and not allow and cut_pid == "")
+                        # Known, pre-existing mismatch (INFORME, hallazgos):
+                        # ClearForCreator returns early on an empty creatorId
+                        # but the pre-scan still drops ownerless wires from the
+                        # index. Needs an empty PlainId; R-01 does not touch it.
                         if empty_pid_restricted:
                             continue
                         self.assertEqual(
@@ -228,116 +245,46 @@ class T3Mirror(unittest.TestCase):
                             (st_present, allow, creator, cut_pid))
 
 
-def snapshot(q):
-    return {
-        "alloc": {eid: e.m_AllocatedPower for eid, e in q.edges.items()},
-        "in": {nid: n.m_InputPower for nid, n in q.nodes.items()},
-        "out": {nid: n.m_OutputPower for nid, n in q.nodes.items()},
-        "powered": {nid: n.m_Powered for nid, n in q.nodes.items()},
-        "over": {nid: n.m_Overloaded for nid, n in q.nodes.items()},
-    }
-
-
-def clone_model(src):
-    q = QueueModel(src.h)
-    for nid, n in src.nodes.items():
-        q.add_node(
-            nid, n.kind, n.m_MaxOutput, n.m_Consumption,
-            last_stable=n.m_LastStableOutput, known=n.m_DemandKnown,
-            virt=n.m_VirtualGeneration, gate=n.m_GateClosed,
-            ratio=n.m_SoftDemandRatio, soft=n.m_SoftDemand, cid=n.m_ComponentId)
-        dst = q.nodes[nid]
-        dst.m_InputPower = n.m_InputPower
-        dst.m_OutputPower = n.m_OutputPower
-        dst.m_PrevInputPower = n.m_PrevInputPower
-        dst.m_Overloaded = n.m_Overloaded
-        dst.m_Powered = n.m_Powered
-    for eid, e in src.edges.items():
-        q.add_edge(eid, e.m_SourceNodeId, e.m_TargetNodeId,
-                   e.m_SourcePort, e.m_TargetPort)
-        qe = q.edges[eid]
-        qe.m_Flags = e.m_Flags
-        qe.m_Demand = e.m_Demand
-        qe.m_AllocatedPower = e.m_AllocatedPower
-        qe.m_OfferedResidual = e.m_OfferedResidual
-    return q
-
-
-def rebuild_without(src, drop_eids):
-    q = QueueModel(src.h)
-    for nid, n in src.nodes.items():
-        q.add_node(nid, n.kind, n.m_MaxOutput, n.m_Consumption,
-                   virt=n.m_VirtualGeneration, gate=n.m_GateClosed)
-    for eid, e in src.edges.items():
-        if eid in drop_eids:
-            continue
-        q.add_edge(eid, e.m_SourceNodeId, e.m_TargetNodeId,
-                   e.m_SourcePort, e.m_TargetPort)
-    q.run(list(q.nodes.keys()), steps=200)
-    return q
-
-
-def almost(a, b, places=2):
-    if set(a) != set(b):
-        return False
-    for k in a:
-        if round(a[k] - b[k], places) != 0:
-            return False
-    return True
+def powered(q):
+    return {nid: n.m_Powered for nid, n in q.nodes.items()}
 
 
 class T4Recovery(unittest.TestCase):
+    """Cutting every wire of a device without inputs (a generator) settles on
+    the incremental path to the same state as a rebuild without those wires,
+    and putting them back one by one returns to the original rebuild."""
+
     def setUp(self):
         self.h = helpers()
 
-    def _nets(self):
-        nets = [net_2a(self.h)]
-        q = QueueModel(self.h)
-        q.add_node("s50", SOURCE, 50)
-        q.add_node("s20", SOURCE, 20)
-        q.add_node("sp", PASSTHROUGH, 200)
-        q.add_node("c", PASSTHROUGH, 500)
-        q.add_node("l1", CONSUMER, 0, 10)
-        q.add_node("l2", CONSUMER, 0, 50)
-        q.add_edge("e_s50", "s50", "sp")
-        q.add_edge("e_l1", "sp", "l1")
-        q.add_edge("e_sp_c", "sp", "c")
-        q.add_edge("e_s20", "s20", "c")
-        q.add_edge("e_out", "c", "l2")
-        q.run(["s50", "s20", "sp", "c", "l1", "l2"])
-        nets.append(q)
-        return nets
-
     def test_cut_all_outgoing_then_restore(self):
-        for q0 in self._nets():
-            original = snapshot(q0)
-            for nid, outs in list(q0.outgoing.items()):
-                if not outs:
+        ncases = 0
+        for name, fn in GRAPHS:
+            nodes, edges = fn()
+            full = _recon(self.h, nodes, edges)
+            for node in nodes:
+                nid = node["id"]
+                outs = [e for e in edges if e[1] == nid]
+                has_inputs = any(e[2] == nid for e in edges)
+                if not outs or has_inputs:
                     continue
-                drop = [e.id for e in outs]
-                live = clone_model(q0)
+                msg = name + " " + nid
+                q = _recon(self.h, nodes, edges)
                 seeds = [nid]
-                for e in list(live.outgoing[nid]):
-                    seeds.append(e.m_TargetNodeId)
-                    live.remove_edge(e.id)
-                live.run(seeds, steps=200)
-                rebuilt = rebuild_without(q0, set(drop))
-                s_live = snapshot(live)
-                s_reb = snapshot(rebuilt)
-                self.assertTrue(almost(s_live["alloc"], s_reb["alloc"]), (nid, s_live["alloc"], s_reb["alloc"]))
-                self.assertEqual(s_live["powered"], s_reb["powered"])
-                restored = clone_model(live)
-                for eid in drop:
-                    e0 = q0.edges[eid]
-                    restored.add_edge(
-                        eid, e0.m_SourceNodeId, e0.m_TargetNodeId,
-                        e0.m_SourcePort, e0.m_TargetPort)
-                restored.run(list(restored.nodes.keys()), steps=200)
-                s_rest = snapshot(restored)
-                full = rebuild_without(q0, set())
-                s_full = snapshot(full)
-                self.assertTrue(almost(s_rest["alloc"], s_full["alloc"]))
-                self.assertTrue(almost(s_rest["alloc"], original["alloc"]))
+                for ed in outs:
+                    q.remove_edge(ed[0])
+                    seeds.append(ed[2])
+                q.run(seeds)
+                cut = _recon(self.h, nodes, [e for e in edges if e[1] != nid])
+                _assert_match(self, q, cut, msg + " cut")
+                self.assertEqual(powered(q), powered(cut), msg + " cut powered")
+                for ed in outs:
+                    q.add_edge(*ed)
+                    q.run([ed[1], ed[2]])
+                _assert_match(self, q, full, msg + " restore")
+                self.assertEqual(powered(q), powered(full), msg + " restore powered")
+                ncases = ncases + 1
+        self.assertGreaterEqual(ncases, 13)
 
 
 if __name__ == "__main__":
