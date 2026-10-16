@@ -10,11 +10,5 @@
 // Path = PBO-relative folder, name = filename without .ptc.
 // =========================================================
 
-modded class ParticleList
-{
-    // DIAG 1.30 (V2): vanilla particle names, no LFPG .ptc registered.
-    static const int LFPG_SPRINKLER_SPRAY = RegisterParticle("smoke_small_generator_01");
-
-    static const int LFPG_FURNACE_SMOKE = RegisterParticle("smoke_small_generator_01");
-};
+// DIAG 1.30 (V1): no modded ParticleList at all.
 #endif

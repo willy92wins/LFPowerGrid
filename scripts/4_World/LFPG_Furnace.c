@@ -34,7 +34,7 @@ class EffLFPGFurnaceSmoke : EffectParticle
 {
     void EffLFPGFurnaceSmoke()
     {
-        SetParticleID(ParticleList.LFPG_FURNACE_SMOKE);
+        SetParticleID(ParticleList.NONE);
     }
 };
 #endif
