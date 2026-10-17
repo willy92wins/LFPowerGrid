@@ -57,3 +57,6 @@ jobs:
 
       - name: CutWires reverse-index rebuild gate (offline source slice)
         run: python .github/tools/test_cutwires_rebuild_gate.py
+
+      - name: Inspector source overload flag (offline source slice)
+        run: python .github/tools/test_inspector_source_overload.py

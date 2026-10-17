@@ -122,6 +122,7 @@ class LFPG_DeviceInspector
     protected bool m_SnapshotBoolA;
     protected bool m_SnapshotBoolB;
     protected bool m_SnapshotBoolC;
+    protected bool m_SnapshotBoolD;
     protected float m_SnapshotFloatA;
     protected float m_SnapshotFloatB;
     protected float m_SnapshotFloatC;
@@ -522,6 +523,7 @@ class LFPG_DeviceInspector
         bool boolA = false;
         bool boolB = false;
         bool boolC = false;
+        bool boolD = false;
         float floatA = 0.0;
         float floatB = 0.0;
         float floatC = 0.0;
@@ -535,6 +537,7 @@ class LFPG_DeviceInspector
             boolA = LFPG_DeviceAPI.GetSourceOn(device);
             floatA = LFPG_DeviceAPI.GetLoadRatio(device);
             floatF = LFPG_DeviceAPI.GetCapacity(device);
+            boolD = LFPG_DeviceAPI.GetOverloaded(device);
         }
         else
         {
@@ -581,7 +584,7 @@ class LFPG_DeviceInspector
             floatE = battery.LFPG_GetChargeRateCurrent();
             boolC = battery.LFPG_IsOutputEnabled();
         }
-        bool changed = (!m_ClientSnapshotValid || deviceType != m_SnapshotDeviceType || intA != m_SnapshotIntA || intB != m_SnapshotIntB || intC != m_SnapshotIntC || boolA != m_SnapshotBoolA || boolB != m_SnapshotBoolB || boolC != m_SnapshotBoolC || floatA != m_SnapshotFloatA || floatB != m_SnapshotFloatB || floatC != m_SnapshotFloatC || floatD != m_SnapshotFloatD || floatE != m_SnapshotFloatE || floatF != m_SnapshotFloatF || floatG != m_SnapshotFloatG || snapshotEntity != m_SnapshotEntity);
+        bool changed = (!m_ClientSnapshotValid || deviceType != m_SnapshotDeviceType || intA != m_SnapshotIntA || intB != m_SnapshotIntB || intC != m_SnapshotIntC || boolA != m_SnapshotBoolA || boolB != m_SnapshotBoolB || boolC != m_SnapshotBoolC || boolD != m_SnapshotBoolD || floatA != m_SnapshotFloatA || floatB != m_SnapshotFloatB || floatC != m_SnapshotFloatC || floatD != m_SnapshotFloatD || floatE != m_SnapshotFloatE || floatF != m_SnapshotFloatF || floatG != m_SnapshotFloatG || snapshotEntity != m_SnapshotEntity);
         m_ClientSnapshotValid = true;
         m_SnapshotDeviceType = deviceType;
         m_SnapshotIntA = intA;
@@ -590,6 +593,7 @@ class LFPG_DeviceInspector
         m_SnapshotBoolA = boolA;
         m_SnapshotBoolB = boolB;
         m_SnapshotBoolC = boolC;
+        m_SnapshotBoolD = boolD;
         m_SnapshotFloatA = floatA;
         m_SnapshotFloatB = floatB;
         m_SnapshotFloatC = floatC;
@@ -697,10 +701,9 @@ class LFPG_DeviceInspector
             {
 				float loadRatio = m_SnapshotFloatA;
                 int loadPct = Math.Round(loadRatio * 100.0);
-                if (loadRatio >= LFPG_LOAD_CRITICAL_THRESHOLD)
+                if (m_SnapshotBoolD)
                 {
                     statusText = Loc("#STR_LFPG_INSPECT_OVERLOAD");
-                    statusText = statusText + "  ";
                     statusColor = COL_RED_ERROR;
                 }
                 else
@@ -708,12 +711,12 @@ class LFPG_DeviceInspector
                     statusText = Loc("#STR_LFPG_INSPECT_ACTIVE");
                     statusText = statusText + "  ";
                     statusColor = COL_GREEN_OK;
+                    string barStr = BuildLoadBar(loadRatio);
+                    statusText = statusText + barStr;
+                    statusText = statusText + " ";
+                    statusText = statusText + loadPct.ToString();
+                    statusText = statusText + "%";
                 }
-                string barStr = BuildLoadBar(loadRatio);
-                statusText = statusText + barStr;
-                statusText = statusText + " ";
-                statusText = statusText + loadPct.ToString();
-                statusText = statusText + "%";
             }
             else
             {
