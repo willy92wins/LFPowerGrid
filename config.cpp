@@ -1037,7 +1037,6 @@ class CfgVehicles
         weight = 25000;
         itemSize[] = {10, 10};
         itemsCargoSize[] = {10, 10};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
