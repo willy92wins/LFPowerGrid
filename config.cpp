@@ -1071,7 +1071,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\sorter\lf_sorter.p3d";
         weight = 5000;
         itemSize[] = {3, 3};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
