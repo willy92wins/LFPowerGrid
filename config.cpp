@@ -297,7 +297,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\splitter\lf_splitter.p3d";
         weight = 5000;
         itemSize[] = {3, 3};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
@@ -329,7 +328,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\ceiling_light\lf_ceiling_light.p3d";
         weight = 3000;
         itemSize[] = {2, 2};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
@@ -364,7 +362,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\wall_lamp\lf_wall_lamp.p3d";
         weight = 3000;
         itemSize[] = {2, 2};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
@@ -410,7 +407,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\solarpanel\lf_solarpanel.p3d";
         weight = 8000;
         itemSize[] = {10, 10};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
@@ -436,7 +432,6 @@ class CfgVehicles
         model = "\LFPowerGrid\data\solarpanel\lf_solarpanel_t2.p3d";
         weight = 10000;
         itemSize[] = {10, 10};
-        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
