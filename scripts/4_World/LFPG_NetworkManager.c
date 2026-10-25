@@ -486,6 +486,14 @@ class LFPG_NetworkManager
         #endif
     }
 
+    bool HasPendingVanillaWrites()
+    {
+        #ifdef SERVER
+        LFPG_Util.Error("[LFPG_NetworkManager] HasPendingVanillaWrites called without mission factory (fallback base)");
+        #endif
+        return false;
+    }
+
     void CutAllWiresFromMovedDevice(EntityAI device, vector previousOwnerPosition, string knownDeviceId = "")
     {
         #ifdef SERVER

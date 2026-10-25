@@ -429,6 +429,13 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         #ifdef SERVER
         if (m_ServerScheduler)
         {
+            if (g_Game)
+            {
+                g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(ValidateAllWiresAndPropagate);
+                g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(DoGlobalSelfHeal);
+                g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(DeferredVanillaPruneAndRebuild);
+                g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(PostBulkRebuildAndPropagate);
+            }
             m_ServerScheduler.Stop();
             m_ServerScheduler = null;
             LFPG_Util.Info("[Scheduler] stop");
@@ -3811,6 +3818,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             }
         }
         #endif
+    }
+    override bool HasPendingVanillaWrites()
+    {
+        return m_VanillaDirty;
     }
     protected bool SaveVanillaWires()
     {

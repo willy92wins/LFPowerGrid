@@ -76,12 +76,19 @@ modded class MissionServer
         if (GetGame())
             GetGame().GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_RunOrphanSweep);
         LFPG_BalanceProvider_NativeImpl.ResetMissionClaimState();
-        // After scheduler stop and both flushes above: release the statics
-        // the engine reports as leaked at process exit (#89). The fetcher
-        // callback tolerates a null instance, and nothing below may call
-        // LFPG_NetworkManager.Get() again in this mission.
-        LFPG_BTCPriceFetcher.Destroy();
-        LFPG_NetworkManager.ReleaseInstance();
+        // If the shutdown flush failed, m_VanillaDirty stays set and the
+        // unsaved wires exist only in this manager's memory. Releasing it
+        // would let a later mission build a fresh manager from disk and
+        // lose them, so in that case both statics stay retained (the old
+        // reuse-on-next-mission behaviour) and are reported as leaked.
+        bool vanillaWritesPending = false;
+        if (nm)
+            vanillaWritesPending = nm.HasPendingVanillaWrites();
+        if (!vanillaWritesPending)
+        {
+            LFPG_BTCPriceFetcher.Destroy();
+            LFPG_NetworkManager.ReleaseInstance();
+        }
         super.OnMissionFinish();
     }
 
