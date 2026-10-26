@@ -407,6 +407,7 @@ class CfgVehicles
         model = "\LFPowerGrid\data\solarpanel\lf_solarpanel.p3d";
         weight = 8000;
         itemSize[] = {10, 10};
+        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
@@ -432,6 +433,7 @@ class CfgVehicles
         model = "\LFPowerGrid\data\solarpanel\lf_solarpanel_t2.p3d";
         weight = 10000;
         itemSize[] = {10, 10};
+        rotationFlags = 17;
         carveNavmesh = 1;
         physLayer = "item_large";
         isDeployable = 0;
