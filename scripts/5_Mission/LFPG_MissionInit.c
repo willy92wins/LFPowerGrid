@@ -87,6 +87,7 @@ modded class MissionServer
         if (!vanillaWritesPending)
         {
             LFPG_BTCPriceFetcher.Destroy();
+            LFPG_BalanceRegistry.Reset();
             LFPG_NetworkManager.ReleaseInstance();
         }
         super.OnMissionFinish();
