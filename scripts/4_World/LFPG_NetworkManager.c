@@ -73,6 +73,17 @@ class LFPG_NetworkManager
         return s_Fallback;
     }
 
+    // Mission teardown only: drops the mission-backed manager (and, through
+    // its ref members, the graph and the control-session registry) so the
+    // engine does not report them as leaked at process exit. Callers must
+    // stop the scheduler and flush before calling this; Get() would build
+    // a fresh manager if anything asked again.
+    static void ReleaseInstance()
+    {
+        s_Instance = null;
+        s_Fallback = null;
+    }
+
     static LFPG_NetworkManager GetExisting()
     {
         return s_Instance;
@@ -473,6 +484,14 @@ class LFPG_NetworkManager
         #ifdef SERVER
         LFPG_Util.Error("[LFPG_NetworkManager] FlushVanillaOnShutdown called without mission factory (fallback base)");
         #endif
+    }
+
+    bool HasPendingVanillaWrites()
+    {
+        #ifdef SERVER
+        LFPG_Util.Error("[LFPG_NetworkManager] HasPendingVanillaWrites called without mission factory (fallback base)");
+        #endif
+        return false;
     }
 
     void CutAllWiresFromMovedDevice(EntityAI device, vector previousOwnerPosition, string knownDeviceId = "")

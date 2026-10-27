@@ -181,6 +181,16 @@ class LFPG_BalanceRegistry
         LFPG_Util.Info(msg);
     }
 
+    // Mission teardown only: drops the registered providers so the engine
+    // does not report them as leaked at process exit. The next manager
+    // registers them again and calls Init before any balance operation.
+    static void Reset()
+    {
+        s_Active = null;
+        s_Providers = null;
+        s_Initialized = false;
+    }
+
     // Returns the active provider (may be null if none resolved)
     static LFPG_BalanceProvider GetActive()
     {

@@ -3812,6 +3812,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         }
         #endif
     }
+    override bool HasPendingVanillaWrites()
+    {
+        return m_VanillaDirty;
+    }
     protected bool SaveVanillaWires()
     {
         #ifdef SERVER
