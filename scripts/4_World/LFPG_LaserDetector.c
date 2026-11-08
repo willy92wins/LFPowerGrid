@@ -445,10 +445,6 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         vector beamStart = LFPG_GetBeamStart();
         vector beamDir = LFPG_GetBeamDirection();
         float segmentLen = m_BeamLength;
-        if (segmentLen < 0.1)
-        {
-            segmentLen = 0.1;
-        }
         float bEndX = beamStart[0] + beamDir[0] * segmentLen;
         float bEndY = beamStart[1] + beamDir[1] * segmentLen;
         float bEndZ = beamStart[2] + beamDir[2] * segmentLen;
@@ -512,9 +508,10 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
                     LFPG_UpdateBeamRaycast();
                     refreshedRaycast = true;
                     segmentLen = m_BeamLength;
-                    if (segmentLen < 0.1)
+                    beamTooShort = false;
+                    if (m_BeamLength < 0.1)
                     {
-                        segmentLen = 0.1;
+                        beamTooShort = true;
                     }
                     bEndX = beamStart[0] + beamDir[0] * segmentLen;
                     bEndY = beamStart[1] + beamDir[1] * segmentLen;

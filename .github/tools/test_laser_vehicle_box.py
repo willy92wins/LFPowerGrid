@@ -76,6 +76,17 @@ class LaserVehicleBox(unittest.TestCase):
         self.assertIn("beamTooShort", crossing[short_at:loop_at])
         self.assertNotIn("return false;", crossing[short_at:loop_at])
         self.assertIn("beamTooShort && !detected", crossing)
+        self.assertNotIn("segmentLen = 0.1", crossing)
+        refresh_short = (
+            r"LFPG_UpdateBeamRaycast\(\);\s*refreshedRaycast = true;"
+            r"\s*segmentLen = m_BeamLength;\s*beamTooShort = false;"
+            r"\s*if \(m_BeamLength < 0\.1\)\s*\{\s*beamTooShort = true;\s*\}"
+        )
+        self.assertRegex(source, refresh_short)
+        mutant, count = re.subn(refresh_short, r"LFPG_UpdateBeamRaycast();\n                    refreshedRaycast = true;\n                    segmentLen = m_BeamLength;", source, count=1)
+        self.assertEqual(count, 1)
+        self.assertRegex(source, r"segmentLen = m_BeamLength;\s*beamTooShort = false;")
+        self.assertIsNone(re.search(r"segmentLen = m_BeamLength;\s*beamTooShort = false;", mutant))
 
 
 if __name__ == "__main__":
