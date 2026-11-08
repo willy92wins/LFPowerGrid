@@ -52,6 +52,31 @@ class LaserVehicleBox(unittest.TestCase):
         self.assertFalse(run(fn, (3.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
         self.assertTrue(run(hits_fn(source), (3.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
 
+    def test_mutant_without_vehicle_raycast_refresh_fails(self):
+        source = LASER.read_text(encoding="utf-8")
+        crossing = method(source, "LFPG_EvaluateCrossing")
+        self.assertEqual(crossing.count("LFPG_UpdateBeamRaycast()"), 1)
+        self.assertIn("m_BeamLength < LFPG_LASER_BEAM_RANGE_M", crossing)
+        self.assertIn("refreshedRaycast", crossing)
+        mutant, count = re.subn(
+            r"LFPG_UpdateBeamRaycast\(\);\s*refreshedRaycast = true;",
+            "refreshedRaycast = true;",
+            source,
+            count=1)
+        self.assertEqual(count, 1)
+        self.assertEqual(method(mutant, "LFPG_EvaluateCrossing").count("LFPG_UpdateBeamRaycast()"), 0)
+        self.assertEqual(method(source, "LFPG_EvaluateCrossing").count("LFPG_UpdateBeamRaycast()"), 1)
+
+    def test_short_beam_still_reaches_vehicle_box(self):
+        source = LASER.read_text(encoding="utf-8")
+        crossing = method(source, "LFPG_EvaluateCrossing")
+        short_at = crossing.index("m_BeamLength < 0.1")
+        loop_at = crossing.index("for (i = 0; i < pCount;")
+        self.assertLess(short_at, loop_at)
+        self.assertIn("beamTooShort", crossing[short_at:loop_at])
+        self.assertNotIn("return false;", crossing[short_at:loop_at])
+        self.assertIn("beamTooShort && !detected", crossing)
+
 
 if __name__ == "__main__":
     unittest.main()

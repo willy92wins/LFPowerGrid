@@ -20,117 +20,117 @@ static const string LFPG_LASER_RVMAT_RED = "LFPowerGrid\\data\\laser_detector\\l
 
 static bool LFPG_LaserSegmentHitsBox(float ax, float ay, float az, float bx, float by, float bz, float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
 {
-    float tMin = 0.0;
-    float tMax = 1.0;
-    float dx = bx - ax;
-    float dy = by - ay;
-    float dz = bz - az;
-    float t1 = 0.0;
-    float t2 = 0.0;
-    float swap = 0.0;
-    if (Math.AbsFloat(dx) < 0.000001)
-    {
-        if (ax < minX)
-        {
-            return false;
-        }
-        if (ax > maxX)
-        {
-            return false;
-        }
-    }
-    else
-    {
-        t1 = (minX - ax) / dx;
-        t2 = (maxX - ax) / dx;
-        if (t1 > t2)
-        {
-            swap = t1;
-            t1 = t2;
-            t2 = swap;
-        }
-        if (t1 > tMin)
-        {
-            tMin = t1;
-        }
-        if (t2 < tMax)
-        {
-            tMax = t2;
-        }
-        if (tMin > tMax)
-        {
-            return false;
-        }
-    }
-    if (Math.AbsFloat(dy) < 0.000001)
-    {
-        if (ay < minY)
-        {
-            return false;
-        }
-        if (ay > maxY)
-        {
-            return false;
-        }
-    }
-    else
-    {
-        t1 = (minY - ay) / dy;
-        t2 = (maxY - ay) / dy;
-        if (t1 > t2)
-        {
-            swap = t1;
-            t1 = t2;
-            t2 = swap;
-        }
-        if (t1 > tMin)
-        {
-            tMin = t1;
-        }
-        if (t2 < tMax)
-        {
-            tMax = t2;
-        }
-        if (tMin > tMax)
-        {
-            return false;
-        }
-    }
-    if (Math.AbsFloat(dz) < 0.000001)
-    {
-        if (az < minZ)
-        {
-            return false;
-        }
-        if (az > maxZ)
-        {
-            return false;
-        }
-    }
-    else
-    {
-        t1 = (minZ - az) / dz;
-        t2 = (maxZ - az) / dz;
-        if (t1 > t2)
-        {
-            swap = t1;
-            t1 = t2;
-            t2 = swap;
-        }
-        if (t1 > tMin)
-        {
-            tMin = t1;
-        }
-        if (t2 < tMax)
-        {
-            tMax = t2;
-        }
-        if (tMin > tMax)
-        {
-            return false;
-        }
-    }
-    return true;
+	float tMin = 0.0;
+	float tMax = 1.0;
+	float dx = bx - ax;
+	float dy = by - ay;
+	float dz = bz - az;
+	float t1 = 0.0;
+	float t2 = 0.0;
+	float swap = 0.0;
+	if (Math.AbsFloat(dx) < 0.000001)
+	{
+		if (ax < minX)
+		{
+			return false;
+		}
+		if (ax > maxX)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		t1 = (minX - ax) / dx;
+		t2 = (maxX - ax) / dx;
+		if (t1 > t2)
+		{
+			swap = t1;
+			t1 = t2;
+			t2 = swap;
+		}
+		if (t1 > tMin)
+		{
+			tMin = t1;
+		}
+		if (t2 < tMax)
+		{
+			tMax = t2;
+		}
+		if (tMin > tMax)
+		{
+			return false;
+		}
+	}
+	if (Math.AbsFloat(dy) < 0.000001)
+	{
+		if (ay < minY)
+		{
+			return false;
+		}
+		if (ay > maxY)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		t1 = (minY - ay) / dy;
+		t2 = (maxY - ay) / dy;
+		if (t1 > t2)
+		{
+			swap = t1;
+			t1 = t2;
+			t2 = swap;
+		}
+		if (t1 > tMin)
+		{
+			tMin = t1;
+		}
+		if (t2 < tMax)
+		{
+			tMax = t2;
+		}
+		if (tMin > tMax)
+		{
+			return false;
+		}
+	}
+	if (Math.AbsFloat(dz) < 0.000001)
+	{
+		if (az < minZ)
+		{
+			return false;
+		}
+		if (az > maxZ)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		t1 = (minZ - az) / dz;
+		t2 = (maxZ - az) / dz;
+		if (t1 > t2)
+		{
+			swap = t1;
+			t1 = t2;
+			t2 = swap;
+		}
+		if (t1 > tMin)
+		{
+			tMin = t1;
+		}
+		if (t2 < tMax)
+		{
+			tMax = t2;
+		}
+		if (tMin > tMax)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 class LFPG_LaserDetector_Kit : LFPG_KitBase
@@ -436,23 +436,22 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
             return false;
         }
 
+        bool beamTooShort = false;
         if (m_BeamLength < 0.1)
         {
-            if (m_GateOpen)
-            {
-                m_GateOpen = false;
-                m_GateHoldUntil = 0.0;
-                SetSynchDirty();
-                return true;
-            }
-            return false;
+            beamTooShort = true;
         }
 
         vector beamStart = LFPG_GetBeamStart();
         vector beamDir = LFPG_GetBeamDirection();
-        float bEndX = beamStart[0] + beamDir[0] * m_BeamLength;
-        float bEndY = beamStart[1] + beamDir[1] * m_BeamLength;
-        float bEndZ = beamStart[2] + beamDir[2] * m_BeamLength;
+        float segmentLen = m_BeamLength;
+        if (segmentLen < 0.1)
+        {
+            segmentLen = 0.1;
+        }
+        float bEndX = beamStart[0] + beamDir[0] * segmentLen;
+        float bEndY = beamStart[1] + beamDir[1] * segmentLen;
+        float bEndZ = beamStart[2] + beamDir[2] * segmentLen;
 
         bool detected = false;
         float crossRadiusSq = LFPG_LASER_CROSS_RADIUS_SQ;
@@ -472,6 +471,7 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         vector playerHigh;
         float distSqLow;
         float distSqHigh;
+        bool refreshedRaycast = false;
 
         beamEnd[0] = bEndX;
         beamEnd[1] = bEndY;
@@ -507,6 +507,33 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
                 {
                     detected = true;
                 }
+                if (!detected && !refreshedRaycast && m_BeamLength < LFPG_LASER_BEAM_RANGE_M)
+                {
+                    LFPG_UpdateBeamRaycast();
+                    refreshedRaycast = true;
+                    segmentLen = m_BeamLength;
+                    if (segmentLen < 0.1)
+                    {
+                        segmentLen = 0.1;
+                    }
+                    bEndX = beamStart[0] + beamDir[0] * segmentLen;
+                    bEndY = beamStart[1] + beamDir[1] * segmentLen;
+                    bEndZ = beamStart[2] + beamDir[2] * segmentLen;
+                    beamEnd[0] = bEndX;
+                    beamEnd[1] = bEndY;
+                    beamEnd[2] = bEndZ;
+                    localA = veh.WorldToModel(beamStart);
+                    localB = veh.WorldToModel(beamEnd);
+                    if (LFPG_LaserSegmentHitsBox(localA[0], localA[1], localA[2], localB[0], localB[1], localB[2], minMax[0][0] - margin, minMax[0][1] - margin, minMax[0][2] - margin, minMax[1][0] + margin, minMax[1][1] + margin, minMax[1][2] + margin))
+                    {
+                        detected = true;
+                    }
+                }
+                continue;
+            }
+
+            if (beamTooShort)
+            {
                 continue;
             }
 
@@ -532,6 +559,18 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
                     detected = true;
                 }
             }
+        }
+
+        if (beamTooShort && !detected)
+        {
+            if (m_GateOpen)
+            {
+                m_GateOpen = false;
+                m_GateHoldUntil = 0.0;
+                SetSynchDirty();
+                return true;
+            }
+            return false;
         }
 
         // Gate hold timer: any successful detection extends the gate-open

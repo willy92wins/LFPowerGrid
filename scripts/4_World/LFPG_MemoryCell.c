@@ -24,27 +24,27 @@ static const int    LFPG_MCELL_TOGGLE_LOAD_GRACE_MS = 30000;
 
 static bool LFPG_MCellToggleShouldFlip(int lowSinceMs, int powerSinceMs, int graceUntilMs, int nowMs, int rearmMs)
 {
-    if (lowSinceMs < 0)
-    {
-        return false;
-    }
-    if (powerSinceMs < 0)
-    {
-        return false;
-    }
-    if (nowMs < graceUntilMs)
-    {
-        return false;
-    }
-    if (nowMs - lowSinceMs < rearmMs)
-    {
-        return false;
-    }
-    if (nowMs - powerSinceMs < rearmMs)
-    {
-        return false;
-    }
-    return true;
+	if (lowSinceMs < 0)
+	{
+		return false;
+	}
+	if (powerSinceMs < 0)
+	{
+		return false;
+	}
+	if (nowMs < graceUntilMs)
+	{
+		return false;
+	}
+	if (nowMs - lowSinceMs < rearmMs)
+	{
+		return false;
+	}
+	if (nowMs - powerSinceMs < rearmMs)
+	{
+		return false;
+	}
+	return true;
 }
 
 // ---------------------------------------------------------

@@ -16,6 +16,8 @@ ADD_PUBLISH = "finish.m_Source.m_DeltaOps.Insert(LFPG_WireDeltaOp.ADD)"
 MSG_ONE = "Replaced 1 existing cable: each port holds only one cable."
 MSG_N = "Replaced \" + replacedCount.ToString() + \" existing cables: each port holds only one cable."
 GUARD = "replaceSettings && replaceSettings.NotifyWireReplaced"
+SEND = "PlayerBase.LFPG_SendClientMsg(player, replaceMsg);"
+ACCUM = "replacedCount = replacedCount + ownerState.m_RemovedWires.Count();"
 
 
 def notice_contract(handler_src, settings_src):
@@ -35,7 +37,9 @@ def notice_contract(handler_src, settings_src):
     notice = handler[delete_at:add_at]
     if GUARD not in notice:
         return False
-    if "replacedCount" not in notice:
+    if SEND not in notice:
+        return False
+    if ACCUM not in notice:
         return False
     if reroute_at >= delete_at:
         return False
@@ -61,6 +65,17 @@ class WireReplaceNotice(unittest.TestCase):
         mutant = handler_src.replace(GUARD, "true", 1)
         self.assertNotEqual(mutant, handler_src)
         self.assertFalse(notice_contract(mutant, settings_src))
+
+    def test_mutant_without_send_or_zero_count_fails(self):
+        handler_src = HANDLER.read_text(encoding="utf-8")
+        settings_src = SETTINGS.read_text(encoding="utf-8")
+        self.assertTrue(notice_contract(handler_src, settings_src))
+        no_send = handler_src.replace(SEND, "", 1)
+        self.assertNotEqual(no_send, handler_src)
+        self.assertFalse(notice_contract(no_send, settings_src))
+        zeroed = handler_src.replace(ACCUM, "replacedCount = 0;", 1)
+        self.assertNotEqual(zeroed, handler_src)
+        self.assertFalse(notice_contract(zeroed, settings_src))
 
 
 if __name__ == "__main__":
