@@ -6024,7 +6024,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
                 laser = LFPG_LaserDetector.Cast(m_RegisteredLasers[registryIndex]);
                 if (!laser)
                     continue;
-                candidateCount = LFPG_CollectPlayerCandidates(laser.GetPosition(), LFPG_LASER_BEAM_RANGE_M + 1.0);
+                candidateCount = LFPG_CollectPlayerCandidates(laser.GetPosition(), LFPG_LASER_BEAM_RANGE_M + LFPG_LASER_VEHICLE_REACH_M);
                 laserEvaluated = laserEvaluated + 1;
                 if (candidateCount == 0)
                     laserDormant = laserDormant + 1;

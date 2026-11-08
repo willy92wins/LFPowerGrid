@@ -386,6 +386,8 @@ static const float LFPG_LASER_CROSS_RADIUS_SQ = 0.25;   // 0.5² pre-computed
 static const float LFPG_LASER_HOLD_SEC        = 3.0;    // gate hold time after last detection (seconds)
 static const float LFPG_LASER_CONSUMPTION     = 5.0;    // self-consumption (u/s)
 static const float LFPG_LASER_CAPACITY        = 100.0;  // max throughput (u/s)
+static const float LFPG_LASER_VEHICLE_REACH_M = 8.0;    // extra candidate radius so a truck cab still sees a beam on the trailer
+static const float LFPG_LASER_VEHICLE_BOX_MARGIN_M = 0.1; // inflate vehicle collision box; shortened beam ends on the hull
 
 // ---- Momentary pulse duration (shared by PushButton, SwitchRemote) ----
 static const int LFPG_BUTTON_PULSE_MS = 2000;

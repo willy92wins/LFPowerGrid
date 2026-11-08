@@ -1,15 +1,15 @@
 // =========================================================
-// LF_PowerGrid - Memory Cell / SR Latch (v3.1.0 — Routing fix)
+// LF_PowerGrid - Memory Cell / SR Latch (v3.1.1 — rising-edge Toggle)
 //
 // LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT.
 //   input_0 = power, input_1 = toggle, input_2 = reset, input_3 = set
 //   output_0 = active (Q), output_1 = inverted (!Q)
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
-// v3.1.0: ApplyRouting runs every SetPowered call. Fixes edge
-//   flags for cables connected after init (edges start ENABLED,
-//   routing must re-disable the correct port each pass).
-//   Diagnostic log every SetPowered call for troubleshooting.
+// Toggle is a rising-edge pulse: each qualifying rising edge inverts the
+// latch. Set/Reset remain level-sensitive and apply after the edge. The
+// active output is always the latch (no Toggle override). Self-consumption
+// keeps input edges live when the active output has no downstream load.
 //
 // Persistence: [base: DeviceId + ver + wireJSON] + m_LatchState
 // =========================================================
@@ -18,6 +18,34 @@ static const string LFPG_MCELL_RVMAT_OFF   = "LFPowerGrid\\data\\button\\materia
 static const string LFPG_MCELL_RVMAT_GREEN  = "LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
 static const string LFPG_MCELL_RVMAT_RED    = "LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 static const float  LFPG_MCELL_CAPACITY     = 100.0;
+static const float  LFPG_MCELL_CONSUMPTION  = 1.0;
+static const int    LFPG_MCELL_TOGGLE_REARM_MS = 1000;
+static const int    LFPG_MCELL_TOGGLE_LOAD_GRACE_MS = 30000;
+
+static bool LFPG_MCellToggleShouldFlip(int lowSinceMs, int powerSinceMs, int graceUntilMs, int nowMs, int rearmMs)
+{
+    if (lowSinceMs < 0)
+    {
+        return false;
+    }
+    if (powerSinceMs < 0)
+    {
+        return false;
+    }
+    if (nowMs < graceUntilMs)
+    {
+        return false;
+    }
+    if (nowMs - lowSinceMs < rearmMs)
+    {
+        return false;
+    }
+    if (nowMs - powerSinceMs < rearmMs)
+    {
+        return false;
+    }
+    return true;
+}
 
 // ---------------------------------------------------------
 // KIT
@@ -31,7 +59,7 @@ class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
 };
 
 // ---------------------------------------------------------
-// DEVICE: PASSTHROUGH, SR latch + toggle override
+// DEVICE: PASSTHROUGH, SR latch + rising-edge toggle
 // ---------------------------------------------------------
 class LFPG_MemoryCell : LFPG_WireOwnerBase
 {
@@ -42,6 +70,12 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
     // ---- Server-only: persisted latch ----
     protected bool m_LatchState = false;
+
+    // ---- Server-only: Toggle edge state (not persisted, not synced) ----
+    protected bool m_ToggleLastHigh = true;
+    protected int m_ToggleLowSinceMs = -1;
+    protected int m_PowerSinceMs = -1;
+    protected int m_ToggleGraceUntilMs = 0;
 
     // ---- Client visual cache ----
     #ifndef SERVER
@@ -82,7 +116,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     override bool LFPG_IsSource() { return true; }
     override bool LFPG_GetSourceOn() { return m_PoweredNet; }
     override bool LFPG_IsGateCapable() { return false; }
-    override float LFPG_GetConsumption() { return 0.0; }
+    override float LFPG_GetConsumption() { return LFPG_MCELL_CONSUMPTION; }
     override float LFPG_GetCapacity() { return LFPG_MCELL_CAPACITY; }
     override bool LFPG_IsPowered() { return m_PoweredNet; }
     override bool LFPG_GetOverloaded() { return m_Overloaded; }
@@ -104,15 +138,14 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // SetPowered — level-sensitive, no edge detection
+    // SetPowered — Toggle rising edge, then Set/Reset by level
     //
-    // Priority: TOGGLE > SET/RESET > latch hold
-    //   TOGGLE energized   -> effective ON (override)
-    //   SET && !RESET       -> latch ON
-    //   RESET && !SET       -> latch OFF
-    //   SET && RESET        -> latch unchanged
-    //   neither             -> latch unchanged
-    //   TOGGLE off          -> effective = latch
+    // R1: Toggle must have been low for LFPG_MCELL_TOGGLE_REARM_MS.
+    // R2: Power must have been high for the same rearm window.
+    // R3: after OnStoreLoad, no edge until LFPG_MCELL_TOGGLE_LOAD_GRACE_MS.
+    // R4: a Toggle never seen low does not fire (starts last-high).
+    // R5: apply the edge first, then Set/Reset by level.
+    // Active output is always m_LatchState.
     // ============================================
     override void LFPG_SetPowered(bool powered)
     {
@@ -125,23 +158,60 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             changed = true;
         }
 
-        // --- Read control inputs (level-sensitive) ---
         bool hasToggle = false;
         bool hasSet    = false;
         bool hasReset  = false;
+        bool hasPower  = false;
+        bool flip      = false;
+        int nowMs = 0;
+        if (g_Game)
+        {
+            nowMs = g_Game.GetTime();
+        }
 
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm)
         {
+            string portPower  = "input_0";
             string portToggle = "input_1";
             string portReset  = "input_2";
             string portSet    = "input_3";
+            hasPower  = nm.IsPortReceivingPower(m_DeviceId, portPower);
             hasToggle = nm.IsPortReceivingPower(m_DeviceId, portToggle);
             hasReset  = nm.IsPortReceivingPower(m_DeviceId, portReset);
             hasSet    = nm.IsPortReceivingPower(m_DeviceId, portSet);
         }
 
-        // --- Update latch from SET/RESET (always, even under TOGGLE) ---
+        if (!hasPower)
+        {
+            m_PowerSinceMs = -1;
+        }
+        else if (m_PowerSinceMs < 0)
+        {
+            m_PowerSinceMs = nowMs;
+        }
+
+        if (hasToggle)
+        {
+            if (!m_ToggleLastHigh)
+            {
+                flip = LFPG_MCellToggleShouldFlip(m_ToggleLowSinceMs, m_PowerSinceMs, m_ToggleGraceUntilMs, nowMs, LFPG_MCELL_TOGGLE_REARM_MS);
+                if (flip)
+                {
+                    m_LatchState = !m_LatchState;
+                }
+            }
+            m_ToggleLastHigh = true;
+        }
+        else
+        {
+            if (m_ToggleLastHigh || m_ToggleLowSinceMs < 0)
+            {
+                m_ToggleLowSinceMs = nowMs;
+            }
+            m_ToggleLastHigh = false;
+        }
+
         if (hasSet && !hasReset)
         {
             m_LatchState = true;
@@ -150,14 +220,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         {
             m_LatchState = false;
         }
-        // Both or neither: latch unchanged
 
-        // --- Compute effective state: TOGGLE overrides ---
         bool newActive = m_LatchState;
-        if (hasToggle)
-        {
-            newActive = true;
-        }
 
         // --- State change ---
         bool stateChanged = false;
@@ -208,6 +272,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             dLog = dLog + m_LatchState.ToString();
             dLog = dLog + " active=";
             dLog = dLog + m_CellActive.ToString();
+            dLog = dLog + " flip=";
+            dLog = dLog + flip.ToString();
             dLog = dLog + " chg=";
             dLog = dLog + stateChanged.ToString();
             dLog = dLog + " id=";
@@ -377,6 +443,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             return false;
         }
         m_CellActive = m_LatchState;
+        if (g_Game)
+        {
+            m_ToggleGraceUntilMs = g_Game.GetTime() + LFPG_MCELL_TOGGLE_LOAD_GRACE_MS;
+        }
         return true;
     }
 };

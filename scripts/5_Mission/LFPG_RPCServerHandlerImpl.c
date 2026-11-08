@@ -641,6 +641,25 @@ class LFPG_RPCServerHandlerImpl
 				manager.PlayerWireCountAdd(removedWire.m_CreatorId, -1);
 			}
 		}
+		int replacedCount = 0;
+		for (ownerIndex = 0; ownerIndex < finish.m_Owners.Count(); ownerIndex = ownerIndex + 1)
+		{
+			ownerState = finish.m_Owners[ownerIndex];
+			replacedCount = replacedCount + ownerState.m_RemovedWires.Count();
+		}
+		if (replacedCount > 0)
+		{
+			LFPG_ServerSettings replaceSettings = LFPG_Settings.Get();
+			if (replaceSettings && replaceSettings.NotifyWireReplaced)
+			{
+				string replaceMsg = "Replaced 1 existing cable: each port holds only one cable.";
+				if (replacedCount > 1)
+				{
+					replaceMsg = "Replaced " + replacedCount.ToString() + " existing cables: each port holds only one cable.";
+				}
+				PlayerBase.LFPG_SendClientMsg(player, replaceMsg);
+			}
+		}
 		manager.EndGraphMutation();
 		manager.UnlockPort(portLockKey);
 		manager.TrackDeviceForPolling(srcRealId);

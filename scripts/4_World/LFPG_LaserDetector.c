@@ -3,7 +3,7 @@
 //
 // LFPG_LaserDetector: PASSTHROUGH, 1 IN + 1 OUT. GATE.
 //   Emits a visible laser beam (raycast for wall occlusion).
-//   Gate opens when a player crosses the beam.
+//   Gate opens when a player or an occupied vehicle crosses the beam.
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
 // NM Registration: RegisterLaserDetector / UnregisterLaserDetector
@@ -17,6 +17,121 @@
 
 static const string LFPG_LASER_RVMAT_OFF = "LFPowerGrid\\data\\button\\materials\\led_off.rvmat";
 static const string LFPG_LASER_RVMAT_RED = "LFPowerGrid\\data\\laser_detector\\laser_detector_red.rvmat";
+
+static bool LFPG_LaserSegmentHitsBox(float ax, float ay, float az, float bx, float by, float bz, float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
+{
+    float tMin = 0.0;
+    float tMax = 1.0;
+    float dx = bx - ax;
+    float dy = by - ay;
+    float dz = bz - az;
+    float t1 = 0.0;
+    float t2 = 0.0;
+    float swap = 0.0;
+    if (Math.AbsFloat(dx) < 0.000001)
+    {
+        if (ax < minX)
+        {
+            return false;
+        }
+        if (ax > maxX)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        t1 = (minX - ax) / dx;
+        t2 = (maxX - ax) / dx;
+        if (t1 > t2)
+        {
+            swap = t1;
+            t1 = t2;
+            t2 = swap;
+        }
+        if (t1 > tMin)
+        {
+            tMin = t1;
+        }
+        if (t2 < tMax)
+        {
+            tMax = t2;
+        }
+        if (tMin > tMax)
+        {
+            return false;
+        }
+    }
+    if (Math.AbsFloat(dy) < 0.000001)
+    {
+        if (ay < minY)
+        {
+            return false;
+        }
+        if (ay > maxY)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        t1 = (minY - ay) / dy;
+        t2 = (maxY - ay) / dy;
+        if (t1 > t2)
+        {
+            swap = t1;
+            t1 = t2;
+            t2 = swap;
+        }
+        if (t1 > tMin)
+        {
+            tMin = t1;
+        }
+        if (t2 < tMax)
+        {
+            tMax = t2;
+        }
+        if (tMin > tMax)
+        {
+            return false;
+        }
+    }
+    if (Math.AbsFloat(dz) < 0.000001)
+    {
+        if (az < minZ)
+        {
+            return false;
+        }
+        if (az > maxZ)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        t1 = (minZ - az) / dz;
+        t2 = (maxZ - az) / dz;
+        if (t1 > t2)
+        {
+            swap = t1;
+            t1 = t2;
+            t2 = swap;
+        }
+        if (t1 > tMin)
+        {
+            tMin = t1;
+        }
+        if (t2 < tMax)
+        {
+            tMax = t2;
+        }
+        if (tMin > tMax)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 class LFPG_LaserDetector_Kit : LFPG_KitBase
 {
@@ -346,11 +461,22 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
         int pCount = players.Count();
         Man man;
         PlayerBase pb;
+        Transport veh;
+        vector minMax[2];
+        vector beamEnd;
+        vector localA;
+        vector localB;
+        float margin;
         vector playerPos;
         vector playerLow;
         vector playerHigh;
         float distSqLow;
         float distSqHigh;
+
+        beamEnd[0] = bEndX;
+        beamEnd[1] = bEndY;
+        beamEnd[2] = bEndZ;
+        margin = LFPG_LASER_VEHICLE_BOX_MARGIN_M;
 
         for (i = 0; i < pCount; i = i + 1)
         {
@@ -367,6 +493,22 @@ class LFPG_LaserDetector : LFPG_WireOwnerBase
             pb = PlayerBase.Cast(man);
             if (!pb)
                 continue;
+
+            veh = Transport.Cast(pb.GetParent());
+            if (veh)
+            {
+                if (!veh.GetCollisionBox(minMax))
+                {
+                    veh.ClippingInfo(minMax);
+                }
+                localA = veh.WorldToModel(beamStart);
+                localB = veh.WorldToModel(beamEnd);
+                if (LFPG_LaserSegmentHitsBox(localA[0], localA[1], localA[2], localB[0], localB[1], localB[2], minMax[0][0] - margin, minMax[0][1] - margin, minMax[0][2] - margin, minMax[1][0] + margin, minMax[1][1] + margin, minMax[1][2] + margin))
+                {
+                    detected = true;
+                }
+                continue;
+            }
 
             playerPos = pb.GetPosition();
 

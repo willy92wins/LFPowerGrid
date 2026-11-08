@@ -60,3 +60,15 @@ jobs:
 
       - name: Inspector source overload flag (offline source slice)
         run: python .github/tools/test_inspector_source_overload.py
+
+      - name: Memory Cell Toggle rising-edge (offline source slice)
+        run: python .github/tools/test_memorycell_toggle.py
+
+      - name: Laser occupied-vehicle box (offline source slice)
+        run: python .github/tools/test_laser_vehicle_box.py
+
+      - name: FinishWiring wire-replace notice (offline)
+        run: python .github/tools/test_wire_replace_notice.py
+
+      - name: Stringtable capacity and detector/cell copy
+        run: python .github/tools/test_stringtable_capacity.py

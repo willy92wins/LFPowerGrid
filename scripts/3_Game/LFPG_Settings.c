@@ -112,6 +112,10 @@ class LFPG_ServerSettings
     // NOT to Fences or BBP doors.
     bool DoorControllerLockBuildingDoors = true;
 
+    // When true, FinishWiring tells the player if the new cable replaced
+    // existing ones (each port holds only one cable).
+    bool NotifyWireReplaced = true;
+
     // ---- v4.7: Furnace Fuel Whitelist ----
     // When true, ONLY items listed in FurnaceFuelWhitelist generate fuel.
     // Items NOT in the list are still burned (destroyed) but add 0 fuel.
@@ -621,6 +625,7 @@ class LFPG_Settings
                 }
                 msg = msg + " FuelEntries=" + fwCount.ToString();
                 msg = msg + " DCLockDoors=" + s_Settings.DoorControllerLockBuildingDoors.ToString();
+                msg = msg + " NotifyWireReplaced=" + s_Settings.NotifyWireReplaced.ToString();
                 msg = msg + " FurnaceHeat=" + s_Settings.FurnaceHeatEnabled.ToString();
                 if (s_Settings.FurnaceHeatEnabled)
                 {
