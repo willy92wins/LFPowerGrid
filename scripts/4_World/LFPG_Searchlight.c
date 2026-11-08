@@ -142,9 +142,9 @@ class LFPG_Searchlight : LFPG_DeviceBase
         RegisterNetSyncVariableFloat(varAimYaw, -180.0, 180.0, 9);
         RegisterNetSyncVariableFloat(varAimPitch, -90.0, 90.0, 8);
         RegisterNetSyncVariableBool(varSplashHit);
-        RegisterNetSyncVariableFloat(varSplashX, -500.0, 20500.0, 16);
+        RegisterNetSyncVariableFloat(varSplashX, -500.0, 20500.0, 2);
         RegisterNetSyncVariableFloat(varSplashY, -10.0, 500.0, 12);
-        RegisterNetSyncVariableFloat(varSplashZ, -500.0, 20500.0, 16);
+        RegisterNetSyncVariableFloat(varSplashZ, -500.0, 20500.0, 2);
     }
 
     // ============================================
