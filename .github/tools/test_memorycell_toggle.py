@@ -92,13 +92,13 @@ def bind(source, name, extra):
 
 class Queue:
     def __init__(self, delay_power, delay_toggle):
-        self.pending = {}
+        self.pending = []
         self.delay_power = delay_power
         self.delay_toggle = delay_toggle
         self.now = 0
 
     def Remove(self, callback):
-        self.pending.pop(id(callback), None)
+        self.pending = [item for item in self.pending if item[1] is not callback]
 
     def CallLater(self, callback, delay, repeat):
         extra = 0
@@ -106,12 +106,12 @@ class Queue:
             extra = self.delay_power
         elif callback is CB_TOGGLE:
             extra = self.delay_toggle
-        self.pending[id(callback)] = (self.now + delay + extra, callback)
+        self.pending.append((self.now + delay + extra, callback))
 
     def next_due(self):
         if not self.pending:
             return None
-        return min(self.pending.values(), key=lambda item: item[0])
+        return min(self.pending, key=lambda item: item[0])
 
 
 class NM:
@@ -216,14 +216,17 @@ class Harness:
         self.on_deleted = self.env["_deleted"]
         self.flips = []
         self.last_latch = self.cell.m_LatchState
+        self.latch_log = []
 
     def _note(self):
         if self.cell.m_LatchState != self.last_latch:
             self.flips.append(self.queue.now)
             self.last_latch = self.cell.m_LatchState
+        self.latch_log.append((self.queue.now, self.cell.m_LatchState))
 
-    def _fire(self, callback):
-        self.queue.Remove(callback)
+    def _fire(self, item):
+        self.queue.pending.remove(item)
+        callback = item[1]
         if callback is CB_POWER:
             self.power_timer(self.cell)
         elif callback is CB_TOGGLE:
@@ -238,7 +241,7 @@ class Harness:
             if nxt[0] == limit and before_read:
                 return
             self.queue.now = nxt[0]
-            self._fire(nxt[1])
+            self._fire(nxt)
 
     def read(self, now, power, toggle, reset=False, set_on=False):
         if self.same_ms == "timer":
@@ -263,7 +266,7 @@ class Harness:
         nxt = self.queue.next_due()
         while nxt is not None:
             self.queue.now = nxt[0]
-            self._fire(nxt[1])
+            self._fire(nxt)
             nxt = self.queue.next_due()
         return len(self.flips), self.cell.m_LatchState, list(self.flips)
 
@@ -271,6 +274,14 @@ class Harness:
         self.queue.now = at
         ctx = SimpleNamespace(Read=lambda _value: True)
         self.load_device(self.cell, ctx, 1)
+
+
+def latch_at(log, t):
+    last = None
+    for now, latch in log:
+        if now <= t:
+            last = latch
+    return last
 
 
 def should_flip(low_since, power_since, grace, now, rearm):
@@ -286,68 +297,55 @@ def should_flip(low_since, power_since, grace, now, rearm):
 
 
 def oracle(reads, debounce, rearm, grace, set_on=False, reset=False):
-    raw_p, raw_t = False, True
-    set_p, set_t = False, True
-    ch_p, ch_t = -1, -1
+    def raw_changes(index, initial):
+        val = initial
+        out = []
+        for item in reads:
+            v = bool(item[index])
+            if v != val:
+                out.append((item[0], v))
+                val = v
+        return out
+
+    def accepted_holds(chgs):
+        events = []
+        for i, (start, val) in enumerate(chgs):
+            if i + 1 < len(chgs):
+                dur = chgs[i + 1][0] - start
+            else:
+                dur = debounce
+            if dur >= debounce:
+                events.append((start + debounce, start, val))
+        return events
+
+    power_ev = [(t, 0, start, val) for t, start, val in accepted_holds(raw_changes(1, False))]
+    tog_ev = [(t, 1, start, val) for t, start, val in accepted_holds(raw_changes(2, True))]
+    events = sorted(power_ev + tog_ev)
+    settled_p = False
+    settled_t = True
     power_since, low_since = -1, -1
     latch = False
     flips = []
-
-    def due(raw, settled, changed, now):
-        return raw != settled and changed >= 0 and now - changed >= debounce
-
-    def apply(now):
-        nonlocal set_p, set_t, power_since, low_since, latch
-        due_p = due(raw_p, set_p, ch_p, now)
-        due_t = due(raw_t, set_t, ch_t, now)
-        events = []
-        if due_p:
-            events.append((ch_p, 0, "P"))
-        if due_t:
-            events.append((ch_t, 1, "T"))
-        events.sort()
-        for _stamp, _order, kind in events:
-            if kind == "P":
-                set_p = raw_p
-                power_since = ch_p if set_p else -1
-            else:
-                if raw_t and (not set_t):
-                    if should_flip(low_since, power_since, grace, ch_t, rearm):
-                        latch = not latch
-                        flips.append(now)
-                if not raw_t:
-                    low_since = ch_t
-                set_t = raw_t
-
-    times = []
-    for item in reads:
-        times.append(item[0])
-        times.append(item[0] + debounce)
-    times = sorted(set(times))
-    idx = 0
-    raw_at = {item[0]: item for item in reads}
-    for now in times:
-        apply(now)
-        if now in raw_at:
-            item = raw_at[now]
-            p, t = bool(item[1]), bool(item[2])
-            apply(now)
-            if p != raw_p:
-                raw_p = p
-                ch_p = now
-            if t != raw_t:
-                raw_t = t
-                ch_t = now
-        apply(now)
+    for settle_t, kind, ch, val in events:
+        if kind == 0:
+            if val == settled_p:
+                continue
+            settled_p = val
+            power_since = ch if val else -1
+        else:
+            if val == settled_t:
+                continue
+            if val and (not settled_t):
+                if should_flip(low_since, power_since, grace, ch, rearm):
+                    latch = not latch
+                    flips.append(settle_t)
+            if not val:
+                low_since = ch
+            settled_t = val
         if set_on and not reset:
             latch = True
         elif reset and not set_on:
             latch = False
-        idx = idx + 1
-    end = max(times) + debounce + 1
-    apply(end)
-    if set_on and not reset:
-        latch = True
     return len(flips), latch, flips
 
 
@@ -425,10 +423,26 @@ class MemoryCellToggle(unittest.TestCase):
         self._expect([(0, 1, 1), (5000, 1, 0), (5050, 0, 0), (5950, 1, 0), (6000, 1, 1)], 0)
         self._expect([(0, 1, 0), (1500, 1, 1), (3500, 0, 0), (3600, 1, 0), (4550, 1, 1), (6000, 1, 1)], 2, instants=[1900, 4950])
         self._expect([(0, 1, 0), (5000, 0, 0), (5050, 0, 0), (5100, 1, 1)], 1)
+        f10 = [(0, 1, 0), (5000, 1, 1), (7000, 1, 0)]
         source = src_text()
-        harness = Harness(source)
-        count, final, _ = harness.run_reads([(0, 1, 0), (5000, 1, 1), (7000, 1, 0)], set_on=True)
+        set_h = Harness(source)
+        _, final, _ = set_h.run_reads(f10, set_on=True)
         self.assertEqual(final, True)
+        self.assertTrue(latch_at(set_h.latch_log, 0))
+        self.assertTrue(latch_at(set_h.latch_log, 5400))
+        self.assertTrue(latch_at(set_h.latch_log, 7000))
+        rst = Harness(source)
+        _, rfinal, _ = rst.run_reads(f10, reset=True)
+        self.assertFalse(rfinal)
+        self.assertFalse(latch_at(rst.latch_log, 0))
+        self.assertFalse(latch_at(rst.latch_log, 5400))
+        self.assertFalse(latch_at(rst.latch_log, 7000))
+        both = Harness(source)
+        _, bfinal, _ = both.run_reads(f10, set_on=True, reset=True)
+        self.assertEqual(bfinal, True)
+        self.assertFalse(latch_at(both.latch_log, 0))
+        self.assertTrue(latch_at(both.latch_log, 5400))
+        self.assertTrue(latch_at(both.latch_log, 7000))
         self._expect([(0, 1, 0), (5000, 1, 1), (7000, 1, 0), (7600, 1, 1), (9600, 1, 0)], 1)
         self._expect([(0, 1, 0), (5000, 0, 1), (8000, 0, 0)], 0)
         self._expect([(0, 1, 0), (5000, 1, 1), (5300, 0, 1), (5600, 1, 1), (5800, 1, 0)], 1, instants=[5400])
@@ -586,7 +600,7 @@ class MemoryCellToggle(unittest.TestCase):
         gone = Harness(no_rm_p)
         gone.read(0, True, False)
         gone.on_deleted(gone.cell)
-        self.assertTrue(any(cb is CB_POWER for _t, cb in gone.queue.pending.values()))
+        self.assertTrue(any(cb is CB_POWER for _t, cb in gone.queue.pending))
         no_rm_t, n = re.subn(
             deleted_pair,
             "Remove(LFPG_MCellPowerSettleTimer);",
@@ -596,7 +610,70 @@ class MemoryCellToggle(unittest.TestCase):
         gone_t.read(0, True, False)
         gone_t.read(100, True, True)
         gone_t.on_deleted(gone_t.cell)
-        self.assertTrue(any(cb is CB_TOGGLE for _t, cb in gone_t.queue.pending.values()))
+        self.assertTrue(any(cb is CB_TOGGLE for _t, cb in gone_t.queue.pending))
+        f10 = [(0, 1, 0), (5000, 1, 1), (7000, 1, 0)]
+        sr_block = (
+            r"if \(m_FlipPending\)\s*\{\s*"
+            r"m_LatchState = !m_LatchState;\s*"
+            r"m_FlipPending = false;\s*"
+            r"flip = true;\s*"
+            r"\}\s*"
+            r"if \(hasSet && !hasReset\)\s*\{\s*"
+            r"m_LatchState = true;\s*"
+            r"\}\s*"
+            r"else if \(hasReset && !hasSet\)\s*\{\s*"
+            r"m_LatchState = false;\s*"
+            r"\}"
+        )
+        swapped, n = re.subn(
+            sr_block,
+            "if (hasSet && !hasReset)\n"
+            "        {\n"
+            "            m_LatchState = true;\n"
+            "        }\n"
+            "        else if (hasReset && !hasSet)\n"
+            "        {\n"
+            "            m_LatchState = false;\n"
+            "        }\n"
+            "        if (m_FlipPending)\n"
+            "        {\n"
+            "            m_LatchState = !m_LatchState;\n"
+            "            m_FlipPending = false;\n"
+            "            flip = true;\n"
+            "        }",
+            source, count=1)
+        self.assertEqual(n, 1)
+        sw = Harness(swapped)
+        sw.run_reads(f10, set_on=True)
+        self.assertNotEqual(latch_at(sw.latch_log, 5400), True)
+        no_sr, n = re.subn(
+            r"if \(hasSet && !hasReset\)\s*\{\s*m_LatchState = true;\s*\}\s*"
+            r"else if \(hasReset && !hasSet\)\s*\{\s*m_LatchState = false;\s*\}",
+            "", source, count=1)
+        self.assertEqual(n, 1)
+        ns = Harness(no_sr)
+        ns.run_reads(f10, set_on=True)
+        self.assertNotEqual(latch_at(ns.latch_log, 0), True)
+        no_rm_pwr, n = re.subn(
+            r"g_Game.GetCallQueue\(CALL_CATEGORY_SYSTEM\).Remove\(LFPG_MCellPowerSettleTimer\);\s*"
+            r"g_Game.GetCallQueue\(CALL_CATEGORY_SYSTEM\).CallLater\(LFPG_MCellPowerSettleTimer",
+            "g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_MCellPowerSettleTimer",
+            source, count=1)
+        self.assertEqual(n, 1)
+        hp = Harness(no_rm_pwr)
+        hp.read(0, True, False)
+        hp.read(100, False, False)
+        self.assertIn(400, [t for t, cb in hp.queue.pending if cb is CB_POWER])
+        no_rm_tog, n = re.subn(
+            r"g_Game.GetCallQueue\(CALL_CATEGORY_SYSTEM\).Remove\(LFPG_MCellToggleSettleTimer\);\s*"
+            r"g_Game.GetCallQueue\(CALL_CATEGORY_SYSTEM\).CallLater\(LFPG_MCellToggleSettleTimer",
+            "g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_MCellToggleSettleTimer",
+            source, count=1)
+        self.assertEqual(n, 1)
+        ht = Harness(no_rm_tog)
+        ht.read(0, True, False)
+        ht.read(100, True, True)
+        self.assertIn(400, [t for t, cb in ht.queue.pending if cb is CB_TOGGLE])
 
 
 if __name__ == "__main__":
