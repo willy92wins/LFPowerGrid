@@ -55,9 +55,13 @@ Hechos:
 ## Duenos sin cambios
 
 Comparando cada dueno con su emision anterior en la misma sesion, en todas las rafagas:
-los duenos cambiantes dieron 231 veces hash distinto. Para los duenos sin cambios ver la tabla: se reemiten en
-cada rafaga (71 lineas por rafaga con 25 duenos cableados y 46 lamparas). Salvo esa segunda rafaga tras arrancar,
-su hash es el mismo.
+
+| Dueno | Mismo hash | Hash distinto |
+|---|---:|---:|
+| Sin cambios (4) | 36 | 16 |
+| Cambiante (21) | 42 | 231 |
+
+Los duenos sin cambios **se reemiten en cada rafaga**, tambien las 46 lamparas sin cables. Sus 16 hash distintos caen en la segunda rafaga tras arrancar de una muerte, sin que nadie cambiara cables. No he mirado que difiere; por su momento podrian ser los net ids que refresca la validacion (hipotesis). Si es asi, un JSON cargado y el siguiente emitido no coinciden aunque los cables sean los mismos.
 
 ## Ficheros de `storage_1/data` por pasada
 
