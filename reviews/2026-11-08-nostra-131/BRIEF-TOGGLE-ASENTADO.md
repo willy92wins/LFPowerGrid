@@ -68,7 +68,7 @@ con un filtro de asentamiento **por entrada**.
   4. Si `flip`: `m_FlipPending = true;` y `LFPG_SetPowered(m_PoweredNet);`, para que el flanco pase por
      el mismo camino de Set/Reset, enrutado y sincronizacion.
   Como cada temporizador procesa todo lo vencido en orden, un temporizador que llegue tarde no cambia el
-  resultado (F13).
+  resultado (F14).
 - La carga (R3) no cambia. En el borrado, quita tambien los dos temporizadores de la cola donde hoy se
   quita `LFPG_DeferredRouting` (si hoy no se quita nada al borrar, anotalo y quita solo los dos nuevos).
 - Comentario R1-R5 de `LFPG_SetPowered` reescrito con el contrato de arriba, corto.
@@ -84,7 +84,7 @@ sin eso, un pulso cortado por un apagon duraria menos de 400 ms y el filtro lo t
    temporizador por entrada** (programar al cambiar esa entrada, cancelar el suyo anterior, disparar a
    los 400 ms). Las constantes (`LFPG_MCELL_DEBOUNCE_MS`, `LFPG_MCELL_TOGGLE_REARM_MS`, la gracia) y los
    valores iniciales de los miembros se leen del fuente, no se copian (TA-03). Fixtures `(t,P,T)`, latch
-   inicial OFF y gracia vencida salvo F14; resultado = numero de inversiones y latch final:
+   inicial OFF y gracia vencida salvo F15; resultado = numero de inversiones y latch final:
    - F1 pulsacion con apagon: `(0,1,0) (10000,1,1) (10010,0,0) (10083,1,1) (12000,1,0)`: 1.
    - F2 cinco pulsaciones de 2 s separadas 3 s, con un apagon de 73 ms al pulsar y al soltar: 5.
    - F3 C5, interruptor fijo y corte de 10 s: `(0,1,1) (20000,0,0)` y luego `(30000,0,1) (30050,1,1)`,
