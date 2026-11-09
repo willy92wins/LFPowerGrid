@@ -16,7 +16,7 @@ el perfil del servidor que se reaplica al arrancar.
 
 No cubre: aparatos colocados despues del ultimo guardado (DayZ los pierde enteros; los cables hacia ellos
 se podan como hoy), estados de interruptores, cables de aparatos vanilla (`vanilla_wires.json`), cambios
-en los 5 s antes de la muerte (el diario escribe cada 5 s), ni un corte de luz del host (la escritura del
+en los 5 s antes de la muerte (el diario escribe cada 5 s), ni deshacer un cambio en esa ventana (G5), ni un corte de luz del host (la escritura del
 fichero no se confirma a disco).
 
 ## Contrato de guardado (medido en `SONDA-CE-PASADAS.md`, mundo `lfpg_grafo`, DayZDiag)
@@ -39,19 +39,25 @@ fichero no se confirma a disco).
 
 ## Garantias y limites declarados
 
-- **G1, nunca peor que sin diario.** El arranque solo escribe sobre lo que cargo la CE (L) si L es uno de
-  los estados guardados con la entrada, que son todos anteriores al estado del diario (W). Con cualquier
-  otra cosa (generacion vieja, backup restaurado a un estado desconocido) no toca nada: STALE. Un modelo
-  en Python de este diseno con 27 000 historiales aleatorios sin estados repetidos no dio ningun
-  resultado mas viejo que lo que cargo la CE.
+- **G1, nunca peor que sin diario fuera de la ventana de G5.** El arranque solo escribe sobre lo que cargo la CE (L)
+  si L es uno de los estados guardados con la entrada, y lo que escribe es W, el ultimo estado capturado. Si al
+  morir el estado vivo es W, queda W o lo que cargo la CE, nunca otra cosa. Con cualquier otra L (generacion vieja,
+  backup restaurado a un estado desconocido) no toca nada: STALE.
 - **G2, que recupera.** Un cambio capturado (Tick cada 5 s, sin validacion activa, bajo el tope, con
-  serializacion buena) y escrito antes de la muerte vuelve si la CE carga dentro de C3 o el estado con el
-  que arranco esa sesion. El mismo modelo no encontro ningun caso dentro del contrato sin recuperar.
+  serializacion buena) y escrito antes de la muerte vuelve si la CE carga dentro de C3 (el estado con el que arranco
+  la sesion cuenta como la emision de antes de la primera). Cuando el dueno ya emitio W dos veces, cargar el estado
+  de arranque es una generacion vieja: fuera del contrato.
 - **G3, ABA.** Restaurar a mano un backup cuyo estado de un dueno coincida con uno de los guardados
   mientras vive la entrada (hasta DURABLE, unas dos pasadas tras el ultimo cambio, o el TTL) reaplica el
   diario. Lo documenta el comentario del ajuste.
 - **G4, retirada antes de tiempo.** Si C1 o C2 fallan en otro servidor (un dueno emitido dos veces en una
   pasada), DURABLE puede retirar pronto: esa muerte se comporta como sin diario, nunca peor.
+- **G5, deshacer dentro de la ventana (D3-01).** La ventana de un dueno va de su ultimo cambio al Tick que lo
+  escribe: 5 s, mas lo que dure una validacion activa o el reintento de una serializacion fallida. Si en ella el dueno
+  vuelve a un estado que la CE puede tener (por ejemplo, se anade un cable y se corta), una muerte dentro de la
+  ventana restaura el ultimo estado capturado: reaparece lo deshecho, aunque sin diario se habria quedado bien. Es la
+  ventana en la que G2 ya no promete nada, y el jugador lo arregla repitiendo el cambio. Cerrarla exige escribir el
+  fichero en cada cambio, que es el coste que el diseno evita.
 - Tambien fuera, declarado: cables que cambien entre la carga y el replay (el diario aun no esta activo y
   el RESTORE los pisa; la validacion poda los que apunten a aparatos que faltan) y cambios que no pasen
   por los cuatro enganches de D5.
@@ -152,10 +158,11 @@ Funciones puras (static, firma en una sola linea, solo escalares):
 ```
 static bool LFPG_WireJournalMarkAllowed(bool active, bool hasEntry, int entryCount, int maxEntries)
     // false si !active; true si hasEntry; false si entryCount >= maxEntries; true en otro caso.
-static int LFPG_WireJournalCaptureKind(bool usable, bool liveEmpty, bool savedEmpty, bool liveEqualsSaved, bool prevEmpty)
-    // REMOVE si !usable; KEEP si liveEmpty; REMOVE si savedEmpty (no se ha leido ni emitido nada:
-    // la CE no puede tener el aparato); REMOVE si liveEqualsSaved && prevEmpty (la CE ya tiene ese
-    // estado y no hay otro en vuelo); STORE en otro caso.
+static int LFPG_WireJournalCaptureKind(bool usable, bool liveEmpty, bool savedEmpty, bool liveEqualsSaved, bool prevEmpty, bool loadedEmpty)
+    // REMOVE si !usable; KEEP si liveEmpty; REMOVE si savedEmpty && prevEmpty && loadedEmpty (no se ha
+    // leido ni emitido nada: la CE no puede tener el aparato); REMOVE si liveEqualsSaved && prevEmpty;
+    // STORE en otro caso. Un ultimo vacio con anterior o cargado presentes es una emision fallida
+    // (D3-02): la CE puede tener cualquiera de los dos y la entrada los guarda.
 static int LFPG_WireJournalSaveVerdict(bool hasEntry, bool isDirty, bool savedEqualsNewest, bool seenOnce)
     // IGNORE si !hasEntry, isDirty o !savedEqualsNewest; FIRST_EMIT si !seenOnce; DURABLE en otro caso.
 static bool LFPG_WireJournalTtlExpired(int capturedMs, int nowMs, int ttlMs)
@@ -183,7 +190,7 @@ Metodos:
    a) Si `nm` existe y `!nm.IsValidationActive()`, por cada id de `m_Dirty`: obj con `FindById`; con
       live = `GetWiresJSON(obj)`, saved = ultimo, prev = anterior y loaded = cargado (los cuatro `""` si no
       hay obj), `kind = LFPG_WireJournalCaptureKind(obj && usable, live == "", saved == "", live == saved,
-      prev == "")`.
+      prev == "", loaded == "")`.
       - REMOVE: borra la entrada y sus mapas si la habia (`m_FileDirty`).
       - KEEP: no toca la entrada; **el id sigue marcado** para el siguiente Tick y, si el obj es
         `LFPG_WireOwnerBase`, llama a `LFPG_InvalidateWireJSONCache()` para que el reintento serialice de
@@ -232,7 +239,9 @@ Metodos:
 Igual que la v2 (la revision de plan v2 comprobo en su punto i que los cinco CutAll llegan a ellos):
 1. `LFPG_WireJournal.Get().MarkOwnerDirty(owner);` como primera sentencia tras la guarda de `owner`
    nulo de `BroadcastOwnerWires`, `BroadcastOwnerWireDelta`, `QueueBroadcastOwnerSnapshot` y
-   `QueueBroadcastOwnerSnapshotFromWires`. El full sync de un jugador no pasa por ellas
+   `QueueBroadcastOwnerSnapshotFromWires`. En `QueueBroadcastOwnerSnapshotFromWires`, anadir `if (!owner) return;` y, a
+   continuacion, `MarkOwnerDirty(owner)`, antes de `CaptureOwnerBroadcastSnapshot` (M3-01; con owner nulo esa llamada ya
+   devuelve null y la funcion no hace nada, asi que no cambia nada de lo que hay). El full sync de un jugador no pasa por ellas
    (`LFPG_SendFullSyncOwner` envia directo), asi que conectar no marca nada.
 2. `ValidateAllWiresAndPropagate()`, rama de servidor, tras el bloque `if (m_ValidationActive) {...}`:
    `if (!m_StartupValidationDone) LFPG_WireJournal.Get().ReplayAtBoot();`
@@ -260,10 +269,12 @@ y distinta de 0 en rojo.
 1. `test_wire_journal_rules.py`, las seis funciones puras del fuente (N = 128, T = 3600000):
    - MarkAllowed: `(true,false,0,N)` true; `(true,true,N,N)` true; `(true,false,N-1,N)` true;
      `(false,true,0,N)` false; `(true,false,N,N)` false. Mutante sin el true por `hasEntry`: el segundo falla.
-   - CaptureKind: `(false,…)` REMOVE; `(true,true,…)` KEEP; `(true,false,true,false,true)` REMOVE;
-     `(true,false,false,true,true)` REMOVE; `(true,false,false,true,false)` STORE;
-     `(true,false,false,false,true)` STORE. Mutante sin la regla `liveEqualsSaved && prevEmpty`: el
-     cuarto da STORE y el test lo caza.
+   - CaptureKind (seis argumentos): `(false,…)` REMOVE; `(true,true,…)` KEEP; `(true,false,true,false,true,true)` REMOVE;
+     `(true,false,false,true,true,false)` REMOVE; `(true,false,false,true,false,false)` STORE;
+     `(true,false,false,false,true,false)` STORE; `(true,false,true,false,false,false)` STORE;
+     `(true,false,true,false,true,false)` STORE. Mutante sin la regla `liveEqualsSaved && prevEmpty`:
+     `(true,false,false,true,true,false)` da STORE y el test lo caza. Mutante con la regla vieja (REMOVE por `savedEmpty`
+     solo): los dos ultimos dan REMOVE y se cazan.
    - SaveVerdict: `(false,…)` IGNORE; `(true,true,…)` IGNORE; `(true,false,false,…)` IGNORE;
      `(true,false,true,false)` FIRST_EMIT; `(true,false,true,true)` DURABLE. Mutantes: DURABLE en la
      primera emision y sin mirar `isDirty`: los dos se cazan.
@@ -300,20 +311,29 @@ y distinta de 0 en rojo.
    - S12: carga A; cambio B; Tick; emite B (una sola vez); Tick. CE A: queda B. CE B: queda B.
    - S13: arranque con entrada (B; A; ""; A), CE A y la rafaga de la carga emitiendo A* distinto de A
      antes del replay: RESTORE, queda B.
-   Mutantes, cada uno rompe al menos lo indicado: replay sin `storedEqualsPrev` (S9 con CE B, S10 con CE
+   - S14 (D3-02): arranque con entrada (B; A; ""; A) y CE A: RESTORE B; fin de validacion; emite con la serializacion
+     fallando (ultimo "", anterior A); la serializacion vuelve; Tick: la entrada queda (B; ""; A; A). Otra muerte con CE
+     A: queda B.
+   - S15: carga A; cambio B; emite con la serializacion fallando; la serializacion vuelve; Tick. CE A: queda B.
+   Mutantes, cada uno rompe al menos lo indicado: la regla vieja de `savedEmpty` (S14 y S15); replay sin `storedEqualsPrev` (S9 con CE B, S10 con CE
    C); sin `storedEqualsLoaded` (S9 y S10 con CE A); DURABLE en la primera emision (S12 con CE A); KEEP
    que desmarca el id (S6); captura que guarda ultimo en `m_SavedPrevJSON` (S9 con CE B); replay que
    compara con ultimo en vez de cargado (S13).
-   Y una prueba con semilla fija: al menos 10 000 historiales aleatorios de un dueno sin estados
-   repetidos (cambios, rafagas, Ticks con y sin validacion, fallos de serializacion) con la CE cargando la
-   ultima emision o la anterior (el estado cargado cuenta como la emision de antes de la primera). Nunca
-   puede quedar un estado mas viejo que el que cargo la CE, y si el fichero tiene una entrada con W mas
-   nuevo que lo que cargo la CE, queda W. Se saltan los casos en que la CE carga `""` (es el fallo del
-   bug-ledger de arriba).
-   - Secuencias, propiedad y mutantes comprobados con un modelo en Python de este diseno antes de
-     escribir el brief: todas dan lo esperado, 27 000 historiales sin ningun caso mas viejo ni ninguno sin
-     recuperar dentro del contrato, y cada mutante rompe lo suyo. El test tiene que dar lo mismo con las
-     funciones del fuente.
+   Y una prueba con semilla fija: al menos 10 000 historiales de un dueno con estados repetidos, varias sesiones (muerte,
+   arranque y seguir) y fallos de serializacion, con la CE cargando la ultima emision o la anterior (el estado cargado
+   cuenta como la emision de antes de la primera; se saltan las cargas de `""`, que es el fallo del bug-ledger de
+   arriba). Comprueba dos cosas. (a) Edad de un estado = tiempo desde la ultima vez que estuvo vivo (el vivo al morir
+   tiene 0). Si queda un estado mas viejo que el que cargo la CE, el estado vivo al morir no es el W del fichero
+   (ventana de G5). (b) Si el ultimo cambio se capturo y se escribio con serializacion buena, queda el estado vivo al
+   morir. Con la regla vieja de `savedEmpty`, (b) tiene que fallar.
+   - Modelo en Python con varias sesiones, estados repetidos y serializaciones fallidas, unas 258 600 muertes: todo
+     resultado mas viejo que lo que cargo la CE cae dentro de la ventana de G5, ninguno fuera; con el arreglo de D3-02,
+     ningun caso de G2 sin recuperar (249 con la regla vieja). El test tiene que dar lo mismo con las funciones del
+     fuente.
+   - O3-01: los escenarios del modelo no ven un despacho mal hecho en el gestor real. Ademas del modelo, ejecuta las
+     transiciones reales de `OnOwnerSaved` del fuente (con `enforce_scalar_slice` o un preprocesador en el test, y mapas
+     simulados): FIRST_EMIT no borra la entrada, DURABLE la borra. Mutante que intercambia el despacho de FIRST_EMIT y
+     DURABLE en `OnOwnerSaved`: tiene que fallar.
 3. `test_wire_journal_structure.py`, sobre los fuentes. El modelo de 2 reimplementa el gestor, asi que
    este test fija sus asignaciones reales (O2-03):
    - Ajuste y linea `Settings loaded:`; las dos clases de datos con exactamente esos campos;
@@ -382,3 +402,7 @@ siguiente. No arranques DayZ para esto: la prueba en partida es `PRUEBA-DIARIO.m
 | O2-03 el modelo puede tapar el gestor | El test de estructura fija las asignaciones reales del gestor, con sus mutantes. |
 | h) L desplazado antes del replay | L es el estado cargado, que no cambia en la sesion (S13). |
 | Sonda: rafagas del arranque a 24-27 s | Antes del replay el diario no esta activo y no cuenta esas emisiones; las entradas restauradas se recapturan tras la validacion (S3). |
+| D3-01 deshacer dentro de la ventana | G5 declarada y G1 acotado; propiedad (a) de la prueba con semilla. |
+| D3-02 ultimo vacio tras una emision fallida | `CaptureKind` con `loadedEmpty`; S14, S15 y propiedad (b). |
+| M3-01 enganche sin guarda | `if (!owner) return;` en `QueueBroadcastOwnerSnapshotFromWires`. |
+| O3-01 el modelo puede tapar el despacho | Las transiciones reales de `OnOwnerSaved`, con su mutante. |
