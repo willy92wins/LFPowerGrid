@@ -331,6 +331,10 @@ class SignalModel(QueueModel):
         self.validate_idx = 0
         self.last_processed = 0
         self.has_gate_branch = "LFPG_EvaluateGateLogic" in src_graph(self.src) and "ComputeSignalOut" in src_graph(self.src)
+        src_txt = src_graph(self.src)
+        self.has_retry = "RetryUnresolvedGates" in src_txt and "m_IsLogicGate" in DATA_SRC.read_text(encoding="utf-8")
+        self.gate_retry = []
+        self.retry_resolves = 0
         self.signal_writes = []
         self.signal_reads = []
         self.validate_syncs = []
@@ -342,6 +346,8 @@ class SignalModel(QueueModel):
     def add_node(self, nid, kind, max_out, cons=0.0, **kw):
         n = super().add_node(nid, kind, max_out, cons=cons, **kw)
         n.m_IsGated = kw.get("gated", False)
+        n.m_IsLogicGate = kw.get("logic_gate", False)
+        n.cast_null = False
         n.m_DirtyMask = 0
         n.m_SignalChanged = False
         n.live_gate_open = not n.m_GateClosed
@@ -408,8 +414,10 @@ class SignalModel(QueueModel):
 
         ent.setpowered = setpowered
         ent.eval_logic = eval_fn
+        ent.cast_null = False
         self.entities[nid] = ent
         self.nodes[nid].m_IsGated = True
+        self.nodes[nid].m_IsLogicGate = True
         self.nodes[nid].m_GateClosed = True
         self.nodes[nid].live_gate_open = False
         self.nodes[nid].role = "gate"
@@ -843,7 +851,14 @@ class SignalModel(QueueModel):
             if gate_is_closed:
                 alloc_avail = 0.0  # :2519-2522
             signal_out = False
-            if self.has_fix and n.m_IsGated and not gate_entity_resolved:
+            if self.has_retry and n.m_IsGated and not gate_entity_resolved:
+                self.queue_gate_retry(nid)
+                if n.m_IsLogicGate:
+                    signal_out = False
+            elif self.has_retry and n.m_IsLogicGate and getattr(resolved if gate_entity_resolved else None, "cast_null", False):
+                self.queue_gate_retry(nid)
+                signal_out = False
+            elif self.has_fix and n.m_IsGated and not gate_entity_resolved and not self.has_retry:
                 signal_out = False
             elif self.has_fix:
                 signal_out = self.compute_signal(
@@ -1056,6 +1071,31 @@ class SignalModel(QueueModel):
         elif callable(callback):
             callback()
 
+    def queue_gate_retry(self, nid):
+        if nid not in self.gate_retry:
+            self.gate_retry.append(nid)
+
+    def retry_unresolved_gates(self):
+        # After ValidateConsumerStates on empty queue; cap 4, rotate, MarkNodeDirty only if resolved.
+        if not self.gate_retry:
+            return
+        cap = 4
+        taken = self.gate_retry[:cap]
+        rest = self.gate_retry[cap:]
+        self.gate_retry = list(rest)
+        for nid in taken:
+            if nid not in self.nodes or not self.nodes[nid].m_IsGated:
+                continue
+            self.retry_resolves = self.retry_resolves + 1
+            resolved = self.resolve_gated_entity(nid)
+            if resolved is None:
+                self.gate_retry.append(nid)
+                continue
+            if self.nodes[nid].m_IsLogicGate and getattr(resolved, "cast_null", False):
+                self.gate_retry.append(nid)
+                continue
+            self.mark(nid, DIRTY_INTERNAL)
+
     def pdq_tick(self, seeds=None, warmup=False, advance_clock=False):
         self.tick = self.tick + 1
         self.epoch = self.epoch + 1
@@ -1091,6 +1131,8 @@ class SignalModel(QueueModel):
         self.edge_visits = 0
         if not self.queue:
             self.validate_consumers(edge_budget)
+            if self.has_retry:
+                self.retry_unresolved_gates()
         while self.queue:
             # LFPG_ElecGraphImpl.c:2250-2253 — budgets before taking a node.
             if processed >= node_budget:
@@ -1116,6 +1158,8 @@ class SignalModel(QueueModel):
         self.deferred = []
         if not self.queue:
             self.validate_consumers(edge_budget)
+            if self.has_retry:
+                self.retry_unresolved_gates()
         self.last_processed = processed
         return processed
 
@@ -1787,6 +1831,27 @@ class TestCSplitter(_TraceCase):
         self.assertTrue(cell.m_LatchState)
         press_push(q, "btnR")
         self.assertFalse(cell.m_LatchState)
+        # C5 Power cut, C6 rebuild/warmup, C7 Set held (§6.4). Fillers stay on Gfill.
+        for j in range(65):
+            q.mark("fill%d" % j, DIRTY_INTERNAL)
+        q.entities["swP"].on = False
+        q.nodes["swP"].live_gate_open = False
+        q.mark("swP", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        q.entities["swP"].on = True
+        q.nodes["swP"].live_gate_open = True
+        q.mark("swP", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        for j in range(65):
+            q.mark("fill%d" % j, DIRTY_INTERNAL)
+        q.settle(["G", "spl", "swP", "btnT", "btnS", "btnR", "cell", "lamp"], warmup=True, require_empty=False)
+        press_push(q, "btnS")
+        self.assertTrue(cell.m_LatchState, "C7 Set held latch")
+        q.entities["btnS"].m_SwitchOn = True
+        q.nodes["btnS"].live_gate_open = True
+        q.mark("btnS", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        self.assertTrue(cell.m_LatchState, "C7 Set still held")
 
 
 class TestAnnotated(_TraceCase):
@@ -2061,17 +2126,91 @@ class TestAnnotated(_TraceCase):
 
     def test_noisy_neighbor_annotated(self):
         q = circuit_a("OR", False, False, splitter=True, require_empty=False)
-        q.add_node("ring", PASSTHROUGH, 100, gated=True)
-        q.add_edge("e_ra", "swA", "ring", tport=PORT_IN0)
-        q.add_edge("e_loop", "ring", "ring", tport=PORT_IN1)
-        q.attach_gate("ring", "XOR")
-        q.entities["swA"].on = True
-        q.nodes["swA"].live_gate_open = True
-        q.mark("swA", DIRTY_INTERNAL)
+        q.add_node("Gn", SOURCE, 500)
+        q.nodes["Gn"].m_Powered = True
+        q.add_node("nsw", PASSTHROUGH, 500, gated=True)
+        q.add_node("nspl", PASSTHROUGH, 500)
+        q.add_edge("e_gn", "Gn", "nsw")
+        q.add_edge("e_ns", "nsw", "nspl")
+        q.attach_switch("nsw", on=True)
+        for i in range(65):
+            nid = "nc%d" % i
+            q.add_node(nid, CONSUMER, 0, 1)
+            q.add_edge("en%d" % i, "nspl", nid)
+        q.mark("Gn", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        for k in range(4):
+            q.entities["nsw"].on = not q.entities["nsw"].on
+            q.nodes["nsw"].live_gate_open = q.entities["nsw"].on
+            q.mark("nsw", DIRTY_INTERNAL)
+            for i in range(65):
+                q.mark("nc%d" % i, DIRTY_INTERNAL)
+            q.run_events(500)
+        _ANNOTATED.append(
+            "ANOTADO vecino ruidoso OR latch=%s nsw=%s"
+            % (gate_open(q), q.entities["nsw"].on)
+        )
+
+    def test_unresolvable_entity_return_annotated(self):
+        q = circuit_a("AND", True, True, splitter=True, require_empty=False)
+        q.fail_find.add("gate")
+        q.fail_vanilla.add("gate")
+        q.fail_netid.add("gate")
+        q.mark("gate", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        q.fail_find.discard("gate")
+        q.fail_vanilla.discard("gate")
+        q.fail_netid.discard("gate")
         q.settle(require_empty=False)
         _ANNOTATED.append(
-            "ANOTADO vecino ruidoso OR latch=%s ring_changes=%s"
-            % (gate_open(q), q.latch_changes.get("ring", 0))
+            "ANOTADO entidad irresoluble y su vuelta latch=%s"
+            % gate_open(q)
+        )
+
+    def test_live_gate_no_entity_annotated(self):
+        q = circuit_a("AND", True, True, splitter=True, require_empty=False)
+        q.fail_find.add("swA")
+        q.fail_netid.add("swA")
+        q.mark("swA", DIRTY_INTERNAL)
+        q.pdq_tick(warmup=True, advance_clock=False)
+        _ANNOTATED.append(
+            "ANOTADO compuerta viva sin entidad AND latch=%s lamp=%s"
+            % (gate_open(q), lamp_power(q))
+        )
+
+    def test_cast_null_na(self):
+        q = circuit_a("AND", True, False, splitter=True, require_empty=False)
+        if "gate" in q.entities:
+            q.entities["gate"].cast_null = True
+        q.nodes["gate"].cast_null = True
+        q.mark("gate", DIRTY_INTERNAL)
+        q.settle(require_empty=False)
+        _ANNOTATED.append("ANOTADO puerta logica Cast nulo n/a latch=%s" % gate_open(q))
+
+    def test_bounded_retry_na(self):
+        h = helpers()
+        q = SignalModel(h, order="fifo", scripted=[], budgets=True)
+        q.add_node("G", SOURCE, 50)
+        q.nodes["G"].m_Powered = True
+        for i in range(10):
+            nid = "g%d" % i
+            q.add_node(nid, PASSTHROUGH, 50, gated=True, logic_gate=True)
+            q.attach_gate(nid, "AND")
+            q.fail_find.add(nid)
+            q.fail_vanilla.add(nid)
+            q.fail_netid.add(nid)
+            q.queue_gate_retry(nid)
+        q.add_node("back", PASSTHROUGH, 50, gated=True, logic_gate=True)
+        q.attach_gate("back", "AND")
+        q.fail_find.add("back")
+        q.fail_vanilla.add("back")
+        q.fail_netid.add("back")
+        q.queue_gate_retry("back")
+        before = q.retry_resolves
+        q.retry_unresolved_gates()
+        _ANNOTATED.append(
+            "ANOTADO reintento acotado n/a resolves=%s has_retry=%s"
+            % (q.retry_resolves - before, q.has_retry)
         )
 
     def test_laser_under_5_annotated(self):
@@ -2221,8 +2360,45 @@ class TestStructural(_TraceCase):
     def test_s14_gated_no_entity_signal_false(self):
         text = src_graph()
         pdq = brace_body(text, "ProcessDirtyQueue")
-        self.assertRegex(pdq, r"m_IsGated")
+        self.assertIn("m_IsLogicGate", pdq)
+        self.assertIn("QueueGateRetry", pdq)
+        self.assertIn("LFPG_LogicGateBase.Cast", pdq)
         self.assertIn("signalOut = false", pdq.replace("signalOut=false", "signalOut = false"))
+        pos_q = pdq.find("QueueGateRetry")
+        pos_a = pdq.find("AllocateOutput")
+        self.assertGreater(pos_a, pos_q)
+
+    def test_s15_is_logic_gate_cached(self):
+        data = DATA_SRC.read_text(encoding="utf-8")
+        self.assertIn("m_IsLogicGate", data)
+        self.assertIn("m_IsLogicGate = false", data)
+        text = src_graph()
+        self.assertIn("EnsureNode", text)
+        self.assertIn("PopulateAllNodeElecStates", text)
+        ens = brace_body(text, "EnsureNode")
+        pop = brace_body(text, "PopulateAllNodeElecStates")
+        self.assertIn("m_IsLogicGate", ens)
+        self.assertIn("m_IsLogicGate", pop)
+        self.assertIn("LFPG_LogicGateBase.Cast", ens)
+        self.assertIn("LFPG_LogicGateBase.Cast", pop)
+
+    def test_s16_retry_after_validate_empty(self):
+        text = src_graph()
+        pdq = brace_body(text, "ProcessDirtyQueue")
+        self.assertIn("RetryUnresolvedGates", pdq)
+        idx_v = [m.start() for m in re.finditer(r"ValidateConsumerStates", pdq)]
+        idx_r = [m.start() for m in re.finditer(r"RetryUnresolvedGates", pdq)]
+        self.assertGreaterEqual(len(idx_v), 2)
+        self.assertGreaterEqual(len(idx_r), 2)
+        self.assertLess(idx_v[0], idx_r[0])
+        self.assertLess(idx_v[1], idx_r[1])
+        retry = brace_body(text, "RetryUnresolvedGates")
+        self.assertIn("LFPG_GATE_RETRY_PER_CALL", retry)
+        self.assertIn("ResolveGatedEntity", retry)
+        self.assertIn("MarkNodeDirty", retry)
+        self.assertIn("LFPG_DIRTY_INTERNAL", retry)
+        rebuild = brace_body(text, "RebuildFromWires")
+        self.assertTrue("m_GateRetry" in rebuild and ("Clear" in rebuild or "Clear()" in rebuild or ".Clear" in rebuild))
 
 
 class TestBudgets(_TraceCase):
@@ -2283,12 +2459,11 @@ class TestBudgets(_TraceCase):
         q.validate_syncs = []
         q.validate_consumers(10 ** 9)
         self.assertEqual(q.validate_syncs, [])
-        q.queue = []
-        q.nodes["queued"].m_InQueue = False
-        q.dirty_mask["queued"] = 0
         q.validate_tick = 20
         q.last_validate_tick = 0
-        q.validate_consumers(10 ** 9)
+        q.validate_syncs = []
+        q.pdq_tick(warmup=False, advance_clock=False)
+        self.assertEqual(q.queue, [])
         self.assertIn("mis", q.validate_syncs)
         self.assertNotIn("dirty", q.validate_syncs)
         self.assertFalse(q.nodes["mis"].m_Powered)
@@ -2307,6 +2482,10 @@ class TestMutants(_TraceCase):
             "m_SignalHigh",
             "LFPG_EvaluateGateLogic",
             "ResolveGatedEntity",
+            "QueueGateRetry",
+            "RetryUnresolvedGates",
+            "m_IsLogicGate",
+            "LFPG_GATE_RETRY_PER_CALL",
         ]
         for t in targets:
             self.assertIn(t, src, "mutation target missing: " + t)
