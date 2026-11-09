@@ -57,6 +57,36 @@ class PulseSurvivesBlackout(unittest.TestCase):
         self.assertTrue(setpowered_ok(button))
         self.assertTrue(setpowered_ok(remote))
 
+    def test_toggle_schedules_pulseoff(self):
+        button = BUTTON.read_text(encoding="utf-8")
+        remote = REMOTE.read_text(encoding="utf-8")
+        self.assertTrue(pulse_armed(button, "LFPG_ToggleButton"))
+        self.assertTrue(pulse_armed(remote, "LFPG_ToggleSwitch"))
+        mutant_button, n_b = re.subn(
+            r"CallLater\(LFPG_PulseOff",
+            "CallLater(LFPG_Unused",
+            button,
+            count=1)
+        mutant_remote, n_r = re.subn(
+            r"CallLater\(LFPG_PulseOff",
+            "CallLater(LFPG_Unused",
+            remote,
+            count=1)
+        self.assertEqual(n_b, 1)
+        self.assertEqual(n_r, 1)
+        self.assertFalse(pulse_armed(mutant_button, "LFPG_ToggleButton"))
+        self.assertFalse(pulse_armed(mutant_remote, "LFPG_ToggleSwitch"))
+
+
+def pulse_armed(source, toggle_name):
+    tog = method(source, toggle_name)
+    if "CallLater(LFPG_PulseOff" not in tog:
+        return False
+    off = method(source, "LFPG_PulseOff")
+    if "m_SwitchOn = false" not in off:
+        return False
+    return True
+
 
 if __name__ == "__main__":
     unittest.main()

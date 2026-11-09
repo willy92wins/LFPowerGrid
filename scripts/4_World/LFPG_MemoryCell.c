@@ -92,6 +92,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected int m_ToggleLowSinceMs = -1;
     protected int m_PowerSinceMs = -1;
     protected int m_PowerLowSinceMs = -1;
+    protected bool m_ToggleLowInOutage = false;
     protected int m_ToggleGraceUntilMs = 0;
 
     // ---- Client visual cache ----
@@ -158,6 +159,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     // SetPowered — Toggle rising edge, then Set/Reset by level
     //
     // R1: Toggle must have been low for LFPG_MCELL_TOGGLE_REARM_MS.
+    //     A Toggle that went low because Power was already low only
+    //     starts that window when Power returns.
     // R2: Power must have been high for the same rearm window. A Power
     //     drop shorter than that window does not restart the counter.
     //     A drop of 1 s or more invalidates R2 even while Power is still
@@ -219,6 +222,14 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             {
                 m_PowerSinceMs = nowMs;
             }
+            if (m_PowerLowSinceMs >= 0)
+            {
+                if (m_ToggleLowInOutage)
+                {
+                    m_ToggleLowSinceMs = nowMs;
+                    m_ToggleLowInOutage = false;
+                }
+            }
             m_PowerLowSinceMs = -1;
         }
 
@@ -233,12 +244,14 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
                 }
             }
             m_ToggleLastHigh = true;
+            m_ToggleLowInOutage = false;
         }
         else
         {
             if (m_ToggleLastHigh || m_ToggleLowSinceMs < 0)
             {
                 m_ToggleLowSinceMs = nowMs;
+                m_ToggleLowInOutage = !hasPower;
             }
             m_ToggleLastHigh = false;
         }

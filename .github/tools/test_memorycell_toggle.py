@@ -153,6 +153,72 @@ class MemoryCellToggle(unittest.TestCase):
         self.assertFalse(run_reads(mutant, seq_a)[0])
         self.assertTrue(run_reads(source, seq_a)[0])
 
+    def test_outage_does_not_arm_fixed_toggle(self):
+        source = CELL.read_text(encoding="utf-8")
+        seq_a = [
+            (True, True, 1),
+            (False, False, 5000),
+            (True, False, 5600),
+            (False, False, 5700),
+            (True, True, 6300),
+        ]
+        seq_b = [
+            (True, True, 1),
+            (False, False, 10000),
+            (True, False, 10900),
+            (True, True, 11000),
+        ]
+        seq_c = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 3000),
+            (True, False, 3100),
+            (True, True, 5200),
+        ]
+        seq7_a = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (False, True, 15000),
+            (True, True, 15050),
+        ]
+        seq7_b = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (True, False, 15000),
+            (True, True, 15050),
+        ]
+        seq7_c = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (True, True, 15000),
+        ]
+        seq7_d = [
+            (True, False, 0),
+            (False, False, 1450),
+            (False, True, 1500),
+            (True, True, 1523),
+        ]
+        self.assertFalse(run_reads(source, seq_a)[0])
+        self.assertFalse(run_reads(source, seq_b)[0])
+        self.assertFalse(run_reads(source, seq_c)[0])
+        self.assertTrue(run_reads(source, seq7_a)[0])
+        self.assertTrue(run_reads(source, seq7_b)[0])
+        self.assertTrue(run_reads(source, seq7_c)[0])
+        self.assertTrue(run_reads(source, seq7_d)[0])
+        mutant, count = re.subn(
+            r"(if \(m_ToggleLowInOutage\)\s*\{\s*)m_ToggleLowSinceMs = nowMs;",
+            r"\1",
+            source,
+            count=1)
+        self.assertEqual(count, 1)
+        self.assertTrue(run_reads(mutant, seq_a)[0])
+        self.assertTrue(run_reads(mutant, seq_b)[0])
+        self.assertFalse(run_reads(source, seq_a)[0])
+        self.assertFalse(run_reads(source, seq_b)[0])
+
 
 def make_step(source):
     powered = method(source, "LFPG_SetPowered")
@@ -162,7 +228,8 @@ def make_step(source):
     arguments = [
         "hasPower", "hasToggle", "hasSet", "hasReset", "nowMs", "flip",
         "m_ToggleLastHigh", "m_ToggleLowSinceMs", "m_PowerSinceMs",
-        "m_PowerLowSinceMs", "m_ToggleGraceUntilMs", "m_LatchState",
+        "m_PowerLowSinceMs", "m_ToggleLowInOutage", "m_ToggleGraceUntilMs",
+        "m_LatchState",
     ]
     stubs = {
         "LFPG_MCellToggleShouldFlip": flip_fn(source),
@@ -172,7 +239,7 @@ def make_step(source):
     }
     compiled = scalar_function(body, arguments) + (
         "    return m_LatchState, m_ToggleLastHigh, m_ToggleLowSinceMs, "
-        "m_PowerSinceMs, m_PowerLowSinceMs, flip\n"
+        "m_PowerSinceMs, m_PowerLowSinceMs, m_ToggleLowInOutage, flip\n"
     )
     environment = {"__builtins__": {}, **stubs}
     exec(compile(compiled, "<source-slice:LFPG_SetPowered-toggle>", "exec"), environment)
@@ -185,13 +252,14 @@ def run_reads(source, reads):
     low_since = -1
     power_since = -1
     power_low = -1
+    toggle_outage = False
     latch = False
     grace = 0
     flip = False
     for has_power, has_toggle, now_ms in reads:
-        latch, last_high, low_since, power_since, power_low, flip = step(
+        latch, last_high, low_since, power_since, power_low, toggle_outage, flip = step(
             has_power, has_toggle, False, False, now_ms, False,
-            last_high, low_since, power_since, power_low, grace, latch)
+            last_high, low_since, power_since, power_low, toggle_outage, grace, latch)
     return latch, last_high, flip
 
 
