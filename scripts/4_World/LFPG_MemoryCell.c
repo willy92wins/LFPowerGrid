@@ -203,9 +203,13 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             string portReset  = "input_2";
             string portSet    = "input_3";
             hasPower  = nm.IsPortReceivingPower(m_DeviceId, portPower);
-            hasToggle = nm.IsPortReceivingPower(m_DeviceId, portToggle);
-            hasReset  = nm.IsPortReceivingPower(m_DeviceId, portReset);
-            hasSet    = nm.IsPortReceivingPower(m_DeviceId, portSet);
+            LFPG_ElecGraph graph = nm.GetGraph();
+            if (graph)
+            {
+                hasToggle = graph.IsPortReceivingSignal(m_DeviceId, portToggle);
+                hasReset  = graph.IsPortReceivingSignal(m_DeviceId, portReset);
+                hasSet    = graph.IsPortReceivingSignal(m_DeviceId, portSet);
+            }
         }
 
         LFPG_MCellApplyDue(nowMs);
