@@ -310,6 +310,14 @@ class LFPG_ElecGraph
         return false;
     }
 
+    bool IsPortReceivingSignal(string deviceId, string portName)
+    {
+        #ifdef SERVER
+        LFPG_Util.Error("[LFPG_ElecGraph] IsPortReceivingSignal called without mission factory (fallback base)");
+        #endif
+        return false;
+    }
+
     void SetOutputPortEnabled(string deviceId, string portName, bool enabled)
     {
         #ifdef SERVER

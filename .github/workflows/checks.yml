@@ -55,6 +55,9 @@ jobs:
       - name: Graph multi-feed split (offline source slice)
         run: python .github/tools/test_graph_multifeed_split.py
 
+      - name: Graph logic signals (offline source slice)
+        run: python .github/tools/test_graph_logic_signals.py
+
       - name: CutWires reverse-index rebuild gate (offline source slice)
         run: python .github/tools/test_cutwires_rebuild_gate.py
 

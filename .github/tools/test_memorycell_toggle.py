@@ -114,6 +114,14 @@ class Queue:
         return min(self.pending, key=lambda item: item[0])
 
 
+class Graph:
+    def __init__(self, ports):
+        self.ports = ports
+
+    def IsPortReceivingSignal(self, device_id, port):
+        return self.ports[port]
+
+
 class NM:
     def __init__(self):
         self.ports = {
@@ -125,6 +133,9 @@ class NM:
 
     def IsPortReceivingPower(self, device_id, port):
         return self.ports[port]
+
+    def GetGraph(self):
+        return Graph(self.ports)
 
 
 class Game:

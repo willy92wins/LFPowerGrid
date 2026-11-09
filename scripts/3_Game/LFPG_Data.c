@@ -257,6 +257,10 @@ class LFPG_ElecNode
     // dispatch on every ProcessDirtyQueue tick for non-gated devices.
     bool   m_IsGated;
 
+    // Runtime only: graph is not persisted; not RPC / SyncVar.
+    // True when this PASSTHROUGH is a logic gate (AND/OR/XOR).
+    bool   m_IsLogicGate;
+
     // v2.1: Cached gate-closed state. Updated each time a gated node
     // is processed in PDQ. Read by AllocateOutput to suppress cold-start
     // inflation for closed-gate targets (prevents phantom demand / false
@@ -314,6 +318,7 @@ class LFPG_ElecNode
         m_Overloaded = false;
         m_LastSyncedLoadRatio = -1.0;
         m_IsGated = false;
+        m_IsLogicGate = false;
         m_GateClosed = false;
         m_DemandKnown = false;
         m_VirtualGeneration = 0.0;
@@ -341,6 +346,8 @@ class LFPG_ElecEdge
     // -1 = never written (sentinel). Written values are clamped >= 0.
     // Runtime only: graph is not persisted; not RPC / SyncVar.
     float           m_OfferedResidual;
+    // Runtime only: graph is not persisted; not RPC / SyncVar.
+    bool            m_SignalHigh;
 
     void LFPG_ElecEdge()
     {
@@ -353,5 +360,6 @@ class LFPG_ElecEdge
         m_Demand = 0.0;
         m_AllocatedPower = 0.0;
         m_OfferedResidual = -1.0;
+        m_SignalHigh = false;
     }
 };
