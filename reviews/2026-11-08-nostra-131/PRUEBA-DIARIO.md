@@ -45,11 +45,14 @@ despues, y la copia del fichero.
 - **J7** Desactivado: `"WireJournal": false`, reinicio y J1. Pasa si se comporta como CONTROL, el RPT
   dice `WireJournal=0` (o `false`) y los `wire_journal.json*` desaparecen al arrancar y no vuelven.
 - **J8a** Principal corrupto con `.bak` valido: con el servidor parado, corta `wire_journal.json` por la
-  mitad, deja el `.bak` y que no haya `.tmp` ni `.bak.new`. Pasa si arranca sin `SCRIPT (E)`, con un
-  `Warn [WireJournal]` que nombra el `.bak`, y el replay usa sus entradas.
-- **J8b** Principal corrupto sin otros: igual, borrando tambien el `.bak`. Pasa si arranca sin
-  `SCRIPT (E)`, con `Warn`, diario vacio, los cables de la CE, y tras un cambio nuevo el fichero vuelve a
-  ser valido.
+  mitad, deja el `.bak` y que no haya `.tmp` ni `.bak.new`. Pasa si arranca con un `Warn [WireJournal]`
+  que nombra el `.bak`, y el replay usa sus entradas. Se admite el error del cargador JSON de vanilla por
+  el fichero corrompido a proposito (uno por cada lectura de ese fichero, que lo nombre); fuera de eso,
+  ningun `SCRIPT (E)` nuevo.
+- **J8b** Principal corrupto sin otros: igual, borrando tambien el `.bak`. Pasa si arranca con `Warn`,
+  diario vacio, los cables de la CE, y tras un cambio nuevo el fichero vuelve a ser valido. Se admite el
+  error del cargador JSON de vanilla por el fichero corrompido a proposito (uno por cada lectura de ese
+  fichero, que lo nombre); fuera de eso, ningun `SCRIPT (E)` nuevo.
 - **J8c (D2-03)** Solo `.bak.new`: tras una muerte como J1, con el servidor parado, copia
   `wire_journal.json` a `wire_journal.json.bak.new` y borra el principal, el `.tmp` y el `.bak`. Pasa si
   arranca con un `Warn` que nombra el `.bak.new` y los cambios de J1 restaurados.
