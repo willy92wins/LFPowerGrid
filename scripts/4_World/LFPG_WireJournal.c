@@ -433,14 +433,20 @@ class LFPG_WireJournal
 				if (se)
 					store.entries.Insert(se);
 			}
+			float saveStart = 0;
+			if (g_Game)
+				saveStart = g_Game.GetTickTime();
 			bool saveOk = LFPG_FileUtil.AtomicSaveWireJournal(LFPG_WIRE_JOURNAL_FILE, store);
 			if (saveOk)
 			{
 				m_FileDirty = false;
+				float saveDurMs = 0;
+				if (g_Game)
+					saveDurMs = (g_Game.GetTickTime() - saveStart) * 1000;
 				string saveMsg = "[WireJournal] saved entries=";
 				saveMsg = saveMsg + store.entries.Count().ToString();
 				saveMsg = saveMsg + " ms=";
-				saveMsg = saveMsg + nowMs.ToString();
+				saveMsg = saveMsg + saveDurMs.ToString();
 				LFPG_Util.Debug(saveMsg);
 			}
 			else

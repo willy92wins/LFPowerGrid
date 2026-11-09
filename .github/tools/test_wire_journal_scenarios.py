@@ -232,6 +232,19 @@ def die(j, owner, ce):
     return j.replay(owner, snap)
 
 
+def restart_session(j, owner, ce):
+    snap = dict(j.file or {})
+    now = j.now
+    rules = j.r
+    owner.boot(ce)
+    owner.emits = [ce] if ce else []
+    nxt = Journal(rules)
+    nxt.now = now
+    nxt.file = dict(snap)
+    nxt.replay(owner, snap)
+    return nxt
+
+
 def run_saved_slice(source, cell, owner_id, saved):
     env = {
         "LFPG_WireJournalSaveVerdict": load(source, "LFPG_WireJournalSaveVerdict",
@@ -581,60 +594,94 @@ class WireJournalScenarios(unittest.TestCase):
 
     def test_seeded_histories(self):
         rng = random.Random(131)
-        g2_fail_old = 0
-        old, _n = re.subn(r"if \(savedEmpty && prevEmpty && loadedEmpty\)", "if (savedEmpty)", SRC, count=1)
-        for _h in range(10000):
-            states = ["A", "B", "C", "A", "B"]
-            o = Owner()
+        old, nold = re.subn(r"if \(savedEmpty && prevEmpty && loadedEmpty\)", "if (savedEmpty)", SRC, count=1)
+        self.assertEqual(nold, 1)
+        old_rules = fns(old)
+        checked = 0
+        old_b_miss = 0
+        hid = 0
+        while checked < 10000:
+            hid = hid + 1
+            log = ["h=" + str(hid)]
+            states = ["A", "B", "C", "D"]
             start = rng.choice(states)
+            o = Owner()
             o.boot(start)
+            o.ser_ok = True
             j = self._j()
-            last_change_captured = True
-            live_at_death = o.live
-            last_written = True
-            last_good = True
-            t_live = {start: 0}
-            now = 0
-            for _step in range(rng.randint(3, 12)):
-                now = now + rng.choice([1, 5, 10])
-                j.now = now
-                act = rng.choice(["chg", "chg", "emit", "tick", "ser"])
-                if act == "chg":
-                    st = rng.choice(states)
-                    o.change(st)
-                    j.mark(o.id)
-                    live_at_death = o.live
-                    t_live[st] = now
-                    last_change_captured = False
-                    last_written = False
-                    last_good = o.ser_ok and o.live != ""
-                elif act == "emit":
-                    j.on_saved(o.id, o.emit())
-                elif act == "tick":
+            last_alive = {start: 0}
+            for sess in range(rng.randint(2, 4)):
+                last_change_captured = True
+                last_written = True
+                last_good = True
+                session_emits = [o.loaded]
+                log.append("boot:" + o.loaded)
+                steps = rng.randint(4, 10)
+                si = 0
+                while si < steps:
+                    j.now = j.now + rng.choice([1, 5, 10])
+                    act = rng.choice(["chg", "chg", "emit", "tick", "ser"])
+                    if act == "chg":
+                        st = rng.choice(states)
+                        o.change(st)
+                        j.mark(o.id)
+                        last_alive[st] = j.now
+                        last_change_captured = False
+                        last_written = False
+                        last_good = o.ser_ok and o.live != ""
+                        log.append("chg:" + st)
+                    elif act == "emit":
+                        jsn = o.emit()
+                        j.on_saved(o.id, jsn)
+                        if jsn != "":
+                            session_emits.append(jsn)
+                        log.append("emit:" + jsn)
+                    elif act == "tick":
+                        j.tick(o)
+                        if o.id in j.entries and j.entries[o.id][0] == o.live and o.live != "":
+                            last_change_captured = True
+                            last_written = True
+                        log.append("tick")
+                    else:
+                        o.ser_ok = rng.choice([True, True, True, False])
+                        log.append("ser:" + str(o.ser_ok))
+                    si = si + 1
+                if len(session_emits) == 1:
+                    o.ser_ok = True
+                    jsn = o.emit()
+                    j.on_saved(o.id, jsn)
+                    if jsn != "":
+                        session_emits.append(jsn)
                     j.tick(o)
-                    if o.id in j.entries and j.entries[o.id][0] == o.live and o.live != "":
-                        last_change_captured = True
-                        last_written = True
+                    log.append("force-emit:" + jsn)
+                live_at_death = o.live
+                last_alive[live_at_death] = j.now
+                if rng.random() < 0.45 and len(session_emits) >= 2:
+                    ce = session_emits[-2]
                 else:
-                    o.ser_ok = rng.choice([True, True, False])
-            live_at_death = o.live
-            emits = [e for e in o.emits if e != ""]
-            if not emits:
-                continue
-            ce = emits[-1] if rng.random() < 0.7 else (emits[-2] if len(emits) > 1 else emits[-1])
-            if ce == "":
-                continue
-            age = lambda st: now - t_live.get(st, now)
-            die(j, o, ce)
-            result = o.live
-            if result != ce and age(result) > age(ce):
-                self.assertTrue((not last_change_captured) or (not last_written) or (not last_good))
-            if last_change_captured and last_written and last_good:
-                self.assertEqual(result, live_at_death)
-            jo = Journal(fns(old))
+                    ce = session_emits[-1]
+                w_file = None
+                if j.file and o.id in j.file:
+                    w_file = j.file[o.id][0]
+                log.append("die ce=" + ce + " live=" + live_at_death + " W=" + str(w_file)
+                           + " cap=" + str(last_change_captured) + " wr=" + str(last_written)
+                           + " good=" + str(last_good))
+                j = restart_session(j, o, ce)
+                result = o.live
+                age_ce = j.now - last_alive.get(ce, j.now)
+                age_res = j.now - last_alive.get(result, j.now)
+                if age_res > age_ce:
+                    if w_file == live_at_death:
+                        self.fail("propiedad (a) fuera de G5: " + " ".join(log)
+                                  + " result=" + result + " age_res=" + str(age_res)
+                                  + " age_ce=" + str(age_ce))
+                if last_change_captured and last_written and last_good:
+                    if result != live_at_death:
+                        self.fail("propiedad (b) G2: " + " ".join(log) + " result=" + result)
+            checked = checked + 1
+            jo = Journal(old_rules)
             o2 = Owner()
             o2.boot(start)
-            # property (b) with old rule is checked in S14/S15 mutants; count G2 misses on a short path
             o2.change("Z")
             jo.mark(o2.id)
             o2.ser_ok = False
@@ -642,22 +689,43 @@ class WireJournalScenarios(unittest.TestCase):
             o2.ser_ok = True
             o2.live = "Z"
             jo.tick(o2)
-            die(jo, o2, start)
-            if jo.entries == {} and o2.live == start:
-                g2_fail_old = g2_fail_old + 1
-        self.assertGreater(g2_fail_old, 0)
+            restart_session(jo, o2, start)
+            if o2.live != "Z":
+                old_b_miss = old_b_miss + 1
+        self.assertEqual(checked, 10000)
+        self.assertGreater(old_b_miss, 0)
 
     def test_on_owner_saved_slice(self):
         cell = SimpleNamespace(
             m_Loaded=True, m_Enabled=True, m_ReadOnly=False, m_FileDirty=False,
             m_Entries=Map(), m_Dirty=Map(), m_SeenEmit=Map(), m_CapturedMs=Map())
-        rec = SimpleNamespace(m_WiresJSON="W")
+        rec = SimpleNamespace(m_WiresJSON="B")
         cell.m_Entries.Set("d1", rec)
-        run_saved_slice(SRC, cell, "d1", "W")
+        run_saved_slice(SRC, cell, "d1", "A")
+        self.assertIn("d1", cell.m_Entries)
+        self.assertFalse(cell.m_SeenEmit.Contains("d1"))
+        self.assertFalse(cell.m_FileDirty)
+        run_saved_slice(SRC, cell, "d1", "A")
+        self.assertIn("d1", cell.m_Entries)
+        self.assertFalse(cell.m_SeenEmit.Contains("d1"))
+        self.assertFalse(cell.m_FileDirty)
+        run_saved_slice(SRC, cell, "d1", "B")
         self.assertIn("d1", cell.m_Entries)
         self.assertTrue(cell.m_SeenEmit.Contains("d1"))
-        run_saved_slice(SRC, cell, "d1", "W")
+        run_saved_slice(SRC, cell, "d1", "B")
         self.assertNotIn("d1", cell.m_Entries)
+        eq_true, n = re.subn(
+            r"if \(savedJSON == entry\.m_WiresJSON\)",
+            "if (true)",
+            SRC, count=1)
+        self.assertEqual(n, 1)
+        bad = SimpleNamespace(
+            m_Loaded=True, m_Enabled=True, m_ReadOnly=False, m_FileDirty=False,
+            m_Entries=Map(), m_Dirty=Map(), m_SeenEmit=Map(), m_CapturedMs=Map())
+        bad.m_Entries.Set("d1", SimpleNamespace(m_WiresJSON="B"))
+        run_saved_slice(eq_true, bad, "d1", "A")
+        run_saved_slice(eq_true, bad, "d1", "A")
+        self.assertNotIn("d1", bad.m_Entries)
         swapped, n = re.subn(
             r"if \(v == LFPG_WJ_SAVE_FIRST_EMIT\)",
             "if (v == __SWAP_DURABLE__)",

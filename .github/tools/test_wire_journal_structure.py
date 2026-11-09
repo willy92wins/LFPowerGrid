@@ -106,6 +106,7 @@ class WireJournalStructure(unittest.TestCase):
         self.assertIn("rec.m_LoadedJSON = loaded;", tick)
         self.assertIn("loaded = OwnerLoadedJSON(obj);", tick)
         self.assertIn("keepIds.Insert(id);", tick)
+        self.assertIn("m_Dirty.Set(keepIds[di], true);", tick)
         self.assertIn("LFPG_InvalidateWireJSONCache()", tick)
         self.assertLess(tick.find("if (!IsActive())"), tick.find("AtomicSaveWireJournal("))
         self.assertIn("IsValidationActive()", tick)
@@ -123,6 +124,10 @@ class WireJournalStructure(unittest.TestCase):
         bakn_i = boot.find('LFPG_WIRE_JOURNAL_FILE + ".bak.new"')
         bak_i = boot.find('LFPG_WIRE_JOURNAL_FILE + ".bak"')
         self.assertTrue(tmp_i < main_i < bakn_i < bak_i)
+        probe_for = re.search(r"for \(ci = ([^;]+); ci < ([^;]+); ci = ci \+ 1\)", boot)
+        self.assertIsNotNone(probe_for)
+        self.assertEqual(probe_for.group(1).strip(), "0")
+        self.assertEqual(probe_for.group(2).strip(), "candidates.Count()")
         self.assertNotIn("CopyFile(", boot)
         self.assertIn("OwnerLoadedJSON(obj)", boot)
         self.assertIn("new array<ref LFPG_WireData>", boot)
@@ -145,6 +150,29 @@ class WireJournalStructure(unittest.TestCase):
         m3, n = re.subn(r"keepIds\.Insert\(id\);", "m_Dirty.Remove(id);", wj, count=1)
         self.assertEqual(n, 1)
         self.assertNotIn("keepIds.Insert(id);", method(m3, "Tick"))
+        m3b, n = re.subn(
+            r"m_Dirty\.Set\(keepIds\[di\], true\);",
+            "m_Dirty.Remove(keepIds[di]);",
+            wj, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotIn("m_Dirty.Set(keepIds[di], true);", method(m3b, "Tick"))
+        m_probe, n = re.subn(
+            r"for \(ci = 0; ci < candidates\.Count\(\); ci = ci \+ 1\)",
+            "for (ci = 1; ci < 2; ci = ci + 1)",
+            wj, count=1)
+        self.assertEqual(n, 1)
+        boot_p = method(m_probe, "ReplayAtBoot")
+        pf = re.search(r"for \(ci = ([^;]+); ci < ([^;]+); ci = ci \+ 1\)", boot_p)
+        self.assertNotEqual((pf.group(1).strip(), pf.group(2).strip()), ("0", "candidates.Count()"))
+        n_cand = 4
+        ci0 = int(pf.group(1).strip())
+        ci_end = int(pf.group(2).strip()) if pf.group(2).strip().isdigit() else n_cand
+        probed = list(range(ci0, ci_end))
+        self.assertNotEqual(probed, list(range(0, n_cand)))
+        for future_i in range(n_cand):
+            saw_future = future_i in probed
+            if not saw_future:
+                self.assertFalse(saw_future)
         m4, n = re.subn(
             r"candidates\.Insert\(LFPG_WIRE_JOURNAL_FILE \+ \"\.tmp\"\);",
             "",
