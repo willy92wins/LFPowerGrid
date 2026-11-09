@@ -51,6 +51,9 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     // Cached canonical JSON shared by persistence and owner sync.
     protected string m_WireJSONCache;
     protected int m_WireJSONCacheGeneration = -1;
+    protected string m_LoadedWireJSON;
+    protected string m_LastStoredWireJSON;
+    protected string m_PrevStoredWireJSON;
 
     // ============================================
     // Constructor
@@ -60,6 +63,9 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
         m_Wires = new array<ref LFPG_WireData>;
         m_WireJSONCache = "";
         m_WireJSONCacheGeneration = -1;
+        m_LoadedWireJSON = "";
+        m_LastStoredWireJSON = "";
+        m_PrevStoredWireJSON = "";
 
         string varWireGen = "m_WireGeneration";
         RegisterNetSyncVariableInt(varWireGen);
@@ -119,6 +125,17 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
         {
             json = LFPG_GetWiresJSON();
         }
+        if (json != m_LastStoredWireJSON)
+        {
+            m_PrevStoredWireJSON = m_LastStoredWireJSON;
+            m_LastStoredWireJSON = json;
+        }
+        #ifdef SERVER
+        if (!m_WireStoreFrozen)
+        {
+            LFPG_WireJournal.Get().OnOwnerSaved(m_DeviceId, json);
+        }
+        #endif
         ctx.Write(json);
 
         LFPG_OnStoreSaveDevice(ctx);
@@ -143,8 +160,15 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
             m_Wires = new array<ref LFPG_WireData>;
             m_WireJSONCache = "";
             m_WireJSONCacheGeneration = -1;
+            m_LoadedWireJSON = "";
+            m_LastStoredWireJSON = "";
+            m_PrevStoredWireJSON = "";
             return true;
         }
+
+        m_LoadedWireJSON = json;
+        m_LastStoredWireJSON = json;
+        m_PrevStoredWireJSON = "";
 
         string debugLabel = GetType();
         bool storeLoaded = LFPG_WireHelper.DeserializeJSON(m_Wires, json, debugLabel);
@@ -176,6 +200,26 @@ class LFPG_WireOwnerBase : LFPG_DeviceBase
     void LFPG_InvalidateWireJSONCache()
     {
         m_WireJSONCacheGeneration = -1;
+    }
+
+    string LFPG_GetLoadedWiresJSON()
+    {
+        return m_LoadedWireJSON;
+    }
+
+    string LFPG_GetLastStoredWiresJSON()
+    {
+        return m_LastStoredWireJSON;
+    }
+
+    string LFPG_GetPrevStoredWiresJSON()
+    {
+        return m_PrevStoredWireJSON;
+    }
+
+    bool LFPG_IsWireStoreFrozen()
+    {
+        return m_WireStoreFrozen;
     }
 
     int LFPG_GetWireGeneration()

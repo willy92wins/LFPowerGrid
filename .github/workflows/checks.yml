@@ -61,6 +61,15 @@ jobs:
       - name: Inspector source overload flag (offline source slice)
         run: python .github/tools/test_inspector_source_overload.py
 
+      - name: Wire journal predicates (offline source slice)
+        run: python .github/tools/test_wire_journal_rules.py
+
+      - name: Wire journal scenarios (offline model + source slice)
+        run: python .github/tools/test_wire_journal_scenarios.py
+
+      - name: Wire journal structure pins (offline)
+        run: python .github/tools/test_wire_journal_structure.py
+
       - name: Memory Cell Toggle rising-edge (offline source slice)
         run: python .github/tools/test_memorycell_toggle.py
 

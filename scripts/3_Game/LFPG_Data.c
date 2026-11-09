@@ -110,6 +110,36 @@ class LFPG_VanillaWireEntry
     }
 };
 
+class LFPG_WireJournalEntry
+{
+    string m_OwnerDeviceId;
+    string m_WiresJSON;
+    string m_SavedJSON;
+    string m_SavedPrevJSON;
+    string m_LoadedJSON;
+
+    void LFPG_WireJournalEntry()
+    {
+        m_OwnerDeviceId = "";
+        m_WiresJSON = "";
+        m_SavedJSON = "";
+        m_SavedPrevJSON = "";
+        m_LoadedJSON = "";
+    }
+};
+
+class LFPG_WireJournalStore
+{
+    int ver;
+    ref array<ref LFPG_WireJournalEntry> entries;
+
+    void LFPG_WireJournalStore()
+    {
+        ver = LFPG_WIRE_JOURNAL_VER;
+        entries = new array<ref LFPG_WireJournalEntry>;
+    }
+};
+
 // ---- Persistence envelope for vanilla wires ----
 class LFPG_VanillaWireStore
 {

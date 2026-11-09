@@ -452,6 +452,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         {
             m_SchedFlushMs = 0;
             FlushVanillaIfDirty();
+            LFPG_WireJournal.Get().Tick(g_Game.GetTime());
         }
         m_SchedPropagationMs += LFPG_SERVER_SCHEDULER_TICK_MS;
         if (m_SchedPropagationMs >= LFPG_PROPAGATE_TICK_MS)
@@ -1498,6 +1499,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (!owner)
             return;
+        LFPG_WireJournal.Get().MarkOwnerDirty(owner);
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "")
             return;
@@ -1517,6 +1519,8 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     }
     protected void QueueBroadcastOwnerSnapshotFromWires(EntityAI owner, array<ref LFPG_WireData> interestWires)
     {
+        if (!owner) return;
+        LFPG_WireJournal.Get().MarkOwnerDirty(owner);
         LFPG_OwnerBroadcastSnapshot snapshot;
         snapshot = CaptureOwnerBroadcastSnapshot(owner, interestWires);
         if (snapshot)
@@ -1625,6 +1629,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     override void BroadcastOwnerWires(EntityAI owner)
     {
         if (!owner) return;
+        LFPG_WireJournal.Get().MarkOwnerDirty(owner);
         string ownerId = LFPG_DeviceAPI.GetDeviceId(owner);
         if (ownerId == "") return;
         if (CoalescePendingOwnerSnapshot(owner, null))
@@ -1833,6 +1838,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
     {
         if (!owner || !operations || !deltaWires)
             return;
+        LFPG_WireJournal.Get().MarkOwnerDirty(owner);
         int entryCount = operations.Count();
         if (entryCount <= 0 || entryCount > LFPG_WIRE_DELTA_MAX_ENTRIES)
             return;
@@ -2878,6 +2884,7 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
             m_ValidationRerunRequested = true;
             return;
         }
+        if (!m_StartupValidationDone) LFPG_WireJournal.Get().ReplayAtBoot();
         m_ValidationActive = true;
         m_ValidationRerunRequested = false;
         m_ValidationPhase = LFPG_VALIDATE_RESOLVE_VANILLA;
@@ -3178,7 +3185,10 @@ class LFPG_NetworkManagerImpl : LFPG_NetworkManager
         bool wasStartupPending = !m_StartupValidationDone;
         m_StartupValidationDone = true;
         if (wasStartupPending)
+        {
             LFPG_Util.Info("[SelfHeal] Startup validation done — RPCs enabled");
+            LFPG_WireJournal.Get().OnStartupValidationDone();
+        }
         string summary = "[SelfHeal] phased summary duration_ms=";
         summary = summary + durationMs.ToString();
         summary = summary + " devices=" + deviceCount.ToString();

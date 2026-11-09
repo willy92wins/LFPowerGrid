@@ -254,6 +254,25 @@ static const float LFPG_OCC_FORCED_RECHECK_MS = 300.0;  // v0.7.38: 800→300 (l
 // See LFPG_Migrators.c for migration chain and compatibility strategy.
 static const int   LFPG_PERSIST_VER = 3;  // v4.0: DeviceBase refactor, per-device version — WIPE REQUIRED
 static const int   LFPG_VANILLA_PERSIST_VER = 2;
+static const int   LFPG_WIRE_JOURNAL_VER = 1;
+static const int   LFPG_WIRE_JOURNAL_MAX_ENTRIES = 128;
+static const int   LFPG_WIRE_JOURNAL_TTL_MS = 3600000;
+static const string LFPG_WIRE_JOURNAL_DIR = "$profile:LF_PowerGrid";
+static const string LFPG_WIRE_JOURNAL_FILE = "$profile:LF_PowerGrid\\wire_journal.json";
+static const int   LFPG_WJ_CAPTURE_REMOVE = 0;
+static const int   LFPG_WJ_CAPTURE_KEEP = 1;
+static const int   LFPG_WJ_CAPTURE_STORE = 2;
+static const int   LFPG_WJ_SAVE_IGNORE = 0;
+static const int   LFPG_WJ_SAVE_FIRST_EMIT = 1;
+static const int   LFPG_WJ_SAVE_DURABLE = 2;
+static const int   LFPG_WJ_REPLAY_MISSING = 0;
+static const int   LFPG_WJ_REPLAY_UNUSABLE = 1;
+static const int   LFPG_WJ_REPLAY_UNCHANGED = 2;
+static const int   LFPG_WJ_REPLAY_RESTORE = 3;
+static const int   LFPG_WJ_REPLAY_STALE = 4;
+static const int   LFPG_WJ_FILE_ABSENT = 0;
+static const int   LFPG_WJ_FILE_FUTURE = 1;
+static const int   LFPG_WJ_FILE_CANDIDATE = 2;
 // Safe pruning (A-08/A-10): a persisted vanilla wire entry is only removed
 // from the store after this many consecutive deferred passes with a dead
 // target. Each deferred pass runs once per server session, so N = 3 demands
