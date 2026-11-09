@@ -23,9 +23,11 @@ con un filtro de asentamiento **por entrada**.
    sentidos. Cada entrada se filtra por separado: un parpadeo de una no retrasa ni anula el cambio de la
    otra (TA-01).
 2. El instante de cada cambio es el de su propia ultima lectura cruda distinta (R7-03). La celda solo lee
-   sus puertos en `LFPG_SetPowered`, que el grafo llama en cada cambio de entrada (`SyncNodeToEntity` no
-   se salta con `LFPG_DIRTY_INPUT`: `LFPG_ElecGraphImpl.c`, la guarda de `dirtyMask` antes de
-   `RememberNodeEntitySync`, y la rama PASSTHROUGH que llama a `SetPowered`).
+   sus puertos en `LFPG_SetPowered`, que el grafo llama cuando la asignacion de una entrada cambia en mas
+   de `LFPG_PROPAGATION_EPSILON` (`SyncNodeToEntity` no se salta con `LFPG_DIRTY_INPUT`). Un cruce del
+   umbral de `IsPortReceivingPower` con una variacion menor que ese epsilon no se notifica
+   (`LFPG_ElecGraphImpl.c:4793` frente a `:5044`, TA3-01): ese cambio se ve en la siguiente llamada, con
+   el instante de esa lectura. Solo pasa con asignaciones de milesimas de u/s; la celda consume 1 u/s.
 3. Los cambios asentados se aplican **en orden de esos instantes**, Power antes que Toggle solo si
    empatan (TA-02, F12), y **siempre antes de que una lectura nueva de esa entrada los sustituya**
    (TA2-01). Un temporizador que llega tarde cambia cuando se ve la inversion, nunca cuantas hay.
@@ -95,7 +97,7 @@ sin eso, un pulso cortado por un apagon duraria menos de 400 ms y el filtro lo t
    `LFPG_SetPowered`, `LFPG_MCellApplyDue`, `LFPG_MCellSettle`, los dos envoltorios,
    `LFPG_OnStoreLoadDevice` y `LFPG_OnDeleted` cargados del fuente, y una cola simulada en Python a la
    que llegan los `CallLater` y `Remove` del propio fuente (un temporizador por entrada, cancelar el suyo
-   anterior, disparar a los 400 ms mas el retraso que pida la fixture). Las constantes y los valores
+   anterior, disparar a los 400 ms mas el retraso que pida la fixture). El arnes ejecuta las cuatro lecturas de `IsPortReceivingPower` del fuente contra un NetworkManager simulado que contesta por puerto, sin inyectar `hasPower` ni `hasToggle`; leer Power del puerto de Toggle (o al reves) tiene que romper los tests (TA3-02). Las constantes y los valores
    iniciales de los miembros se leen del fuente, no se copian (TA-03). Fixtures `(t,P,T)`, latch inicial
    OFF y gracia vencida salvo F15; resultado = numero de inversiones, latch final y, donde se indica, el
    instante de la inversion. Con temporizadores puntuales y, en F18, en los dos ordenes entre lectura y
