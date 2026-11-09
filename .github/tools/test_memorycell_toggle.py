@@ -1,5 +1,7 @@
-"""Memory Cell Toggle rising-edge predicate; production slice plus source contracts."""
+"""Memory Cell settled Toggle: production slices plus a simulated CallLater queue."""
 from pathlib import Path
+from types import SimpleNamespace
+import random
 import re
 import sys
 import unittest
@@ -12,272 +14,589 @@ if str(HERE) not in sys.path:
 from enforce_scalar_slice import load, method, scalar_function
 
 CELL = ROOT / "scripts/4_World/LFPG_MemoryCell.c"
-ARGS = ["lowSinceMs", "powerSinceMs", "graceUntilMs", "nowMs", "rearmMs"]
-POWER_ARGS = ["powerSinceMs", "powerLowSinceMs", "nowMs", "rearmMs"]
-REARM = 1000
-NOW = 20000
-CUT_CHECK = "nowMs - powerLowSinceMs >= rearmMs"
+FLIP_ARGS = ["lowSinceMs", "powerSinceMs", "graceUntilMs", "nowMs", "rearmMs"]
+DUE_ARGS = ["raw", "settled", "changedMs", "nowMs", "debounceMs"]
+FIELDS = [
+    "m_PoweredNet", "m_LatchState", "m_CellActive", "m_RawPower", "m_RawToggle",
+    "m_RawPowerChangedMs", "m_RawToggleChangedMs", "m_SettledPower",
+    "m_SettledToggle", "m_FlipPending", "m_ToggleLowSinceMs", "m_PowerSinceMs",
+    "m_ToggleGraceUntilMs", "m_DeviceId",
+]
+GAPS = [10, 50, 73, 100, 300, 399, 400, 401, 600, 999, 1000, 1001, 1400, 2000, 5000]
+PORT_POWER = object()
+PORT_TOGGLE = object()
+PORT_RESET = object()
+PORT_SET = object()
+CB_POWER = object()
+CB_TOGGLE = object()
+CB_DEFER = object()
 
 
-def flip_fn(source=None):
-    text = source if source is not None else CELL.read_text(encoding="utf-8")
-    return load(text, "LFPG_MCellToggleShouldFlip", ARGS, {})
+def src_text():
+    return CELL.read_text(encoding="utf-8")
 
 
-def without_rearm(source):
-    body = method(source, "LFPG_MCellToggleShouldFlip")
-    stripped, n1 = re.subn(
-        r"if \(nowMs - lowSinceMs < rearmMs\)\s*\{\s*return false;\s*\}",
-        "", body, count=1)
-    stripped, n2 = re.subn(
-        r"if \(nowMs - powerSinceMs < rearmMs\)\s*\{\s*return false;\s*\}",
-        "", stripped, count=1)
-    if n1 != 1 or n2 != 1:
-        raise AssertionError("rearm guards missing")
-    return source.replace(body, stripped, 1)
+def const_int(source, name):
+    match = re.search(r"\b" + name + r"\s*=\s*(-?\d+)", source)
+    if not match:
+        raise AssertionError("const missing: " + name)
+    return int(match.group(1))
+
+
+def member_init(source, name):
+    match = re.search(r"\b" + re.escape(name) + r"\s*=\s*([^;]+);", source)
+    if not match:
+        raise AssertionError("member missing: " + name)
+    raw = match.group(1).strip()
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
+    return int(raw)
+
+
+def neutralize(code):
+    code = re.sub(r"#ifndef\s+SERVER.*?#endif", "", code, flags=re.S)
+    code = re.sub(
+        r"if\s*\(\s*LFPG_LOG_LEVEL\s*>=\s*2\s*\)\s*\{(?:[^{}]|\{[^{}]*\})*\}",
+        "",
+        code)
+    code = re.sub(r"LFPG_Util\.\w+\s*\([^;]*\);", "", code)
+    code = code.replace('"input_0"', "PORT_POWER")
+    code = code.replace('"input_1"', "PORT_TOGGLE")
+    code = code.replace('"input_2"', "PORT_RESET")
+    code = code.replace('"input_3"', "PORT_SET")
+    code = re.sub(r'"(?:\\.|[^"\\])*"', "EMPTY", code)
+    code = re.sub(r"(\w+)\.ToString\(\)", r"str(\1)", code)
+    code = re.sub(
+        r"\b(?:string|vector|ref|ParamsReadContext|ParamsWriteContext|LFPG_[A-Za-z0-9_]+)\s+(?=[A-Za-z_]\w*\s*(?:=|;))",
+        "",
+        code)
+    return code
+
+
+def qualify_members(code):
+    return re.sub(r"(?<![.\w])(m_[A-Za-z0-9_]+)\b", r"cell.\1", code)
+
+
+def bind(source, name, extra):
+    body = qualify_members(neutralize(method(source, name)))
+    generated = scalar_function(body, extra)
+    inner = generated.split("\n", 1)[1]
+    header = "def run(cell"
+    if extra:
+        header = header + ", " + ", ".join(extra)
+    header = header + "):\n"
+    return header + inner + "\n"
+
+
+class Queue:
+    def __init__(self, delay_power, delay_toggle):
+        self.pending = {}
+        self.delay_power = delay_power
+        self.delay_toggle = delay_toggle
+        self.now = 0
+
+    def Remove(self, callback):
+        self.pending.pop(id(callback), None)
+
+    def CallLater(self, callback, delay, repeat):
+        extra = 0
+        if callback is CB_POWER:
+            extra = self.delay_power
+        elif callback is CB_TOGGLE:
+            extra = self.delay_toggle
+        self.pending[id(callback)] = (self.now + delay + extra, callback)
+
+    def next_due(self):
+        if not self.pending:
+            return None
+        return min(self.pending.values(), key=lambda item: item[0])
+
+
+class NM:
+    def __init__(self):
+        self.ports = {
+            PORT_POWER: False,
+            PORT_TOGGLE: False,
+            PORT_RESET: False,
+            PORT_SET: False,
+        }
+
+    def IsPortReceivingPower(self, device_id, port):
+        return self.ports[port]
+
+
+class Game:
+    def __init__(self, queue):
+        self.queue = queue
+        self.now = 0
+
+    def GetTime(self):
+        return self.queue.now
+
+    def GetCallQueue(self, category):
+        return self.queue
+
+
+def env_for(source, queue, nm):
+    game = Game(queue)
+    stubs = {
+        "PORT_POWER": PORT_POWER,
+        "PORT_TOGGLE": PORT_TOGGLE,
+        "PORT_RESET": PORT_RESET,
+        "PORT_SET": PORT_SET,
+        "EMPTY": "",
+        "str": str,
+        "LFPG_MCellToggleShouldFlip": load(source, "LFPG_MCellToggleShouldFlip", FLIP_ARGS, {}),
+        "LFPG_MCellSettleDue": load(source, "LFPG_MCellSettleDue", DUE_ARGS, {}),
+        "LFPG_MCELL_DEBOUNCE_MS": const_int(source, "LFPG_MCELL_DEBOUNCE_MS"),
+        "LFPG_MCELL_TOGGLE_REARM_MS": const_int(source, "LFPG_MCELL_TOGGLE_REARM_MS"),
+        "LFPG_MCELL_TOGGLE_LOAD_GRACE_MS": const_int(source, "LFPG_MCELL_TOGGLE_LOAD_GRACE_MS"),
+        "LFPG_LOG_LEVEL": 0,
+        "CALL_CATEGORY_SYSTEM": 0,
+        "g_Game": game,
+        "LFPG_NetworkManager": SimpleNamespace(Get=lambda: nm),
+        "LFPG_MCellPowerSettleTimer": CB_POWER,
+        "LFPG_MCellToggleSettleTimer": CB_TOGGLE,
+        "LFPG_DeferredRouting": CB_DEFER,
+        "LFPG_Util": SimpleNamespace(Debug=lambda *_a: None, Error=lambda *_a: None),
+    }
+    return stubs, game
+
+
+def new_cell(source):
+    cell = SimpleNamespace()
+    for field in FIELDS:
+        if field == "m_DeviceId":
+            cell.m_DeviceId = "cell"
+            continue
+        cell.__dict__[field] = member_init(source, field)
+    return cell
+
+
+class Harness:
+    def __init__(self, source, delay_power=0, delay_toggle=0, same_ms="read"):
+        self.source = source
+        self.queue = Queue(delay_power, delay_toggle)
+        self.nm = NM()
+        self.same_ms = same_ms
+        self.env, self.game = env_for(source, self.queue, self.nm)
+        self.env["__builtins__"] = {"str": str}
+        self.cell = new_cell(source)
+        self.cell.m_ToggleGraceUntilMs = 0
+        self.env["LFPG_ApplyRouting"] = lambda: None
+        self.env["SetSynchDirty"] = lambda: None
+        self.env["LFPG_MCellApplyDue"] = lambda nowMs: self.env["_apply"](self.cell, nowMs)
+        self.env["LFPG_MCellCommitPower"] = lambda: self.env["_commit_p"](self.cell)
+        self.env["LFPG_MCellCommitToggle"] = lambda: self.env["_commit_t"](self.cell)
+        self.env["LFPG_MCellSettle"] = lambda: self.env["_settle"](self.cell)
+        self.env["LFPG_SetPowered"] = lambda powered: self.env["_setpowered"](self.cell, powered)
+
+        def compile_into(name, extra, key):
+            wrapped = bind(source, name, extra)
+            exec(compile(wrapped, "<slice:" + name + ">", "exec"), self.env)
+            self.env[key] = self.env["run"]
+
+        compile_into("LFPG_MCellCommitPower", [], "_commit_p")
+        compile_into("LFPG_MCellCommitToggle", [], "_commit_t")
+        compile_into("LFPG_MCellApplyDue", ["nowMs"], "_apply")
+        compile_into("LFPG_SetPowered", ["powered"], "_setpowered")
+        compile_into("LFPG_MCellSettle", [], "_settle")
+        compile_into("LFPG_MCellPowerSettleTimer", [], "_power_timer")
+        compile_into("LFPG_MCellToggleSettleTimer", [], "_toggle_timer")
+        compile_into("LFPG_OnStoreLoadDevice", ["ctx", "deviceVer"], "_load")
+        compile_into("LFPG_OnDeleted", [], "_deleted")
+        self.setpowered = self.env["_setpowered"]
+        self.apply_due = self.env["_apply"]
+        self.settle = self.env["_settle"]
+        self.power_timer = self.env["_power_timer"]
+        self.toggle_timer = self.env["_toggle_timer"]
+        self.load_device = self.env["_load"]
+        self.on_deleted = self.env["_deleted"]
+        self.flips = []
+        self.last_latch = self.cell.m_LatchState
+
+    def _note(self):
+        if self.cell.m_LatchState != self.last_latch:
+            self.flips.append(self.queue.now)
+            self.last_latch = self.cell.m_LatchState
+
+    def _fire(self, callback):
+        self.queue.Remove(callback)
+        if callback is CB_POWER:
+            self.power_timer(self.cell)
+        elif callback is CB_TOGGLE:
+            self.toggle_timer(self.cell)
+        self._note()
+
+    def _drain_until(self, limit, before_read):
+        while True:
+            nxt = self.queue.next_due()
+            if nxt is None or nxt[0] > limit:
+                return
+            if nxt[0] == limit and before_read:
+                return
+            self.queue.now = nxt[0]
+            self._fire(nxt[1])
+
+    def read(self, now, power, toggle, reset=False, set_on=False):
+        if self.same_ms == "timer":
+            self._drain_until(now, before_read=False)
+        else:
+            self._drain_until(now, before_read=True)
+        self.queue.now = now
+        self.nm.ports[PORT_POWER] = power
+        self.nm.ports[PORT_TOGGLE] = toggle
+        self.nm.ports[PORT_RESET] = reset
+        self.nm.ports[PORT_SET] = set_on
+        self.setpowered(self.cell, power)
+        self._note()
+        if self.same_ms == "timer":
+            return
+        self._drain_until(now, before_read=False)
+
+    def run_reads(self, reads, set_on=False, reset=False):
+        for item in reads:
+            now, power, toggle = item[0], bool(item[1]), bool(item[2])
+            self.read(now, power, toggle, reset=reset, set_on=set_on)
+        nxt = self.queue.next_due()
+        while nxt is not None:
+            self.queue.now = nxt[0]
+            self._fire(nxt[1])
+            nxt = self.queue.next_due()
+        return len(self.flips), self.cell.m_LatchState, list(self.flips)
+
+    def do_load(self, at=0):
+        self.queue.now = at
+        ctx = SimpleNamespace(Read=lambda _value: True)
+        self.load_device(self.cell, ctx, 1)
+
+
+def should_flip(low_since, power_since, grace, now, rearm):
+    if low_since < 0 or power_since < 0:
+        return False
+    if now < grace:
+        return False
+    if now - low_since < rearm:
+        return False
+    if now - power_since < rearm:
+        return False
+    return True
+
+
+def oracle(reads, debounce, rearm, grace, set_on=False, reset=False):
+    raw_p, raw_t = False, True
+    set_p, set_t = False, True
+    ch_p, ch_t = -1, -1
+    power_since, low_since = -1, -1
+    latch = False
+    flips = []
+
+    def due(raw, settled, changed, now):
+        return raw != settled and changed >= 0 and now - changed >= debounce
+
+    def apply(now):
+        nonlocal set_p, set_t, power_since, low_since, latch
+        due_p = due(raw_p, set_p, ch_p, now)
+        due_t = due(raw_t, set_t, ch_t, now)
+        events = []
+        if due_p:
+            events.append((ch_p, 0, "P"))
+        if due_t:
+            events.append((ch_t, 1, "T"))
+        events.sort()
+        for _stamp, _order, kind in events:
+            if kind == "P":
+                set_p = raw_p
+                power_since = ch_p if set_p else -1
+            else:
+                if raw_t and (not set_t):
+                    if should_flip(low_since, power_since, grace, ch_t, rearm):
+                        latch = not latch
+                        flips.append(now)
+                if not raw_t:
+                    low_since = ch_t
+                set_t = raw_t
+
+    times = []
+    for item in reads:
+        times.append(item[0])
+        times.append(item[0] + debounce)
+    times = sorted(set(times))
+    idx = 0
+    raw_at = {item[0]: item for item in reads}
+    for now in times:
+        apply(now)
+        if now in raw_at:
+            item = raw_at[now]
+            p, t = bool(item[1]), bool(item[2])
+            apply(now)
+            if p != raw_p:
+                raw_p = p
+                ch_p = now
+            if t != raw_t:
+                raw_t = t
+                ch_t = now
+        apply(now)
+        if set_on and not reset:
+            latch = True
+        elif reset and not set_on:
+            latch = False
+        idx = idx + 1
+    end = max(times) + debounce + 1
+    apply(end)
+    if set_on and not reset:
+        latch = True
+    return len(flips), latch, flips
+
+
+def f2_reads():
+    reads = [(0, 1, 0)]
+    for k in range(5):
+        a = 10000 + 5000 * k
+        reads.extend([
+            (a, 1, 1),
+            (a + 10, 0, 0),
+            (a + 83, 1, 1),
+            (a + 2000, 1, 0),
+            (a + 2010, 0, 0),
+            (a + 2083, 1, 0),
+        ])
+    return reads
 
 
 class MemoryCellToggle(unittest.TestCase):
-    def test_positive_and_negative_cases(self):
-        fn = flip_fn()
-        self.assertTrue(fn(NOW - 1500, NOW - 10000, 0, NOW, REARM))
-        self.assertTrue(fn(NOW - 1000, NOW - 1000, 0, NOW, REARM))
-        self.assertFalse(fn(NOW - 200, NOW - 10000, 0, NOW, REARM))
-        self.assertFalse(fn(NOW - 1500, NOW - 300, 0, NOW, REARM))
-        self.assertFalse(fn(NOW - 1500, NOW - 10000, NOW + 1, NOW, REARM))
-        self.assertFalse(fn(-1, NOW - 10000, 0, NOW, REARM))
-        self.assertFalse(fn(NOW - 1500, -1, 0, NOW, REARM))
+    def test_flip_predicate(self):
+        source = src_text()
+        fn = load(source, "LFPG_MCellToggleShouldFlip", FLIP_ARGS, {})
+        now = 20000
+        rearm = const_int(source, "LFPG_MCELL_TOGGLE_REARM_MS")
+        self.assertTrue(fn(now - 1500, now - 10000, 0, now, rearm))
+        self.assertTrue(fn(now - 1000, now - 1000, 0, now, rearm))
+        self.assertFalse(fn(now - 200, now - 10000, 0, now, rearm))
+        self.assertFalse(fn(now - 1500, now - 300, 0, now, rearm))
+        self.assertFalse(fn(now - 1500, now - 10000, now + 1, now, rearm))
+        self.assertFalse(fn(-1, now - 10000, 0, now, rearm))
+        self.assertFalse(fn(now - 1500, -1, 0, now, rearm))
 
-    def test_mutant_without_rearm_makes_n1_true(self):
-        source = CELL.read_text(encoding="utf-8")
-        mutant = without_rearm(source)
-        fn = flip_fn(mutant)
-        self.assertTrue(fn(NOW - 200, NOW - 10000, 0, NOW, REARM))
-        self.assertFalse(flip_fn(source)(NOW - 200, NOW - 10000, 0, NOW, REARM))
+    def test_settle_due_predicate(self):
+        source = src_text()
+        fn = load(source, "LFPG_MCellSettleDue", DUE_ARGS, {})
+        debounce = const_int(source, "LFPG_MCELL_DEBOUNCE_MS")
+        self.assertTrue(fn(True, False, 0, debounce, debounce))
+        self.assertTrue(fn(True, False, 100, 100 + debounce, debounce))
+        self.assertFalse(fn(True, True, 0, debounce, debounce))
+        self.assertFalse(fn(True, False, -1, debounce, debounce))
+        self.assertFalse(fn(True, False, 0, debounce - 1, debounce))
 
     def test_source_no_toggle_override_and_self_consumption(self):
-        source = CELL.read_text(encoding="utf-8")
+        source = src_text()
         powered = method(source, "LFPG_SetPowered")
         self.assertNotIn("newActive = true;", powered)
-        self.assertNotRegex(powered, r"if\s*\(\s*hasToggle\s*\)\s*\{[^}]*newActive")
         cons = method(source, "LFPG_GetConsumption")
         self.assertIn("return LFPG_MCELL_CONSUMPTION;", cons)
         self.assertRegex(source, r"LFPG_MCELL_CONSUMPTION\s*=\s*1\.0")
+        self.assertIn("LFPG_MCellApplyDue(nowMs)", powered)
 
-    def test_setpowered_sequence_and_mutant_without_last_high_false(self):
-        source = CELL.read_text(encoding="utf-8")
-        self.assertIn("m_ToggleLastHigh = false;", method(source, "LFPG_SetPowered"))
-        latch, last_high = run_toggle_sequence(source)
-        self.assertTrue(latch)
-        self.assertFalse(last_high)
-        mutant = source.replace("m_ToggleLastHigh = false;", "", 1)
-        self.assertNotEqual(mutant, source)
-        mutant_latch, _ = run_toggle_sequence(mutant)
-        self.assertFalse(mutant_latch)
+    def _expect(self, reads, flips, latch=None, instants=None, **kwargs):
+        source = src_text()
+        harness = Harness(source, **kwargs)
+        count, final, times = harness.run_reads(reads)
+        self.assertEqual(count, flips)
+        if latch is not None:
+            self.assertEqual(final, latch)
+        if instants is not None:
+            self.assertEqual(times, instants)
+        return times
 
-    def test_power_restart_counter_cases_and_mutant(self):
-        source = CELL.read_text(encoding="utf-8")
-        fn = load(source, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {})
-        self.assertTrue(fn(-1, -1, 5000, 1000))
-        self.assertTrue(fn(1000, 3000, 4000, 1000))
-        self.assertFalse(fn(1000, -1, 9000, 1000))
-        self.assertFalse(fn(1000, 8900, 9000, 1000))
-        mutant, count = re.subn(re.escape(CUT_CHECK), "true", source, count=1)
+    def test_fixtures_punctual(self):
+        self._expect([(0, 1, 0), (10000, 1, 1), (10010, 0, 0), (10083, 1, 1), (12000, 1, 0)], 1, instants=[10483])
+        self._expect(f2_reads(), 5)
+        for tail in (
+            [(30000, 0, 1), (30050, 1, 1)],
+            [(30000, 1, 0), (30050, 1, 1)],
+            [(30000, 1, 1)],
+        ):
+            self._expect([(0, 1, 1), (20000, 0, 0)] + tail, 0)
+        self._expect([(0, 1, 1), (5000, 0, 0), (7500, 0, 1), (8000, 1, 1)], 0)
+        self._expect([(0, 1, 1), (5000, 0, 0), (5600, 1, 0), (5700, 0, 0), (6300, 1, 1)], 0)
+        self._expect([(0, 1, 1), (5000, 0, 0), (5600, 1, 0), (5700, 0, 0), (6600, 1, 1)], 0)
+        self._expect([(0, 1, 1), (5000, 1, 0), (5050, 0, 0), (5950, 1, 0), (6000, 1, 1)], 0)
+        self._expect([(0, 1, 0), (1500, 1, 1), (3500, 0, 0), (3600, 1, 0), (4550, 1, 1), (6000, 1, 1)], 2, instants=[1900, 4950])
+        self._expect([(0, 1, 0), (5000, 0, 0), (5050, 0, 0), (5100, 1, 1)], 1)
+        source = src_text()
+        harness = Harness(source)
+        count, final, _ = harness.run_reads([(0, 1, 0), (5000, 1, 1), (7000, 1, 0)], set_on=True)
+        self.assertEqual(final, True)
+        self._expect([(0, 1, 0), (5000, 1, 1), (7000, 1, 0), (7600, 1, 1), (9600, 1, 0)], 1)
+        self._expect([(0, 1, 0), (5000, 0, 1), (8000, 0, 0)], 0)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5300, 0, 1), (5600, 1, 1), (5800, 1, 0)], 1, instants=[5400])
+        self._expect([(0, 1, 0), (5000, 1, 1), (5100, 0, 1), (6000, 0, 1)], 1)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5800, 1, 0)], 1)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5600, 1, 0), (7000, 1, 1), (7600, 1, 0)], 2)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5400, 1, 0)], 1, same_ms="read")
+        self._expect([(0, 1, 0), (5000, 1, 1), (5400, 1, 0)], 1, same_ms="timer")
+        self._expect([(0, 1, 0), (5000, 0, 1), (5400, 1, 1)], 0)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5100, 0, 1), (5500, 0, 0)], 1)
+
+    def test_f15_grace_via_load(self):
+        source = src_text()
+        early = Harness(source)
+        early.do_load(0)
+        count, _, _ = early.run_reads([(0, 1, 0), (5000, 1, 1), (7000, 1, 0)])
+        self.assertEqual(count, 0)
+        late = Harness(source)
+        late.do_load(0)
+        count, _, _ = late.run_reads([(0, 1, 0), (31000, 1, 1), (33000, 1, 0)])
         self.assertEqual(count, 1)
-        mutant_fn = load(mutant, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {})
-        self.assertTrue(mutant_fn(1000, 8900, 9000, 1000))
-        self.assertFalse(fn(1000, 8900, 9000, 1000))
 
-    def test_power_hysteresis_sequences_and_mutant(self):
-        source = CELL.read_text(encoding="utf-8")
-        short_cut = [
-            (True, False, 0),
-            (True, False, 1500),
-            (False, False, 1600),
-            (True, True, 1700),
-        ]
-        long_cut = [
-            (True, True, 0),
-            (False, False, 10000),
-            (True, True, 20000),
-        ]
-        self.assertTrue(last_flip(source, short_cut))
-        self.assertFalse(last_flip(source, long_cut))
-        mutant, count = re.subn(
-            r"if \(!hasPower\)\s*\{\s*if \(m_PowerLowSinceMs < 0\)\s*\{\s*m_PowerLowSinceMs = nowMs;\s*\}\s*else if \(nowMs - m_PowerLowSinceMs >= LFPG_MCELL_TOGGLE_REARM_MS\)\s*\{\s*m_PowerSinceMs = -1;\s*\}\s*\}",
-            "if (!hasPower)\n        {\n            m_PowerSinceMs = -1;\n        }",
-            source,
-            count=1)
-        self.assertEqual(count, 1)
-        self.assertFalse(last_flip(mutant, short_cut))
-        self.assertTrue(last_flip(source, short_cut))
+    def test_late_timers_match_punctual(self):
+        f13 = [(0, 1, 0), (5000, 1, 1), (5300, 0, 1), (5600, 1, 1), (5800, 1, 0)]
+        self._expect(f13, 1, delay_toggle=401)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5800, 1, 0)], 1, delay_toggle=401)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5600, 1, 0), (7000, 1, 1), (7600, 1, 0)], 2, delay_toggle=3000)
+        self._expect([(0, 1, 1), (5000, 1, 0), (5050, 0, 0), (5950, 1, 0), (6000, 1, 1)], 0, delay_power=1000)
+        self._expect([(0, 1, 0), (5000, 1, 1), (5100, 0, 1), (6000, 0, 1)], 1, delay_toggle=200)
 
-    def test_long_cut_toggle_before_power_stays_on(self):
-        source = CELL.read_text(encoding="utf-8")
-        seq_a = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (False, True, 15000),
-            (True, True, 15050),
-        ]
-        seq_b = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (True, False, 15000),
-            (True, True, 15050),
-        ]
-        seq_c = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (True, True, 15000),
-        ]
-        seq_d = [
-            (True, False, 0),
-            (False, False, 1450),
-            (False, True, 1500),
-            (True, True, 1523),
-        ]
-        self.assertTrue(run_reads(source, seq_a)[0])
-        self.assertTrue(run_reads(source, seq_b)[0])
-        self.assertTrue(run_reads(source, seq_c)[0])
-        self.assertTrue(run_reads(source, seq_d)[0])
-        mutant, count = re.subn(
-            r"else if \(nowMs - m_PowerLowSinceMs >= LFPG_MCELL_TOGGLE_REARM_MS\)\s*\{\s*m_PowerSinceMs = -1;\s*\}",
-            "",
-            source,
-            count=1)
-        self.assertEqual(count, 1)
-        self.assertFalse(run_reads(mutant, seq_a)[0])
-        self.assertTrue(run_reads(source, seq_a)[0])
+    def test_deleted_drops_timers(self):
+        source = src_text()
+        harness = Harness(source)
+        harness.read(0, True, False)
+        harness.read(100, True, True)
+        self.assertTrue(harness.queue.pending)
+        harness.on_deleted(harness.cell)
+        self.assertFalse(harness.queue.pending)
+        harness.queue.now = 100000
+        self.assertIsNone(harness.queue.next_due())
 
-    def test_outage_does_not_arm_fixed_toggle(self):
-        source = CELL.read_text(encoding="utf-8")
-        seq_a = [
-            (True, True, 1),
-            (False, False, 5000),
-            (True, False, 5600),
-            (False, False, 5700),
-            (True, True, 6300),
-        ]
-        seq_b = [
-            (True, True, 1),
-            (False, False, 10000),
-            (True, False, 10900),
-            (True, True, 11000),
-        ]
-        seq_c = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 3000),
-            (True, False, 3100),
-            (True, True, 5200),
-        ]
-        seq7_a = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (False, True, 15000),
-            (True, True, 15050),
-        ]
-        seq7_b = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (True, False, 15000),
-            (True, True, 15050),
-        ]
-        seq7_c = [
-            (True, False, 0),
-            (True, True, 1500),
-            (False, False, 5000),
-            (True, True, 15000),
-        ]
-        seq7_d = [
-            (True, False, 0),
-            (False, False, 1450),
-            (False, True, 1500),
-            (True, True, 1523),
-        ]
-        self.assertFalse(run_reads(source, seq_a)[0])
-        self.assertFalse(run_reads(source, seq_b)[0])
-        self.assertFalse(run_reads(source, seq_c)[0])
-        self.assertTrue(run_reads(source, seq7_a)[0])
-        self.assertTrue(run_reads(source, seq7_b)[0])
-        self.assertTrue(run_reads(source, seq7_c)[0])
-        self.assertTrue(run_reads(source, seq7_d)[0])
-        mutant, count = re.subn(
-            r"(if \(m_ToggleLowInOutage\)\s*\{\s*)m_ToggleLowSinceMs = nowMs;",
-            r"\1",
-            source,
-            count=1)
-        self.assertEqual(count, 1)
-        self.assertTrue(run_reads(mutant, seq_a)[0])
-        self.assertTrue(run_reads(mutant, seq_b)[0])
-        self.assertFalse(run_reads(source, seq_a)[0])
-        self.assertFalse(run_reads(source, seq_b)[0])
+    def test_random_matches_oracle(self):
+        source = src_text()
+        debounce = const_int(source, "LFPG_MCELL_DEBOUNCE_MS")
+        rearm = const_int(source, "LFPG_MCELL_TOGGLE_REARM_MS")
+        rng = random.Random(131)
+        for _n in range(1000):
+            nread = rng.randint(3, 10)
+            t = 0
+            reads = []
+            for _i in range(nread):
+                t = t + rng.choice(GAPS)
+                reads.append((t, rng.randint(0, 1), rng.randint(0, 1)))
+            delay_p = rng.randint(0, 3000)
+            delay_t = rng.randint(0, 3000)
+            harness = Harness(source, delay_power=delay_p, delay_toggle=delay_t)
+            got = harness.run_reads(reads)
+            exp = oracle(reads, debounce, rearm, 0)
+            self.assertEqual(got[0], exp[0])
+            self.assertEqual(got[1], exp[1])
 
+    def test_swapped_power_toggle_ports_break_f1(self):
+        source = src_text().replace(
+            "hasPower  = nm.IsPortReceivingPower(m_DeviceId, portPower);",
+            "hasPower  = nm.IsPortReceivingPower(m_DeviceId, portToggle);",
+            1)
+        harness = Harness(source)
+        count, _, _ = harness.run_reads([(0, 1, 0), (10000, 1, 1), (10010, 0, 0), (10083, 1, 1), (12000, 1, 0)])
+        self.assertNotEqual(count, 1)
 
-def make_step(source):
-    powered = method(source, "LFPG_SetPowered")
-    start = powered.index("if (!hasPower)")
-    end = powered.index("bool newActive = m_LatchState")
-    body = powered[start:end]
-    arguments = [
-        "hasPower", "hasToggle", "hasSet", "hasReset", "nowMs", "flip",
-        "m_ToggleLastHigh", "m_ToggleLowSinceMs", "m_PowerSinceMs",
-        "m_PowerLowSinceMs", "m_ToggleLowInOutage", "m_ToggleGraceUntilMs",
-        "m_LatchState",
-    ]
-    stubs = {
-        "LFPG_MCellToggleShouldFlip": flip_fn(source),
-        "LFPG_MCellPowerRestartCounter": load(
-            source, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {}),
-        "LFPG_MCELL_TOGGLE_REARM_MS": 1000,
-    }
-    compiled = scalar_function(body, arguments) + (
-        "    return m_LatchState, m_ToggleLastHigh, m_ToggleLowSinceMs, "
-        "m_PowerSinceMs, m_PowerLowSinceMs, m_ToggleLowInOutage, flip\n"
-    )
-    environment = {"__builtins__": {}, **stubs}
-    exec(compile(compiled, "<source-slice:LFPG_SetPowered-toggle>", "exec"), environment)
-    return environment["run"]
-
-
-def run_reads(source, reads):
-    step = make_step(source)
-    last_high = True
-    low_since = -1
-    power_since = -1
-    power_low = -1
-    toggle_outage = False
-    latch = False
-    grace = 0
-    flip = False
-    for has_power, has_toggle, now_ms in reads:
-        latch, last_high, low_since, power_since, power_low, toggle_outage, flip = step(
-            has_power, has_toggle, False, False, now_ms, False,
-            last_high, low_since, power_since, power_low, toggle_outage, grace, latch)
-    return latch, last_high, flip
-
-
-def run_toggle_sequence(source):
-    reads = [
-        (True, False, 0),
-        (True, True, 1500),
-        (True, False, 1800),
-        (True, True, 2100),
-        (False, False, 4000),
-    ]
-    latch, last_high, _ = run_reads(source, reads)
-    return latch, last_high
-
-
-def last_flip(source, reads):
-    _, _, flip = run_reads(source, reads)
-    return flip
+    def test_mutants(self):
+        source = src_text()
+        f8 = [(0, 1, 0), (1500, 1, 1), (3500, 0, 0), (3600, 1, 0), (4550, 1, 1), (6000, 1, 1)]
+        f9 = [(0, 1, 0), (5000, 0, 0), (5050, 0, 0), (5100, 1, 1)]
+        f13 = [(0, 1, 0), (5000, 1, 1), (5300, 0, 1), (5600, 1, 1), (5800, 1, 0)]
+        f14 = [(0, 1, 0), (5000, 1, 1), (5100, 0, 1), (6000, 0, 1)]
+        f12 = [(0, 1, 0), (5000, 0, 1), (8000, 0, 0)]
+        f19 = [(0, 1, 0), (5000, 0, 1), (5400, 1, 1)]
+        f11 = [(0, 1, 0), (5000, 1, 1), (7000, 1, 0), (7600, 1, 1), (9600, 1, 0)]
+        f3 = [(0, 1, 1), (20000, 0, 0), (30000, 1, 1)]
+        zero_db, n = re.subn(r"LFPG_MCELL_DEBOUNCE_MS = 400", "LFPG_MCELL_DEBOUNCE_MS = 0", source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(zero_db).run_reads(f8)[0], 2)
+        self.assertNotEqual(Harness(zero_db).run_reads(f9)[0], 1)
+        shared, n = re.subn(r"m_RawToggleChangedMs = nowMs", "m_RawToggleChangedMs = m_RawPowerChangedMs", source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(shared).run_reads(f8)[0], 2)
+        one_timer, n = re.subn(
+            r"CallLater\(LFPG_MCellToggleSettleTimer, LFPG_MCELL_DEBOUNCE_MS, false\)",
+            "CallLater(LFPG_MCellPowerSettleTimer, LFPG_MCELL_DEBOUNCE_MS, false)",
+            source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(one_timer).run_reads(f13)[2], [5400])
+        power_first, n = re.subn(
+            r"if \(m_RawPowerChangedMs <= m_RawToggleChangedMs\)",
+            "if (true)",
+            source, count=1)
+        self.assertEqual(n, 1)
+        self.assertEqual(Harness(power_first, delay_toggle=200).run_reads(f14)[0], 0)
+        tog_first, n = re.subn(
+            r"if \(m_RawPowerChangedMs <= m_RawToggleChangedMs\)",
+            "if (m_RawPowerChangedMs < m_RawToggleChangedMs)",
+            source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(tog_first).run_reads(f12)[0], 0)
+        self.assertNotEqual(Harness(tog_first).run_reads(f19)[0], 0)
+        no_r1, n = re.subn(
+            r"if \(nowMs - lowSinceMs < rearmMs\)\s*\{\s*return false;\s*\}",
+            "", source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(no_r1).run_reads(f11)[0], 1)
+        no_r2, n = re.subn(
+            r"if \(powerSinceMs < 0\)\s*\{\s*return false;\s*\}",
+            "", source, count=1)
+        self.assertEqual(n, 1)
+        no_r2, n = re.subn(
+            r"if \(nowMs - powerSinceMs < rearmMs\)\s*\{\s*return false;\s*\}",
+            "", no_r2, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(no_r2).run_reads(f3)[0], 0)
+        self.assertNotEqual(Harness(no_r2).run_reads(f12)[0], 0)
+        self.assertNotEqual(Harness(no_r2).run_reads(f19)[0], 0)
+        rearm0, n = re.subn(r"LFPG_MCELL_TOGGLE_REARM_MS = 1000", "LFPG_MCELL_TOGGLE_REARM_MS = 0", source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(rearm0).run_reads(f11)[0], 1)
+        no_grace, n = re.subn(
+            r"if \(nowMs < graceUntilMs\)\s*\{\s*return false;\s*\}",
+            "", source, count=1)
+        self.assertEqual(n, 1)
+        early = Harness(no_grace)
+        early.do_load(0)
+        self.assertNotEqual(early.run_reads([(0, 1, 0), (5000, 1, 1), (7000, 1, 0)])[0], 0)
+        grace0, n = re.subn(
+            r"m_ToggleGraceUntilMs = g_Game.GetTime\(\) \+ LFPG_MCELL_TOGGLE_LOAD_GRACE_MS",
+            "m_ToggleGraceUntilMs = 0",
+            source, count=1)
+        self.assertEqual(n, 1)
+        loaded = Harness(grace0)
+        loaded.do_load(0)
+        self.assertNotEqual(loaded.run_reads([(0, 1, 0), (5000, 1, 1), (7000, 1, 0)])[0], 0)
+        no_apply, n = re.subn(r"LFPG_MCellApplyDue\(nowMs\);", "", source, count=1)
+        self.assertEqual(n, 1)
+        self.assertNotEqual(Harness(no_apply, delay_toggle=401).run_reads(f13)[0], 1)
+        self.assertNotEqual(Harness(no_apply, delay_toggle=401).run_reads([(0, 1, 0), (5000, 1, 1), (5800, 1, 0)])[0], 1)
+        self.assertNotEqual(Harness(no_apply, delay_power=1000).run_reads([(0, 1, 1), (5000, 1, 0), (5050, 0, 0), (5950, 1, 0), (6000, 1, 1)])[0], 0)
+        deleted_pair = (
+            r"Remove\(LFPG_MCellPowerSettleTimer\);\s*"
+            r"g_Game.GetCallQueue\(CALL_CATEGORY_SYSTEM\).Remove\(LFPG_MCellToggleSettleTimer\);"
+        )
+        no_rm_p, n = re.subn(
+            deleted_pair,
+            "Remove(LFPG_MCellToggleSettleTimer);",
+            source, count=1)
+        self.assertEqual(n, 1)
+        gone = Harness(no_rm_p)
+        gone.read(0, True, False)
+        gone.on_deleted(gone.cell)
+        self.assertTrue(any(cb is CB_POWER for _t, cb in gone.queue.pending.values()))
+        no_rm_t, n = re.subn(
+            deleted_pair,
+            "Remove(LFPG_MCellPowerSettleTimer);",
+            source, count=1)
+        self.assertEqual(n, 1)
+        gone_t = Harness(no_rm_t)
+        gone_t.read(0, True, False)
+        gone_t.read(100, True, True)
+        gone_t.on_deleted(gone_t.cell)
+        self.assertTrue(any(cb is CB_TOGGLE for _t, cb in gone_t.queue.pending.values()))
 
 
 if __name__ == "__main__":
