@@ -13,8 +13,10 @@ from enforce_scalar_slice import load, method, scalar_function
 
 CELL = ROOT / "scripts/4_World/LFPG_MemoryCell.c"
 ARGS = ["lowSinceMs", "powerSinceMs", "graceUntilMs", "nowMs", "rearmMs"]
+POWER_ARGS = ["powerSinceMs", "powerLowSinceMs", "nowMs", "rearmMs"]
 REARM = 1000
 NOW = 20000
+CUT_CHECK = "nowMs - powerLowSinceMs >= rearmMs"
 
 
 def flip_fn(source=None):
@@ -73,8 +75,45 @@ class MemoryCellToggle(unittest.TestCase):
         mutant_latch, _ = run_toggle_sequence(mutant)
         self.assertFalse(mutant_latch)
 
+    def test_power_restart_counter_cases_and_mutant(self):
+        source = CELL.read_text(encoding="utf-8")
+        fn = load(source, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {})
+        self.assertTrue(fn(-1, -1, 5000, 1000))
+        self.assertTrue(fn(1000, 3000, 4000, 1000))
+        self.assertFalse(fn(1000, -1, 9000, 1000))
+        self.assertFalse(fn(1000, 8900, 9000, 1000))
+        mutant, count = re.subn(re.escape(CUT_CHECK), "true", source, count=1)
+        self.assertEqual(count, 1)
+        mutant_fn = load(mutant, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {})
+        self.assertTrue(mutant_fn(1000, 8900, 9000, 1000))
+        self.assertFalse(fn(1000, 8900, 9000, 1000))
 
-def run_toggle_sequence(source):
+    def test_power_hysteresis_sequences_and_mutant(self):
+        source = CELL.read_text(encoding="utf-8")
+        short_cut = [
+            (True, False, 0),
+            (True, False, 1500),
+            (False, False, 1600),
+            (True, True, 1700),
+        ]
+        long_cut = [
+            (True, True, 0),
+            (False, False, 10000),
+            (True, True, 20000),
+        ]
+        self.assertTrue(last_flip(source, short_cut))
+        self.assertFalse(last_flip(source, long_cut))
+        mutant, count = re.subn(
+            r"if \(!hasPower\)\s*\{\s*if \(m_PowerLowSinceMs < 0\)\s*\{\s*m_PowerLowSinceMs = nowMs;\s*\}\s*\}",
+            "if (!hasPower)\n        {\n            m_PowerSinceMs = -1;\n        }",
+            source,
+            count=1)
+        self.assertEqual(count, 1)
+        self.assertFalse(last_flip(mutant, short_cut))
+        self.assertTrue(last_flip(source, short_cut))
+
+
+def make_step(source):
     powered = method(source, "LFPG_SetPowered")
     start = powered.index("if (!hasPower)")
     end = powered.index("bool newActive = m_LatchState")
@@ -82,24 +121,40 @@ def run_toggle_sequence(source):
     arguments = [
         "hasPower", "hasToggle", "hasSet", "hasReset", "nowMs", "flip",
         "m_ToggleLastHigh", "m_ToggleLowSinceMs", "m_PowerSinceMs",
-        "m_ToggleGraceUntilMs", "m_LatchState",
+        "m_PowerLowSinceMs", "m_ToggleGraceUntilMs", "m_LatchState",
     ]
     stubs = {
         "LFPG_MCellToggleShouldFlip": flip_fn(source),
+        "LFPG_MCellPowerRestartCounter": load(
+            source, "LFPG_MCellPowerRestartCounter", POWER_ARGS, {}),
         "LFPG_MCELL_TOGGLE_REARM_MS": 1000,
     }
     compiled = scalar_function(body, arguments) + (
-        "    return m_LatchState, m_ToggleLastHigh, m_ToggleLowSinceMs, m_PowerSinceMs\n"
+        "    return m_LatchState, m_ToggleLastHigh, m_ToggleLowSinceMs, "
+        "m_PowerSinceMs, m_PowerLowSinceMs, flip\n"
     )
     environment = {"__builtins__": {}, **stubs}
     exec(compile(compiled, "<source-slice:LFPG_SetPowered-toggle>", "exec"), environment)
-    step = environment["run"]
+    return environment["run"]
+
+
+def run_reads(source, reads):
+    step = make_step(source)
     last_high = True
     low_since = -1
     power_since = -1
+    power_low = -1
     latch = False
     grace = 0
-    # baja, sube, baja 300 ms, sube, Power cae
+    flip = False
+    for has_power, has_toggle, now_ms in reads:
+        latch, last_high, low_since, power_since, power_low, flip = step(
+            has_power, has_toggle, False, False, now_ms, False,
+            last_high, low_since, power_since, power_low, grace, latch)
+    return latch, last_high, flip
+
+
+def run_toggle_sequence(source):
     reads = [
         (True, False, 0),
         (True, True, 1500),
@@ -107,11 +162,13 @@ def run_toggle_sequence(source):
         (True, True, 2100),
         (False, False, 4000),
     ]
-    for has_power, has_toggle, now_ms in reads:
-        latch, last_high, low_since, power_since = step(
-            has_power, has_toggle, False, False, now_ms, False,
-            last_high, low_since, power_since, grace, latch)
+    latch, last_high, _ = run_reads(source, reads)
     return latch, last_high
+
+
+def last_flip(source, reads):
+    _, _, flip = run_reads(source, reads)
+    return flip
 
 
 if __name__ == "__main__":

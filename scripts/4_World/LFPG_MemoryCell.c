@@ -47,6 +47,22 @@ static bool LFPG_MCellToggleShouldFlip(int lowSinceMs, int powerSinceMs, int gra
 	return true;
 }
 
+static bool LFPG_MCellPowerRestartCounter(int powerSinceMs, int powerLowSinceMs, int nowMs, int rearmMs)
+{
+	if (powerSinceMs < 0)
+	{
+		return true;
+	}
+	if (powerLowSinceMs >= 0)
+	{
+		if (nowMs - powerLowSinceMs >= rearmMs)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // ---------------------------------------------------------
 // KIT
 // ---------------------------------------------------------
@@ -75,6 +91,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     protected bool m_ToggleLastHigh = true;
     protected int m_ToggleLowSinceMs = -1;
     protected int m_PowerSinceMs = -1;
+    protected int m_PowerLowSinceMs = -1;
     protected int m_ToggleGraceUntilMs = 0;
 
     // ---- Client visual cache ----
@@ -141,7 +158,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     // SetPowered — Toggle rising edge, then Set/Reset by level
     //
     // R1: Toggle must have been low for LFPG_MCELL_TOGGLE_REARM_MS.
-    // R2: Power must have been high for the same rearm window.
+    // R2: Power must have been high for the same rearm window. A Power
+    //     drop shorter than that window does not restart the counter;
+    //     after a drop of 1 s or more, Power and Toggle returning together
+    //     do not count.
     // R3: after OnStoreLoad, no edge until LFPG_MCELL_TOGGLE_LOAD_GRACE_MS.
     // R4: a Toggle never seen low does not fire (starts last-high).
     // R5: apply the edge first, then Set/Reset by level.
@@ -184,11 +204,18 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
         if (!hasPower)
         {
-            m_PowerSinceMs = -1;
+            if (m_PowerLowSinceMs < 0)
+            {
+                m_PowerLowSinceMs = nowMs;
+            }
         }
-        else if (m_PowerSinceMs < 0)
+        else
         {
-            m_PowerSinceMs = nowMs;
+            if (LFPG_MCellPowerRestartCounter(m_PowerSinceMs, m_PowerLowSinceMs, nowMs, LFPG_MCELL_TOGGLE_REARM_MS))
+            {
+                m_PowerSinceMs = nowMs;
+            }
+            m_PowerLowSinceMs = -1;
         }
 
         if (hasToggle)
