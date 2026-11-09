@@ -205,7 +205,7 @@ class CfgMods
         credits = "Extanator";
         author = "Return";
         authorID = "0";
-        version = "1.3.0";
+        version = "1.3.1";
         type = "mod";
 
         dependencies[] = { "Game", "World", "Mission" };
