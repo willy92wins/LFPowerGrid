@@ -1,8 +1,9 @@
 """Structural pins for the wire journal (assignments, hooks, conventions)."""
 from pathlib import Path
+from types import SimpleNamespace
 import re
 import unittest
-from enforce_scalar_slice import method
+from enforce_scalar_slice import load, method
 
 ROOT = Path(__file__).resolve().parents[2]
 WJ = ROOT / "scripts/4_World/LFPG_WireJournal.c"
@@ -25,6 +26,225 @@ BEFORE = ("CoalescePendingOwnerSnapshot(", "StorePendingOwnerSnapshot(",
 
 def src(path):
     return path.read_text(encoding="utf-8")
+
+
+class Arr(list):
+    def Insert(self, item):
+        self.append(item)
+
+    def Count(self):
+        return len(self)
+
+
+class JMap(dict):
+    def Contains(self, k):
+        return k in self
+
+    def Get(self, k):
+        return dict.get(self, k)
+
+    def Set(self, k, v):
+        self[k] = v
+
+    def Remove(self, k):
+        self.pop(k, None)
+
+    def Count(self):
+        return len(self)
+
+    def GetKey(self, i):
+        return list(self.keys())[i]
+
+
+class VerTok:
+    def __init__(self):
+        self.n = 0
+
+    def __int__(self):
+        return self.n
+
+    def __index__(self):
+        return self.n
+
+    def __gt__(self, other):
+        return self.n > other
+
+    def __eq__(self, other):
+        return self.n == other
+
+
+def replay_python(body):
+    held = []
+
+    def hold(m):
+        held.append(m.group(0))
+        return "STRLIT" + str(len(held) - 1)
+
+    code = re.sub(r'"(?:\\.|[^"\\])*"', hold, body)
+    code = re.sub(
+        r"for \((\w+) = ([^;]+); \1 < ([^;]+); \1 = \1 \+ 1\)",
+        r"for \1 in range(\2, \3)",
+        code)
+    code = re.sub(r"\bnew array<[^>]+>", "Arr()", code)
+    code = re.sub(r"\bnew LFPG_WireJournalStore\(\)", "Store()", code)
+    code = re.sub(
+        r"JsonFileLoader<[^>]+>\.LoadFile\(",
+        "JsonLoad(",
+        code)
+    code = re.sub(
+        r"LFPG_FileUtil\.TryReadRawJsonVersion\((\w+), (\w+)\)",
+        r"TryRead(\1, \2)",
+        code)
+    code = re.sub(r"\bint ver = 0;", "ver = VerTok();", code)
+    code = re.sub(
+        r"LFPG_WireJournalFileVerdict\((\w+), (\w+), (\w+),",
+        r"LFPG_WireJournalFileVerdict(\1, \2, int(\3),",
+        code)
+    code = re.sub(r"(?<![.\w])(m_[A-Za-z0-9_]+)\b", r"cell.\1", code)
+    tokens = re.findall(r"STRLIT\d+|[^{};]+|[{};]", code)
+    tokens = [token.strip() for token in tokens if token.strip() and token != ";"]
+    cursor = 0
+    lines = ["def run(cell):"]
+
+    def expression(value):
+        value = value.replace("&&", " and ").replace("||", " or ")
+        value = re.sub(r"!(?!=)", "not ", value)
+        value = re.sub(r"\btrue\b", "True", value)
+        value = re.sub(r"\bfalse\b", "False", value)
+        value = re.sub(r"\bnull\b", "None", value)
+        value = re.sub(r"(\w+)\.ToString\(\)", r"str(\1)", value)
+        value = re.sub(
+            r"\b(?:ref\s+)?(?:array<[^>]+>|string|int|bool|EntityAI|LFPG_(?![A-Z0-9_]+\b)\w+)\s+",
+            "",
+            value)
+        return re.sub(r"STRLIT(\d+)", lambda m: held[int(m.group(1))], value)
+
+    def statement(level):
+        nonlocal cursor
+        token = tokens[cursor]
+        cursor = cursor + 1
+        indent = "    " * level
+        if token == "{":
+            while tokens[cursor] != "}":
+                statement(level)
+            cursor = cursor + 1
+            return
+        if re.match(r"^for\s+\w+\s+in\s+range\(", token):
+            lines.append(indent + expression(token) + ":")
+            statement(level + 1)
+            return
+        if re.match(r"^(if|else if)\s*\(", token):
+            opening, depth = token.index("("), 1
+            end = opening + 1
+            while depth:
+                depth += (token[end] == "(") - (token[end] == ")")
+                end += 1
+            keyword = "elif" if token.startswith("else if") else "if"
+            lines.append(indent + keyword + " " + expression(token[opening + 1:end - 1]) + ":")
+            tail = token[end:].strip()
+            if tail:
+                tokens.insert(cursor, tail)
+            statement(level + 1)
+            return
+        if token == "else":
+            lines.append(indent + "else:")
+            statement(level + 1)
+            return
+        expr = expression(token)
+        if expr not in ("return", "continue", "break") and re.match(r"^[A-Za-z_]\w*$", expr):
+            return
+        lines.append(indent + expr)
+
+    while cursor < len(tokens):
+        statement(1)
+    return "\n".join(lines) + "\n"
+
+
+def run_replay_at_boot(source, future_at, enabled):
+    defines = src(DF)
+    journal_file = re.search(r'LFPG_WIRE_JOURNAL_FILE = "([^"]+)"', defines).group(1)
+    journal_ver = int(re.search(r"LFPG_WIRE_JOURNAL_VER = (\d+)", defines).group(1))
+    wj_names = {name: int(val) for name, val in re.findall(r"\b(LFPG_WJ_[A-Z0-9_]+)\s*=\s*(-?\d+)", defines)}
+    candidates = [
+        journal_file + ".tmp",
+        journal_file,
+        journal_file + ".bak.new",
+        journal_file + ".bak",
+    ]
+    versions = {}
+    ci = 0
+    while ci < 4:
+        versions[candidates[ci]] = journal_ver
+        ci = ci + 1
+    versions[candidates[future_at]] = journal_ver + 1
+    io = SimpleNamespace(loads=0, deletes=0, writes=0)
+
+    def file_exist(path):
+        return path in versions
+
+    def try_read(path, ver_tok):
+        if path not in versions:
+            return False
+        ver_tok.n = versions[path]
+        return True
+
+    def delete_file(path):
+        io.deletes = io.deletes + 1
+        versions.pop(path, None)
+        return True
+
+    def json_load(path, store, err=None):
+        io.loads = io.loads + 1
+        return False
+
+    def write_touch(*_a, **_k):
+        io.writes = io.writes + 1
+        return False
+
+    cell = SimpleNamespace(
+        m_Loaded=False, m_Enabled=True, m_ReadOnly=False, m_FileDirty=False,
+        m_Entries=JMap(), m_Dirty=JMap(), m_SeenEmit=JMap(), m_CapturedMs=JMap(),
+        m_Restored=Arr(), m_CapWarned=False, m_LastSaveWarnMs=0, m_LastKeepWarnMs=0)
+
+    def drop_entry(oid):
+        cell.m_Entries.Remove(oid)
+
+    env = {
+        "Arr": Arr, "Store": lambda: SimpleNamespace(ver=0, entries=Arr()),
+        "VerTok": VerTok, "cell": cell,
+        "FileExist": file_exist, "TryRead": try_read, "DeleteFile": delete_file,
+        "JsonLoad": json_load, "CopyFile": write_touch,
+        "LFPG_WIRE_JOURNAL_FILE": journal_file,
+        "LFPG_WIRE_JOURNAL_VER": journal_ver,
+        "LFPG_WireJournalFileVerdict": load(
+            source, "LFPG_WireJournalFileVerdict",
+            ["exists", "versionRead", "version", "currentVer"], wj_names),
+        "LFPG_WJ_FILE_FUTURE": wj_names["LFPG_WJ_FILE_FUTURE"],
+        "LFPG_WJ_REPLAY_RESTORE": wj_names["LFPG_WJ_REPLAY_RESTORE"],
+        "LFPG_WJ_REPLAY_STALE": wj_names["LFPG_WJ_REPLAY_STALE"],
+        "LFPG_WJ_REPLAY_MISSING": wj_names["LFPG_WJ_REPLAY_MISSING"],
+        "LFPG_WJ_REPLAY_UNUSABLE": wj_names["LFPG_WJ_REPLAY_UNUSABLE"],
+        "LFPG_Settings": SimpleNamespace(Get=lambda: SimpleNamespace(WireJournal=enabled)),
+        "LFPG_Util": SimpleNamespace(Warn=lambda *_a: None, Info=lambda *_a: None, Debug=lambda *_a: None),
+        "g_Game": SimpleNamespace(GetTime=lambda: 0),
+        "LFPG_DeviceRegistry": SimpleNamespace(Get=lambda: SimpleNamespace(FindById=lambda _i: None)),
+        "OwnerLoadedJSON": lambda _o: "",
+        "OwnerUsable": lambda _o: False,
+        "LFPG_WireJournalReplayVerdict": lambda *_a: wj_names["LFPG_WJ_REPLAY_UNUSABLE"],
+        "LFPG_WireHelper": SimpleNamespace(DeserializeJSON=lambda *_a: False),
+        "LFPG_DeviceAPI": SimpleNamespace(
+            ClearDeviceWires=write_touch, AddDeviceWire=write_touch),
+        "DropEntry": drop_entry,
+        "str": str, "range": range, "int": int, "len": len,
+    }
+    # Hasta la carga: pasar por ella ya cuenta como carga y el resto no hace falta traducirlo.
+    body = method(source, "ReplayAtBoot")
+    body = body[:body.index("LFPG_WireJournalStore loadedStore")]
+    body = body + 'JsonFileLoader<LFPG_WireJournalStore>.LoadFile("", null, null);'
+    compiled = replay_python(body)
+    exec(compile(compiled, "<slice:ReplayAtBoot>", "exec"), env)
+    env["run"](cell)
+    return io.loads, io.deletes, io.writes, cell.m_ReadOnly
 
 
 class WireJournalStructure(unittest.TestCase):
@@ -175,31 +395,24 @@ class WireJournalStructure(unittest.TestCase):
         boot_path = method(m_path, "ReplayAtBoot")
         self.assertNotIn("string path = candidates[ci];", boot_path)
 
-        def boot_probe(path_expr, future_at, enabled):
-            n_cand = 4
-            vers = [1] * n_cand
-            vers[future_at] = 2
-            loads = 0
-            deletes = 0
-            writes = 0
-            for ci in range(n_cand):
-                idx = ci if path_expr == "candidates[ci]" else 1
-                ver = vers[idx]
-                if ver > 1:
-                    return True, loads, deletes, writes
-            if not enabled:
-                deletes = n_cand
-            loads = 1
-            return False, loads, deletes, writes
-
         for future_i in range(4):
             for enabled in (True, False):
-                ro, loads, deletes, writes = boot_probe("candidates[ci]", future_i, enabled)
+                loads, deletes, writes, ro = run_replay_at_boot(wj, future_i, enabled)
                 self.assertTrue(ro)
                 self.assertEqual((loads, deletes, writes), (0, 0, 0))
-        mut_ro, mut_loads, mut_del, mut_wr = boot_probe("candidates[1]", 0, False)
-        self.assertFalse(mut_ro)
-        self.assertGreater(mut_del, 0)
+        mut_src, n = re.subn(
+            r"(futMsg = futMsg \+ \"; journal off this boot, files left untouched\";\s*"
+            r"LFPG_Util\.Warn\(futMsg\);\s*)return;",
+            r"\1",
+            wj, count=1)
+        self.assertEqual(n, 1)
+        mut_hit = False
+        for future_i in range(4):
+            for enabled in (True, False):
+                loads, deletes, writes, ro = run_replay_at_boot(mut_src, future_i, enabled)
+                if loads + deletes + writes > 0:
+                    mut_hit = True
+        self.assertTrue(mut_hit)
         m4, n = re.subn(
             r"candidates\.Insert\(LFPG_WIRE_JOURNAL_FILE \+ \"\.tmp\"\);",
             "",

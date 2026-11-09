@@ -606,9 +606,9 @@ class WireJournalScenarios(unittest.TestCase):
         checked = 0
         old_b_miss = 0
         hid = 0
-        n_eval = 0
+        hist_a = set()
+        hist_b = set()
         n_g5 = 0
-        n_b = 0
         n_inject = 0
         keep_total = 0
 
@@ -676,41 +676,41 @@ class WireJournalScenarios(unittest.TestCase):
                     log.append("force-emit:" + jsn)
                 o.ser_ok = True
                 inject_g5 = rng.random() < 0.2
-                older = None
-                ei = 0
-                while ei < len(session_emits):
-                    em = session_emits[ei]
-                    if em != "" and em != o.live:
-                        older = em
-                    ei = ei + 1
                 if inject_g5:
-                    if older is None:
-                        older = rng.choice(states)
-                        if older == o.live:
-                            older = states[(states.index(o.live) + 1) % len(states)]
-                        o.change(older)
-                        j.mark(o.id)
-                        last_alive[older] = j.now
+                    if session_emits[-1] == "":
                         jsn = o.emit()
                         j.on_saved(o.id, jsn)
                         session_emits.append(jsn)
-                        log.append("g5-seed-emit:" + jsn)
-                        other = states[(states.index(older) + 1) % len(states)]
-                        o.change(other)
-                        j.mark(o.id)
-                        last_alive[other] = j.now
-                        log.append("g5-seed-away:" + other)
+                        log.append("g5-force-emit:" + jsn)
+                    last_e = session_emits[-1]
+                    prev_e = None
+                    if len(session_emits) >= 2:
+                        prev_e = session_emits[-2]
                     j.tick(o)
                     last_change_captured, last_written, last_good = capture_flags(j, o)
                     log.append("tick-before-g5")
-                    o.change(older)
+                    target = None
+                    if last_e != "" and last_e != o.live:
+                        target = last_e
+                    elif prev_e is not None and prev_e != "" and prev_e != o.live:
+                        target = prev_e
+                    else:
+                        other = states[(states.index(o.live) + 1) % len(states)]
+                        o.change(other)
+                        j.mark(o.id)
+                        last_alive[other] = j.now
+                        j.tick(o)
+                        last_change_captured, last_written, last_good = capture_flags(j, o)
+                        log.append("g5-away:" + other)
+                        target = last_e
+                    o.change(target)
                     j.mark(o.id)
-                    last_alive[older] = j.now
+                    last_alive[target] = j.now
                     last_change_captured = False
                     last_written = False
-                    log.append("g5-revert:" + older + "-no-tick")
+                    log.append("g5-revert:" + target + "-no-tick")
                     live_at_death = o.live
-                    ce = older
+                    ce = target
                 else:
                     j.tick(o)
                     last_change_captured, last_written, last_good = capture_flags(j, o)
@@ -733,9 +733,11 @@ class WireJournalScenarios(unittest.TestCase):
                 keep_total = keep_total + j.keeps
                 j = restart_session(j, o, ce)
                 result = o.live
+                in_c3 = (ce == session_emits[-1]
+                         or (len(session_emits) >= 2 and ce == session_emits[-2]))
                 comparable = ce in last_alive and result in last_alive
-                if comparable:
-                    n_eval = n_eval + 1
+                if in_c3 and comparable:
+                    hist_a.add(hid)
                     age_ce = j.now - last_alive[ce]
                     age_res = j.now - last_alive[result]
                     if age_res > age_ce:
@@ -744,8 +746,8 @@ class WireJournalScenarios(unittest.TestCase):
                             self.fail("propiedad (a) fuera de G5: " + " ".join(log)
                                       + " result=" + result + " age_res=" + str(age_res)
                                       + " age_ce=" + str(age_ce))
-                if last_change_captured and last_written and last_good:
-                    n_b = n_b + 1
+                if in_c3 and last_change_captured and last_written and last_good:
+                    hist_b.add(hid)
                     if w_file == live_at_death and ce != live_at_death:
                         n_inject = n_inject + 1
                         injected = ce
@@ -770,9 +772,9 @@ class WireJournalScenarios(unittest.TestCase):
         self.assertEqual(checked, 10000)
         self.assertGreater(old_b_miss, 0)
         self.assertGreater(keep_total, 0)
-        self.assertGreaterEqual(n_eval, 100, "n_eval=" + str(n_eval))
+        self.assertGreaterEqual(len(hist_a), 9000, "hist_a=" + str(len(hist_a)))
         self.assertGreater(n_g5, 0, "n_g5=" + str(n_g5))
-        self.assertGreaterEqual(n_b, 10000, "n_b=" + str(n_b))
+        self.assertGreaterEqual(len(hist_b), 8000, "hist_b=" + str(len(hist_b)))
         self.assertGreater(n_inject, 0)
 
     def test_on_owner_saved_slice(self):
