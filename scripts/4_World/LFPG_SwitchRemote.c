@@ -67,12 +67,6 @@ class LFPG_SwitchRemote : LFPG_SwitchDeviceBase
 
         m_PoweredNet = powered;
 
-        if (!powered && m_SwitchOn)
-        {
-            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_PulseOff);
-            m_SwitchOn = false;
-        }
-
         SetSynchDirty();
 
         if (LFPG_LOG_LEVEL >= 2)

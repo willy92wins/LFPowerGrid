@@ -1,15 +1,15 @@
 // =========================================================
-// LF_PowerGrid - Memory Cell / SR Latch (v3.1.0 — Routing fix)
+// LF_PowerGrid - Memory Cell / SR Latch (v3.1.1 — rising-edge Toggle)
 //
 // LFPG_MemoryCell: PASSTHROUGH, 4 IN + 2 OUT.
 //   input_0 = power, input_1 = toggle, input_2 = reset, input_3 = set
 //   output_0 = active (Q), output_1 = inverted (!Q)
 //   Extends LFPG_WireOwnerBase (Refactor v4.1).
 //
-// v3.1.0: ApplyRouting runs every SetPowered call. Fixes edge
-//   flags for cables connected after init (edges start ENABLED,
-//   routing must re-disable the correct port each pass).
-//   Diagnostic log every SetPowered call for troubleshooting.
+// Toggle inverts on a settled rising edge (400 ms debounce per input).
+// Set/Reset remain level-sensitive and apply after the edge. The
+// active output is always the latch (no Toggle override). Self-consumption
+// keeps input edges live when the active output has no downstream load.
 //
 // Persistence: [base: DeviceId + ver + wireJSON] + m_LatchState
 // =========================================================
@@ -18,6 +18,52 @@ static const string LFPG_MCELL_RVMAT_OFF   = "LFPowerGrid\\data\\button\\materia
 static const string LFPG_MCELL_RVMAT_GREEN  = "LFPowerGrid\\data\\button\\materials\\led_green.rvmat";
 static const string LFPG_MCELL_RVMAT_RED    = "LFPowerGrid\\data\\button\\materials\\led_red.rvmat";
 static const float  LFPG_MCELL_CAPACITY     = 100.0;
+static const float  LFPG_MCELL_CONSUMPTION  = 1.0;
+static const int    LFPG_MCELL_TOGGLE_REARM_MS = 1000;
+static const int    LFPG_MCELL_DEBOUNCE_MS = 400;
+static const int    LFPG_MCELL_TOGGLE_LOAD_GRACE_MS = 30000;
+
+static bool LFPG_MCellToggleShouldFlip(int lowSinceMs, int powerSinceMs, int graceUntilMs, int nowMs, int rearmMs)
+{
+	if (lowSinceMs < 0)
+	{
+		return false;
+	}
+	if (powerSinceMs < 0)
+	{
+		return false;
+	}
+	if (nowMs < graceUntilMs)
+	{
+		return false;
+	}
+	if (nowMs - lowSinceMs < rearmMs)
+	{
+		return false;
+	}
+	if (nowMs - powerSinceMs < rearmMs)
+	{
+		return false;
+	}
+	return true;
+}
+
+static bool LFPG_MCellSettleDue(bool raw, bool settled, int changedMs, int nowMs, int debounceMs)
+{
+	if (raw == settled)
+	{
+		return false;
+	}
+	if (changedMs < 0)
+	{
+		return false;
+	}
+	if (nowMs - changedMs < debounceMs)
+	{
+		return false;
+	}
+	return true;
+}
 
 // ---------------------------------------------------------
 // KIT
@@ -31,7 +77,7 @@ class LFPG_MemoryCell_Kit : LFPG_LogicGate_Kit
 };
 
 // ---------------------------------------------------------
-// DEVICE: PASSTHROUGH, SR latch + toggle override
+// DEVICE: PASSTHROUGH, SR latch + rising-edge toggle
 // ---------------------------------------------------------
 class LFPG_MemoryCell : LFPG_WireOwnerBase
 {
@@ -42,6 +88,18 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
 
     // ---- Server-only: persisted latch ----
     protected bool m_LatchState = false;
+
+    // ---- Server-only: settled Toggle/Power (not persisted, not synced) ----
+    protected bool m_RawPower = false;
+    protected bool m_RawToggle = true;
+    protected int m_RawPowerChangedMs = -1;
+    protected int m_RawToggleChangedMs = -1;
+    protected bool m_SettledPower = false;
+    protected bool m_SettledToggle = true;
+    protected bool m_FlipPending = false;
+    protected int m_ToggleLowSinceMs = -1;
+    protected int m_PowerSinceMs = -1;
+    protected int m_ToggleGraceUntilMs = 0;
 
     // ---- Client visual cache ----
     #ifndef SERVER
@@ -82,7 +140,7 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     override bool LFPG_IsSource() { return true; }
     override bool LFPG_GetSourceOn() { return m_PoweredNet; }
     override bool LFPG_IsGateCapable() { return false; }
-    override float LFPG_GetConsumption() { return 0.0; }
+    override float LFPG_GetConsumption() { return LFPG_MCELL_CONSUMPTION; }
     override float LFPG_GetCapacity() { return LFPG_MCELL_CAPACITY; }
     override bool LFPG_IsPowered() { return m_PoweredNet; }
     override bool LFPG_GetOverloaded() { return m_Overloaded; }
@@ -104,15 +162,16 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     }
 
     // ============================================
-    // SetPowered — level-sensitive, no edge detection
+    // SetPowered — settled Toggle edge, then Set/Reset by level
     //
-    // Priority: TOGGLE > SET/RESET > latch hold
-    //   TOGGLE energized   -> effective ON (override)
-    //   SET && !RESET       -> latch ON
-    //   RESET && !SET       -> latch OFF
-    //   SET && RESET        -> latch unchanged
-    //   neither             -> latch unchanged
-    //   TOGGLE off          -> effective = latch
+    // Each raw Power/Toggle change exists only after LFPG_MCELL_DEBOUNCE_MS.
+    // Apply due settled changes before overwriting that input's raw sample.
+    // R1: settled Toggle low for LFPG_MCELL_TOGGLE_REARM_MS at the edge instant.
+    // R2: settled Power high for the same window at that instant.
+    // R3: after OnStoreLoad, no edge until LFPG_MCELL_TOGGLE_LOAD_GRACE_MS.
+    // R4: Toggle starts settled-high; a low must be seen first.
+    // R5: apply the settled edge, then Set/Reset by level.
+    // Active output is always m_LatchState.
     // ============================================
     override void LFPG_SetPowered(bool powered)
     {
@@ -125,23 +184,54 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             changed = true;
         }
 
-        // --- Read control inputs (level-sensitive) ---
         bool hasToggle = false;
         bool hasSet    = false;
         bool hasReset  = false;
+        bool hasPower  = false;
+        bool flip      = false;
+        int nowMs = 0;
+        if (g_Game)
+        {
+            nowMs = g_Game.GetTime();
+        }
 
         LFPG_NetworkManager nm = LFPG_NetworkManager.Get();
         if (nm)
         {
+            string portPower  = "input_0";
             string portToggle = "input_1";
             string portReset  = "input_2";
             string portSet    = "input_3";
+            hasPower  = nm.IsPortReceivingPower(m_DeviceId, portPower);
             hasToggle = nm.IsPortReceivingPower(m_DeviceId, portToggle);
             hasReset  = nm.IsPortReceivingPower(m_DeviceId, portReset);
             hasSet    = nm.IsPortReceivingPower(m_DeviceId, portSet);
         }
 
-        // --- Update latch from SET/RESET (always, even under TOGGLE) ---
+        LFPG_MCellApplyDue(nowMs);
+
+        if (hasPower != m_RawPower)
+        {
+            m_RawPower = hasPower;
+            m_RawPowerChangedMs = nowMs;
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_MCellPowerSettleTimer);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_MCellPowerSettleTimer, LFPG_MCELL_DEBOUNCE_MS, false);
+        }
+        if (hasToggle != m_RawToggle)
+        {
+            m_RawToggle = hasToggle;
+            m_RawToggleChangedMs = nowMs;
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_MCellToggleSettleTimer);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).CallLater(LFPG_MCellToggleSettleTimer, LFPG_MCELL_DEBOUNCE_MS, false);
+        }
+
+        if (m_FlipPending)
+        {
+            m_LatchState = !m_LatchState;
+            m_FlipPending = false;
+            flip = true;
+        }
+
         if (hasSet && !hasReset)
         {
             m_LatchState = true;
@@ -150,14 +240,8 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
         {
             m_LatchState = false;
         }
-        // Both or neither: latch unchanged
 
-        // --- Compute effective state: TOGGLE overrides ---
         bool newActive = m_LatchState;
-        if (hasToggle)
-        {
-            newActive = true;
-        }
 
         // --- State change ---
         bool stateChanged = false;
@@ -208,11 +292,109 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             dLog = dLog + m_LatchState.ToString();
             dLog = dLog + " active=";
             dLog = dLog + m_CellActive.ToString();
+            dLog = dLog + " flip=";
+            dLog = dLog + flip.ToString();
             dLog = dLog + " chg=";
             dLog = dLog + stateChanged.ToString();
             dLog = dLog + " id=";
             dLog = dLog + m_DeviceId;
             LFPG_Util.Debug(dLog);
+        }
+        #endif
+    }
+
+    protected void LFPG_MCellApplyDue(int nowMs)
+    {
+        #ifdef SERVER
+        bool dueP = false;
+        bool dueT = false;
+        dueP = LFPG_MCellSettleDue(m_RawPower, m_SettledPower, m_RawPowerChangedMs, nowMs, LFPG_MCELL_DEBOUNCE_MS);
+        dueT = LFPG_MCellSettleDue(m_RawToggle, m_SettledToggle, m_RawToggleChangedMs, nowMs, LFPG_MCELL_DEBOUNCE_MS);
+        if (dueP)
+        {
+            if (dueT)
+            {
+                if (m_RawPowerChangedMs <= m_RawToggleChangedMs)
+                {
+                    LFPG_MCellCommitPower();
+                    LFPG_MCellCommitToggle();
+                }
+                else
+                {
+                    LFPG_MCellCommitToggle();
+                    LFPG_MCellCommitPower();
+                }
+            }
+            else
+            {
+                LFPG_MCellCommitPower();
+            }
+        }
+        else if (dueT)
+        {
+            LFPG_MCellCommitToggle();
+        }
+        #endif
+    }
+
+    protected void LFPG_MCellCommitPower()
+    {
+        #ifdef SERVER
+        m_SettledPower = m_RawPower;
+        if (m_SettledPower)
+        {
+            m_PowerSinceMs = m_RawPowerChangedMs;
+        }
+        else
+        {
+            m_PowerSinceMs = -1;
+        }
+        #endif
+    }
+
+    protected void LFPG_MCellCommitToggle()
+    {
+        #ifdef SERVER
+        if (m_RawToggle)
+        {
+            if (!m_SettledToggle)
+            {
+                if (LFPG_MCellToggleShouldFlip(m_ToggleLowSinceMs, m_PowerSinceMs, m_ToggleGraceUntilMs, m_RawToggleChangedMs, LFPG_MCELL_TOGGLE_REARM_MS))
+                {
+                    m_FlipPending = true;
+                }
+            }
+        }
+        else
+        {
+            m_ToggleLowSinceMs = m_RawToggleChangedMs;
+        }
+        m_SettledToggle = m_RawToggle;
+        #endif
+    }
+
+    void LFPG_MCellPowerSettleTimer()
+    {
+        LFPG_MCellSettle();
+    }
+
+    void LFPG_MCellToggleSettleTimer()
+    {
+        LFPG_MCellSettle();
+    }
+
+    void LFPG_MCellSettle()
+    {
+        #ifdef SERVER
+        int nowMs = 0;
+        if (g_Game)
+        {
+            nowMs = g_Game.GetTime();
+        }
+        LFPG_MCellApplyDue(nowMs);
+        if (m_FlipPending)
+        {
+            LFPG_SetPowered(m_PoweredNet);
         }
         #endif
     }
@@ -273,6 +455,15 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     }
 
     // ---- Lifecycle hooks ----
+    override void LFPG_OnDeleted()
+    {
+        if (g_Game)
+        {
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_MCellPowerSettleTimer);
+            g_Game.GetCallQueue(CALL_CATEGORY_SYSTEM).Remove(LFPG_MCellToggleSettleTimer);
+        }
+    }
+
     override void LFPG_OnKilled()
     {
         #ifdef SERVER
@@ -377,6 +568,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             return false;
         }
         m_CellActive = m_LatchState;
+        if (g_Game)
+        {
+            m_ToggleGraceUntilMs = g_Game.GetTime() + LFPG_MCELL_TOGGLE_LOAD_GRACE_MS;
+        }
         return true;
     }
 };

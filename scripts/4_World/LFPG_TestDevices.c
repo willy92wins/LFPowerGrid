@@ -63,6 +63,9 @@ class LFPG_Generator : PowerGenerator
 	protected string m_WireJSONCache;
 	protected bool m_WireJSONCacheValid = false;
 	protected ref array<ref LFPG_WireData> m_WireJSONSnapshot;
+    protected string m_LoadedWireJSON;
+    protected string m_LastStoredWireJSON;
+    protected string m_PrevStoredWireJSON;
 
     // Source state (replicated)
     protected bool m_SourceOn = false;
@@ -99,6 +102,9 @@ class LFPG_Generator : PowerGenerator
     {
         m_Wires = new array<ref LFPG_WireData>;
 		m_WireJSONSnapshot = new array<ref LFPG_WireData>;
+        m_LoadedWireJSON = "";
+        m_LastStoredWireJSON = "";
+        m_PrevStoredWireJSON = "";
         RegisterNetSyncVariableInt("m_DeviceIdLow");
         RegisterNetSyncVariableInt("m_DeviceIdHigh");
         RegisterNetSyncVariableBool("m_SourceOn");
@@ -725,6 +731,21 @@ class LFPG_Generator : PowerGenerator
 		return m_WireJSONCache;
     }
 
+    string LFPG_GetLoadedWiresJSON()
+    {
+        return m_LoadedWireJSON;
+    }
+
+    string LFPG_GetLastStoredWiresJSON()
+    {
+        return m_LastStoredWireJSON;
+    }
+
+    string LFPG_GetPrevStoredWiresJSON()
+    {
+        return m_PrevStoredWireJSON;
+    }
+
 	protected bool LFPG_WireJSONSnapshotMatches()
 	{
 		if (m_Wires.Count() != m_WireJSONSnapshot.Count())
@@ -897,6 +918,14 @@ class LFPG_Generator : PowerGenerator
 
         string json;
         LFPG_WireHelper.SerializeJSON(m_Wires, json);
+        if (json != m_LastStoredWireJSON)
+        {
+            m_PrevStoredWireJSON = m_LastStoredWireJSON;
+            m_LastStoredWireJSON = json;
+        }
+        #ifdef SERVER
+        LFPG_WireJournal.Get().OnOwnerSaved(m_DeviceId, json);
+        #endif
         ctx.Write(json);
     }
 
@@ -936,6 +965,9 @@ class LFPG_Generator : PowerGenerator
             LFPG_Util.Error(slErrJson);
             return false;
         }
+        m_LoadedWireJSON = json;
+        m_LastStoredWireJSON = json;
+        m_PrevStoredWireJSON = "";
         LFPG_WireHelper.DeserializeJSON(m_Wires, json, "LFPG_Generator");
 		m_WireJSONCacheValid = false;
 
