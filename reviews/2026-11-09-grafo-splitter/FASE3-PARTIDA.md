@@ -33,7 +33,7 @@ ni errores en el log de script.
 | C1-C7 con Splitter (C1, C2, C3 toggle de 5 pulsos, C5, C6 tras reinicio, C7) | (no repetido hoy) | PASA |
 | D5 con Splitter, coche cruzando el haz | la celda no se activa: FALLA | PASA |
 | D5 con Power directo | (no repetido hoy) | PASA |
-| D5 Laser -> interruptor -> Set | no concluyente (beam 0.0 en ese sitio) | PASA |
+| D5 Laser -> interruptor -> Set | no concluyente (beam 0.0 en ese sitio); en la ronda 1, sobre un grafo igual, falló: `gate 1` con `set 0 active 0` (`reviews/2026-11-08-nostra-131/GRAFO-SPLITTER-MEDICIONES.md:99`) | PASA |
 | Regresión sin Splitter: A, B, C (C2, C3, C5, C7) | (no repetido hoy) | PASA |
 | D1-D4 | (no repetido hoy) | D1 detecta y suelta a los 3 s; D2 detecta el coche; D3 detecta el camión; D4 no detecta el coche vacío |
 | Sobrecarga con XOR abierto y 9 lámparas | | 0 cambios de salida en 60 s, 0/9 lámparas, generador `overloaded=1`; con B on la puerta cierra en 11 y sale de la sobrecarga |

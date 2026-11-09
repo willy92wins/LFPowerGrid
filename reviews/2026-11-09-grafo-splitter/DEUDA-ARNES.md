@@ -26,6 +26,7 @@ Fuente: las R21 a ciegas del delta 898de79..eacd64c, en esta carpeta: `REVIEW-co
 | Grok H2 | IMPORTANTE | T:2415-2438 | Las tres D5 con Power esperan siempre latch verdadero; no hay rama de rojo en la base | Ver la nota de desviación de abajo: se queda así |
 | Grok H3 | IMPORTANTE | T:1473-1481, T:3914-3920 | `retry_no_cap` muerde por el flag, no por `retryRoundLimit` del texto | Extraer `retryRoundLimit` del fuente mutado |
 | Grok H4 | MENOR | T:1351-1352 | El mutante del reproceso en la misma época sigue el flag `drop_signal_same_epoch`; está declarado equivalente en F | Sin cambio, salvo leerlo del texto al rehacer |
+| Modelo frente a partida | IMPORTANTE | T:2415-2438 (`test_d5_laser_switch_set`); `GRAFO-SPLITTER-MEDICIONES.md:99` | D5 Laser -> interruptor -> Set: el modelo la da verde en la base (por `m_AllocChanged` en `592ebcc:2688-2690`); la partida la dio roja en la ronda 1 y no concluyente en la fase 3 | Repetir en BASE con el haz bien colocado y trazas PT_CHAIN, o encontrar qué no modela el arnés en esa variante |
 | Grok H5 | MENOR | `g2_compare` T:1834-1835 | Ninguna fila construye una OR cerrada con entrada alta y exige `g2_compare != []` | Fila negativa para G2 |
 
 ## Testigos que no muerden del todo
@@ -51,6 +52,12 @@ Commit `282b59a` en la rama lateral `claude/grafo-test-fidelidad` (no en el PR),
 
 §6.4 esperaba en rojo en la base las tres D5 con Power. D5 Laser -> interruptor -> Set sale verde en
 la base por `m_AllocChanged = true` en la transición de compuerta (`592ebcc:LFPG_ElecGraphImpl.c:2688-2690`,
-`:2756-2758` en el árbol actual). Codex comprobó que ponerlo a false vuelve roja esa fila. En partida, el
-11-09 en BASE, esta variante ya funcionaba con el interruptor delante. Los rojos de la base son por eso
-23 y no 24.
+`:2756-2758` en el árbol actual). Codex comprobó que ponerlo a false vuelve roja esa fila. Por eso los
+rojos de la base en el test son 23 y no 24.
+
+Pero la partida no coincide con el modelo. En la ronda 1 (11-09, 00:17-01:08 hora local, grafo igual al
+de BASE) esta variante falló: «Laser -> interruptor encendido -> Set, con Power aparte, jugador a pie:
+`gate 1` con `set 0 active 0`» (`reviews/2026-11-08-nostra-131/GRAFO-SPLITTER-MEDICIONES.md:99`). En la
+fase 3 en BASE no fue concluyente (beam 0.0). El modelo la da verde en la base, la partida la dio roja
+en la ronda 1 y no concluyente en la fase 3: es una discrepancia abierta entre modelo y partida. Con el
+arreglo pasa en los dos.
