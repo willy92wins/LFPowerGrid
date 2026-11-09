@@ -1,12 +1,12 @@
-# PLAN-CONSOLIDADO v3 — señal lógica separada del flujo (puertas y Laser -> Set detrás de un Splitter, 1.3.1)
+# PLAN-CONSOLIDADO v4 — señal lógica separada del flujo (puertas y Laser -> Set detrás de un Splitter, 1.3.1)
 
-Estado: v3, tras la R22 de la v2 (`REVIEW-grok-plan-v2.md`, APTO CON CAMBIOS, y
-`REVIEW-codex-plan-v2.md`, NO APTO por un pulso falso que no pasa por 00). Cambios frente a la v2:
-§0, §2.1, §3.1, §4, §5.7-5.8, §6.3-6.6, §7, §8, §9, §10 y §11.2. La v2 queda como
-`PLAN-CONSOLIDADO-v2.md` y la v1 como `PLAN-CONSOLIDADO-v1.md`. Base `main` 592ebcc, rama
-`claude/project-thread-0iolln`, PR #98 en borrador. Si algo choca con `AGENTS.md`, manda `AGENTS.md`
-y se dice en el informe. Las líneas citadas son de 592ebcc (los commits posteriores solo añaden
-documentos).
+Estado: v4, tras la R22 de la v3 (`REVIEW-grok-plan-v3.md` y `REVIEW-codex-plan-v3.md`, las dos NO
+APTO: una carrera entre dos cambios de la misma ventana de propagación y una compuerta cuya entidad
+no encuentra el pre-gate). Cambios frente a la v3: §0, §2.1, §3.1, §4, §5.9-5.11, §6.3-6.6, §7, §8, §9,
+§10 y §11.3. La v3 queda como `PLAN-CONSOLIDADO-v3.md`, la v2 como `PLAN-CONSOLIDADO-v2.md` y la v1
+como `PLAN-CONSOLIDADO-v1.md`. Base `main` 592ebcc, rama `claude/project-thread-0iolln`, PR #98 en
+borrador. Si algo choca con `AGENTS.md`, manda `AGENTS.md` y se dice en el informe. Las líneas
+citadas son de 592ebcc (los commits posteriores solo añaden documentos y tests).
 
 ## 0. La decisión en una frase
 
@@ -17,17 +17,26 @@ Power (`input_0`) de la Memory Cell sigue leyendo flujo. Las puertas publican en
 las entradas que leen **en el momento de publicar** (`LFPG_EvaluateGateLogic` sobre la señal de
 `input_0` e `input_1`), no su latch.
 
+Lo que se garantiza (§2.1, nuevo en v4): cada valor que lee una puerta o una celda lo escribió su
+proveedor con lo que leía al procesarse, y al vaciarse la cola y los diferidos cada arista coincide
+con la tabla de §2.1. Lo que no: dos cambios en la misma ventana de propagación pueden llegar en
+cualquier orden, como en un biestable real (L-RACE). Una compuerta cuya entidad no aparece en los tres
+niveles de resolución no da señal.
+
 Qué se toma de cada plan:
 
 - **Codex:** la dirección (canal de señal), el contrato de señal, la causa de A4 y la mitad de D5
   que explica por qué no se recupera, la tabla de mutantes, los límites de convergencia y, tras las
-  R22, quitar la tolerancia de un apagón de las puertas y publicar la lógica actual de la puerta.
+  R22, quitar la tolerancia de un apagón de las puertas, publicar la lógica actual de la puerta,
+  resolver su entidad en el pre-gate como Step 5 y declarar la carrera del mismo instante.
 - **Grok:** la causa de A3 (coincide con Codex), el porqué del control sin Splitter (SOURCE con 50
   fijos frente a PASSTHROUGH con el input de la época), la mitad estática de D5 (oferta 5 - 5 = 0 y
   exclusión del vector), la fidelidad del arnés (el `QueueModel` actual no aplica la sonda de
-  compuerta cerrada) y el control negativo sin Splitter.
-- **Descartado de Grok:** el reparto parcial en PASSTHROUGH (su parche 1) y el +1 u/s del Laser
-  abierto (su parche 2). Motivos en §5.
+  compuerta cerrada), el control negativo sin Splitter y, tras la R22 de la v3, que sin entidad no
+  haya señal.
+- **Descartado de Grok:** el reparto parcial en PASSTHROUGH (su parche 1), el +1 u/s del Laser
+  abierto (su parche 2) y, tras la R22 de la v3, el orden topológico de la señal y el Set que ignora un
+  alto aún no reescrito. Motivos en §5.
 
 ## 1. Causas confirmadas
 
@@ -94,10 +103,12 @@ arista de salida habilitada, sin mirar demanda, asignación ni sobrecarga.
 | PASSTHROUGH sin autoconsumo | (alguna arista de entrada habilitada con señal, o `m_VirtualGeneration > EPS`) y compuerta abierta |
 | PASSTHROUGH con autoconsumo | lo anterior, y `newPowered` (su entrada real cubre su autoconsumo, `:2379-2399`) |
 | Compuerta cerrada | baja |
-| Puerta lógica: la entidad que resuelve el pre-gate es `LFPG_LogicGateBase` | `LFPG_EvaluateGateLogic(señal de input_0, señal de input_1)`, leídas en ese momento con `IsPortReceivingSignal`; no usa el latch ni `signalIn`. Si la entidad no se resuelve, la fila de PASSTHROUGH con el latch cacheado |
+| Puerta lógica: la entidad que resuelve el pre-gate es `LFPG_LogicGateBase` | `LFPG_EvaluateGateLogic(señal de input_0, señal de input_1)`, leídas en ese momento con `IsPortReceivingSignal`; no usa el latch ni `signalIn`. La entidad se busca en los tres niveles de Step 5 (§5.10) |
+| Cualquier nodo con compuerta (`m_IsGated`) cuya entidad no aparece en los tres niveles | baja: sin dispositivo no hay señal. La energía sigue con la compuerta cacheada, como hoy (§5.10) |
 
 - La compuerta es el `gateIsClosed` **leído en vivo** en el pre-gate (`:2483-2509`), no
-  `node.m_GateClosed`. Si la entidad no se resuelve, el pre-gate ya copia el valor cacheado.
+  `node.m_GateClosed`. Si la entidad no aparece en los tres niveles, el reparto sigue copiando el
+  valor cacheado, como hoy, y la señal es baja (fila de arriba).
 - **Nuevo en v3 (Codex R22-V2-01):** el latch de una puerta (`m_GateOpen`, que devuelve
   `LFPG_IsGateOpen`, `LFPG_LogicGate.c:125-128`) es el de su lectura anterior, porque el callback que
   lo actualiza corre en Step 5, después de `AllocateOutput` (`:2525`). Con `signalIn` y ese latch, una
@@ -121,6 +132,26 @@ arista de salida habilitada, sin mirar demanda, asignación ni sobrecarga.
 - Baterías: su `m_VirtualGeneration` sale de la carga y del permiso de descarga, no de la demanda
   (`LFPG_NetworkManagerImpl.c:6313-6322`), así que una batería con carga da señal sin oscilar.
 
+Garantía (nuevo en v4; Codex R22-V3-02 y Grok R22v3-01):
+
+- **G1, sin valores inventados.** El bit que escribe un proveedor sale de la tabla con lo que lee en
+  esa pasada: sus aristas de entrada, su compuerta en vivo y, si es una puerta, su lógica actual. Nunca
+  del latch de una lectura anterior ni de una entidad sin resolver. Solo el proveedor escribe sus bits,
+  en su `AllocateOutput`; `SetOutputPortEnabled` solo los pone a false.
+- **G2, coherencia al vaciar.** Con la cola y los diferidos vacíos y todas las entidades con compuerta
+  resueltas, cada arista habilitada coincide con el oráculo de §6.3 (la tabla aplicada desde las
+  fuentes con el estado de los dispositivos), el latch de cada puerta es su tabla y no queda ningún
+  cambio por llegar.
+- **L-RACE, limitación declarada.** La propagación va pasada a pasada, y las «entradas actuales» de una
+  puerta son los bits publicados, no una foto coherente del tick (Codex). Si dos cambios caen en la
+  misma ventana por caminos distintos (baja una entrada de una puerta y en el mismo tick se conecta un
+  cable de su salida a Set, o se enciende un interruptor entre la puerta y Set), o si un solo cambio
+  llega a una celda por dos caminos de distinta longitud, el orden de la cola decide qué ve antes la
+  celda, y puede capturar el estado intermedio. Es la carrera de un biestable real, y hoy, con la
+  lectura por flujo, ya existe. La ventana dura hasta que la cola se vacía: normalmente una llamada de
+  PDQ, más si los presupuestos la parten. Dos cambios separados por un vaciado de la cola nunca dan esa
+  captura.
+
 Consecuencias, declaradas (criterio de producto, también en la fase 3):
 
 - Señal alta no certifica energía. Una puerta puede estar abierta con asignación 0 (A4), un Laser
@@ -131,8 +162,16 @@ Consecuencias, declaradas (criterio de producto, también en la fase 3):
   fuente que no esté en sobrecarga. Los cables siguen en CRITICAL y aguas abajo no llega energía. Se queda así a propósito: atar la señal a
   la sobrecarga (Grok R22-02) vuelve a acoplar lógica y reparto, que es lo que este arreglo separa;
   hoy, con una carga detrás de una puerta, la sobrecarga cierra y reabre la puerta en bucle.
-- Invariante que se prueba: en estado estable, `m_AllocatedPower > EPS` implica `m_SignalHigh` en toda
-  arista habilitada. Señal sin flujo vale; flujo sin señal es un fallo.
+- L-RACE (arriba). Para la nota al jugador: si conectas un cable a Set o accionas un interruptor justo
+  cuando cambia una entrada de la puerta, la Memory Cell puede quedarse con el valor que la puerta tenía
+  un instante antes.
+- Una compuerta sin entidad tras los tres niveles: señal baja y energía con la compuerta cacheada
+  mientras dure. Se corrige en la siguiente pasada del nodo con la entidad resuelta, que es cuando hoy
+  se corrige la energía.
+- Invariante que se prueba: en estado estable y con todas las entidades con compuerta resueltas,
+  `m_AllocatedPower > EPS` implica `m_SignalHigh` en toda arista habilitada. Señal sin flujo vale; flujo
+  sin señal es un fallo. Como el invariante no ve un alto falso (Codex, pregunta 2 de la v3), los tests
+  comprueban además G2 con el oráculo.
 
 ### 2.2 Quién lee qué
 
@@ -154,7 +193,9 @@ Consecuencias, declaradas (criterio de producto, también en la fase 3):
 | `5_Mission/LFPG_ElecGraphImpl.c:81`, `:179`, `:2298` | `protected bool m_SignalChanged;`, a false en el constructor y al empezar cada nodo junto a `m_AllocChanged = false;` | ver cambios de señal aunque todos los floats sigan iguales (A4, cadenas sin flujo) |
 | `:2308-2349` (Step 1) | `bool signalIn = false;` junto a `inputSum`, y tras el filtro `LFPG_EDGE_ENABLED`: `if (inEdge.m_SignalHigh) signalIn = true;`, leyendo el bit directamente | propagar la línea viva por tramos sin flujo |
 | helper nuevo junto a `:4009-4034` | `protected bool ComputeSignalOut(bool isSource, float newOutput, bool signalIn, float virt, float cons, bool powered, bool gateClosed)` con la tabla de §2.1; solo `if/else`, bool y float, sin bucles ni enums, para que `enforce_scalar_slice` lo ejecute | el contrato en un sitio y probado offline |
-| `:2516-2525` (Step 2b) | calcular `signalOut` con `ComputeSignalOut` (`gateIsClosed` vivo, `newPowered`, `signalIn`). Después, si el pre-gate resolvió la entidad (`gateEntityResolved`, `resolvedEnt` de `:2487`) y `LFPG_LogicGateBase.Cast(resolvedEnt)` no es null: `signalOut = LFPG_EvaluateGateLogic(IsPortReceivingSignal(nodeId, "input_0"), IsPortReceivingSignal(nodeId, "input_1"))`, con los nombres de puerto en locales `string` como en `LFPG_LogicGate.c:139-140`. Ni `gateIsClosed` ni `allocAvail` cambian. Luego `AllocateOutput(nodeId, allocAvail, signalOut)` (única llamada, verificado por las dos R22) | D5: publicar con la compuerta viva; Codex R22-V2-01: la puerta publica su lógica actual |
+| `:2487` (pre-gate) | `resolvedEnt = ResolveGatedEntity(nodeId);` en vez de `FindById(nodeId)`. El resto del pre-gate no cambia | Codex R22-V3-01: el pre-gate y Step 5 resuelven la misma entidad en la misma pasada |
+| helper nuevo junto a `SyncNodeToEntity` (`:3044`) | `protected EntityAI ResolveGatedEntity(string nodeId)`: los tres niveles de `:3079-3111` en el mismo orden (`FindById`, `LFPG_DeviceAPI.ResolveVanillaDevice` y NetworkID con `m_NodeNetLow`/`m_NodeNetHigh`, con `Register` si acierta), y un comentario que diga que van a la par. `SyncNodeToEntity` y `ResetOrphanSyncVars` no se tocan (R20) | el mismo |
+| `:2516-2525` (Step 2b) | calcular `signalOut` con `ComputeSignalOut` (`gateIsClosed` vivo, `newPowered`, `signalIn`). Después, si el pre-gate resolvió la entidad (`gateEntityResolved`, `resolvedEnt` de `:2487`) y `LFPG_LogicGateBase.Cast(resolvedEnt)` no es null: `signalOut = LFPG_EvaluateGateLogic(IsPortReceivingSignal(nodeId, "input_0"), IsPortReceivingSignal(nodeId, "input_1"))`, con los nombres de puerto en locales `string` como en `LFPG_LogicGate.c:139-140`. Si `node.m_IsGated` y el pre-gate no resolvió la entidad: `signalOut = false`. Ni `gateIsClosed` ni `allocAvail` cambian. Luego `AllocateOutput(nodeId, allocAvail, signalOut)` (única llamada, verificado por las dos R22) | D5: publicar con la compuerta viva; Codex R22-V2-01: la puerta publica su lógica actual; Codex R22-V3-01 y Grok R22v3-02: sin entidad no hay señal |
 | `:4562` y bucle Pass 2 `:4749-4798` | parámetro `bool signalOut`; tras el filtro `LFPG_EDGE_ENABLED` y **fuera** de `if (!overloaded)`: si `allocEdge.m_SignalHigh != signalOut`, `m_SignalChanged = true`; luego `allocEdge.m_SignalHigh = signalOut;` | que la señal sobreviva al all-off (A3) |
 | `:2786` y `:2815` | añadir `\|\| m_SignalChanged` a la condición de Step 3 y a la del reproceso en la misma época | que el lector se entere, acotado por `m_RequeueCount` |
 | junto a `:5013-5048` | `override bool IsPortReceivingSignal(...)`: copia de `IsPortReceivingPower` (contabilidad de visitas, `LFPG_EDGE_ENABLED`, puerto) que mira `edge.m_SignalHigh` | la lectura |
@@ -191,6 +232,11 @@ Consecuencias, declaradas (criterio de producto, también en la fase 3):
   routing.
 - Laser, PressurePad, PushButton, Electronic Counter, Door Controller.
 - `config.cpp`, classnames, persistencia, RPC, layouts, stringtable.
+- `ValidateConsumerStates`, `SyncNodeToEntity`, `ResetOrphanSyncVars` y `NodeEntitySyncUnchanged`
+  (§5.11).
+- Excepción declarada en el reparto (§5.10): si el registro falla y el NetworkID acierta, el pre-gate
+  lee la compuerta viva y actualiza `m_GateClosed`, lo mismo que Step 5 ve en esa pasada. Con el
+  registro resolviendo, que es lo normal, el reparto no cambia.
 
 ## 5. Decisiones sobre lo que los planes no comparten
 
@@ -250,6 +296,51 @@ Consecuencias, declaradas (criterio de producto, también en la fase 3):
      de Codex R22-01 cuando el proveedor ha perdido la alimentación y aún no se ha reprocesado. Un alto
      falso deja una celda activada; un alto tardío solo llega tarde.
    - Fixture en §6.4.
+9. **Carrera del mismo instante: se declara, no se ordena (Grok R22v3-01, BLOQUEA; Codex R22-V3-02).**
+   - Escenario: el de §5.7 con la cola [AND, M, B], o cualquier orden con AND antes que B. AND lee 11
+     porque B aún no ha escrito su baja, y publica bien AND(1,1); M lee Set alto y se activa; B
+     escribe baja, AND pasa a bajo y cierra; M se queda activada. Testigo de Codex con callbacks
+     reales: AND false y M true.
+   - No es un valor inventado: AND valía 1 hasta que el flanco de B le llegó, y M leyó ese estado
+     publicado. Es la carrera de un biestable real, y ya existe hoy con la lectura por flujo.
+   - Descartado el orden topológico de señal por época (Grok): es otra arquitectura. O cambia el orden
+     de la cola para el reparto, que no se toca, o pide una segunda pasada solo de señal. Y no quita el
+     caso de un solo cambio que llega a una celda por dos caminos de distinta longitud, que es del
+     circuito.
+   - Descartado el Set que ignora un alto aún no reescrito en la época (Grok): no lo arregla, porque en
+     [AND, M, B] AND ya reescribió su salida en esta época.
+   - Descartado, para esta versión, un filtro en Set y Reset como el de 400 ms de Toggle: cambia la
+     celda, que §4 protege, y podría perder un Laser que se cruza deprisa. Va al bug-ledger (GL-07).
+   - Se declara como L-RACE (§2.1) y se prueba su frontera (§6.4): en orden topológico M nunca se
+     activa; con los dos cambios separados por un vaciado de la cola, M nunca se activa en ningún
+     orden; en cualquier orden, al vaciar se cumple G2 y el barrido no cambia el latch de M.
+10. **Entidad de compuerta: tres niveles y, si no aparece, señal baja (Codex R22-V3-01, BLOQUEA; Grok
+    R22v3-02).**
+    - Hoy el pre-gate solo usa `FindById` (`:2487`) y Step 5 resuelve en tres niveles (`:3079-3111`:
+      registro, vanilla y NetworkID). Si el registro falla y el NetworkID acierta, la puerta publica con
+      el latch cacheado y Step 5 recupera la entidad detrás de M. Testigo de Codex: AND false y M true.
+    - El pre-gate pasa a usar los mismos tres niveles (`ResolveGatedEntity`), así que publica con la
+      entidad que Step 5 va a usar en esa pasada.
+    - Si tras los tres niveles no hay entidad, el motor no conoce el objeto: el dispositivo se ha borrado
+      o aún no existe. Sin dispositivo no hay señal: `signalOut = false` en todo nodo con compuerta,
+      porque sin la entidad no se sabe si es una puerta lógica. La energía sigue con la compuerta
+      cacheada (`:2497-2503`), como hoy.
+    - Descartado conservar el último bit: en un dispositivo borrado dejaría un alto viejo hasta que se
+      limpia el nodo, y en un interruptor sin entidad podría quedarse alto aunque ya no le llegue la
+      entrada. Descartado publicar con el latch cacheado: es el alto falso de Codex.
+    - Efecto en energía, declarado: si el registro falla y el NetworkID acierta, el pre-gate lee la
+      compuerta viva y actualiza `m_GateClosed`, lo mismo que Step 5 ve en esa pasada. Con el registro
+      resolviendo, que es lo normal, no cambia nada.
+    - Coste: `ResolveVanillaDevice` y `GetObjectByNetworkId` solo cuando `FindById` falla.
+11. **Barrido en vacío: sin cambios en producción (Grok R22v3-03).**
+    - `ValidateConsumerStates` solo corre con la cola vacía: al empezar la llamada si no hay nada
+      pendiente (`:2219-2231`) y al acabar si no queda nada tras reinsertar los reencolados diferidos
+      (`:2896-2921`). Y salta los nodos en cola o sucios (`:3466-3467`).
+    - El alto pasajero de L-RACE solo existe mientras la puerta sigue pendiente en la cola, así que el
+      barrido no puede leerlo. Con la cola vacía y las entidades resueltas, G2 dice que los bits están
+      asentados, y una celda que el barrido resincroniza lee lo mismo que en una pasada.
+    - El modelo lo imita tal cual (§6.3) y las filas de carrera afirman que el barrido no cambia el
+      latch de M.
 
 ## 6. Tests (R26)
 
@@ -310,12 +401,30 @@ Parte de `QueueModel` (`test_graph_multifeed_split.py:101-472`) y añade, citand
   reconstrucción (`LFPG_NetworkManagerImpl.c:865`, `:3158`, `:3722`). Cada `CallLater` dispara en su
   instante, también entre dos PDQ: el routing diferido de la Memory Cell a 50 ms
   (`LFPG_MemoryCell.c:262-269`), sus filtros de 400 ms y el rearme de 1000 ms. `g_Game.GetTime()`
-  devuelve ese reloj. Si un temporizador y un PDQ caen en el mismo ms, se prueban los dos órdenes.
-- **Barrido en vacío:** `ValidateConsumerStates` (`:3417`, llamado en `:2231` y `:2921` con la cola
-  vacía, cada `LFPG_CONSUMER_VALIDATE_TICK_INTERVAL` = 10 ticks y en lotes de
-  `LFPG_VALIDATE_BATCH_SIZE` = 32; `LFPG_Defines.c:514`, `:518`) corrige `m_Powered` por flujo, también
-  en PASSTHROUGH, y llama `SyncNodeToEntity`, que dispara el callback de una puerta o de una celda. El
-  modelo lo imita, porque puede tapar un mutante o provocar un cambio.
+  devuelve ese reloj. Si un temporizador y un PDQ caen en el mismo ms, se prueban los dos órdenes. La
+  traza anota el ms de cada `CallLater` y de cada PDQ (Grok, cierre de R22v2-02).
+- **Barrido en vacío (Codex, pregunta 3 de la v3):** `ValidateConsumerStates` (`:3417`) solo corre con
+  la cola vacía: al empezar la llamada si no hay nada pendiente (`:2219-2231`) y al acabar si no queda
+  nada tras reinsertar los reencolados diferidos (`:2896-2921`). Cada
+  `LFPG_CONSUMER_VALIDATE_TICK_INTERVAL` = 10 ticks, en lotes de `LFPG_VALIDATE_BATCH_SIZE` = 32 con el
+  cursor circular y dentro del presupuesto de aristas (`LFPG_Defines.c:514`, `:518`); salta los nodos
+  en cola o sucios (`:3466-3467`), corrige `m_Powered` por flujo en los dos sentidos, también en
+  PASSTHROUGH, y **solo entonces** llama `SyncNodeToEntity` sin máscara, con `NodeEntitySyncUnchanged`
+  como en el fuente (`:3133`). No es una reevaluación incondicional. El modelo lo imita así, porque
+  puede tapar un mutante o provocar un cambio.
+- **El bit solo lo escribe su proveedor (Grok, defectos que los tests de la v3 no verían):**
+  `m_SignalHigh` cambia en la pasada del proveedor (`AllocateOutput`) o pasa a false en
+  `SetOutputPortEnabled`; nunca al encolar un nodo ni al cambiar la entidad de un interruptor. La
+  traza anota, por cada lectura de señal, el bit que vio el lector, quién lo escribió y en qué pasada.
+- **Resolución de entidad:** registro, vanilla y NetworkID son tres funciones del modelo que un fixture
+  puede hacer fallar por nodo y por pasada. En la base el pre-gate usa solo el registro y Step 5 los
+  tres; con el arreglo, los dos usan los tres.
+- **Oráculo de G2 (Codex, pregunta 2 de la v3):** tras cada vaciado de cola y diferidos, un cálculo
+  independiente del modelo y de `ComputeSignalOut` aplica la tabla de §2.1 desde las fuentes con el
+  estado de los dispositivos (interruptores, compuertas vivas, generadores, autoconsumos cubiertos y
+  `LFPG_EvaluateGateLogic` sobre las señales del propio oráculo) y lo compara con cada arista
+  habilitada. Se escribe en el test a partir de la tabla, sin llamar al fuente. Con el arreglo lo afirma
+  cada fila de §6.4; en la base se anota.
 - La señal: `signalIn` en Step 1, `ComputeSignalOut` antes de `AllocateOutput`, la rama de puerta con
   el `LFPG_EvaluateGateLogic` real sobre las lecturas de `input_0` e `input_1`, escritura sin mirar la
   sobrecarga, `m_SignalChanged`, y la limpieza en `SetOutputPortEnabled`.
@@ -342,27 +451,33 @@ un solo `SetPowered`.
 
 | Fixture | Hoy (592ebcc) | Con el arreglo | Muerde |
 |---|---|---|---|
-| A1-A3 con Splitter: AND, OR, XOR recorriendo la tabla en secuencia sobre un mismo circuito (§6.3); lámpara = CeilingLight PT, consumo 10, capacidad 50 | rojo en (a): XOR con 10 cierra tras dos visitas oscuras | latch = tabla, entrada de la lámpara >= 10 solo si la tabla da 1, como mucho 1 cambio de latch por combinación, en todos los órdenes | lectura por flujo |
+| A1-A3 con Splitter: AND, OR, XOR recorriendo la tabla en secuencia sobre un mismo circuito (§6.3); lámpara = CeilingLight PT, consumo 10, capacidad 50; y, como en el banco de las 00:18, los tres circuitos en el mismo grafo, cada uno con su generador, con el AND oscilando mientras se recorren OR y XOR | rojo en (a). Con los tres circuitos como en el banco: A1 y A3 en rojo; A2 se anota, porque el modelo no reproduce el fallo del banco (allí el OR oscila 28 veces en 4 s, con 276 visitas en una llamada y 10 pendientes) y se mide en la fase 3 | latch = tabla, entrada de la lámpara >= 10 solo si la tabla da 1, como mucho 1 cambio de latch por combinación, en todos los órdenes, y G2 | lectura por flujo |
 | **Transiciones** con Splitter: 10 -> 00, 11 -> 00 (los dos en la misma época) y 11 -> 00 -> 10, con una Memory Cell en Set a la salida del AND (Power aparte de 1, sin carga) | se anota | tras cada paso el latch = tabla; la celda nunca se activa en 11 -> 00 -> 10 salvo por el 11 inicial, que se resetea antes; ningún alto transitorio en la salida del AND en 00 -> 10 | dejar la tolerancia |
-| **Latch viejo (Codex R22-V2-01):** el escenario de §5.7, con la cola [B, AND, M] guionada y en los órdenes (b)-(d) | se anota | AND cerrado, M desactivada y la arista AND -> M.Set baja en cada lectura de M | publicar con `signalIn` y el latch |
-| Latch viejo sin tocar cables: AND -> interruptor apagado -> M.Set, B off y el interruptor on en el mismo tick; y XOR -> interruptor -> M.Set con 10 -> 11 | se anota | M desactivada; ninguna lectura alta en Set | publicar con `signalIn` y el latch |
+| **Latch viejo y carrera (Codex R22-V2-01 y R22-V3-02, Grok R22v3-01):** el escenario de §5.7 en (a), con la cola [B, AND, M] guionada, y en (b)-(d), incluida [AND, M, B] | se anota | en todos los órdenes, al vaciar: AND cerrado, la arista AND -> M.Set baja, G2, y el barrido no cambia el latch de M. M desactivada en (a) y en todo orden con B antes que AND; en los demás M puede quedar activada (L-RACE) y el test anota el resultado con el orden | publicar con `signalIn` y el latch (en (a)) |
+| Latch viejo sin tocar cables: AND -> interruptor apagado -> M.Set, B off y el interruptor on en el mismo tick; y XOR -> interruptor -> M.Set con 10 -> 11 | se anota | en orden topológico (B, puerta, interruptor, M): M desactivada y ninguna lectura alta en Set; en los demás, L-RACE como arriba; al vaciar, G2 | publicar con `signalIn` y el latch |
+| **Cambios separados por un vaciado (frontera de L-RACE):** B off y se vacía la cola; después se conecta AND -> M.Set. Lo mismo con el interruptor entre AND y Set, y con XOR 10 -> 11, vaciado, interruptor on | se anota | M desactivada en todos los órdenes; G2 | publicar con `signalIn` y el latch; bit escrito fuera de la pasada de su proveedor |
+| **Registro sin la entidad, NetworkID con ella (Codex R22-V3-01):** el circuito de §5.7 en (a), y también AND 10 -> 11 con M en Set; `FindById` de la puerta falla en esa pasada y el NetworkID acierta | se anota | la puerta publica su lógica actual en esa misma pasada (11 -> 10: baja y M desactivada; 10 -> 11: alta y M activada en esa llamada) y queda registrada | pre-gate solo con `FindById` |
+| **Entidad irresoluble (Grok R22v3-02):** el circuito de §5.7 en (a) con los tres niveles fallando para la puerta en la pasada 11 -> 10 y en su Step 5; luego la entidad vuelve y la puerta se reprocesa | se anota | sin entidad: las aristas de salida de la puerta bajas y M desactivada; con ella: la lógica actual; al vaciar, G2 | publicar con el latch cacheado |
 | A1-A3 sin Splitter (control) | verde | verde, y asignaciones finales iguales a las de la base | regresión de energía |
 | A4: XOR sin carga, A on, B off, con y sin Splitter, 600 ticks | **rojo obligatorio** (oscila); si el modelo no lo reproduce, el modelo está incompleto y se arregla antes de implementar | como mucho 1 cambio; puerta abierta con AX asignación 0 y señal alta | lectura por flujo |
-| B1: XOR -> Door Controller (CONSUMER) detrás de Splitter; A on, B on, A off, B off | rojo | después de cada paso, puerta = XOR(A,B) y Door Controller alimentado solo si da 1; tras B off, latch cerrado | lectura por flujo; dejar la tolerancia |
+| **Vecino ruidoso (GL-06):** un XOR con su salida en su propia `input_1` y A encendido, que oscila por diseño (§7), en el mismo grafo que OR y XOR detrás de Splitter recorriendo la tabla; y una variante con nodos de relleno hasta cruzar un presupuesto en cada llamada, como las 276 visitas del banco | se anota | OR y XOR siguen su tabla con como mucho un cambio por combinación en todos los órdenes, y G2 en sus aristas; el anillo sigue oscilando | lectura por flujo |
+| B1: XOR -> Door Controller (CONSUMER) detrás de Splitter; A on, B on, A off, B off | se anota: en partida, en BASE, la puerta llegó tarde y la secuencia quedó invertida sin vecino oscilando (0 «Requeue limit»); el modelo no lo reproduce, y aquí el Door Controller no tiene el retardo de la puerta física; se mide en la fase 3 con trazas | después de cada paso, puerta = XOR(A,B) y Door Controller alimentado solo si da 1, con como mucho un cambio de latch del XOR y un cambio de alimentación del Door Controller por paso; tras B off, latch cerrado | lectura por flujo; dejar la tolerancia |
 | D5: Power por Splitter; Power directo; Laser -> interruptor encendido -> Set | rojo: Set nunca alto | el Laser abre: Set alto, latch true, Output habilitada, lámpara >= 10, Power alto; el Laser cierra: latch se queda; pulso de Reset (2000 ms): latch false y lámpara 0. Se admite XM = 0 | lectura por flujo de Set; compuerta cacheada |
 | D5 sin Power (solo Laser) | verde (medido así) | verde | control |
 | Laser con entrada < 5 y compuerta abierta | n/a | señal baja en Set | quitar la condición de autoconsumo |
 | **Salida rehabilitada (Codex R22-01):** celda A con Output deshabilitada y bit alto antiguo; A pierde alimentación; un Set la activa y rehabilita Output; la celda B (Set desde Output de A, Power aparte) va en la cola antes del reproceso de A | se anota | B no se activa; mientras A no se reprocesa, el lector ve baja | no limpiar el bit al cambiar el flag |
-| **Q -> Toggle (Grok R22v2-02):** Output de A -> Toggle de B, Power de B aparte; rearme de 1000 ms ya cumplido; A pasa de desactivada a activada, y luego de activada a desactivada; reloj por eventos (§6.3) | se anota | A off -> on: B voltea exactamente una vez; A on -> off: B no voltea | reloj de 100 ms que junta el routing de 50 ms con el PDQ |
-| **Salida rehabilitada con retraso (§5.8):** como la anterior, con Set de A sostenido y un pulso de Reset de 100 ms (Output deshabilitada unos 100 ms); (i) carga normal; (ii) con la cola llena de nodos pendientes para que la pasada de A llegue más de 1000 ms tarde | se anota | (i) B no voltea; (ii) B voltea como mucho una vez, que es la limitación declarada en §5.8 | - |
+| **Q -> Toggle (Grok R22v2-02):** Output de A -> Toggle de B, Power de B aparte; rearme de 1000 ms ya cumplido; A pasa de desactivada a activada, y luego de activada a desactivada; reloj por eventos (§6.3) | se anota | A off -> on: B voltea exactamente una vez; A on -> off: B no voltea; según la traza, el routing de 50 ms cae entre dos PDQ | reloj de 100 ms que junta el routing de 50 ms con el PDQ |
+| **Salida rehabilitada con retraso (§5.8; Codex R22-V3-03):** Output de A -> Toggle de B, Power de B aparte y estable, rearme cumplido; A activada con Set alto; Set de A a 0 y pulso de Reset de 100 ms, luego Set a 1 y Reset a 0, para que Q vaya 1 -> 0 -> 1 y Output se deshabilite de verdad (con Set sostenido, Reset no quita Q); (i) carga normal; (ii) con la cola llena de nodos pendientes para que la pasada de A llegue más de 1000 ms tarde | se anota | el test afirma la deshabilitación y las lecturas de B antes de contar; (i) B no voltea; (ii) B lee baja 1100 ms o más y voltea exactamente una vez, que es la limitación declarada en §5.8 | - |
 | C con Splitter: pulsador en Toggle (pulso 2000 ms, presses cada 3 s), en Set y en Reset | verde | verde: un flip por pulsación; Set y Reset ponen y quitan | regresión C1-C7 |
+| C con Splitter y cola congestionada (Codex, pregunta 4 de la v3): lo mismo, con los nodos de relleno de la fila de presupuesto de nodos pendientes en cada pulsación | verde | lo mismo que C | regresión C1-C7 con presupuestos |
 | Sobrecarga: G 50 -> Splitter; swA on -> XOR.in0, swB off -> in1, XOR -> lámpara 10; lámpara de 60 en la tercera salida | se anota | todas las asignaciones 0 (B5 intacto), latch estable (como mucho 1 cambio en 600 ticks), AX con señal alta | acoplar señal a sobrecarga |
 | Corte real: G apagado; cable swA -> XOR cortado; Output de la celda deshabilitada | n/a | cuando la propagación llega, los lectores leen baja; las aristas habilitadas quedan con asignación 0 y señal baja; en las deshabilitadas **no** se exige asignación 0 (el código la conserva), sí señal baja; al volver G, las tablas como antes | retener señal; ignorar `LFPG_EDGE_ENABLED` |
 | **Cadena larga (Codex R22-03):** G -> 64 Splitters en cadena -> interruptor -> XOR (sin carga) y -> pulsador -> Toggle de una celda | n/a | al apagar G el último tramo se procesa en ticks posteriores (presupuesto); cuando llega, lecturas bajas; ningún flip de la celda ni cambio de latch de más; al volver G, la celda no se voltea sola. No prueba por sí sola los presupuestos: para eso, las dos filas siguientes | no respetar presupuestos |
 | **Presupuesto de nodos (Codex R22-V2-02):** 65 CONSUMER pendientes, cada uno con una entrada y sin lecturas en su callback | verde: es del modelo y no depende del arreglo | una llamada procesa 64, cuenta 64 visitas y deja 1 en la cola | modelo sin el límite de nodos |
 | **Presupuesto de aristas:** nodos pendientes con varias aristas, de forma que el contador cruce 256 dentro de un nodo | verde: es del modelo | ese nodo se termina, el contador acaba por encima de 256, no se toma ningún nodo más y los que quedan siguen en su orden | modelo sin el límite de aristas; modelo que corta dentro de un nodo |
+| **Barrido del modelo (Codex, pregunta 3 de la v3):** nodos en cola; uno sucio fuera de la cola; uno con `m_Powered` desajustado y otro ajustado | verde: es del modelo | con nodos en cola no corre; con la cola vacía, salta el sucio y solo llama al callback del desajustado, con `NodeEntitySyncUnchanged` como en el fuente | barrido incondicional en el modelo |
 | Arranque y reconstrucción: todas las aristas nacen con señal false, con la puerta procesada **antes** que sus proveedores y también **entre** ellos (A, puerta, B), con PDQ directo sin avance de reloj | n/a | A3 y D5 llegan a su estado estable con como mucho un cierre y una reapertura de la puerta, y sin activar ninguna celda aguas abajo | señal inicial true; dejar la tolerancia |
-| Invariante en todos los estados estables de todos los fixtures | n/a | asignación > EPS implica señal alta | - |
+| Invariante y G2 en todos los estados estables de todos los fixtures | n/a | asignación > EPS implica señal alta; cada arista habilitada = oráculo | - |
 
 ### 6.5 Estructurales sobre el fuente Enforce (el modelo no ve el cableado de PDQ)
 
@@ -387,6 +502,10 @@ un solo `SetPowered`.
   `LFPG_LogicGateBase.Cast` de la entidad del pre-gate, lee `input_0` e `input_1` con
   `IsPortReceivingSignal`, asigna `signalOut` con `LFPG_EvaluateGateLogic` y no escribe ni
   `gateIsClosed` ni `allocAvail`.
+- S13: el pre-gate llama a `ResolveGatedEntity`, que hace `FindById`, `ResolveVanillaDevice` y
+  NetworkID en ese orden y registra la entidad si la encuentra por NetworkID.
+- S14: en Step 2b, con `node.m_IsGated` y sin entidad resuelta, `signalOut = false` antes de
+  `AllocateOutput`, sin tocar `gateIsClosed` ni `allocAvail`.
 
 ### 6.6 Mutantes (sobre el texto del fuente, como `test_memorycell_toggle.py:507-514`)
 
@@ -399,7 +518,7 @@ extracción, un método ausente o una excepción del arnés no cuentan.
 | Set de la celda de vuelta a flujo | F: D5 |
 | Power de la celda a señal | F: señal presente y Power con asignación 0, Toggle no tiene permiso |
 | Escribir la señal solo dentro de `if (!overloaded)` | S1, y F en sobrecarga |
-| Quitar `m_SignalChanged` de Step 3 | S2, y F en dos casos donde la instrumentación de §6.3 afirma, en la pasada del interruptor, que los otros cinco disparadores están apagados y `m_SignalChanged` encendido: (i) XOR sin carga con `input_1` sin cable, detrás de Splitter -> swA: al apagar G, la pasada de swA (entrada 0 -> 0, demanda 0 -> 0, AX 0 -> 0) es el único camino al XOR, que con el arreglo acaba cerrado y con el mutante acaba abierto **en todos los órdenes** (Grok R22v2-01; Codex, pregunta 4 de la v2: con swB conectado, su sonda cambia 1 -> 0 y despierta al XOR según el orden); (ii) Laser -> interruptor -> Set al abrir el Laser, en la pasada del interruptor. No vale D5 con el Laser directo en Set: su transición de compuerta ya pone `m_AllocChanged` (`:2688-2690`) |
+| Quitar `m_SignalChanged` de Step 3 | S2, y F en dos casos donde la instrumentación de §6.3 afirma, en la pasada del interruptor, que los otros cinco disparadores están apagados y `m_SignalChanged` encendido: (i) XOR sin carga con `input_1` sin cable, detrás de Splitter -> swA: al apagar G, la pasada de swA (entrada 0 -> 0, demanda 0 -> 0, AX 0 -> 0) es el único camino al XOR, que con el arreglo acaba cerrado y con el mutante acaba abierto **en todos los órdenes** (Grok R22v2-01; Codex, pregunta 4 de la v2: con swB conectado, su sonda cambia 1 -> 0 y despierta al XOR según el orden); (ii) Laser -> interruptor -> Set al abrir el Laser, en la pasada del interruptor. No vale D5 con el Laser directo en Set: su transición de compuerta ya pone `m_AllocChanged` (`:2688-2690`). En (i) se afirman además, en esa pasada, `inputChanged` apagado en el XOR e `inputSum` 0 -> 0 (Grok R22v3-04), y las precondiciones: XOR asentado, `input_1` sin cable, sin salida, y `m_Powered` false con flujo 0, para que el barrido no lo despierte (Codex, pregunta 5 de la v3) |
 | Quitar `m_SignalChanged` del reproceso en la misma época | S2, y F de convergencia en (a) |
 | `ComputeSignalOut` con `node.m_GateClosed` | S5, y F: primera pasada abierta de D5 |
 | `ComputeSignalOut` sin la condición de autoconsumo | F: Laser con entrada < 5 |
@@ -409,9 +528,13 @@ extracción, un método ausente o una excepción del arnés no cuentan.
 | Constructor con `m_SignalHigh = true` | S8, y F: arranque |
 | No limpiar el bit en `SetOutputPortEnabled` | S10, y F: salida rehabilitada |
 | Volver a poner la tolerancia de un apagón (el bloque de 592ebcc) | S11, y F: transiciones 10 -> 00 (puerta abierta con 00) y 11 -> 00 -> 10 (celda activada), y B1 tras B off |
-| Quitar la rama de puerta (la puerta publica con `signalIn` y el latch) | S12, y F: las dos filas de latch viejo |
+| Quitar la rama de puerta (la puerta publica con `signalIn` y el latch) | S12, y F: latch viejo y carrera en (a), y latch viejo sin tocar cables en orden topológico |
 | Modelo sin el límite de nodos (solo arnés) | F: presupuesto de nodos |
 | Modelo sin el límite de aristas, o que corta dentro de un nodo (solo arnés) | F: presupuesto de aristas |
+| Pre-gate solo con `FindById` | S13, y F: registro sin la entidad (10 -> 11: M activada en esa llamada) |
+| Sin entidad, publicar con el latch cacheado (la v3) | S14, y F: entidad irresoluble |
+| Modelo que escribe el bit de un interruptor al encolarlo (solo arnés) | F: carrera en [AND, M, B], porque la traza tiene que mostrar que AND leyó alto en B |
+| Modelo con barrido incondicional (solo arnés) | F: barrido del modelo |
 
 ### 6.7 Lo que tienen que dar las suites que ya existen
 
@@ -425,7 +548,8 @@ extracción, un método ausente o una excepción del arnés no cuentan.
 - Linter de `AGENTS.md` §1 sobre la base y sobre el árbol: delta de `errors` = 0, gateado por
   `len(errors)`. Más el barrido manual de §1 por cada local tipada del diff (`graph.IsPortReceivingSignal`
   declarado en `LFPG_ElecGraph`; `allocEdge.m_SignalHigh`, `inEdge.m_SignalHigh` y `edge.m_SignalHigh`
-  en `LFPG_ElecEdge`).
+  en `LFPG_ElecEdge`; en `ResolveGatedEntity`, las mismas llamadas y miembros que `SyncNodeToEntity`
+  usa en `:3079-3111`).
 
 ## 7. Riesgos del brief, uno a uno
 
@@ -443,7 +567,8 @@ extracción, un método ausente o una excepción del arnés no cuentan.
 - **Coste por tick.** Un bool por arista; lecturas y escrituras dentro de bucles que ya existen; un
   lector nuevo que llaman los callbacks de puertas y celdas y, dos veces por pasada, la rama de puerta
   de Step 2b (unas cuatro visitas de arista por pasada de puerta, contadas en el presupuesto). Ni bucles, ni mapas, ni
-  temporizadores, ni búsquedas de entidad nuevas por tick. Offline no se mide. En partida, con un PBO
+  temporizadores, ni búsquedas de entidad nuevas por tick (los dos niveles nuevos del pre-gate solo corren
+  cuando `FindById` falla). Offline no se mide. En partida, con un PBO
   con `LFPG_PERF_PROBE` (ticks hasta asentar, nodos y visitas por evento, `LFPG_PerfProbe.c:162-180`,
   llamada en `LFPG_ElecGraphImpl.c:2941`): en eventos de circuitos sin lógica (generador con Splitter y
   lámparas encendido y apagado; el banco grande si se puede) nodos y visitas iguales a BASE con un
@@ -470,7 +595,16 @@ La matriz del brief, más:
   estable (como mucho 1 cambio en 60 s), cables en CRITICAL, lámpara apagada, LEDs de entrada siguiendo
   a los interruptores.
 - **Coste:** las medidas de §7 con el PBO de `LFPG_PERF_PROBE`, BASE y arreglo.
-- Criterios: los del brief, y además ningún «Requeue limit reached» en estado estable.
+- Criterios: los del brief, y además ningún «Requeue limit reached» en estado estable, salvo los del
+  anillo del vecino ruidoso.
+- **Vecino ruidoso (GL-06):** OR y XOR detrás de Splitter recorriendo la tabla, primero solos en el
+  mundo y luego con un circuito oscilando en otro sitio (en BASE, el A4; con el arreglo, el anillo de
+  §6.4, porque el A4 ya no oscila). BASE y arreglo, con trazas: «Requeue limit» por nodo, y nodos y
+  visitas por llamada con `LFPG_PERF_PROBE`.
+- **B1 con trazas:** `LFPG_LOG_LEVEL` 2 para `[LogicGate]` y `[LFPG_DoorController] SetPowered`,
+  contando los cambios de alimentación del Door Controller por paso, en BASE y con el arreglo.
+- L-RACE no se prueba en partida: no se pueden meter dos cambios en la misma décima de segundo de forma
+  repetible.
 - El banco grande si se puede. Al acabar, el banco como estaba.
 
 ## 9. Para el bug-ledger (no se arregla aquí)
@@ -492,23 +626,37 @@ La matriz del brief, más:
 - **GL-05.** La asignación de una arista deshabilitada se conserva (`:5084-5091`) y un lector de flujo
   podría ver la vieja al rehabilitarla, antes del reproceso del proveedor. Es el mismo hueco que Codex
   R22-01 cerró para la señal; para el flujo ya existía y no se toca.
+- **GL-06.** Un circuito que oscila podría retrasar a otros del servidor por el presupuesto compartido
+  de la cola. Indicios en el banco de las 00:18: con el AND oscilando (1400 «Requeue limit» entre
+  00:18:00 y 00:19:45), el OR osciló 28 veces en 4 s, con 276 visitas en una llamada y 10 pendientes.
+  Sin demostrar. Con el arreglo las puertas no dependen del flujo, pero un consumidor que lee flujo sí
+  podría notarlo. Se mide en la fase 3 (§8).
+- **GL-07.** Set y Reset de la Memory Cell son de nivel y sin filtro: un alto pasajero de L-RACE, o de
+  un cambio que llega por dos caminos, puede activar la celda. Candidato para otra ronda: el filtro de
+  400 ms de Toggle también en Set y Reset, después de medir cuánto mantiene el Laser su compuerta
+  abierta (`LFPG_LaserDetector.c`), para no perder a quien lo cruza deprisa.
 - **TA3-01** sigue abierto.
 
-## 10. R22 de la v3: qué tiene que mirar cada revisor
+## 10. R22 de la v4: qué tiene que mirar cada revisor
 
-Solo el delta frente a la v2 y el cierre de sus propios hallazgos (§11.2), sin ver la revisión del
+Solo el delta frente a la v3 y el cierre de sus propios hallazgos (§11.3), sin ver la revisión del
 otro. Veredicto APTO / APTO CON CAMBIOS / NO APTO. Por hallazgo: id, gravedad, `path:line`, escenario
-de fallo concreto y arreglo propuesto. En particular:
+de fallo concreto y arreglo propuesto. Un hallazgo BLOQUEA si rompe G1 o G2, un caso del brief
+(A1-A4, B1-B2, C1-C7, D5) o el escenario de Nostra. Lo que caiga dentro de una limitación declarada
+(L-RACE, §5.8, compuerta sin entidad, B5) se da como nota, salvo que demostréis que esa limitación
+contradice el brief o el reporte. En particular:
 
-1. Con la rama de puerta, ¿queda algún camino en el que una puerta publique un valor distinto de la
-   lógica de sus entradas actuales, o en el que una Memory Cell capture un alto falso? Mirad también
-   la entidad que no se resuelve y el barrido en vacío.
-2. La puerta publica su lógica actual mientras el reparto usa el latch vivo: ¿hay algún estado estable
-   en el que no se cumpla el invariante «asignación > EPS implica señal alta»?
-3. El reloj por eventos, el barrido en vacío y los dos presupuestos de §6.3: ¿bastan para que las
-   filas nuevas de §6.4 den un rojo o un verde verdaderos?
-4. La limitación declarada de §5.8: ¿algún criterio del brief o de C1-C7 que la contradiga?
-5. El nuevo anclaje (i) del mutante de `m_SignalChanged`: ¿hay otro camino que despierte al XOR?
+1. ¿Queda algún camino en el que una puerta o una celda lea un valor que su proveedor no calculó con
+   lo que leía al procesarse (G1)? Mirad la resolución en tres niveles, la señal baja sin entidad, la
+   limpieza al cambiar el flag y las llamadas directas al PDQ.
+2. ¿Hay algún estado con la cola y los diferidos vacíos, y todas las entidades resueltas, en el que una
+   arista habilitada no coincida con el oráculo de §6.3 (G2)?
+3. ¿Contradice L-RACE algún caso del brief o del reporte de Nostra (Laser -> Set, XOR de escalera)?
+4. ¿Puede la resolución en tres niveles dar baja para una entidad viva, y qué haría aguas abajo? ¿Rompe
+   algo el cambio de energía declarado en §5.10?
+5. Las filas nuevas o corregidas de §6.4 (carrera, cambios separados por un vaciado, entidad, §5.8, C
+   con congestión, vecino ruidoso, barrido del modelo) y las reglas nuevas de §6.3 (oráculo, barrido,
+   el bit solo en la pasada de su proveedor, traza del reloj): ¿dan un rojo o un verde verdaderos?
 
 ## 11. Cierre de las R22
 
@@ -542,3 +690,19 @@ de fallo concreto y arreglo propuesto. En particular:
 | Grok R22v2-03 (MENOR): `SetOutputPortEnabled` no marca `m_SignalChanged` | sin cambio: las dos ramas que cambian el flag marcan `DIRTY_TOPOLOGY` (`:5096-5098`) y Step 3 propaga con `forceDownstream` (`:2769-2774`); Grok no encontró ningún lector huérfano | - |
 | Grok, premisa de la v2: el cierre depende del reencolado, del reproceso en la misma época y de que Step 5 no salte el callback | aceptado: las aserciones leen latch y bits tras vaciar cola y diferidos | §6.3 |
 | Medida del PC en partida: el rojo depende de recorrer la tabla | aceptado: A1-A3 en secuencia sobre un mismo circuito | §6.3, §6.4, §8 |
+
+### 11.3 R22 de la v3
+
+| Hallazgo | Decisión | Dónde |
+|---|---|---|
+| Grok R22v3-01 (BLOQUEA) y Codex R22-V3-02 (IMPORTANTE): con [AND, M, B] la celda se activa | se declara la garantía, con la opción de Codex de transitorios permitidos y acotados: L-RACE, G1 y G2; se prueban la frontera y G2 en todos los órdenes. Descartados el orden topológico y el Set que ignora un alto no reescrito (§5.9) | §0, §2.1, §5.9, §6.4, §9 GL-07 |
+| Codex R22-V3-01 (BLOQUEA) y Grok R22v3-02 (IMPORTANTE): entidad sin resolver en el pre-gate | aceptado: tres niveles en el pre-gate, como Step 5, y sin entidad señal baja en todo nodo con compuerta; la energía, como hoy | §2.1, §3.1, §4, §5.10, §6.4, §6.5 S13-S14, §6.6 |
+| Grok R22v3-03 (IMPORTANTE): el barrido fija el alto en M | sin cambio en producción: el barrido solo corre con la cola vacía y salta los nodos en cola o sucios, y el alto pasajero solo existe con la puerta pendiente; el modelo lo imita así y las filas de carrera lo afirman | §5.11, §6.3, §6.4 |
+| Grok R22v3-04 (MENOR): ancla (i) | aceptado: `inputChanged` e `inputSum` 0 -> 0 del XOR en la pasada de swA | §6.6 |
+| Codex R22-V3-03 (IMPORTANTE): el fixture de §5.8 no deshabilita Output | aceptado: Set a 0 durante el Reset y se afirma la deshabilitación; (i) ningún flip, (ii) exactamente uno | §6.4 |
+| Codex, pregunta 2: el invariante no ve los altos falsos | aceptado: oráculo de G2 tras cada vaciado | §2.1, §6.3, §6.4 |
+| Codex, pregunta 3: el barrido es condicional | aceptado en el modelo, con su fila | §6.3, §6.4 |
+| Codex, pregunta 4: C1-C7 con congestión | aceptado: fila de C con la cola congestionada | §6.4 |
+| Codex, pregunta 5: precondiciones del ancla (i) | aceptado | §6.6 |
+| Grok, defectos que los tests no verían: bit escrito al encolar; routing de 50 ms y PDQ en el mismo ms | aceptado: el bit solo lo escribe su proveedor, con traza de lecturas y del reloj, y un mutante del arnés | §6.3, §6.4, §6.6 |
+| Registros del banco (PC, 00:18-00:27): el AND oscilaba durante OR y XOR; B1 sin vecino | A1 y A3 con los tres circuitos como en el banco; A2 y B1 anotadas y a la fase 3 con trazas; fila de vecino ruidoso con el arreglo | §6.4, §8, §9 GL-06 |
