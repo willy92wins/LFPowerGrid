@@ -513,6 +513,10 @@ static const int LFPG_MAX_NODES_GLOBAL        = 2048;
 // Full sweep of 200 nodes = ceil(200/32) x 1s = ~7 seconds.
 static const int LFPG_CONSUMER_VALIDATE_TICK_INTERVAL = 10;
 
+// Entity-resolution retries per round. At most one round every
+// LFPG_CONSUMER_VALIDATE_TICK_INTERVAL ProcessDirtyQueue calls.
+static const int LFPG_GATE_RETRY_PER_CALL = 4;
+
 // Nodes checked per validation invocation.
 // 32 nodes x avg 2 incoming edges = ~64 edge checks per batch. Negligible.
 static const int LFPG_VALIDATE_BATCH_SIZE = 32;
