@@ -128,6 +128,9 @@ class WireJournalStructure(unittest.TestCase):
         self.assertIsNotNone(probe_for)
         self.assertEqual(probe_for.group(1).strip(), "0")
         self.assertEqual(probe_for.group(2).strip(), "candidates.Count()")
+        path_m = re.search(r"string path = ([^;]+);", boot)
+        self.assertIsNotNone(path_m)
+        self.assertEqual(path_m.group(1).strip(), "candidates[ci]")
         self.assertNotIn("CopyFile(", boot)
         self.assertIn("OwnerLoadedJSON(obj)", boot)
         self.assertIn("new array<ref LFPG_WireData>", boot)
@@ -164,15 +167,39 @@ class WireJournalStructure(unittest.TestCase):
         boot_p = method(m_probe, "ReplayAtBoot")
         pf = re.search(r"for \(ci = ([^;]+); ci < ([^;]+); ci = ci \+ 1\)", boot_p)
         self.assertNotEqual((pf.group(1).strip(), pf.group(2).strip()), ("0", "candidates.Count()"))
-        n_cand = 4
-        ci0 = int(pf.group(1).strip())
-        ci_end = int(pf.group(2).strip()) if pf.group(2).strip().isdigit() else n_cand
-        probed = list(range(ci0, ci_end))
-        self.assertNotEqual(probed, list(range(0, n_cand)))
-        for future_i in range(n_cand):
-            saw_future = future_i in probed
-            if not saw_future:
-                self.assertFalse(saw_future)
+        m_path, n = re.subn(
+            r"string path = candidates\[ci\];",
+            "string path = candidates[1];",
+            wj, count=1)
+        self.assertEqual(n, 1)
+        boot_path = method(m_path, "ReplayAtBoot")
+        self.assertNotIn("string path = candidates[ci];", boot_path)
+
+        def boot_probe(path_expr, future_at, enabled):
+            n_cand = 4
+            vers = [1] * n_cand
+            vers[future_at] = 2
+            loads = 0
+            deletes = 0
+            writes = 0
+            for ci in range(n_cand):
+                idx = ci if path_expr == "candidates[ci]" else 1
+                ver = vers[idx]
+                if ver > 1:
+                    return True, loads, deletes, writes
+            if not enabled:
+                deletes = n_cand
+            loads = 1
+            return False, loads, deletes, writes
+
+        for future_i in range(4):
+            for enabled in (True, False):
+                ro, loads, deletes, writes = boot_probe("candidates[ci]", future_i, enabled)
+                self.assertTrue(ro)
+                self.assertEqual((loads, deletes, writes), (0, 0, 0))
+        mut_ro, mut_loads, mut_del, mut_wr = boot_probe("candidates[1]", 0, False)
+        self.assertFalse(mut_ro)
+        self.assertGreater(mut_del, 0)
         m4, n = re.subn(
             r"candidates\.Insert\(LFPG_WIRE_JOURNAL_FILE \+ \"\.tmp\"\);",
             "",

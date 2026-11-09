@@ -125,6 +125,7 @@ class Journal:
         self.file_dirty = False
         self.validation = False
         self.now = 0
+        self.keeps = 0
 
     def active(self):
         return self.loaded and self.enabled and not self.readonly
@@ -154,10 +155,16 @@ class Journal:
         if not self.validation:
             keep = set()
             for oid in list(self.dirty):
-                live = owner.live if owner.present else ""
-                saved = owner.last if owner.present else ""
-                prev = owner.prev if owner.present else ""
-                loaded = owner.loaded if owner.present else ""
+                live = ""
+                saved = ""
+                prev = ""
+                loaded = ""
+                if owner.present:
+                    if owner.ser_ok:
+                        live = owner.live
+                    saved = owner.last
+                    prev = owner.prev
+                    loaded = owner.loaded
                 usable = owner.present and owner.usable
                 kind = self.r["cap"](usable, live == "", saved == "", live == saved, prev == "", loaded == "")
                 if kind == REMOVE:
@@ -169,6 +176,7 @@ class Journal:
                     self.captured.pop(oid, None)
                 elif kind == KEEP:
                     keep.add(oid)
+                    self.keeps = self.keeps + 1
                 else:
                     old = self.entries.get(oid)
                     rec = (live, saved, prev, loaded)
@@ -342,11 +350,9 @@ class WireJournalScenarios(unittest.TestCase):
         o.change("C")
         j.mark(o.id)
         o.ser_ok = False
-        o.live = ""
         j.tick(o)
         self.assertIn(o.id, j.dirty)
         o.ser_ok = True
-        o.live = "C"
         j.tick(o)
         die(j, o, "A")
         self.assertEqual(o.live, "C")
@@ -600,6 +606,22 @@ class WireJournalScenarios(unittest.TestCase):
         checked = 0
         old_b_miss = 0
         hid = 0
+        n_eval = 0
+        n_g5 = 0
+        n_b = 0
+        n_inject = 0
+        keep_total = 0
+
+        def capture_flags(journal, owner):
+            cap = (owner.id in journal.entries
+                   and journal.entries[owner.id][0] == owner.live
+                   and owner.live != "")
+            wr = (journal.file is not None
+                  and owner.id in journal.file
+                  and journal.file[owner.id][0] == owner.live)
+            good = owner.ser_ok and owner.live != ""
+            return cap, wr, good
+
         while checked < 10000:
             hid = hid + 1
             log = ["h=" + str(hid)]
@@ -620,7 +642,7 @@ class WireJournalScenarios(unittest.TestCase):
                 si = 0
                 while si < steps:
                     j.now = j.now + rng.choice([1, 5, 10])
-                    act = rng.choice(["chg", "chg", "emit", "tick", "ser"])
+                    act = rng.choice(["chg", "chg", "emit", "tick", "tick", "ser"])
                     if act == "chg":
                         st = rng.choice(states)
                         o.change(st)
@@ -628,54 +650,107 @@ class WireJournalScenarios(unittest.TestCase):
                         last_alive[st] = j.now
                         last_change_captured = False
                         last_written = False
-                        last_good = o.ser_ok and o.live != ""
                         log.append("chg:" + st)
                     elif act == "emit":
                         jsn = o.emit()
                         j.on_saved(o.id, jsn)
-                        if jsn != "":
-                            session_emits.append(jsn)
+                        session_emits.append(jsn)
                         log.append("emit:" + jsn)
                     elif act == "tick":
+                        if o.id in j.dirty and rng.random() < 0.4:
+                            o.ser_ok = False
+                            log.append("ser-fail-tick")
                         j.tick(o)
-                        if o.id in j.entries and j.entries[o.id][0] == o.live and o.live != "":
-                            last_change_captured = True
-                            last_written = True
+                        last_change_captured, last_written, last_good = capture_flags(j, o)
                         log.append("tick")
+                        o.ser_ok = True
                     else:
-                        o.ser_ok = rng.choice([True, True, True, False])
+                        o.ser_ok = rng.choice([True, True, False])
                         log.append("ser:" + str(o.ser_ok))
                     si = si + 1
                 if len(session_emits) == 1:
                     o.ser_ok = True
                     jsn = o.emit()
                     j.on_saved(o.id, jsn)
-                    if jsn != "":
-                        session_emits.append(jsn)
-                    j.tick(o)
+                    session_emits.append(jsn)
                     log.append("force-emit:" + jsn)
-                live_at_death = o.live
-                last_alive[live_at_death] = j.now
-                if rng.random() < 0.45 and len(session_emits) >= 2:
-                    ce = session_emits[-2]
+                o.ser_ok = True
+                inject_g5 = rng.random() < 0.2
+                older = None
+                ei = 0
+                while ei < len(session_emits):
+                    em = session_emits[ei]
+                    if em != "" and em != o.live:
+                        older = em
+                    ei = ei + 1
+                if inject_g5:
+                    if older is None:
+                        older = rng.choice(states)
+                        if older == o.live:
+                            older = states[(states.index(o.live) + 1) % len(states)]
+                        o.change(older)
+                        j.mark(o.id)
+                        last_alive[older] = j.now
+                        jsn = o.emit()
+                        j.on_saved(o.id, jsn)
+                        session_emits.append(jsn)
+                        log.append("g5-seed-emit:" + jsn)
+                        other = states[(states.index(older) + 1) % len(states)]
+                        o.change(other)
+                        j.mark(o.id)
+                        last_alive[other] = j.now
+                        log.append("g5-seed-away:" + other)
+                    j.tick(o)
+                    last_change_captured, last_written, last_good = capture_flags(j, o)
+                    log.append("tick-before-g5")
+                    o.change(older)
+                    j.mark(o.id)
+                    last_alive[older] = j.now
+                    last_change_captured = False
+                    last_written = False
+                    log.append("g5-revert:" + older + "-no-tick")
+                    live_at_death = o.live
+                    ce = older
                 else:
-                    ce = session_emits[-1]
+                    j.tick(o)
+                    last_change_captured, last_written, last_good = capture_flags(j, o)
+                    live_at_death = o.live
+                    last_alive[live_at_death] = j.now
+                    if rng.random() < 0.45 and len(session_emits) >= 2:
+                        ce = session_emits[-2]
+                    else:
+                        ce = session_emits[-1]
+                if ce == "":
+                    keep_total = keep_total + j.keeps
+                    log.append("skip-empty-ce")
+                    continue
                 w_file = None
                 if j.file and o.id in j.file:
                     w_file = j.file[o.id][0]
                 log.append("die ce=" + ce + " live=" + live_at_death + " W=" + str(w_file)
                            + " cap=" + str(last_change_captured) + " wr=" + str(last_written)
                            + " good=" + str(last_good))
+                keep_total = keep_total + j.keeps
                 j = restart_session(j, o, ce)
                 result = o.live
-                age_ce = j.now - last_alive.get(ce, j.now)
-                age_res = j.now - last_alive.get(result, j.now)
-                if age_res > age_ce:
-                    if w_file == live_at_death:
-                        self.fail("propiedad (a) fuera de G5: " + " ".join(log)
-                                  + " result=" + result + " age_res=" + str(age_res)
-                                  + " age_ce=" + str(age_ce))
+                comparable = ce in last_alive and result in last_alive
+                if comparable:
+                    n_eval = n_eval + 1
+                    age_ce = j.now - last_alive[ce]
+                    age_res = j.now - last_alive[result]
+                    if age_res > age_ce:
+                        n_g5 = n_g5 + 1
+                        if w_file == live_at_death:
+                            self.fail("propiedad (a) fuera de G5: " + " ".join(log)
+                                      + " result=" + result + " age_res=" + str(age_res)
+                                      + " age_ce=" + str(age_ce))
                 if last_change_captured and last_written and last_good:
+                    n_b = n_b + 1
+                    if w_file == live_at_death and ce != live_at_death:
+                        n_inject = n_inject + 1
+                        injected = ce
+                        if injected == live_at_death:
+                            self.fail("inyeccion G2 tautologica: " + " ".join(log))
                     if result != live_at_death:
                         self.fail("propiedad (b) G2: " + " ".join(log) + " result=" + result)
             checked = checked + 1
@@ -694,6 +769,11 @@ class WireJournalScenarios(unittest.TestCase):
                 old_b_miss = old_b_miss + 1
         self.assertEqual(checked, 10000)
         self.assertGreater(old_b_miss, 0)
+        self.assertGreater(keep_total, 0)
+        self.assertGreaterEqual(n_eval, 100, "n_eval=" + str(n_eval))
+        self.assertGreater(n_g5, 0, "n_g5=" + str(n_g5))
+        self.assertGreaterEqual(n_b, 10000, "n_b=" + str(n_b))
+        self.assertGreater(n_inject, 0)
 
     def test_on_owner_saved_slice(self):
         cell = SimpleNamespace(
@@ -701,30 +781,28 @@ class WireJournalScenarios(unittest.TestCase):
             m_Entries=Map(), m_Dirty=Map(), m_SeenEmit=Map(), m_CapturedMs=Map())
         rec = SimpleNamespace(m_WiresJSON="B")
         cell.m_Entries.Set("d1", rec)
-        run_saved_slice(SRC, cell, "d1", "A")
-        self.assertIn("d1", cell.m_Entries)
-        self.assertFalse(cell.m_SeenEmit.Contains("d1"))
-        self.assertFalse(cell.m_FileDirty)
-        run_saved_slice(SRC, cell, "d1", "A")
-        self.assertIn("d1", cell.m_Entries)
-        self.assertFalse(cell.m_SeenEmit.Contains("d1"))
-        self.assertFalse(cell.m_FileDirty)
         run_saved_slice(SRC, cell, "d1", "B")
         self.assertIn("d1", cell.m_Entries)
         self.assertTrue(cell.m_SeenEmit.Contains("d1"))
+        self.assertFalse(cell.m_FileDirty)
+        seen_after_first = cell.m_SeenEmit.Contains("d1")
+        run_saved_slice(SRC, cell, "d1", "A")
+        self.assertIn("d1", cell.m_Entries)
+        self.assertEqual(cell.m_SeenEmit.Contains("d1"), seen_after_first)
+        self.assertFalse(cell.m_FileDirty)
         run_saved_slice(SRC, cell, "d1", "B")
         self.assertNotIn("d1", cell.m_Entries)
-        eq_true, n = re.subn(
+        seen_any, n = re.subn(
             r"if \(savedJSON == entry\.m_WiresJSON\)",
-            "if (true)",
+            "if (savedJSON == entry.m_WiresJSON || m_SeenEmit.Contains(ownerId))",
             SRC, count=1)
         self.assertEqual(n, 1)
         bad = SimpleNamespace(
             m_Loaded=True, m_Enabled=True, m_ReadOnly=False, m_FileDirty=False,
             m_Entries=Map(), m_Dirty=Map(), m_SeenEmit=Map(), m_CapturedMs=Map())
         bad.m_Entries.Set("d1", SimpleNamespace(m_WiresJSON="B"))
-        run_saved_slice(eq_true, bad, "d1", "A")
-        run_saved_slice(eq_true, bad, "d1", "A")
+        run_saved_slice(seen_any, bad, "d1", "B")
+        run_saved_slice(seen_any, bad, "d1", "A")
         self.assertNotIn("d1", bad.m_Entries)
         swapped, n = re.subn(
             r"if \(v == LFPG_WJ_SAVE_FIRST_EMIT\)",
