@@ -143,6 +143,67 @@ class LFPG_FileUtil
         return true;
     }
 
+    static bool AtomicSaveWireJournal(string targetPath, LFPG_WireJournalStore store)
+    {
+        string tmpPath    = targetPath + ".tmp";
+        string bakPath    = targetPath + ".bak";
+        string bakNewPath = targetPath + ".bak.new";
+
+        string err;
+        if (!JsonFileLoader<LFPG_WireJournalStore>.SaveFile(tmpPath, store, err))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSave: failed to write tmp: " + err);
+            return false;
+        }
+        if (!FileExist(tmpPath))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSave: tmp file not found after write");
+            return false;
+        }
+
+        LFPG_ServerSettings st = LFPG_Settings.Get();
+        bool doReadback = true;
+        if (st) doReadback = st.AtomicVerifyReadback;
+        if (doReadback)
+        {
+            LFPG_WireJournalStore verify = new LFPG_WireJournalStore();
+            string verifyErr;
+            if (!JsonFileLoader<LFPG_WireJournalStore>.LoadFile(tmpPath, verify, verifyErr))
+            {
+                LFPG_Util.Error("[FileUtil] AtomicSave: tmp read-back failed: " + verifyErr);
+                DeleteFile(tmpPath);
+                return false;
+            }
+        }
+
+		if (!StageCurrentTarget(targetPath, bakNewPath))
+		{
+			DeleteFile(tmpPath);
+			return false;
+		}
+
+        if (FileExist(targetPath)) DeleteFile(targetPath);
+        if (!CopyFile(tmpPath, targetPath))
+        {
+            LFPG_Util.Error("[FileUtil] AtomicSave: promote tmp->target failed");
+            if (FileExist(bakNewPath))
+            {
+                CopyFile(bakNewPath, targetPath);
+            }
+            else if (FileExist(bakPath))
+            {
+                CopyFile(bakPath, targetPath);
+            }
+            return false;
+        }
+
+		RotateStagedBackup(bakPath, bakNewPath);
+
+        DeleteFile(tmpPath);
+
+        return true;
+    }
+
     // ---- Server Settings ----
     static bool AtomicSaveSettings(string targetPath, LFPG_ServerSettings settings)
     {
