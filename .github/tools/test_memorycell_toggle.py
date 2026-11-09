@@ -104,13 +104,54 @@ class MemoryCellToggle(unittest.TestCase):
         self.assertTrue(last_flip(source, short_cut))
         self.assertFalse(last_flip(source, long_cut))
         mutant, count = re.subn(
-            r"if \(!hasPower\)\s*\{\s*if \(m_PowerLowSinceMs < 0\)\s*\{\s*m_PowerLowSinceMs = nowMs;\s*\}\s*\}",
+            r"if \(!hasPower\)\s*\{\s*if \(m_PowerLowSinceMs < 0\)\s*\{\s*m_PowerLowSinceMs = nowMs;\s*\}\s*else if \(nowMs - m_PowerLowSinceMs >= LFPG_MCELL_TOGGLE_REARM_MS\)\s*\{\s*m_PowerSinceMs = -1;\s*\}\s*\}",
             "if (!hasPower)\n        {\n            m_PowerSinceMs = -1;\n        }",
             source,
             count=1)
         self.assertEqual(count, 1)
         self.assertFalse(last_flip(mutant, short_cut))
         self.assertTrue(last_flip(source, short_cut))
+
+    def test_long_cut_toggle_before_power_stays_on(self):
+        source = CELL.read_text(encoding="utf-8")
+        seq_a = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (False, True, 15000),
+            (True, True, 15050),
+        ]
+        seq_b = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (True, False, 15000),
+            (True, True, 15050),
+        ]
+        seq_c = [
+            (True, False, 0),
+            (True, True, 1500),
+            (False, False, 5000),
+            (True, True, 15000),
+        ]
+        seq_d = [
+            (True, False, 0),
+            (False, False, 1450),
+            (False, True, 1500),
+            (True, True, 1523),
+        ]
+        self.assertTrue(run_reads(source, seq_a)[0])
+        self.assertTrue(run_reads(source, seq_b)[0])
+        self.assertTrue(run_reads(source, seq_c)[0])
+        self.assertTrue(run_reads(source, seq_d)[0])
+        mutant, count = re.subn(
+            r"else if \(nowMs - m_PowerLowSinceMs >= LFPG_MCELL_TOGGLE_REARM_MS\)\s*\{\s*m_PowerSinceMs = -1;\s*\}",
+            "",
+            source,
+            count=1)
+        self.assertEqual(count, 1)
+        self.assertFalse(run_reads(mutant, seq_a)[0])
+        self.assertTrue(run_reads(source, seq_a)[0])
 
 
 def make_step(source):

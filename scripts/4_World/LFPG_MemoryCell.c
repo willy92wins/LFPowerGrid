@@ -159,9 +159,9 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
     //
     // R1: Toggle must have been low for LFPG_MCELL_TOGGLE_REARM_MS.
     // R2: Power must have been high for the same rearm window. A Power
-    //     drop shorter than that window does not restart the counter;
-    //     after a drop of 1 s or more, Power and Toggle returning together
-    //     do not count.
+    //     drop shorter than that window does not restart the counter.
+    //     A drop of 1 s or more invalidates R2 even while Power is still
+    //     low, so a Toggle that returns first does not count.
     // R3: after OnStoreLoad, no edge until LFPG_MCELL_TOGGLE_LOAD_GRACE_MS.
     // R4: a Toggle never seen low does not fire (starts last-high).
     // R5: apply the edge first, then Set/Reset by level.
@@ -207,6 +207,10 @@ class LFPG_MemoryCell : LFPG_WireOwnerBase
             if (m_PowerLowSinceMs < 0)
             {
                 m_PowerLowSinceMs = nowMs;
+            }
+            else if (nowMs - m_PowerLowSinceMs >= LFPG_MCELL_TOGGLE_REARM_MS)
+            {
+                m_PowerSinceMs = -1;
             }
         }
         else
